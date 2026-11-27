@@ -3,7 +3,7 @@ anon_union_braced_init.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -34,10 +34,10 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x18]
                	ldursw	x20, [x29, #-0x20]
                	ldur	x21, [x29, #-0x18]
-               	sub	x0, x29, #0x10
-               	mov	w1, w20
-               	stur	x1, [x29, #-0x10]
+               	mov	w0, w20
+               	stur	x0, [x29, #-0x10]
                	stur	x21, [x29, #-0x8]
+               	sub	x0, x29, #0x10
                	bl	<addr>
                	ldrsw	x1, [x0]
                	cmp	w1, w20
@@ -45,12 +45,12 @@ Disassembly of section .text:
                	ldr	x0, [x0, #0x8]
                	cmp	x0, x21
                	b.ne	<addr>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x1                // =1
+               	stur	x1, [x29, #-0x50]
+               	stur	x0, [x29, #-0x48]
                	sub	x0, x29, #0x50
-               	mov	x2, #0x1                // =1
-               	stur	x2, [x29, #-0x50]
-               	stur	x1, [x29, #-0x48]
                	bl	<addr>
                	ldrsw	x1, [x0]
                	cmp	w1, #0x1
@@ -83,12 +83,12 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x60]
                	ldp	x20, x21, [sp], #0x70
                	ret
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #0x5                // =5
+               	stur	x1, [x29, #-0x30]
+               	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x30
-               	mov	x2, #0x5                // =5
-               	stur	x2, [x29, #-0x30]
-               	stur	x1, [x29, #-0x28]
                	bl	<addr>
                	ldrsw	x1, [x0]
                	cmp	w1, #0x5

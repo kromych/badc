@@ -47,12 +47,12 @@ pub(super) fn emit_intrinsic(
             };
             // `cntb xd` or `cntd xd`: the vector bytes, or the doublewords,
             // which are the predicate bytes.
-            let base = if intrinsic == I::SveVlBytes {
-                0x0420_E3E0
+            let (base, mnem) = if intrinsic == I::SveVlBytes {
+                (0x0420_E3E0, "cntb")
             } else {
-                0x04E0_E3E0
+                (0x04E0_E3E0, "cntd")
             };
-            emit(code, base | u32::from(rd.0));
+            emit(code, insn!(base | u32::from(rd.0), mnem, [text::x(rd)]));
             store_spilled_int(code, frame, dst, rd);
             Ok(())
         }
@@ -83,24 +83,24 @@ pub(super) fn emit_intrinsic(
         I::Fma | I::Fmaf => fail("intrinsic: fma / fmaf lower to Inst::Fma, not Inst::Intrinsic"),
         // `brk #0` raises a breakpoint / illegal-state exception.
         I::Trap => {
-            emit(code, 0xD420_0000u32);
+            emit(code, super::encode::enc_brk(0));
             Ok(())
         }
         // `yield`, the AArch64 spin-loop hint.
         I::CpuRelax => {
-            emit(code, 0xD503_203Fu32);
+            emit(code, insn!(0xD503_203F, "yield", []));
             Ok(())
         }
         // `dmb ish`, a full barrier across the inner shareable domain:
         // the seq_cst, release and acq_rel thread fences (C11 7.17.4.1).
         I::AtomicThreadFence | I::AtomicReleaseFence => {
-            emit(code, 0xD503_3BBFu32);
+            emit(code, insn!(0xD503_3BBF, "dmb", [text::lit("ish")]));
             Ok(())
         }
         // `dmb ishld`: the acquire fence orders earlier loads before
         // later loads and stores.
         I::AtomicAcquireFence => {
-            emit(code, 0xD503_39BFu32);
+            emit(code, insn!(0xD503_39BF, "dmb", [text::lit("ishld")]));
             Ok(())
         }
         // A signal fence (C11 7.17.4.2) needs no instruction.
@@ -122,12 +122,12 @@ pub(super) fn emit_intrinsic(
         // `dsb ish`: data synchronization barrier over the inner shareable
         // domain.
         I::AArch64DsbIsh => {
-            emit(code, 0xD503_3B9Fu32);
+            emit(code, insn!(0xD503_3B9F, "dsb", [text::lit("ish")]));
             Ok(())
         }
         // `isb`: instruction synchronization barrier.
         I::AArch64Isb => {
-            emit(code, 0xD503_3FDFu32);
+            emit(code, insn!(0xD503_3FDF, "isb", []));
             Ok(())
         }
         I::AArch64DcCvau | I::AArch64IcIvau => {
@@ -171,6 +171,21 @@ pub(super) fn emit_intrinsic(
         // x18, so it holds the value the OS put there.
         I::PlatformRegister => emit_frame_register(code, dst, frame, Reg(18), "PlatformRegister"),
         I::ReturnAddress => emit_return_address(code, args, dst, alloc, frame, scratch),
+        I::FunctionPrefix => {
+            let (rd, [target]) = (int_or_spill_scratch(dst, scratch), args) else {
+                return fail("FunctionPrefix: expected 1 arg");
+            };
+            let Some(rd) = rd else {
+                return fail("FunctionPrefix: dst not int reg / spill");
+            };
+            let Some(r) = materialize_int(code, place_of(alloc, *target), scratch.primary, frame)
+            else {
+                return fail("FunctionPrefix: target not int reg / spill");
+            };
+            emit(code, super::encode::enc_ldur(rd, r, -8));
+            store_spilled_int(code, frame, dst, rd);
+            Ok(())
+        }
         // The walker lowers the bit-count and byte-swap builtins to
         // `Inst::BitCount` / `Inst::Bswap`; they never reach codegen as an
         // `Inst::Intrinsic`.
@@ -223,7 +238,8 @@ pub(super) fn intrinsic_keeps_frame(intrinsic: crate::c5::op::Intrinsic, abi: su
         | I::SveSt1B
         | I::SveSt1H
         | I::SveSt1W
-        | I::SveSt1D => false,
+        | I::SveSt1D
+        | I::FunctionPrefix => false,
         // The AAPCS64 `va_list` forms borrow a register around a push / pop;
         // the cursor forms are loads and stores.
         I::VaArg | I::VaCopy => abi.aarch64_host_variadic(),
@@ -487,12 +503,15 @@ fn emit_cache_op(
     let Some(rt) = materialize_int(code, place_of(alloc, args[0]), scratch.primary, frame) else {
         return fail("dc/ic cache op: address not int reg / spill");
     };
-    let base = if matches!(intrinsic, crate::c5::op::Intrinsic::AArch64DcCvau) {
-        0xD50B_7B20u32
+    let (base, mnem, op) = if matches!(intrinsic, crate::c5::op::Intrinsic::AArch64DcCvau) {
+        (0xD50B_7B20u32, "dc", "cvau")
     } else {
-        0xD50B_7520u32
+        (0xD50B_7520u32, "ic", "ivau")
     };
-    emit(code, base | (rt.0 as u32));
+    emit(
+        code,
+        insn!(base | (rt.0 as u32), mnem, [text::lit(op), text::x(rt)]),
+    );
     Ok(())
 }
 
@@ -516,7 +535,8 @@ fn emit_read_cache_type(
     } else {
         scratch.secondary
     };
-    emit(code, 0xD53B_0020u32 | (tmp.0 as u32));
+    // CTR_EL0: op0 3, op1 3, CRn 0, CRm 0, op2 1.
+    emit(code, super::encode::enc_mrs(tmp, 0xD801));
     emit(code, enc_str_imm(tmp, addr, 0));
     Ok(())
 }
@@ -666,7 +686,7 @@ pub(super) fn emit_mzero(
         }
         w
     };
-    let store = |code: &mut Vec<u8>, w: u32, base: Reg, off: u32| match w {
+    let store = |code: &mut CodeBuf, w: u32, base: Reg, off: u32| match w {
         16 => emit(code, enc_stp_off(zero, zero, base, off as i32)),
         8 => emit(code, enc_str_imm(zero, base, off)),
         4 => emit(code, enc_str32_imm(zero, base, off)),
@@ -792,7 +812,7 @@ pub(super) fn emit_mcpy(
             matches!(place, Place::Spill(_))
                 || (!alloc.holds_live_across(v, r.0) && !frame.fixed_regs.has_gpr(r.0))
         };
-        let cursor = |code: &mut Vec<u8>, regs: &mut SiteRegs, base: Reg| {
+        let cursor = |code: &mut CodeBuf, regs: &mut SiteRegs, base: Reg| {
             let c = regs.take(code)?;
             emit_mov_reg(code, c, base);
             Some(c)
@@ -872,7 +892,7 @@ fn atomic_regs(
 /// result in a saved register leaves through the encoder scratch, which
 /// the consumed operands no longer need.
 fn finish_atomic(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     regs: &SiteRegs,
     dst: Place,
     r: Reg,
@@ -1157,7 +1177,7 @@ const ATOMIC128_SAVE_BYTES: u32 = 64;
 type Work = [Reg; 7];
 
 /// Borrow and save the working registers.
-fn atomic128_save_working(code: &mut Vec<u8>, frame: Frame) -> Emit<Work> {
+fn atomic128_save_working(code: &mut CodeBuf, frame: Frame) -> Emit<Work> {
     use super::encode::{enc_stp_off, enc_stp_pre};
     let w = borrow_regs::<7>(&[], frame.fixed_regs, "a 16-byte atomic")?;
     emit(
@@ -1171,7 +1191,7 @@ fn atomic128_save_working(code: &mut Vec<u8>, frame: Frame) -> Emit<Work> {
 }
 
 /// Restore the working registers, after the prior value is written back.
-fn atomic128_restore_working(code: &mut Vec<u8>, w: &Work) {
+fn atomic128_restore_working(code: &mut CodeBuf, w: &Work) {
     use super::encode::{enc_ldp_off, enc_ldp_post};
     emit(code, enc_ldr_imm(w[6], Reg(31), 48));
     emit(code, enc_ldp_off(w[4], w[5], Reg(31), 32));
@@ -1277,7 +1297,7 @@ fn emit_atomic128(
     // CmpXchg's mismatch branch lands here, past the store/retry.
     if let Some(to_done) = to_done {
         let delta = ((code.len() - to_done) / 4) as i32;
-        code[to_done..to_done + 4].copy_from_slice(&enc_b_cond(Cond::Ne, delta).to_le_bytes());
+        patch(code, to_done, enc_b_cond(Cond::Ne, delta));
     }
     // Write the prior value back through &oldl / &oldh.
     atomic128_writeback(code, args[1], oldl, &w, frame, alloc, scratch.primary)?;

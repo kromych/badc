@@ -2,6 +2,7 @@
 // Apple's arm64 set adds FE_FLUSHTOZERO to the five C17 names. Clearing
 // the whole set leaves none raised.
 #include <fenv.h>
+#pragma STDC FENV_ACCESS ON
 
 #if defined(__APPLE__) && defined(__aarch64__)
 _Static_assert(FE_FLUSHTOZERO == 0x80 && FE_ALL_EXCEPT == 0x9f, "Apple's exception set");

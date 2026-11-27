@@ -3,7 +3,7 @@ inline_asm_a64_w_values_keep_their_bits.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -178,7 +178,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	fmul	v2.2s, v0.2s, v1.2s
-               	mov	x1, v2.d[0]
+               	fmov	x1, d2
                	mov	x17, #0x3ec00000        // =1052770304
                	movk	x17, #0xc100, lsl #48
                	cmp	x1, x17

@@ -3,7 +3,7 @@ file_scope_asm_local_label_branch.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -33,20 +33,19 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	leaq	<rip>, %rdi # <addr>
+               	pushq	%rax
                	movl	$0x1, <rip> # <addr>
-               	callq	<addr>
                	leaq	<rip>, %rdi # <addr>
+               	callq	<addr>
                	cmpl	$0x0, <rip> # <addr>
                	jne	<addr>
                	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x3, <rip> # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	callq	<addr>
                	cmpl	$0x0, <rip> # <addr>
                	jne	<addr>
@@ -54,12 +53,11 @@ Disassembly of section .text:
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x2a, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	addb	%al, (%rax)
                	addb	%dl, -0x48(%rdx)
 
 <pv_unlock>:

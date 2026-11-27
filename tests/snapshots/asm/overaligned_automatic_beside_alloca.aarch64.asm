@@ -3,7 +3,7 @@ overaligned_automatic_beside_alloca.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -53,23 +53,23 @@ Disassembly of section .text:
                	add	x21, x21, #0x1
                	cmp	w21, #0x3
                	b.gt	<addr>
-               	mul	x24, x25, x21
-               	sxtw	x2, w24
-               	add	x17, x2, #0xf
+               	mul	x23, x25, x21
+               	add	x17, x23, #0xf
                	and	x17, x17, #0xfffffffffffffff0
-               	mov	x23, sp
-               	sub	x23, x23, x17
+               	mov	x24, sp
+               	sub	x24, x24, x17
                	lsr	x17, x17, #12
                	cbz	x17, <addr>
                	sub	sp, sp, #0x1, lsl #12   // =0x1000
                	str	xzr, [sp]
                	subs	x17, x17, #0x1
                	b.ne	<addr>
-               	mov	sp, x23
-               	mov	x0, x23
+               	mov	sp, x24
+               	mov	x0, x24
+               	mov	x2, x23
                	mov	x1, x21
                	bl	<addr>
-               	mov	x0, x23
+               	mov	x0, x24
                	mov	x1, x21
                	bl	<addr>
                	add	x0, x20, #0x40
@@ -88,8 +88,8 @@ Disassembly of section .text:
                	cmp	x1, #0x8
                	cset	x1, ne
                	cbnz	x1, <addr>
-               	sub	x0, x24, #0x1
-               	ldrb	w0, [x23, w0, sxtw]
+               	sub	x0, x23, #0x1
+               	ldrb	w0, [x24, x0]
                	cmp	w0, w21
                	cset	x0, ne
                	b	<addr>
@@ -140,8 +140,7 @@ Disassembly of section .text:
                	b.gt	<addr>
                	mov	x26, sp
                	mul	x24, x25, x21
-               	add	x0, x24, #0x1
-               	sxtw	x2, w0
+               	add	x2, x24, #0x1
                	add	x17, x2, #0xf
                	and	x17, x17, #0xfffffffffffffff0
                	mov	x23, sp
@@ -167,7 +166,7 @@ Disassembly of section .text:
                	cmp	w1, #0x31
                	cset	x1, ne
                	cbnz	x1, <addr>
-               	ldrb	w0, [x23, w24, sxtw]
+               	ldrb	w0, [x23, x24]
                	cmp	w0, w21
                	cset	x0, ne
                	b	<addr>

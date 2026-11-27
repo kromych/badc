@@ -3,7 +3,7 @@ ssa_va_arg_loop.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -161,7 +161,7 @@ Disassembly of section .text:
                	mov	x2, #0x2                // =2
                	mov	x3, #0x3                // =3
                	mov	x4, #0x4                // =4
-               	mov	x5, x0
+               	mov	x5, #0x5                // =5
                	bl	<addr>
                	cmp	x0, #0xf
                	b.eq	<addr>

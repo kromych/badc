@@ -65,6 +65,38 @@
 
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
+// glibc's checking entry points, which an object built against glibc's headers
+// with _FORTIFY_SOURCE calls in place of the functions.
+#pragma binding(libc::__chk_fail,            "__chk_fail")
+#pragma binding(libc::__memcpy_chk,          "__memcpy_chk")
+#pragma binding(libc::__memmove_chk,         "__memmove_chk")
+#pragma binding(libc::__mempcpy_chk,         "__mempcpy_chk")
+#pragma binding(libc::__memset_chk,          "__memset_chk")
+#pragma binding(libc::__memset_explicit_chk, "__memset_explicit_chk")
+#pragma binding(libc::__explicit_bzero_chk,  "__explicit_bzero_chk")
+#pragma binding(libc::__stpcpy_chk,          "__stpcpy_chk")
+#pragma binding(libc::__stpncpy_chk,         "__stpncpy_chk")
+#pragma binding(libc::__strcat_chk,          "__strcat_chk")
+#pragma binding(libc::__strcpy_chk,          "__strcpy_chk")
+#pragma binding(libc::__strncat_chk,         "__strncat_chk")
+#pragma binding(libc::__strncpy_chk,         "__strncpy_chk")
+#pragma binding(libc::__strlcat_chk,         "__strlcat_chk")
+#pragma binding(libc::__strlcpy_chk,         "__strlcpy_chk")
+_Noreturn void __chk_fail(void);
+void *__memcpy_chk(void *, const void *, size_t, size_t);
+void *__memmove_chk(void *, const void *, size_t, size_t);
+void *__mempcpy_chk(void *, const void *, size_t, size_t);
+void *__memset_chk(void *, int, size_t, size_t);
+void *__memset_explicit_chk(void *, int, size_t, size_t);
+void __explicit_bzero_chk(void *, size_t, size_t);
+char *__stpcpy_chk(char *, const char *, size_t);
+char *__stpncpy_chk(char *, const char *, size_t, size_t);
+char *__strcat_chk(char *, const char *, size_t);
+char *__strcpy_chk(char *, const char *, size_t);
+char *__strncat_chk(char *, const char *, size_t, size_t);
+char *__strncpy_chk(char *, const char *, size_t, size_t);
+size_t __strlcat_chk(char *, const char *, size_t, size_t);
+size_t __strlcpy_chk(char *, const char *, size_t, size_t);
 #pragma binding(libc::memset,   "memset")
 #pragma binding(libc::memcmp,   "memcmp")
 #pragma binding(libc::memcpy,   "memcpy")

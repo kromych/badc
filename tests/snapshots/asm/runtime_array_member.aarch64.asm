@@ -3,7 +3,7 @@ runtime_array_member.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -21,26 +21,26 @@ Disassembly of section .text:
                	stur	w0, [x29, #-0x8]
                	ldursw	x0, [x29, #-0x8]
                	ldursw	x1, [x29, #-0x8]
-               	add	x1, x1, #0x1
-               	ldursw	x2, [x29, #-0x8]
-               	add	x2, x2, #0x2
-               	ldursw	x3, [x29, #-0x8]
-               	add	x3, x3, #0x3
-               	ldursw	x4, [x29, #-0x8]
-               	add	x4, x4, #0x64
+               	add	x2, x1, #0x1
+               	ldursw	x1, [x29, #-0x8]
+               	add	x3, x1, #0x2
+               	ldursw	x1, [x29, #-0x8]
+               	add	x4, x1, #0x3
+               	ldursw	x1, [x29, #-0x8]
+               	add	x1, x1, #0x64
                	cmp	w0, #0xa
                	b.ne	<addr>
-               	cmp	w1, #0xb
+               	cmp	w2, #0xb
                	b.ne	<addr>
-               	cmp	w2, #0xc
+               	cmp	w3, #0xc
                	b.ne	<addr>
-               	cmp	w3, #0xd
+               	cmp	w4, #0xd
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cmp	w4, #0x6e
+               	cmp	w1, #0x6e
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x10

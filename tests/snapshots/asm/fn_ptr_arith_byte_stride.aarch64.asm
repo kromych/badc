@@ -3,7 +3,7 @@ fn_ptr_arith_byte_stride.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -88,12 +88,12 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	stur	x2, [x29, #-0x10]
                	stur	x1, [x29, #-0x8]
-               	add	x1, x0, #0x10
-               	sub	x2, x1, x0
-               	asr	x3, x2, #63
-               	add	x2, x2, x3, lsr #61
-               	asr	x2, x2, #3
-               	cmp	x2, #0x2
+               	add	x2, x0, #0x10
+               	sub	x1, x2, x0
+               	asr	x3, x1, #63
+               	add	x1, x1, x3, lsr #61
+               	asr	x1, x1, #3
+               	cmp	x1, #0x2
                	b.eq	<addr>
                	mov	x0, #0x11               // =17
                	add	sp, sp, #0x20
@@ -101,7 +101,7 @@ Disassembly of section .text:
                	ret
                	add	x0, x0, #0x8
                	add	x0, x0, #0x8
-               	cmp	x0, x1
+               	cmp	x0, x2
                	b.eq	<addr>
                	mov	x0, #0x13               // =19
                	add	sp, sp, #0x20

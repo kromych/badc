@@ -1347,7 +1347,7 @@ impl Compiler {
         Ok(())
     }
 
-    /// GNU `designated_init`, which gcc takes on a struct type only.
+    /// GNU `designated_init`, valid on a struct type only.
     pub(super) fn mark_designated_init(&mut self, struct_id: usize) -> Result<(), C5Error> {
         if self.structs[struct_id].is_union {
             return Err(self.compile_err(
@@ -1360,9 +1360,9 @@ impl Compiler {
     }
 
     /// Honor or discard a `transparent_union` request on the aggregate.
-    /// GCC honors the attribute only when the union's machine mode is the
-    /// first member's, mirrored here as a non-floating, non-bitfield
-    /// first member whose storage covers every member; otherwise the
+    /// The attribute holds only when the union is passed as its first
+    /// member is: a non-floating, non-bitfield first member whose storage
+    /// covers every member; otherwise the
     /// attribute is ignored with a warning. An incomplete union (a typedef
     /// alias of a forward declaration) cannot be checked and takes the
     /// flag as declared.

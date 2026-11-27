@@ -1,6 +1,7 @@
 //! x86-64 GOT references to a symbol the link defines (psABI B.2): the
-//! forms GNU ld relaxes reach the symbol directly, and any other
-//! instruction reads a slot the link allocates for it.
+//! relaxable forms reach the symbol directly, and any other
+//! instruction reads a slot the link allocates for it. The aarch64 GOT
+//! load's direct form is an `add`.
 
 use crate::c5::object::elf_reloc_types::{
     R_X86_64_GOT64, R_X86_64_GOTPCREL, R_X86_64_GOTPCRELX, R_X86_64_REX_GOTPCRELX,
@@ -61,7 +62,7 @@ pub(crate) fn got_use(text: &[u8], field: usize, rtype: u32) -> GotUse {
 /// Rewrite a relaxable instruction to reach the symbol directly and
 /// return where its PC32 field now sits. `jmp rel32` is one byte shorter
 /// than the indirect form, so its field moves back by one and a `nop`
-/// follows it, as GNU ld places them.
+/// follows it.
 pub(crate) fn relax(text: &mut [u8], field: usize, how: GotUse) -> Option<usize> {
     match how {
         GotUse::Load => {
@@ -80,6 +81,21 @@ pub(crate) fn relax(text: &mut [u8], field: usize, how: GotUse) -> Option<usize>
         }
         GotUse::Operand => None,
     }
+}
+
+/// Rewrite the aarch64 `ldr xT, [xN, #imm]` an `R_AARCH64_LD64_GOT_LO12_NC`
+/// patches at `at` into `add xT, xN, #imm`, which takes the address the slot
+/// holds; false, and the word kept, where it is no 64-bit `ldr`.
+pub(crate) fn a64_ldr_to_add(text: &mut [u8], at: usize) -> bool {
+    let Some(field) = text.get_mut(at..at.saturating_add(4)) else {
+        return false;
+    };
+    let word = u32::from_le_bytes([field[0], field[1], field[2], field[3]]);
+    if word & 0xFFC0_0000 != 0xF940_0000 {
+        return false;
+    }
+    field.copy_from_slice(&(0x9100_0000 | (word & 0x3FF)).to_le_bytes());
+    true
 }
 
 #[cfg(test)]

@@ -3,7 +3,7 @@ inline_asm_pushed_replacement.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -43,6 +43,7 @@ Disassembly of section .text:
                	popq	%rbp
                	retq
                	addb	%al, (%rax)
+               	addb	%dl, 0x52(%rcx)
 
 <cs_wrapper>:
                	pushq	%rcx

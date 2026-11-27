@@ -260,12 +260,12 @@ fn single_instruction_expansions_are_built_at_once() {
 }
 
 /// The `-O` pipeline's output for `name`: the dump body and instructions.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn optimized(src: &str, name: &str, target: Target) -> (String, Vec<(u32, String)>) {
     super::codegen::optimized_function_full_pool(src, name, target)
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn divide_texts(insts: &[(u32, String)]) -> Vec<&str> {
     insts
         .iter()
@@ -281,7 +281,7 @@ fn divide_texts(insts: &[(u32, String)]) -> Vec<&str> {
 /// A divisor the optimizer makes constant -- the argument of an inlined
 /// helper, the parameter every call agrees on -- takes no divide, and the
 /// immediate form the walker defers reaches no emitter.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn divisor_made_constant_by_the_optimizer_is_reduced() {
     const SRC: &str = "static int dv(int a, int d) { return a / d; }\n\
@@ -302,7 +302,7 @@ fn divisor_made_constant_by_the_optimizer_is_reduced() {
 /// What the expansion must not take: a divisor that inlining made zero
 /// keeps the hardware divide (C99 6.5.5p5), and a divisor that stays a
 /// variable keeps its own.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn zero_and_variable_divisors_keep_the_divide_through_the_optimizer() {
     const SRC: &str = "static int dv(int a, int d) { return a / d; }\n\
@@ -325,7 +325,7 @@ fn zero_and_variable_divisors_keep_the_divide_through_the_optimizer() {
 /// byte promoted to `int`, and an `int` under a guard, whose power-of-two
 /// division is one shift or mask with no bias. Without the bound the
 /// bias stays.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn non_negative_dividend_divides_as_unsigned() {
     const SRC: &str = "int byte(unsigned char c) { return c / 10 + c % 10; }\n\
@@ -357,7 +357,7 @@ fn non_negative_dividend_divides_as_unsigned() {
 /// not the constant's: -3 converted to `unsigned` is a divisor above 2^31,
 /// whose quotient is a comparison, and `long` divides at 32 bits on LLP64
 /// and at 64 on LP64.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn reduction_follows_the_operand_types() {
     const SRC: &str = "static unsigned ud(unsigned a, unsigned d) { return a / d; }\n\

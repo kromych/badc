@@ -3,7 +3,7 @@ epoll_event_array_readback.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -31,8 +31,8 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x80000            // =524288
                	bl	<addr>
-               	mov	x21, x0
-               	cmp	w21, #0x0
+               	mov	x20, x0
+               	cmp	w20, #0x0
                	b.ge	<addr>
                	mov	x0, #0x2                // =2
                	b	<addr>
@@ -45,24 +45,24 @@ Disassembly of section .text:
                	movk	x16, #0x6655, lsl #32
                	movk	x16, #0x8877, lsl #48
                	str	x16, [sp, #0x28]
-               	sub	x3, x29, #0x30
                	mov	x1, #0x1                // =1
                	stur	w1, [x29, #-0x30]
                	stur	x0, [x29, #-0x28]
                	ldursw	x2, [x29, #-0x40]
                	str	x0, [sp, #0x20]
-               	mov	x0, x21
+               	mov	x0, x20
+               	sub	x3, x29, #0x30
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
                	b	<addr>
-               	sub	x3, x29, #0x30
                	ldr	x16, [sp, #0x28]
                	stur	x16, [x29, #-0x28]
-               	mov	x1, #0x1                // =1
                	ldursw	x2, [x29, #-0x38]
-               	mov	x0, x21
+               	mov	x0, x20
+               	mov	x1, #0x1                // =1
+               	sub	x3, x29, #0x30
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -84,48 +84,48 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	b	<addr>
-               	sub	x4, x29, #0x20
+               	sub	x2, x29, #0x20
+               	str	x2, [sp, #0x18]
+               	mov	x0, x20
+               	mov	x1, x2
                	mov	x2, #0x2                // =2
                	mov	x3, #0x3e8              // =1000
-               	str	x4, [sp, #0x18]
-               	mov	x0, x21
-               	mov	x1, x4
                	bl	<addr>
                	sxtw	x0, w0
-               	ldr	x4, [sp, #0x18]
+               	ldr	x2, [sp, #0x18]
                	cmp	x0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	b	<addr>
+               	sub	x3, x29, #0x20
                	mov	x0, #0x0                // =0
-               	mov	x20, x0
+               	mov	x21, x0
                	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.ge	<addr>
                	lsl	x1, x0, #4
-               	add	x2, x4, x1
-               	ldr	w2, [x2]
-               	cmp	w2, #0x1
+               	add	x4, x2, x1
+               	ldr	w4, [x4]
+               	cmp	w4, #0x1
                	b.ne	<addr>
-               	sub	x2, x29, #0x20
-               	add	x1, x2, x1
+               	add	x1, x3, x1
                	ldr	x1, [x1, #0x8]
                	ldr	x17, [sp, #0x20]
                	cmp	x1, x17
                	b.ne	<addr>
-               	orr	x20, x20, #0x1
+               	orr	x21, x21, #0x1
                	b	<addr>
                	ldr	x17, [sp, #0x28]
                	cmp	x1, x17
                	b.ne	<addr>
-               	orr	x20, x20, #0x2
+               	orr	x21, x21, #0x2
                	b	<addr>
                	mov	x0, #0x8                // =8
                	b	<addr>
                	mov	x0, #0x7                // =7
                	b	<addr>
-               	mov	x0, x21
+               	mov	x0, x20
                	bl	<addr>
                	ldursw	x0, [x29, #-0x40]
                	bl	<addr>
@@ -135,8 +135,7 @@ Disassembly of section .text:
                	bl	<addr>
                	ldursw	x0, [x29, #-0x34]
                	bl	<addr>
-               	mov	x0, #0x0                // =0
-               	mov	x1, #0x9                // =9
-               	cmp	w20, #0x3
-               	csel	x0, x0, x1, eq
+               	cmp	w21, #0x3
+               	mov	x17, #0x9               // =9
+               	csel	x0, xzr, x17, eq
                	b	<addr>

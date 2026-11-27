@@ -116,6 +116,8 @@ that run the program.
 | `--target=<target>` | `macos-aarch64`, `linux-aarch64`, `linux-x64`, `windows-x64` or `windows-arm64`; the default is the host |
 | `-O` | run the SSA optimizer and define `__OPTIMIZE__`, not `NDEBUG`; `-O1` to `-O3`, `-Os`, `-Oz`, `-Ofast` and `-Og` mean the same, `-O0` turns it off |
 | `-g` | write DWARF debug information |
+| `-fsanitize=<checks>` | insert run-time checks for undefined behavior; `undefined` names every check badc implements ([the list](std-conformance.md#command-line-compatibility)) |
+| `-fcrash-report` | have the program report a fatal signal, or an exception no handler takes, with its registers and frames |
 | `-o <path>` | the output file |
 | `-D NAME[=VALUE]`, `-U NAME` | define or undefine a macro |
 | `-I <dir>`, `-iquote <dir>`, `-isystem <dir>`, `-include <file>` | header search and forced includes |
@@ -123,12 +125,14 @@ that run the program.
 | `-M`, `-MM`, `-MD`, `-MMD`, `-MF`, `-MT`, `-MQ`, `-MP` | make dependency rules; also `-Wp,-MD,<file>` and `-Wp,-MMD,<file>` |
 | `-H`, `--show-includes` | print the path of every included header to stderr |
 | `--gnu` | define the GNU C identity macros (`__GNUC__` and the rest); off by default |
-| `--msvc` | Windows targets: define the MSVC identity macros (`_MSC_VER` and the rest), `__STDC_NO_ATOMICS__`, and `__STDC_NO_VLA__`, and leave `__STDC__` undefined; off by default |
+| `-fgnuc-version=<v>` | define them claiming version `<v>`; `0` defines none |
+| `--msvc` | Windows targets: define the MSVC identity macros (`_MSC_VER` and the rest), `__STDC_NO_ATOMICS__`, and `__STDC_NO_VLA__`, leave `__STDC__` undefined, and default to `-fpermissive`, as cl reports those diagnostics as warnings; off by default |
 | `-flax-vector-conversions[=all\|integer\|none]` | let two vector types of one size convert implicitly: any two, or two integer ones; none by default, all under `--msvc` |
 | `-ffreestanding` | compile for a freestanding implementation: `__STDC_HOSTED__` is 0 and `-fno-builtin` applies |
 | `--freestanding` | link without badc's startup runtime; the program supplies its entry point |
 | `--list-symbols` | print the built-in keywords, library calls and constants |
 | `-q` | drop the `info: compiling` and `info: wrote file` lines |
+| `-v` | print the version and configuration to stderr and go on with the build; `--version` prints them and exits |
 | `--track-pointers`, `--trace` | interpreter options; `--interp` only |
 
 Options may come before or after the inputs. Under `--jit` and `--interp`,
@@ -199,17 +203,29 @@ Process 52314 stopped
 On the Windows targets the DWARF sections are in the PE image, and a `-g` link
 also writes the program database beside it (`hello.exe` gets `hello.pdb`),
 which the image's debug directory names by its absolute path. The PDB holds
-the CodeView types, the procedures with their frame-pointer-relative locals,
-the line tables, and the global and public symbols of every unit the image
-carries DWARF for. `--strip-debug` (`-Wl,-S`) drops both; badc writes no
-assembly, so the driver's own `-S` is refused.
+the CodeView types, the procedures with their locals relative to the frame or
+stack pointer, the line tables, and the global and public symbols of every
+unit the image carries DWARF for. `--strip-debug` (`-Wl,-S`) drops both. The
+driver's own `-S` writes the assembly listing of the object `-c` would write.
 
-Two options help when badc itself is the suspect:
+Under `-O`, x86-64 code keeps no frame pointer: debuggers unwind through the
+call-frame information, on Windows through the unwind codes, and a profiler
+that follows frame-pointer chains needs `-fno-omit-frame-pointer`.
+
+When the program is the suspect, `-fsanitize=undefined` reports undefined
+behavior where it happens, and `-fcrash-report` prints the registers and the
+frames of a crash.
+
+These help when badc itself is the suspect:
 
 * `--dump-ssa` prints each function's SSA IR and the register allocator's
   placement of each value to stderr before lowering.
 * `--verify-ssa` checks the SSA form after each pass and stops at the first
   pass that breaks it. A debug build of badc always checks.
+* A badc built with the `codegen_test` feature prints each function's SSA
+  after every pass whose name contains `BADC_DUMP_AFTER` (`all` for every
+  pass), for the functions `BADC_DUMP_FN` names, comma-separated: the first
+  pass whose output is wrong.
 
 ## C as a script
 

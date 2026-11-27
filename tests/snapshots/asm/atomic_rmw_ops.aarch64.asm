@@ -3,7 +3,7 @@ atomic_rmw_ops.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -17,22 +17,22 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	mov	x3, #0xa                // =10
-               	stur	x3, [x29, #-0x18]
+               	mov	x2, #0xa                // =10
+               	stur	x2, [x29, #-0x18]
                	sub	x1, x29, #0x18
                	mov	x0, #0x5                // =5
-               	ldaddal	x0, x2, [x1]
-               	cmp	x2, #0xa
+               	ldaddal	x0, x3, [x1]
+               	cmp	x3, #0xa
                	b.ne	<addr>
-               	ldar	x2, [x1]
-               	cmp	x2, #0xf
+               	ldar	x3, [x1]
+               	cmp	x3, #0xf
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x2, #0x3                // =3
-               	neg	x16, x2
+               	mov	x3, #0x3                // =3
+               	neg	x16, x3
                	ldaddal	x16, x4, [x1]
                	cmp	x4, #0xf
                	b.ne	<addr>
@@ -50,21 +50,21 @@ Disassembly of section .text:
                	b.ne	<addr>
                	ldar	x5, [x1]
                	cbz	x5, <addr>
-               	mov	x0, x2
+               	mov	x0, x3
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldsetal	x0, x2, [x1]
-               	cbnz	x2, <addr>
-               	ldar	x2, [x1]
-               	cmp	x2, #0x5
+               	ldsetal	x0, x3, [x1]
+               	cbnz	x3, <addr>
+               	ldar	x3, [x1]
+               	cmp	x3, #0x5
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x2, #0x6                // =6
-               	ldeoral	x2, x5, [x1]
+               	mov	x3, #0x6                // =6
+               	ldeoral	x3, x5, [x1]
                	cmp	x5, #0x5
                	b.ne	<addr>
                	ldar	x5, [x1]
@@ -80,7 +80,7 @@ Disassembly of section .text:
                	ldar	x6, [x1]
                	cmp	x6, #0x63
                	b.eq	<addr>
-               	mov	x0, x2
+               	mov	x0, x3
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -117,26 +117,26 @@ Disassembly of section .text:
                	b.ne	<addr>
                	cmp	x5, #0x7
                	b.eq	<addr>
-               	mov	x0, x3
+               	mov	x0, x2
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x1, #0x4                // =4
                	stur	w1, [x29, #-0x10]
                	sub	x1, x29, #0x10
-               	mov	x3, #0x1                // =1
-               	ldaddal	w3, w3, [x1]
-               	cmp	w3, #0x4
+               	mov	x2, #0x1                // =1
+               	ldaddal	w2, w2, [x1]
+               	cmp	w2, #0x4
                	b.ne	<addr>
-               	ldar	w3, [x1]
-               	cmp	w3, #0x5
+               	ldar	w2, [x1]
+               	cmp	w2, #0x5
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x3, #-0x1               // =-1
-               	casal	w0, w3, [x1]
+               	mov	x2, #-0x1               // =-1
+               	casal	w0, w2, [x1]
                	cmp	w0, #0x5
                	b.eq	<addr>
                	mov	x0, #0xc                // =12
@@ -173,7 +173,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldeoral	w2, w0, [x1]
+               	ldeoral	w3, w0, [x1]
                	cmp	w0, #0x5
                	b.ne	<addr>
                	ldar	w0, [x1]

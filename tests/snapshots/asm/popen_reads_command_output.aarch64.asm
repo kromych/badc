@@ -3,7 +3,7 @@ popen_reads_command_output.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -28,9 +28,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x60]
                	ldr	x20, [sp], #0x70
                	ret
+               	mov	x2, x20
                	sub	x0, x29, #0x40
                	mov	x1, #0x40               // =64
-               	mov	x2, x20
                	bl	<addr>
                	cbnz	x0, <addr>
                	mov	x0, #0x2                // =2
@@ -42,18 +42,18 @@ Disassembly of section .text:
                	mov	x0, x1
                	bl	<addr>
                	ldr	x1, [sp, #0x18]
+               	sub	x5, x29, #0x40
                	b	<addr>
                	sub	x0, x0, #0x1
                	strb	wzr, [x1, x0]
                	cbz	x0, <addr>
-               	sub	x2, x0, #0x1
-               	ldrb	w3, [x1, x2]
-               	cmp	w3, #0xa
+               	sub	x3, x0, #0x1
+               	ldrb	w2, [x1, x3]
+               	cmp	w2, #0xa
                	b.eq	<addr>
-               	cmp	w3, #0xd
+               	cmp	w2, #0xd
                	b.eq	<addr>
-               	sub	x3, x29, #0x40
-               	ldrb	w2, [x3, x2]
+               	ldrb	w2, [x5, x3]
                	cmp	w2, #0x20
                	b.eq	<addr>
                	sub	x0, x29, #0x40

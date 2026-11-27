@@ -3,7 +3,7 @@ two_d_float_array_partial_init.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -21,31 +21,31 @@ Disassembly of section .text:
                	add	x4, x4, <lo12>
                	adrp	x5, <page>
                	add	x5, x5, <lo12>
-               	mov	x2, x3
-               	lsl	x1, x2, #4
-               	add	x0, x5, x1
+               	mov	x1, x3
+               	lsl	x2, x1, #4
+               	add	x0, x5, x2
                	ldr	s0, [x0]
-               	add	x1, x4, x1
-               	ldr	s1, [x1]
+               	add	x2, x4, x2
+               	ldr	s1, [x2]
                	fcmp	s0, s1
                	b.ne	<addr>
                	mov	x7, #0x1                // =1
                	ldr	s0, [x0, #0x4]
-               	ldr	s1, [x1, #0x4]
+               	ldr	s1, [x2, #0x4]
                	fcmp	s0, s1
                	b.ne	<addr>
                	mov	x7, #0x2                // =2
                	ldr	s0, [x0, #0x8]
-               	ldr	s1, [x1, #0x8]
+               	ldr	s1, [x2, #0x8]
                	fcmp	s0, s1
                	b.ne	<addr>
                	mov	x6, #0x3                // =3
                	ldr	s0, [x0, #0xc]
-               	ldr	s1, [x1, #0xc]
+               	ldr	s1, [x2, #0xc]
                	fcmp	s0, s1
                	b.ne	<addr>
-               	add	x2, x2, #0x1
-               	cmp	w2, #0xc
+               	add	x1, x1, #0x1
+               	cmp	w1, #0xc
                	b.lt	<addr>
                	movi	d0, #0000000000000000
                	adrp	x0, <page>
@@ -128,9 +128,9 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	ldr	x0, [x0]
+               	fcvt	d0, s0
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
-               	fcvt	d0, s0
                	bl	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
@@ -142,19 +142,20 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	ldr	x0, [x0]
+               	adrp	x4, <page>
+               	add	x4, x4, <lo12>
+               	lsl	x2, x1, #4
+               	add	x4, x4, x2
+               	ldr	s0, [x4, x3, lsl #2]
+               	fcvt	d0, s0
+               	adrp	x4, <addr>
+               	add	x4, x4, <lo12>
+               	add	x2, x4, x2
+               	ldr	s1, [x2, x3, lsl #2]
+               	fcvt	d1, s1
+               	mov	x2, x1
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
-               	adrp	x5, <page>
-               	add	x5, x5, <lo12>
-               	lsl	x4, x2, #4
-               	add	x5, x5, x4
-               	ldr	s0, [x5, x3, lsl #2]
-               	fcvt	d0, s0
-               	adrp	x5, <addr>
-               	add	x5, x5, <lo12>
-               	add	x4, x5, x4
-               	ldr	s1, [x4, x3, lsl #2]
-               	fcvt	d1, s1
                	bl	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10

@@ -3,7 +3,7 @@ inline_asm_a64_fp_modifier.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -26,10 +26,9 @@ Disassembly of section .text:
                	fmul	d0, d1, d2
                	mov	x16, #0x4045000000000000 // =4631107791820423168
                	fmov	d1, x16
-               	mov	x0, #0x2a               // =42
-               	mov	x1, #0x0                // =0
                	fcmp	d0, d1
-               	csel	x0, x0, x1, eq
+               	mov	x16, #0x2a              // =42
+               	csel	x0, x16, xzr, eq
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

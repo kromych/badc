@@ -81,7 +81,8 @@ pub(super) fn int_cmp_cc(op: BinOp) -> Option<Cc> {
 /// `Inst::Select`: `cmov` on the flags of the condition the allocator
 /// fused into the select, read as a branch on it would be, or on `test
 /// cond, cond`. A floating compare's `==` and `!=` add `cmovp`. A floating
-/// select moves the bits through r10 / r11; `mov` and `movq` keep the flags.
+/// select moves the bits through the site's scratch pair; `mov` and `movq`
+/// keep the flags.
 pub(super) fn emit_select(
     code: &mut CodeBuf,
     dst: Place,
@@ -103,7 +104,7 @@ pub(super) fn emit_select(
         };
         shape
     } else {
-        let Some(rc) = materialize_int(code, place_of(alloc, cond), SCRATCH_R10, frame) else {
+        let Some(rc) = materialize_int(code, place_of(alloc, cond), S0, frame) else {
             return fail("Select: condition not int reg / spill");
         };
         let width = if super::super::passes::narrow::is_cmp32(&func.cmp32, v) {
@@ -127,16 +128,18 @@ pub(super) fn emit_select(
     };
     if matches!(kind, LoadKind::F32 | LoadKind::F64) {
         let fp = frame.fp_scratch[0];
-        for (src, r) in [(a, SCRATCH_R10), (b, SCRATCH_R11)] {
+        let mut pair = [Reg(0); 2];
+        for (k, (src, s)) in [(a, S0), (b, S1)].into_iter().enumerate() {
             let Some(x) = materialize_fp(code, place_of(alloc, src), Reg(fp), frame) else {
                 return fail("Select: arm not fp reg / spill");
             };
-            emit_movq_r_xmm(code, r, x);
+            pair[k] = scratch(code, s);
+            emit_movq_r_xmm(code, pair[k], x);
         }
         let (t, x) = if a_first {
-            (SCRATCH_R11, SCRATCH_R10)
+            (pair[1], pair[0])
         } else {
-            (SCRATCH_R10, SCRATCH_R11)
+            (pair[0], pair[1])
         };
         cmov_pick(code, cc, parity, t, x);
         let Some(xd) = fp_or_spill_dst(dst, frame) else {
@@ -146,13 +149,13 @@ pub(super) fn emit_select(
         fp_spill_dst_to_slot(code, dst, xd, frame);
         return Ok(());
     }
-    let Some(ra) = materialize_int(code, place_of(alloc, a), SCRATCH_R10, frame) else {
+    let Some(ra) = materialize_int(code, place_of(alloc, a), S0, frame) else {
         return fail("Select: arm not int reg / spill");
     };
-    let Some(rb) = materialize_int(code, place_of(alloc, b), SCRATCH_R11, frame) else {
+    let Some(rb) = materialize_int(code, place_of(alloc, b), S1, frame) else {
         return fail("Select: arm not int reg / spill");
     };
-    let Some(rd) = int_or_spill_dst(dst) else {
+    let Some(rd) = int_or_spill_dst(code, dst) else {
         return fail("Select: dst not int reg / spill");
     };
     let (x, y) = if a_first { (ra, rb) } else { (rb, ra) };
@@ -168,13 +171,13 @@ pub(super) fn emit_select(
             return fail("Select: condition has no inverse");
         };
         let y = if parity {
-            let t = if y == SCRATCH_R10 || y == SCRATCH_R11 {
+            let t = if y == scratch_reg(code, S0) || y == scratch_reg(code, S1) {
                 y
             } else {
-                let t = if x == SCRATCH_R10 {
-                    SCRATCH_R11
+                let t = if x == scratch_reg(code, S0) {
+                    scratch(code, S1)
                 } else {
-                    SCRATCH_R10
+                    scratch(code, S0)
                 };
                 emit_mov_rr(code, t, y);
                 t
@@ -191,7 +194,7 @@ pub(super) fn emit_select(
 }
 
 /// `t = x` when `cc` holds, or when PF is set under `parity`.
-fn cmov_pick(code: &mut Vec<u8>, cc: Cc, parity: bool, t: Reg, x: Reg) {
+fn cmov_pick(code: &mut CodeBuf, cc: Cc, parity: bool, t: Reg, x: Reg) {
     use super::encode::emit_cmovcc_rr;
     emit_cmovcc_rr(code, cc, t, x);
     if parity {
@@ -203,7 +206,7 @@ fn cmov_pick(code: &mut Vec<u8>, cc: Cc, parity: bool, t: Reg, x: Reg) {
 /// the flags directly and the boolean materialization is elided, else
 /// `setcc` + `movzx` the result into `rd`.
 fn finish_int_cmp(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     v: super::super::ir::ValueId,
     cc: Cc,
     rd: Reg,
@@ -229,7 +232,7 @@ pub(super) fn emit_extend(
     frame: Frame,
 ) -> Emit {
     let src_place = place_of(alloc, value);
-    let Some(rd) = int_or_spill_dst(dst) else {
+    let Some(rd) = int_or_spill_dst(code, dst) else {
         return fail("Extend: dst not int reg / spill");
     };
     let Some(rn) = materialize_int(code, src_place, rd, frame) else {
@@ -247,7 +250,7 @@ pub(super) fn emit_extend(
 
 /// `rd <- rn`, sign-extended from the width of an `I8` / `I16` / `I32`
 /// `kind` (`MOVSX` / `MOVSXD`); any other kind takes the whole register.
-pub(super) fn emit_sign_extend(code: &mut Vec<u8>, rd: Reg, rn: Reg, kind: LoadKind) {
+pub(super) fn emit_sign_extend(code: &mut CodeBuf, rd: Reg, rn: Reg, kind: LoadKind) {
     match kind {
         LoadKind::I8 => super::encode::emit_movsx_r_r8(code, rd, rn),
         LoadKind::I16 => super::encode::emit_movsx_r_r16(code, rd, rn),
@@ -284,6 +287,7 @@ pub(super) fn emit_copy(
         }
         (Place::IntReg(r), Place::Spill(_)) if !is_fp => {
             spill_dst_to_slot(code, dst, Reg(r), frame);
+            spill_wide_rest(code, w, dst, Reg(r), frame);
             return Ok(());
         }
         _ => {}
@@ -326,7 +330,7 @@ pub(super) fn emit_copy(
         }
         fp_spill_dst_to_slot(code, dst, dd, frame);
     } else {
-        let Some(rd) = int_or_spill_dst(dst) else {
+        let Some(rd) = int_or_spill_dst(code, dst) else {
             return fail("Copy: dst not int reg / spill");
         };
         let Some(rn) = materialize_int(code, src_place, rd, frame) else {
@@ -336,6 +340,7 @@ pub(super) fn emit_copy(
             emit_mov_rr(code, rd, rn);
         }
         spill_dst_to_slot(code, dst, rd, frame);
+        spill_wide_rest(code, w, dst, rd, frame);
     }
     Ok(())
 }
@@ -350,7 +355,7 @@ pub(super) fn emit_neg(
     frame: Frame,
 ) -> Emit {
     let src_place = place_of(alloc, value);
-    let Some(rd) = int_or_spill_dst(dst) else {
+    let Some(rd) = int_or_spill_dst(code, dst) else {
         return fail("Neg: dst not int reg / spill");
     };
     let Some(rn) = materialize_int(code, src_place, rd, frame) else {
@@ -377,7 +382,7 @@ pub(super) fn emit_bswap(
     frame: Frame,
 ) -> Emit {
     let src_place = place_of(alloc, value);
-    let Some(rd) = int_or_spill_dst(dst) else {
+    let Some(rd) = int_or_spill_dst(code, dst) else {
         return fail("Bswap: dst not int reg / spill");
     };
     let Some(rn) = materialize_int(code, src_place, rd, frame) else {
@@ -420,7 +425,7 @@ pub(super) fn emit_bit_count(
     frame: Frame,
 ) -> Emit {
     let src_place = place_of(alloc, value);
-    let Some(rd) = int_or_spill_dst(dst) else {
+    let Some(rd) = int_or_spill_dst(code, dst) else {
         return fail("BitCount: dst not int reg / spill");
     };
     let Some(rn) = materialize_int(code, src_place, rd, frame) else {
@@ -430,21 +435,23 @@ pub(super) fn emit_bit_count(
     match op {
         BitCountOp::Popcount => emit_rr(code, Mnem::Popcnt, width, rd, rn),
         BitCountOp::Ctz => {
-            if !nonzero {
-                emit_mov_r_imm64(code, SCRATCH_R11, i64::from(bits));
+            let guard = (!nonzero).then(|| scratch(code, S1));
+            if let Some(t) = guard {
+                emit_mov_r_imm64(code, t, i64::from(bits));
             }
             emit_rr(code, Mnem::Bsf, width, rd, rn);
-            if !nonzero {
-                emit_rr(code, Mnem::Cmovz, 4, rd, SCRATCH_R11);
+            if let Some(t) = guard {
+                emit_rr(code, Mnem::Cmovz, 4, rd, t);
             }
         }
         BitCountOp::Clz => {
-            if !nonzero {
-                emit_mov_r_imm64(code, SCRATCH_R11, i64::from(2 * bits - 1));
+            let guard = (!nonzero).then(|| scratch(code, S1));
+            if let Some(t) = guard {
+                emit_mov_r_imm64(code, t, i64::from(2 * bits - 1));
             }
             emit_rr(code, Mnem::Bsr, width, rd, rn);
-            if !nonzero {
-                emit_rr(code, Mnem::Cmovz, 4, rd, SCRATCH_R11);
+            if let Some(t) = guard {
+                emit_rr(code, Mnem::Cmovz, 4, rd, t);
             }
             emit_ri(code, Mnem::Xor, 4, rd, bits - 1);
         }
@@ -452,15 +459,16 @@ pub(super) fn emit_bit_count(
         // over the same width. The `or` leaves the operand non-zero, so
         // `bsr` needs no zero guard.
         BitCountOp::Clrsb => {
+            let t = scratch(code, S1);
             if width == 4 {
-                super::encode::emit_mov_r32_r32(code, SCRATCH_R11, rn);
+                super::encode::emit_mov_r32_r32(code, t, rn);
             } else {
-                emit_mov_rr(code, SCRATCH_R11, rn);
+                emit_mov_rr(code, t, rn);
             }
-            emit_shift_ri(code, Mnem::Shl, width, SCRATCH_R11, 1);
-            emit_rr(code, Mnem::Xor, width, SCRATCH_R11, rn);
-            emit_ri(code, Mnem::Or, width, SCRATCH_R11, 1);
-            emit_rr(code, Mnem::Bsr, width, rd, SCRATCH_R11);
+            emit_shift_ri(code, Mnem::Shl, width, t, 1);
+            emit_rr(code, Mnem::Xor, width, t, rn);
+            emit_ri(code, Mnem::Or, width, t, 1);
+            emit_rr(code, Mnem::Bsr, width, rd, t);
             emit_ri(code, Mnem::Xor, 4, rd, bits - 1);
         }
     }
@@ -605,7 +613,7 @@ pub(super) fn emit_fma(
 /// multiply-accumulate. The two-operand `imul` overwrites its destination,
 /// which cannot be `rd` while `c` is still to arrive, so the product forms
 /// in a multiplicand's own register when this instruction is its last
-/// reader, else in `SCRATCH_R11`.
+/// reader, else in scratch 1.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_mul_add(
     code: &mut CodeBuf,
@@ -618,7 +626,7 @@ pub(super) fn emit_mul_add(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
-    let Some(rd) = int_or_spill_dst(dst) else {
+    let Some(rd) = int_or_spill_dst(code, dst) else {
         return fail("MulAdd: dst not int reg / spill");
     };
     let (pa, pb, pc) = (place_of(alloc, a), place_of(alloc, b), place_of(alloc, c));
@@ -648,15 +656,16 @@ pub(super) fn emit_mul_add(
     {
         pair
     } else {
-        let Some(ra) = materialize_int(code, pa, SCRATCH_R11, frame) else {
+        let Some(ra) = materialize_int(code, pa, S1, frame) else {
             return fail("MulAdd: a not int reg / spill");
         };
-        if ra.0 != SCRATCH_R11.0 {
-            emit_mov_rr(code, SCRATCH_R11, ra);
+        let t = scratch(code, S1);
+        if ra != t {
+            emit_mov_rr(code, t, ra);
         }
-        (SCRATCH_R11, pb)
+        (t, pb)
     };
-    let Some(rm) = materialize_int(code, other, SCRATCH_R10, frame) else {
+    let Some(rm) = materialize_int(code, other, S0, frame) else {
         return fail("MulAdd: multiplicand not int reg / spill");
     };
     emit_rr(code, Mnem::Imul, 8, rp, rm);
@@ -664,7 +673,7 @@ pub(super) fn emit_mul_add(
     // and a spilled addend reloads into the scratch that path left
     // free; otherwise the destination takes the addend first. Either
     // way the multiplicands are already consumed.
-    let landing = if rp.0 == rd.0 { SCRATCH_R11 } else { rd };
+    let landing: Stage = if rp.0 == rd.0 { S1.into() } else { rd.into() };
     let Some(rc) = materialize_int(code, pc, landing, frame) else {
         return fail("MulAdd: c not int reg / spill");
     };
@@ -686,44 +695,39 @@ pub(super) fn emit_mul_add(
     Ok(())
 }
 
-/// `Inst::Fneg`: flip the IEEE 754 sign bit, `1 << 63` for a double and
-/// `1 << 31` for a single held in the low dword (C99 6.3.1.8), through a
-/// mask built in the second FP scratch.
-pub(super) fn emit_fneg(
+/// `Inst::Fneg` (`clear` false) flips the IEEE 754 sign bit, `fabs` (C99
+/// 7.12.7.2, `clear` true) clears it, of a double or of a single in the low
+/// dword, by one `vxorpd` / `vandpd` with a 16-byte read-only mask. Returns
+/// the mask's `(displacement offset, bits, width)` for the literal pool.
+pub(super) fn emit_fp_sign(
     code: &mut CodeBuf,
     dst: Place,
     v: super::super::ir::ValueId,
     value: u32,
+    clear: bool,
     alloc: &Allocation,
     frame: Frame,
-) -> Emit {
+) -> Emit<(usize, u64, u8)> {
     let src_place = place_of(alloc, value);
     let Some(dd) = fp_or_spill_dst(dst, frame) else {
-        return fail("Fneg: dst not fp reg / spill");
+        return fail("fp sign: dst not fp reg / spill");
     };
     let Some(dn) = materialize_fp(code, src_place, dd, frame) else {
-        return fail("Fneg: value not fp reg / spill / int reg");
+        return fail("fp sign: value not fp reg / spill / int reg");
     };
-    if dn.0 != dd.0 {
-        emit_movapd_xmm_xmm(code, dd, dn);
-    }
-    // r10 holds nothing live here.
-    let scratch_int = SCRATCH_R10;
-    let mask: i64 = if alloc.is_f32(v) {
-        0x8000_0000
+    let sign: u64 = if alloc.is_f32(v) { 1 << 31 } else { 1 << 63 };
+    let (opcode, mask) = if clear {
+        (0x54, (sign << 1).wrapping_sub(1) & !sign)
     } else {
-        i64::MIN
+        (0x57, sign)
     };
-    emit_mov_r_imm64(code, scratch_int, mask);
-    emit_movq_xmm_r(code, Reg(frame.fp_scratch[1]), scratch_int);
-    emit_xorpd(code, dd, Reg(frame.fp_scratch[1]));
+    let field = super::encode::emit_vex_pd_logic_rip(code, opcode, dd, dn);
     fp_spill_dst_to_slot(code, dst, dd, frame);
-    Ok(())
+    Ok((field, mask, 16))
 }
 
-/// A unary FP intrinsic that is one instruction: `sqrtsd` / `sqrtss`, or
-/// `fabs` as an AND with the inverted sign mask (C99 7.12.7) built as in
-/// `emit_fneg`.
+/// A unary FP intrinsic that is one instruction: `sqrtsd` / `sqrtss`, or a
+/// rounding.
 pub(super) fn emit_fp_unary(
     code: &mut CodeBuf,
     dst: Place,
@@ -734,7 +738,7 @@ pub(super) fn emit_fp_unary(
     frame: Frame,
 ) -> Emit {
     use super::super::op::Intrinsic as I;
-    use super::encode::{emit_andpd, emit_roundsd, emit_roundss, emit_sqrtsd, emit_sqrtss};
+    use super::encode::{emit_roundsd, emit_roundss, emit_sqrtsd, emit_sqrtss};
     let src_place = place_of(alloc, value);
     let Some(dd) = fp_or_spill_dst(dst, frame) else {
         return fail("fp_unary: dst not fp reg / spill");
@@ -754,15 +758,6 @@ pub(super) fn emit_fp_unary(
             } else {
                 emit_sqrtsd(code, dd, dn);
             }
-        }
-        I::Fabs | I::Fabsf => {
-            if dn.0 != dd.0 {
-                emit_movapd_xmm_xmm(code, dd, dn);
-            }
-            let mask: i64 = if is_f32 { 0x7fff_ffff } else { i64::MAX };
-            emit_mov_r_imm64(code, SCRATCH_R10, mask);
-            emit_movq_xmm_r(code, Reg(frame.fp_scratch[1]), SCRATCH_R10);
-            emit_andpd(code, dd, Reg(frame.fp_scratch[1]));
         }
         I::Floor | I::Floorf | I::Ceil | I::Ceilf | I::Trunc | I::Truncf => {
             // ROUNDSD/ROUNDSS rounding-mode immediate, with bit 3 set to
@@ -804,7 +799,7 @@ pub(super) fn emit_fp_cast(
     let src_place = place_of(alloc, value);
     match kind {
         FpCastKind::IntToFp => {
-            let Some(rn) = materialize_int(code, src_place, SCRATCH_R10, frame) else {
+            let Some(rn) = materialize_int(code, src_place, S0, frame) else {
                 return fail("FpCast IntToFp: value not int reg / spill");
             };
             let Some(dd) = fp_or_spill_dst(dst, frame) else {
@@ -828,7 +823,7 @@ pub(super) fn emit_fp_cast(
             // Unsigned 64-bit to double (SSE2 has no unsigned convert): a clear bit
             // 63 makes the signed convert exact; otherwise halve with the discarded
             // low bit as the sticky bit, convert, and double.
-            let Some(src) = materialize_int(code, src_place, SCRATCH_R10, frame) else {
+            let Some(src) = materialize_int(code, src_place, S0, frame) else {
                 return fail("FpCast UIntToFp: value not int reg / spill");
             };
             let Some(dd) = fp_or_spill_dst(dst, frame) else {
@@ -836,8 +831,8 @@ pub(super) fn emit_fp_cast(
             };
             // Modifiable scratch copies so a live source register is not
             // clobbered by the shift/and below.
-            let rn = SCRATCH_R10;
-            let t = SCRATCH_R11;
+            let rn = scratch(code, S0);
+            let t = scratch(code, S1);
             // C99 6.3.1.4: a `float` result converts in single precision.
             let res_f32 = alloc.is_f32(v);
             // Break the false dependency the converts carry on `dd`;
@@ -876,7 +871,7 @@ pub(super) fn emit_fp_cast(
             let Some(dn) = materialize_fp(code, src_place, Reg(frame.fp_scratch[0]), frame) else {
                 return fail("FpCast FpToInt: value not fp reg / spill / int reg");
             };
-            let Some(rd) = int_or_spill_dst(dst) else {
+            let Some(rd) = int_or_spill_dst(code, dst) else {
                 return fail("FpCast FpToInt: dst not int reg / spill");
             };
             // C99 6.3.1.4: a `float` source truncates directly to the
@@ -897,7 +892,7 @@ pub(super) fn emit_fp_cast(
             else {
                 return fail("FpCast UFpToInt: value not fp reg / spill / int reg");
             };
-            let Some(rd) = int_or_spill_dst(dst) else {
+            let Some(rd) = int_or_spill_dst(code, dst) else {
                 return fail("FpCast UFpToInt: dst not int reg / spill");
             };
             // Modifiable copy so the `subsd` below cannot clobber a
@@ -905,8 +900,9 @@ pub(super) fn emit_fp_cast(
             let dn = Reg(frame.fp_scratch[0]);
             emit_movapd_xmm_xmm(code, dn, src_xmm);
             let two63 = Reg(frame.fp_scratch[1]);
-            emit_mov_r_imm64(code, SCRATCH_R11, 0x43E0000000000000u64 as i64);
-            emit_movq_xmm_r(code, two63, SCRATCH_R11);
+            let t = scratch(code, S1);
+            emit_mov_r_imm64(code, t, 0x43E0000000000000u64 as i64);
+            emit_movq_xmm_r(code, two63, t);
             emit_ucomisd(code, dn, two63);
             emit_jcc_rel8(code, Cc::Ae, 0);
             let jae_fixup = code.len() - 1;
@@ -917,8 +913,8 @@ pub(super) fn emit_fp_cast(
             code[jae_fixup] = (big - jae_fixup - 1) as i8 as u8;
             emit_subsd(code, dn, two63);
             emit_cvttsd2si(code, rd, dn);
-            emit_mov_r_imm64(code, SCRATCH_R11, 0x8000000000000000u64 as i64);
-            emit_rr(code, Mnem::Or, 8, rd, SCRATCH_R11);
+            emit_mov_r_imm64(code, t, 0x8000000000000000u64 as i64);
+            emit_rr(code, Mnem::Or, 8, rd, t);
             let done = code.len();
             code[jmp_fixup] = (done - jmp_fixup - 1) as i8 as u8;
             spill_dst_to_slot(code, dst, rd, frame);
@@ -947,7 +943,7 @@ pub(super) fn emit_fp_cast(
             let Some(dn) = materialize_fp(code, src_place, Reg(frame.fp_scratch[0]), frame) else {
                 return fail("FpCast FpBits: value not fp reg / spill / int reg");
             };
-            let Some(rd) = int_or_spill_dst(dst) else {
+            let Some(rd) = int_or_spill_dst(code, dst) else {
                 return fail("FpCast FpBits: dst not int reg / spill");
             };
             emit_movq_r_xmm(code, rd, dn);
@@ -955,7 +951,7 @@ pub(super) fn emit_fp_cast(
             Ok(())
         }
         FpCastKind::BitsFp => {
-            let Some(rn) = materialize_int(code, src_place, SCRATCH_R10, frame) else {
+            let Some(rn) = materialize_int(code, src_place, S0, frame) else {
                 return fail("FpCast BitsFp: value not int reg / spill");
             };
             let Some(dd) = fp_or_spill_dst(dst, frame) else {
@@ -1013,7 +1009,7 @@ fn shift_size(op: BinOp) -> u8 {
 }
 
 /// Stage the lhs into the destination of a two-operand op.
-fn stage_lhs(code: &mut Vec<u8>, rd: Reg, rn: Reg) {
+fn stage_lhs(code: &mut CodeBuf, rd: Reg, rn: Reg) {
     if rd.0 != rn.0 {
         emit_mov_rr(code, rd, rn);
     }
@@ -1044,9 +1040,9 @@ pub(super) fn emit_binop(
         );
     }
     if let Some((cc, nan_fix)) = fp_compare_cc(op) {
-        return emit_fp_compare(code, op, v, dst, lhs, rhs, cc, nan_fix, alloc, frame);
+        return emit_fp_compare(code, op, v, dst, lhs, rhs, cc, nan_fix, alloc, frame).map(|_| ());
     }
-    let Some(rd) = int_or_spill_dst(dst) else {
+    let Some(rd) = int_or_spill_dst(code, dst) else {
         return fail("Binop: dst not int reg / spill");
     };
     // The walker's sign-narrow pair `Binop(Shl, X, Imm(K)); Binop(Shr, _,
@@ -1156,11 +1152,31 @@ pub(super) fn emit_fp_binop_mem(
     Ok(end)
 }
 
+/// A floating comparison `op` whose constant operand the allocator folds;
+/// the end of that literal's displacement.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_fp_compare_folded(
+    code: &mut CodeBuf,
+    op: BinOp,
+    v: super::super::ir::ValueId,
+    dst: Place,
+    lhs: u32,
+    rhs: u32,
+    alloc: &Allocation,
+    frame: Frame,
+) -> Emit<Option<usize>> {
+    let Some((cc, nan_fix)) = fp_compare_cc(op) else {
+        return fail("Fcmp: no condition for the operator");
+    };
+    emit_fp_compare(code, op, v, dst, lhs, rhs, cc, nan_fix, alloc, frame)
+}
+
 /// FP comparison: `ucomisd` / `ucomiss` sets ZF / CF / PF, PF=1 signaling
 /// an unordered (NaN) compare. C99 6.5.9p3 requires `==` to yield 0 on NaN
 /// and `!=` to yield 1, so the cc-only `setcc` takes an explicit
 /// AND-with-`setnp` / OR-with-`setp` fixup. A fused branch reads the flags
-/// instead.
+/// instead. A constant the allocator folds (`fp_mem_operand`) is the
+/// compare's memory operand; the displacement's end is returned for it.
 #[allow(clippy::too_many_arguments)]
 fn emit_fp_compare(
     code: &mut CodeBuf,
@@ -1173,34 +1189,49 @@ fn emit_fp_compare(
     nan_fix: FpCmpNanFix,
     alloc: &Allocation,
     frame: Frame,
-) -> Emit {
-    let Some(dn) = materialize_fp(code, place_of(alloc, lhs), Reg(frame.fp_scratch[0]), frame)
-    else {
-        return fail("Fcmp: lhs not fp reg / spill / int reg");
+) -> Emit<Option<usize>> {
+    let (first, second) = if fp_compare_swaps_operands(op) {
+        (rhs, lhs)
+    } else {
+        (lhs, rhs)
     };
-    let Some(dm) = materialize_fp(code, place_of(alloc, rhs), Reg(frame.fp_scratch[1]), frame)
-    else {
-        return fail("Fcmp: rhs not fp reg / spill / int reg");
+    let Some(dn) = materialize_fp(
+        code,
+        place_of(alloc, first),
+        Reg(frame.fp_scratch[0]),
+        frame,
+    ) else {
+        return fail("Fcmp: first operand not fp reg / spill / int reg");
     };
     let fused = alloc.branch_fused.get(v as usize).copied().unwrap_or(false);
-    let (dn, dm) = if fp_compare_swaps_operands(op) {
-        (dm, dn)
-    } else {
-        (dn, dm)
-    };
     // The compare width follows the operands' precision (C99 6.3.1.8); a
     // relational operator signals on any NaN: `comisd` (C99 F.3).
     let f32 = alloc.is_f32(lhs) || alloc.is_f32(rhs);
-    match (f32, crate::c5::ir::fp_compare_signals(op)) {
-        (true, false) => emit_ucomiss(code, dn, dm),
-        (false, false) => emit_ucomisd(code, dn, dm),
-        (true, true) => super::encode::emit_comiss(code, dn, dm),
-        (false, true) => super::encode::emit_comisd(code, dn, dm),
+    let signals = crate::c5::ir::fp_compare_signals(op);
+    let mut literal = None;
+    if alloc.fp_mem_operand.contains(&second) {
+        super::encode::emit_comis_rip(code, !f32, signals, dn);
+        literal = Some(code.len());
+    } else {
+        let Some(dm) = materialize_fp(
+            code,
+            place_of(alloc, second),
+            Reg(frame.fp_scratch[1]),
+            frame,
+        ) else {
+            return fail("Fcmp: second operand not fp reg / spill / int reg");
+        };
+        match (f32, signals) {
+            (true, false) => emit_ucomiss(code, dn, dm),
+            (false, false) => emit_ucomisd(code, dn, dm),
+            (true, true) => super::encode::emit_comiss(code, dn, dm),
+            (false, true) => super::encode::emit_comisd(code, dn, dm),
+        }
     }
     if fused {
-        return Ok(());
+        return Ok(literal);
     }
-    let Some(rd) = int_or_spill_dst(dst) else {
+    let Some(rd) = int_or_spill_dst(code, dst) else {
         return fail("Fcmp: dst not int reg / spill");
     };
     emit_setcc_r8(code, cc, rd);
@@ -1208,23 +1239,22 @@ fn emit_fp_compare(
     match nan_fix {
         FpCmpNanFix::None => {}
         FpCmpNanFix::AndNotP | FpCmpNanFix::OrP => {
-            // r10 / r11 hold nothing live on this path (both operands are
-            // in xmm), so one of them is disjoint from `rd`.
-            let scratch = if rd.0 == SCRATCH_R10.0 {
-                SCRATCH_R11
+            // Both operands are in xmm, so one scratch is disjoint from `rd`.
+            let t = if rd == scratch_reg(code, S0) {
+                scratch(code, S1)
             } else {
-                SCRATCH_R10
+                scratch(code, S0)
             };
             let and_not_p = matches!(nan_fix, FpCmpNanFix::AndNotP);
             let fix_cc = if and_not_p { Cc::Np } else { Cc::P };
-            emit_setcc_r8(code, fix_cc, scratch);
-            emit_movzx_r_r8(code, scratch, scratch);
+            emit_setcc_r8(code, fix_cc, t);
+            emit_movzx_r_r8(code, t, t);
             let mnem = if and_not_p { Mnem::And } else { Mnem::Or };
-            emit_rr(code, mnem, 8, rd, scratch);
+            emit_rr(code, mnem, 8, rd, t);
         }
     }
     spill_dst_to_slot(code, dst, rd, frame);
-    Ok(())
+    Ok(literal)
 }
 
 /// A spilled second operand of an arithmetic or compare op is read in
@@ -1295,29 +1325,25 @@ fn emit_int_binop(
     // The rhs scratch carries a spilled shift count, or preserves a register
     // rhs that aliases rd. It must not be rcx for a shift: a rotate
     // moves the count into cl while preserving a live rcx with a push / pop,
-    // which a count materialized into rcx here would defeat; r11 is always
-    // safe.
+    // which a count materialized into rcx here would defeat; a scratch of the
+    // site is always safe.
     let is_shift = matches!(
         op,
         BinOp::Shl | BinOp::Shr | BinOp::Shru | BinOp::Ror | BinOp::Ror32
     );
-    let rhs_scratch = if is_shift {
-        if rd.0 == SCRATCH_R10.0 {
-            SCRATCH_R11
-        } else {
-            SCRATCH_R10
-        }
-    } else if rd.0 == SCRATCH_R10.0 {
-        Reg::RCX
-    } else {
-        SCRATCH_R10
+    let rd_is_scratch = rd == scratch_reg(code, S0);
+    let rhs_scratch: Stage = match (is_shift, rd_is_scratch) {
+        (true, true) => S1.into(),
+        (false, true) => Reg::RCX.into(),
+        (_, false) => S0.into(),
     };
     let rhs_aliases_rd = matches!(rhs_place, Place::IntReg(r) if r == rd.0);
     // When rhs and dst share a register and lhs is spilled, the lhs load
     // below would overwrite rhs, so rhs moves to the scratch first.
     let rhs_preserved_in_scratch = rhs_aliases_rd && matches!(lhs_place, Place::Spill(_));
     if rhs_preserved_in_scratch {
-        emit_mov_rr(code, rhs_scratch, rd);
+        let t = rhs_scratch.reg(code);
+        emit_mov_rr(code, t, rd);
     }
     let Some(rn) = int_operand_into_rd(code, lhs_place, rd, frame) else {
         return fail("Binop: lhs not int reg / spill");
@@ -1330,7 +1356,7 @@ fn emit_int_binop(
     ) {
         // A preserved rhs now lives in the scratch, not in its original place.
         let rhs_place = if rhs_preserved_in_scratch {
-            Place::IntReg(rhs_scratch.0)
+            Place::IntReg(rhs_scratch.reg(code).0)
         } else {
             rhs_place
         };
@@ -1368,7 +1394,7 @@ fn emit_int_binop(
         // rd now holds lhs from the spill load and the second operand
         // is rhs_scratch; otherwise rd still holds rhs and rn holds lhs.
         let other = if rhs_preserved_in_scratch {
-            rhs_scratch
+            rhs_scratch.reg(code)
         } else {
             rn
         };
@@ -1381,10 +1407,11 @@ fn emit_int_binop(
     let reads_count_first = is_cmp || matches!(op, BinOp::Shl | BinOp::Shr | BinOp::Shru);
     let stage_rhs_to_scratch = rhs_aliases_rd && !reads_count_first;
     let Some(rm) = (if rhs_preserved_in_scratch {
-        Some(rhs_scratch)
+        Some(rhs_scratch.reg(code))
     } else if stage_rhs_to_scratch {
-        emit_mov_rr(code, rhs_scratch, rd);
-        Some(rhs_scratch)
+        let t = rhs_scratch.reg(code);
+        emit_mov_rr(code, t, rd);
+        Some(t)
     } else if let Place::IntReg(r) = rhs_place {
         Some(Reg(r))
     } else {
@@ -1455,7 +1482,7 @@ fn implicit_holds_live(
 /// 128-bit product to rdx:rax. A value live in rax / rdx across the
 /// operation is preserved with push / pop; the transient misalignment is
 /// harmless since no call intervenes. `rn` is the materialized lhs;
-/// `rhs_place` routes into r10.
+/// `rhs_place` routes into a scratch of the site.
 #[allow(clippy::too_many_arguments)]
 fn emit_binop_rdx_rax(
     code: &mut CodeBuf,
@@ -1478,7 +1505,7 @@ fn emit_binop_rdx_rax(
     // the remainder; a register rd overwrites anyway is not saved.
     let preserve_rax = rd.0 != Reg::RAX.0 && implicit_holds_live(alloc, v, Reg::RAX, frame);
     let preserve_rdx = rd.0 != Reg::RDX.0 && implicit_holds_live(alloc, v, Reg::RDX, frame);
-    let pushed_bytes = (preserve_rax as i32 + preserve_rdx as i32) * 8;
+    let pushed_bytes = saved_shift(frame, u32::from(preserve_rax) + u32::from(preserve_rdx));
 
     // The one-operand forms accept r/m64, so a spilled operand is named
     // through its slot (shifted by the pushes) and a register operand
@@ -1490,28 +1517,28 @@ fn emit_binop_rdx_rax(
     let rm_operand = match rhs_place {
         Place::IntReg(r) if r != Reg::RAX.0 && r != Reg::RDX.0 => RmOperand::Reg(Reg(r)),
         Place::Spill(slot) => {
-            let (sb, off) = spill_slot_addr_shifted(frame, slot, pushed_bytes as u32);
+            let (sb, off) = spill_slot_addr_shifted(frame, slot, pushed_bytes);
             RmOperand::Mem(sb, off)
         }
         Place::IntReg(r) => {
-            // r10 may hold a spilled lhs (a spilled dst is staged there); r11 never
-            // does.
-            let rhs_scratch = if rn.0 == SCRATCH_R10.0 {
-                SCRATCH_R11
+            // Scratch 0 may hold a spilled lhs (a spilled dst is staged
+            // there); scratch 1 never does.
+            let t = if rn == scratch_reg(code, S0) {
+                scratch(code, S1)
             } else {
-                SCRATCH_R10
+                scratch(code, S0)
             };
-            emit_mov_rr(code, rhs_scratch, Reg(r));
-            RmOperand::Reg(rhs_scratch)
+            emit_mov_rr(code, t, Reg(r));
+            RmOperand::Reg(t)
         }
         _ => return fail("Binop rdx:rax: rhs not int reg / spill"),
     };
 
     if preserve_rax {
-        emit_push_r(code, Reg::RAX);
+        save_across(code, frame, Reg::RAX, keep::RAX);
     }
     if preserve_rdx {
-        emit_push_r(code, Reg::RDX);
+        save_across(code, frame, Reg::RDX, keep::RDX);
     }
     // rax := lhs (dividend low half, or multiplicand).
     if rn.0 != Reg::RAX.0 {
@@ -1551,10 +1578,10 @@ fn emit_binop_rdx_rax(
         emit_mov_rr(code, rd, result_src);
     }
     if preserve_rdx {
-        emit_pop_r(code, Reg::RDX);
+        restore_across(code, frame, Reg::RDX, keep::RDX);
     }
     if preserve_rax {
-        emit_pop_r(code, Reg::RAX);
+        restore_across(code, frame, Reg::RAX, keep::RAX);
     }
     spill_dst_to_slot(code, dst, rd, frame);
     Ok(())
@@ -1573,27 +1600,28 @@ pub(super) fn emit_udiv128(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
-    let Some(rd) = int_or_spill_dst(dst) else {
+    let Some(rd) = int_or_spill_dst(code, dst) else {
         return fail("Udiv128: dst not int reg / spill");
     };
     let (hi, lo) = (place_of(alloc, hi), place_of(alloc, lo));
     let preserve_rax = rd != Reg::RAX && implicit_holds_live(alloc, v, Reg::RAX, frame);
     let preserve_rdx = rd != Reg::RDX && implicit_holds_live(alloc, v, Reg::RDX, frame);
-    let pushed = (u32::from(preserve_rax) + u32::from(preserve_rdx)) * 8;
+    let pushed = saved_shift(frame, u32::from(preserve_rax) + u32::from(preserve_rdx));
     let rm = match place_of(alloc, divisor) {
         Place::IntReg(r) if r != Reg::RAX.0 && r != Reg::RDX.0 => Ok(Reg(r)),
         Place::IntReg(r) => {
-            emit_mov_rr(code, SCRATCH_R11, Reg(r));
-            Ok(SCRATCH_R11)
+            let t = scratch(code, S1);
+            emit_mov_rr(code, t, Reg(r));
+            Ok(t)
         }
         Place::Spill(slot) => Err(spill_slot_addr_shifted(frame, slot, pushed)),
         _ => return fail("Udiv128: divisor not int reg / spill"),
     };
     if preserve_rax {
-        emit_push_r(code, Reg::RAX);
+        save_across(code, frame, Reg::RAX, keep::RAX);
     }
     if preserve_rdx {
-        emit_push_r(code, Reg::RDX);
+        save_across(code, frame, Reg::RDX, keep::RDX);
     }
     let load = |code: &mut CodeBuf, to: Reg, from: Place| match from {
         Place::IntReg(r) => {
@@ -1628,10 +1656,10 @@ pub(super) fn emit_udiv128(
     }
     emit_mov_rr(code, rd, Reg::RAX);
     if preserve_rdx {
-        emit_pop_r(code, Reg::RDX);
+        restore_across(code, frame, Reg::RDX, keep::RDX);
     }
     if preserve_rax {
-        emit_pop_r(code, Reg::RAX);
+        restore_across(code, frame, Reg::RAX, keep::RAX);
     }
     spill_dst_to_slot(code, dst, rd, frame);
     Ok(())
@@ -1686,18 +1714,17 @@ fn emit_shift_by_count_reg(
         emit_shift_cl(code, shift_mnem(op), shift_size(op), target)
     };
     if rd.0 == Reg::RCX.0 {
-        // Stage the value in a scratch disjoint from rcx and the count
-        // register; r11 is reserved outside both allocator banks and
-        // never aliases rd, the count, or any live value.
-        let scratch = SCRATCH_R11;
-        emit_mov_rr(code, scratch, src);
+        // Stage the value in scratch 1, which aliases neither rd, the
+        // count, a spilled source's scratch 0, nor any live value.
+        let t = scratch(code, S1);
+        emit_mov_rr(code, t, src);
         match count {
             ShiftCount::Reg(r) if r.0 != Reg::RCX.0 => emit_mov_rr(code, Reg::RCX, r),
             ShiftCount::Reg(_) => {}
             ShiftCount::Imm(imm) => super::encode::emit_mov_r_imm64(code, Reg::RCX, imm),
         }
-        do_shift(code, scratch);
-        emit_mov_rr(code, rd, scratch);
+        do_shift(code, t);
+        emit_mov_rr(code, rd, t);
         spill_dst_to_slot(code, dst, rd, frame);
         return Ok(());
     }
@@ -1707,7 +1734,7 @@ fn emit_shift_by_count_reg(
     let rcx_holds_live = count_reg.map(|r| r.0).unwrap_or(u8::MAX) != Reg::RCX.0
         && implicit_holds_live(alloc, v, Reg::RCX, frame);
     if rcx_holds_live {
-        emit_push_r(code, Reg::RCX);
+        save_across(code, frame, Reg::RCX, keep::RCX);
     }
     match count {
         ShiftCount::Reg(r) if r.0 != Reg::RCX.0 => emit_mov_rr(code, Reg::RCX, r),
@@ -1716,7 +1743,7 @@ fn emit_shift_by_count_reg(
     }
     do_shift(code, rd);
     if rcx_holds_live {
-        emit_pop_r(code, Reg::RCX);
+        restore_across(code, frame, Reg::RCX, keep::RCX);
     }
     spill_dst_to_slot(code, dst, rd, frame);
     Ok(())
@@ -1737,7 +1764,7 @@ pub(crate) fn binop_imm_materializes(op: BinOp, imm: i64) -> bool {
         BinOp::Add | BinOp::Sub | BinOp::Or | BinOp::Xor => !fits_i32,
         BinOp::And => !(fits_i32 || imm as u64 == 0xffff_ffff),
         _ if int_cmp_cc(op).is_some() => !fits_i32,
-        // Mulh / Mulhu / Div / Divu reach the r11-scratch path below.
+        // Mulh / Mulhu / Div / Divu reach the scratch path below.
         _ => true,
     }
 }
@@ -1753,7 +1780,7 @@ pub(super) fn emit_binop_imm(
     alloc: &Allocation,
     frame: Frame,
 ) -> Emit {
-    let Some(rd) = int_or_spill_dst(dst) else {
+    let Some(rd) = int_or_spill_dst(code, dst) else {
         return fail("BinopI: dst not int reg / spill");
     };
     let lhs_place = place_of(alloc, lhs);
@@ -1810,7 +1837,7 @@ pub(super) fn emit_binop_imm(
         spill_dst_to_slot(code, dst, rd, frame);
         return Ok(());
     }
-    // Forms that avoid the 10-byte `mov r11, imm64` of the scratch path
+    // Forms that avoid the 10-byte `mov scratch, imm64` of the scratch path
     // below: a multiply by a power of two is a shift, by 3 / 5 / 9 one
     // `lea`, by any other i32 `imul rd, rn, imm32`; a shift by 0..63 takes
     // the imm8 form; an add / sub of an i32 into another register is one
@@ -1945,16 +1972,15 @@ pub(super) fn emit_binop_imm(
             frame,
         );
     }
-    // The immediate materializes into r11, which sits outside both
-    // allocator banks (`RegBanks::for_target`) and so never aliases `rd` or
-    // `rn` and is free under any register pressure.
-    let scratch = SCRATCH_R11;
-    super::encode::emit_mov_r_imm64(code, scratch, rhs_imm);
+    // The immediate materializes into scratch 1, which aliases neither
+    // `rd` nor `rn`.
+    let t = scratch(code, S1);
+    super::encode::emit_mov_r_imm64(code, t, rhs_imm);
     stage_lhs(code, rd, rn);
     if let Some(m) = alu_mnem(op) {
-        emit_rr(code, m, 8, rd, scratch);
+        emit_rr(code, m, 8, rd, t);
     } else if let Some(cc) = int_cmp_cc(op) {
-        emit_rr(code, Mnem::Cmp, cmp_width(alloc, v), rn, scratch);
+        emit_rr(code, Mnem::Cmp, cmp_width(alloc, v), rn, t);
         if finish_int_cmp(code, v, cc, rd, alloc) {
             return Ok(());
         }
@@ -2061,7 +2087,7 @@ pub(super) fn flag_steps(func: &FunctionSsa, alloc: &Allocation) -> Vec<Option<F
 /// The step or comparison [`flag_steps`] marked; `None` for any other
 /// instruction.
 pub(super) fn emit_flag_step(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     v: super::super::ir::ValueId,
     steps: &[Option<FlagStep>],
     fcx: &FnCtx,
@@ -2097,9 +2123,16 @@ pub(super) fn emit_flag_step(
 /// flags: the comparison's answer, or the step's own zero test.
 pub(super) fn flag_step_cc(
     steps: &[Option<FlagStep>],
+    block: &super::super::ir::Block,
     cond: super::super::ir::ValueId,
     negate: bool,
 ) -> Option<Cc> {
+    // [`flag_steps`] vouches for the flags at the branch ending the step's
+    // own block only; a branch of another block reading the same value
+    // follows code that may have set them.
+    if !block.inst_range.contains(&cond) {
+        return None;
+    }
     let cc = match steps.get(cond as usize).copied().flatten()? {
         FlagStep::Answered(cc) => cc,
         FlagStep::Sets { .. } => Cc::Ne,
@@ -2288,7 +2321,7 @@ pub(super) fn memory_destinations(
 
 /// The instruction [`memory_destinations`] marked; `None` for any other.
 pub(super) fn emit_memory_destination(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     v: super::super::ir::ValueId,
     marks: &[Option<MemDest>],
     fcx: &FnCtx,

@@ -106,7 +106,7 @@ pub(crate) fn adrp_word(word: u32, pages: i32) -> Result<u32, PairError> {
     if word & 0x9F00_0000 != 0x9000_0000 {
         return Err(PairError::NotAdrp(word));
     }
-    Ok(enc_adrp(Reg((word & 0x1F) as u8), pages))
+    Ok(enc_adrp(Reg((word & 0x1F) as u8), pages).word)
 }
 
 /// Second word of an `adrp` pair carrying `in_page`. Accepts
@@ -188,7 +188,8 @@ fn slot_load_word(rn: Reg, word: u32, in_page: u32, width: SlotWidth) -> Result<
     Ok(match width {
         SlotWidth::W32 => enc_ldr32_imm(rt, rn, in_page),
         SlotWidth::W64 => enc_ldr_imm(rt, rn, in_page),
-    })
+    }
+    .word)
 }
 
 /// Base register an in-page word already addresses through: `Rn` for
@@ -228,8 +229,8 @@ pub(crate) fn movw_word(word: u32, group: u8, signed: bool, value: i64) -> u32 {
 }
 
 /// `movw_word` over a value that folded to a constant, under the range
-/// check the specifier names. GNU as rejects such a value where it does
-/// not fit rather than narrowing it, and names the sign in the message.
+/// check the specifier names. A value that does not fit is rejected rather
+/// than narrowed, and the message names the sign.
 pub(crate) fn movw_const_word(
     word: u32,
     group: u8,
@@ -380,7 +381,7 @@ mod tests {
     fn adrp_field_patch_matches_shared_encoder() {
         for rd in 0u8..32 {
             for pages in -(1i32 << 20)..(1 << 20) {
-                let placeholder = enc_adrp(Reg(rd), 0);
+                let placeholder = enc_adrp(Reg(rd), 0).word;
                 let immlo = (pages as u32) & 0x3;
                 let immhi = ((pages as u32) >> 2) & 0x7_FFFF;
                 let masked = (placeholder & !0x60ff_ffe0) | (immlo << 29) | (immhi << 5);
@@ -402,7 +403,7 @@ mod tests {
         for rd in 0u8..32 {
             for rn in [0u8, 1, 15, 16, 30, 31] {
                 for in_page in 0u32..4096 {
-                    let placeholder = enc_add_imm(Reg(rd), Reg(rn), 0);
+                    let placeholder = enc_add_imm(Reg(rd), Reg(rn), 0).word;
                     let masked = (placeholder & !0x003f_fc00) | (in_page << 10);
                     assert_eq!(
                         lo12_word(placeholder, in_page).unwrap(),
@@ -411,7 +412,7 @@ mod tests {
                     );
                     assert_eq!(
                         lo12_word(placeholder, in_page).unwrap(),
-                        enc_add_imm(Reg(rd), Reg(rn), in_page),
+                        enc_add_imm(Reg(rd), Reg(rn), in_page).word,
                         "rebuild disagrees: rd={rd} rn={rn} in_page={in_page}"
                     );
                 }
@@ -439,7 +440,7 @@ mod tests {
     /// The rebuild-from-scratch form the writers used would have widened it.
     #[test]
     fn lo12_preserves_operand_width() {
-        let add32 = enc_add_imm(Reg(3), Reg(4), 0) & !(1 << 31);
+        let add32 = enc_add_imm(Reg(3), Reg(4), 0).word & !(1 << 31);
         let patched = lo12_word(add32, 0xabc).unwrap();
         assert_eq!(patched >> 31, 0, "sf bit must survive");
         assert_eq!((patched >> 10) & 0xFFF, 0xabc);
@@ -480,17 +481,17 @@ mod tests {
     fn slot_load_turns_an_address_materialization_into_a_load() {
         for rd in [0u8, 5, 16, 30] {
             let mut pair = Vec::new();
-            pair.extend_from_slice(&enc_adrp(Reg(rd), 0).to_le_bytes());
-            pair.extend_from_slice(&enc_add_imm(Reg(rd), Reg(rd), 0).to_le_bytes());
+            pair.extend_from_slice(&enc_adrp(Reg(rd), 0).word.to_le_bytes());
+            pair.extend_from_slice(&enc_add_imm(Reg(rd), Reg(rd), 0).word.to_le_bytes());
             patch_slot_load(&mut pair, 0, 0x1000, 0x5068, SlotWidth::W64).unwrap();
             assert_eq!(
                 u32::from_le_bytes(pair[0..4].try_into().unwrap()),
-                enc_adrp(Reg(rd), 4),
+                enc_adrp(Reg(rd), 4).word,
                 "rd={rd}"
             );
             assert_eq!(
                 u32::from_le_bytes(pair[4..8].try_into().unwrap()),
-                enc_ldr_imm(Reg(rd), Reg(rd), 0x68),
+                enc_ldr_imm(Reg(rd), Reg(rd), 0x68).word,
                 "rd={rd}"
             );
         }
@@ -501,21 +502,21 @@ mod tests {
     #[test]
     fn slot_load_accepts_a_load_and_both_widths() {
         let mut pair = Vec::new();
-        pair.extend_from_slice(&enc_adrp(Reg(16), 0).to_le_bytes());
-        pair.extend_from_slice(&enc_ldr_imm(Reg(16), Reg(16), 0).to_le_bytes());
+        pair.extend_from_slice(&enc_adrp(Reg(16), 0).word.to_le_bytes());
+        pair.extend_from_slice(&enc_ldr_imm(Reg(16), Reg(16), 0).word.to_le_bytes());
         patch_slot_load(&mut pair, 0, 0x2000, 0x9040, SlotWidth::W64).unwrap();
         assert_eq!(
             u32::from_le_bytes(pair[4..8].try_into().unwrap()),
-            enc_ldr_imm(Reg(16), Reg(16), 0x40)
+            enc_ldr_imm(Reg(16), Reg(16), 0x40).word
         );
 
         let mut pair32 = Vec::new();
-        pair32.extend_from_slice(&enc_adrp(Reg(17), 0).to_le_bytes());
-        pair32.extend_from_slice(&enc_add_imm(Reg(17), Reg(17), 0).to_le_bytes());
+        pair32.extend_from_slice(&enc_adrp(Reg(17), 0).word.to_le_bytes());
+        pair32.extend_from_slice(&enc_add_imm(Reg(17), Reg(17), 0).word.to_le_bytes());
         patch_slot_load(&mut pair32, 0, 0x2000, 0x9044, SlotWidth::W32).unwrap();
         assert_eq!(
             u32::from_le_bytes(pair32[4..8].try_into().unwrap()),
-            enc_ldr32_imm(Reg(17), Reg(17), 0x44)
+            enc_ldr32_imm(Reg(17), Reg(17), 0x44).word
         );
     }
 
@@ -526,8 +527,8 @@ mod tests {
     fn split_parts_reproduce_the_pair_patch() {
         let (site, target) = (0x1000i64, 0x5abci64);
         let mut pair = Vec::new();
-        pair.extend_from_slice(&enc_adrp(Reg(1), 0).to_le_bytes());
-        pair.extend_from_slice(&enc_add_imm(Reg(2), Reg(1), 0).to_le_bytes());
+        pair.extend_from_slice(&enc_adrp(Reg(1), 0).word.to_le_bytes());
+        pair.extend_from_slice(&enc_add_imm(Reg(2), Reg(1), 0).word.to_le_bytes());
         let mut split = pair.clone();
         patch_addr(&mut pair, 0, site, target, AddrPart::Whole).unwrap();
         patch_addr(&mut split, 0, site, target, AddrPart::Page).unwrap();
@@ -541,16 +542,16 @@ mod tests {
     #[test]
     fn split_slot_in_page_keeps_its_own_base_register() {
         let mut code = Vec::new();
-        code.extend_from_slice(&enc_add_imm(Reg(7), Reg(3), 0).to_le_bytes());
+        code.extend_from_slice(&enc_add_imm(Reg(7), Reg(3), 0).word.to_le_bytes());
         patch_slot(&mut code, 0, 0, 0x9040, SlotWidth::W64, AddrPart::InPage).unwrap();
         assert_eq!(
             u32::from_le_bytes(code[0..4].try_into().unwrap()),
-            enc_ldr_imm(Reg(7), Reg(3), 0x40)
+            enc_ldr_imm(Reg(7), Reg(3), 0x40).word
         );
     }
 
     /// A signed 48-bit absolute address load -- `movz :abs_g2_s:` then `movk`
-    /// `:abs_g1_nc:` / `:abs_g0_nc:` over `x5` -- as GNU ld resolves it.
+    /// `:abs_g1_nc:` / `:abs_g0_nc:` over `x5`.
     /// Words taken from `ld --defsym` over each value; the negative ones
     /// come out `movn` over the complement, which is what sets the groups
     /// the sequence never writes.
@@ -588,7 +589,7 @@ mod tests {
         assert_eq!(movw_word(movk, 0, false, -1), 0xf29f_ffe5);
     }
 
-    /// The ranges GNU ld admits: the ABI checks group `n` over
+    /// The link ranges: the ABI checks group `n` over
     /// `16 * (n + 1)` bits, and the signed forms over one bit more.
     /// Boundaries confirmed against `ld --defsym` in both directions.
     #[test]
@@ -612,7 +613,7 @@ mod tests {
         assert!(movw_fits(i64::MIN, 64, true));
     }
 
-    /// The narrower ranges GNU as admits when the expression folds at
+    /// The narrower ranges admitted when the expression folds at
     /// assembly: group `n` over `16 * (n + 1)` bits for both signs, which
     /// for a signed group is one bit tighter than the link's rule.
     #[test]
@@ -630,8 +631,8 @@ mod tests {
     #[test]
     fn slot_load_rejects_an_unscalable_offset() {
         let mut pair = Vec::new();
-        pair.extend_from_slice(&enc_adrp(Reg(0), 0).to_le_bytes());
-        pair.extend_from_slice(&enc_add_imm(Reg(0), Reg(0), 0).to_le_bytes());
+        pair.extend_from_slice(&enc_adrp(Reg(0), 0).word.to_le_bytes());
+        pair.extend_from_slice(&enc_add_imm(Reg(0), Reg(0), 0).word.to_le_bytes());
         assert_eq!(
             patch_slot_load(&mut pair, 0, 0, 0x14, SlotWidth::W64),
             Err(PairError::Lo12Unscalable {

@@ -3,7 +3,7 @@ duff_switch_into_loop.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -64,19 +64,19 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x60]
                	add	x29, sp, #0x60
                	mov	x1, #0x0                // =0
-               	mov	x0, x1
                	sub	x2, x29, #0x50
+               	sub	x3, x29, #0x28
+               	mov	x0, x1
                	strb	w0, [x2, x0]
-               	sub	x2, x29, #0x28
-               	strb	w1, [x2, x0]
+               	strb	w1, [x3, x0]
                	add	x0, x0, #0x1
                	cmp	w0, #0x27
                	b.lt	<addr>
                	sub	x20, x29, #0x28
                	sub	x21, x29, #0x50
-               	mov	x2, #0x27               // =39
                	mov	x0, x20
                	mov	x1, x21
+               	mov	x2, #0x27               // =39
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	ldrb	w1, [x20, x0]

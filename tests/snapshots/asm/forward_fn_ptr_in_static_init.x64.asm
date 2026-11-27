@@ -3,7 +3,7 @@ forward_fn_ptr_in_static_init.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -38,32 +38,31 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0xa, %edi
+               	pushq	%rax
                	movq	<rip>, %rax # <addr>
+               	movl	$0xa, %edi
                	callq	*%rax
                	cmpl	$0xc, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	movl	$0x5, %edi
                	movq	<rip>, %rax # <addr>
+               	movl	$0x5, %edi
                	callq	*%rax
                	cmpl	$0xf, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	movl	$0x64, %edi
                	movq	<rip>, %rax # <addr>
+               	movl	$0x64, %edi
                	callq	*%rax
                	cmpl	$0x5d, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

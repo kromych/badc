@@ -164,8 +164,13 @@ pub(crate) enum AsmOpndA64 {
     Sym { expr: String, spec: SymSpec },
     /// `[base, :lo12:sym]`: a load/store whose scaled immediate is the low
     /// 12 bits of a symbol expression. The base is an operand reference or
-    /// an explicit register, as for [`AsmOpndA64::Mem`].
-    MemSymLo12 { base: MemBase, expr: String },
+    /// an explicit register, as for [`AsmOpndA64::Mem`]. `got` marks
+    /// `:got_lo12:`, the offset of the symbol's GOT slot in its page.
+    MemSymLo12 {
+        base: MemBase,
+        expr: String,
+        got: bool,
+    },
     /// An immediate written as an expression over labels (`#(1b - vs + 4)`):
     /// absolute, but only the section layout knows the value, and on A64 the
     /// value selects the encoding, so the section path folds it before
@@ -218,17 +223,19 @@ pub(crate) enum AsmOpndA64 {
 }
 
 /// Which part of a symbol expression's value an operand takes, from the
-/// relocation specifier GNU as writes before the expression.
+/// relocation specifier written before the expression.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SymSpec {
     /// No specifier: the address itself, for a branch / `adr` / `adrp`.
     Addr,
     /// `:lo12:` -- the low 12 bits, for an `add` or a load/store immediate.
     Lo12,
+    /// `:got:` -- the page of the symbol's GOT slot, for `adrp`.
+    Got,
     /// `:abs_gN[_s|_nc]:` -- the `group`th 16-bit group of the value, for a
     /// `movz` / `movk` immediate. `signed` marks the `_s` forms, whose
-    /// negative values encode as `movn`; `check` is the value width GNU as
-    /// admits when the expression folds, `None` for the `_nc` forms and
+    /// negative values encode as `movn`; `check` is the value width
+    /// admitted when the expression folds, `None` for the `_nc` forms and
     /// `:abs_g3:`.
     MovwAbs {
         group: u8,
@@ -325,7 +332,7 @@ fn sysop_word(op1: u32, crn: u32, crm: u32, op2: u32) -> u32 {
 
 /// The base word of a `sys #op1, cN, cM, #op2` operand list (`op1`, `crn`,
 /// `crm`, `op2` fields, Rt left zero), or None if a field is malformed / out of
-/// range. `#` on the immediates is optional, matching GAS.
+/// range. `#` on the immediates is optional.
 fn sys_op_base(op1: &str, crn: &str, crm: &str, op2: &str) -> Option<u32> {
     let imm = |t: &str| -> Option<u32> {
         parse_int(t.strip_prefix('#').unwrap_or(t))
@@ -344,6 +351,49 @@ fn sys_op_base(op1: &str, crn: &str, crm: &str, op2: &str) -> Option<u32> {
 
 /// The 4-bit CRm value of a `dmb` / `dsb` barrier option, or None if the
 /// name is not one. `isb` takes only `sy`; `clrex` only a numeric imm.
+/// The spelling of PSTATE field `(op1, op2)` in `msr <field>, #imm`.
+fn pstate_name(op1: u16, op2: u16) -> &'static str {
+    match (op1, op2) {
+        (0, 5) => "SPSel",
+        (3, 6) => "DAIFSet",
+        (3, 7) => "DAIFClr",
+        (0, 3) => "UAO",
+        (0, 4) => "PAN",
+        (3, 2) => "DIT",
+        (3, 1) => "SSBS",
+        (3, 4) => "TCO",
+        _ => "ALLINT",
+    }
+}
+
+/// The text of barrier `mnem` with option `crm`: a named domain, the
+/// speculation barriers `dsb #0` / `dsb #4` are, or the bare number.
+fn barrier_text(mnem: &str, crm: u32) -> String {
+    const NAMES: [(u32, &str); 12] = [
+        (15, "sy"),
+        (14, "st"),
+        (13, "ld"),
+        (11, "ish"),
+        (10, "ishst"),
+        (9, "ishld"),
+        (7, "nsh"),
+        (6, "nshst"),
+        (5, "nshld"),
+        (3, "osh"),
+        (2, "oshst"),
+        (1, "oshld"),
+    ];
+    let name = NAMES.iter().find(|(v, _)| *v == crm).map(|(_, n)| *n);
+    match (mnem, crm, name) {
+        ("dsb", 0, _) => String::from("ssbb"),
+        ("dsb", 4, _) => String::from("pssbb"),
+        ("dmb" | "dsb", _, Some(n)) => format!("{mnem} {n}"),
+        ("isb" | "clrex", 15, _) => String::from(mnem),
+        ("clrex", _, _) => format!("clrex #{crm:#x}"),
+        _ => format!("{mnem} #{crm}"),
+    }
+}
+
 fn barrier_option(name: &str) -> Option<u32> {
     Some(match name.to_ascii_lowercase().as_str() {
         "sy" => 15,
@@ -394,7 +444,8 @@ fn prfop_code(name: &str) -> Option<u32> {
 #[derive(Debug, Clone)]
 pub(crate) struct AsmInsnA64 {
     /// Empty for a raw-byte piece (`bytes` carries the payload) and for a
-    /// local-label definition (`label_def` carries the number).
+    /// local-label definition (`label_def` carries the number); the whole
+    /// text of an instruction the parser encodes itself.
     pub mnemonic: String,
     pub operands: Vec<AsmOpndA64>,
     /// Literal bytes for a raw-byte piece; empty for a mnemonic.
@@ -442,6 +493,11 @@ fn parse_reg(tok: &str) -> Option<(u8, bool, bool)> {
         "xzr" => return Some((31, true, false)),
         "wsp" => return Some((31, false, true)),
         "wzr" => return Some((31, false, false)),
+        // The AAPCS64 names for the procedure-call registers (6.2).
+        "ip0" => return Some((16, true, false)),
+        "ip1" => return Some((17, true, false)),
+        "fp" => return Some((29, true, false)),
+        "lr" => return Some((30, true, false)),
         _ => {}
     }
     let (is64, rest) = match tok.as_bytes().first()? {
@@ -949,29 +1005,38 @@ fn parse_mem(inner: &str, pre: bool) -> Result<AsmOpndA64, String> {
                 "inline asm: `@PAGEOFF` has no writeback `[{inner}]`"
             ));
         }
-        return Ok(AsmOpndA64::MemSymLo12 { base, expr });
+        return Ok(AsmOpndA64::MemSymLo12 {
+            base,
+            expr,
+            got: false,
+        });
     }
-    // `[base, :lo12:sym]`: the symbol's low 12 bits as the scaled immediate.
+    // `[base, :lo12:sym]`: the symbol's low 12 bits as the scaled immediate;
+    // `[base, :got_lo12:sym]`, those of its GOT slot.
+    let field = parts.get(1).map(|p| p.strip_prefix('#').unwrap_or(p));
+    let lo12 = field.and_then(|f| {
+        (f.strip_prefix(":lo12:").map(|s| (s, false)))
+            .or_else(|| f.strip_prefix(":got_lo12:").map(|s| (s, true)))
+    });
     if parts.len() == 2
-        && let Some(spec) = parts[1]
-            .strip_prefix('#')
-            .unwrap_or(parts[1])
-            .strip_prefix(":lo12:")
+        && let Some((spec, got)) = lo12
     {
+        let op = if got { ":got_lo12:" } else { ":lo12:" };
         if pre {
-            return Err(format!("inline asm: `:lo12:` has no writeback `[{inner}]`"));
+            return Err(format!("inline asm: `{op}` has no writeback `[{inner}]`"));
         }
         let expr = split_sym_addend(spec)
-            .ok_or_else(|| format!("inline asm: bad `:lo12:` symbol `[{inner}]`"))?;
+            .ok_or_else(|| format!("inline asm: bad `{op}` symbol `[{inner}]`"))?;
         return Ok(AsmOpndA64::MemSymLo12 {
             base,
             expr: String::from(expr),
+            got,
         });
     }
     // A second part that is not an immediate is a register index: the
-    // register-offset form `[base, Rm{, <extend> #s}]`. GNU as makes the
-    // `#` on an offset optional, so a bare integer (`[x4, -16]`) is an
-    // offset, not an index.
+    // register-offset form `[base, Rm{, <extend> #s}]`. The `#` on an
+    // offset is optional, so a bare integer (`[x4, -16]`) is an offset, not
+    // an index.
     let bare_int_off = |t: &str| !t.starts_with('#') && parse_int(t).is_some();
     if parts.len() >= 2 && !parts[1].starts_with('#') && !bare_int_off(parts[1]) {
         if pre {
@@ -1073,8 +1138,8 @@ fn parse_extend(spec: &str, idx_is64: bool) -> Result<(u8, Option<u8>), String> 
     Ok((option, shift))
 }
 
-/// The amount of a shift / extend modifier. GAS makes the `#` optional here as
-/// it does on an immediate operand, so `lsl 12` and `lsl #12` are one form.
+/// The amount of a shift / extend modifier. The `#` is optional here as on an
+/// immediate operand, so `lsl 12` and `lsl #12` are one form.
 fn shift_amount(rest: &str) -> Option<i64> {
     let rest = rest.trim();
     parse_int(rest.strip_prefix('#').unwrap_or(rest))
@@ -1096,7 +1161,7 @@ fn is_sve_count(mnem: &str) -> bool {
 /// The pattern or multiplier operand of an SVE element count, `None` for any
 /// other token. A pattern is one of the architecture's names, case-blind, or
 /// `#imm` in 0..=31; the multiplier is `mul #imm` (Arm ARM C8.2 predicate
-/// constraints, as GNU as and LLVM spell them).
+/// constraints).
 fn sve_count_operand(tok: &str) -> Result<Option<AsmOpndA64>, String> {
     let lower = tok.trim().to_ascii_lowercase();
     if let Some(rest) = lower.strip_prefix("mul")
@@ -1186,7 +1251,7 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
             _ => Err(format!("inline asm: bad immediate `{tok}`")),
         };
     }
-    // GNU as makes the `#` optional on an immediate, including one written as a
+    // The `#` on an immediate is optional, including on one written as a
     // relocation specifier (`#:lo12:sym`), so a `:`-led remainder falls through
     // to the specifier handling below.
     if let Some(rest) = tok.strip_prefix('#')
@@ -1314,8 +1379,8 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
             .map_err(|_| format!("inline asm: bad operand reference `{tok}`"))?;
         return Ok(AsmOpndA64::Ref { idx, is64 });
     }
-    // GNU as reads register names, arrangements, shift and extend keywords and
-    // condition codes in either case; labels and symbols keep their spelling.
+    // Register names, arrangements, shift and extend keywords and condition
+    // codes read in either case; labels and symbols keep their spelling.
     let symbolic = tok;
     let folded = tok.to_ascii_lowercase();
     let tok = folded.as_str();
@@ -1458,8 +1523,8 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     if let Some(field) = sysreg_field(tok) {
         return Ok(AsmOpndA64::SysReg(field));
     }
-    // A condition code (for csel and other conditional forms). gas reads one
-    // only where the instruction takes it, so another case stays a symbol.
+    // A condition code (for csel and other conditional forms). It reads as
+    // one only where the instruction takes it; elsewhere it stays a symbol.
     let tok = symbolic;
     if let Some(c) = cond_code(tok) {
         return Ok(AsmOpndA64::Cond(c));
@@ -1488,21 +1553,23 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
     {
         return Ok(AsmOpndA64::Label { num, forward: dir });
     }
-    // GAS makes the `#` on an immediate optional, so a bare integer literal is
+    // The `#` on an immediate is optional, so a bare integer literal is
     // an immediate (`brk 0x800`, `hlt 0xf000`). Checked last: registers,
     // system registers and local labels are matched above.
     if let Some(v) = parse_int(tok) {
         return Ok(AsmOpndA64::Imm(v));
     }
-    // `:lo12:sym` (with GAS's optional `#`): a symbol's low 12 bits.
+    // `:lo12:sym` (with an optional `#`): a symbol's low 12 bits.
     let bare = tok.strip_prefix('#').unwrap_or(tok);
-    if let Some(spec) = bare.strip_prefix(":lo12:")
-        && let Some(expr) = split_sym_addend(spec)
-    {
-        return Ok(AsmOpndA64::Sym {
-            expr: String::from(expr),
-            spec: SymSpec::Lo12,
-        });
+    for (op, spec) in [(":lo12:", SymSpec::Lo12), (":got:", SymSpec::Got)] {
+        if let Some(rest) = bare.strip_prefix(op)
+            && let Some(expr) = split_sym_addend(rest)
+        {
+            return Ok(AsmOpndA64::Sym {
+                expr: String::from(expr),
+                spec,
+            });
+        }
     }
     if let Some((expr, spec)) = apple_page_operand(bare) {
         return Ok(AsmOpndA64::Sym { expr, spec });
@@ -1532,7 +1599,7 @@ fn parse_operand(tok: &str) -> Result<AsmOpndA64, String> {
             spec: SymSpec::Addr,
         });
     }
-    // GNU as makes the `#` optional, so an immediate written as an expression
+    // The `#` is optional, so an immediate written as an expression
     // over labels also reaches here without one. A lone name is not one of
     // these: the symbol form above already took it, or it is a bad operand.
     if !crate::c5::asm::is_asm_symbol_name(tok) && is_layout_expr(tok) {
@@ -1548,7 +1615,7 @@ fn is_layout_expr(tok: &str) -> bool {
     crate::c5::asm::is_asm_layout_expr(tok)
 }
 
-/// The group part of an `:abs_gN[_s|_nc]:` specifier. GNU as defines the
+/// The group part of an `:abs_gN[_s|_nc]:` specifier. The specifier has
 /// unsuffixed and `_nc` forms for groups 0..2, `_s` for groups 0..2, and
 /// `:abs_g3:` alone for the top group; every other spelling is an unknown
 /// modifier. The check width is the group's cumulative one, which for a
@@ -1764,7 +1831,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
             Some(p) => (&piece[..p], piece[p..].trim()),
             None => (piece, ""),
         };
-        // GNU as reads a mnemonic in either case.
+        // A mnemonic reads in either case.
         let mnem = &mnem.to_ascii_lowercase()[..];
         // `mov Rd, sp` / `mov sp, Rn` is `add Rd, Rn, #0`, distinct from the
         // register move `mov Rd, Rm` (`orr Rd, xzr, Rm`). Rewrite the
@@ -1840,7 +1907,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 let word =
                     0xD500_401F | ((op1 as u32) << 16) | ((v as u32) << 8) | ((op2 as u32) << 5);
                 insns.push(AsmInsnA64 {
-                    mnemonic: String::new(),
+                    mnemonic: format!("msr {}, #{v:#x}", pstate_name(op1, op2)),
                     operands: Vec::new(),
                     bytes: word.to_le_bytes().to_vec(),
                     label_def: None,
@@ -1877,7 +1944,7 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
             };
             let word = 0xD503_301F | (crm << 8) | (opc << 5);
             insns.push(AsmInsnA64 {
-                mnemonic: String::new(),
+                mnemonic: barrier_text(mnem, crm),
                 operands: Vec::new(),
                 bytes: word.to_le_bytes().to_vec(),
                 label_def: None,
@@ -1901,8 +1968,15 @@ pub(crate) fn parse_template(tmpl: &[u8]) -> Result<Vec<AsmInsnA64>, String> {
                 },
                 _ => return Err(format!("inline asm: bad `{mnem}` operands")),
             };
+            let text = match op {
+                7 => "xpaclri",
+                34 => "bti c",
+                36 => "bti j",
+                38 => "bti jc",
+                _ => "bti r",
+            };
             insns.push(AsmInsnA64 {
-                mnemonic: String::new(),
+                mnemonic: String::from(text),
                 operands: Vec::new(),
                 bytes: (0xD503_201F | (op << 5)).to_le_bytes().to_vec(),
                 label_def: None,
@@ -2227,6 +2301,20 @@ mod tests {
         }
     }
 
+    /// The AAPCS64 register aliases: `ip0`/`ip1` are x16/x17, `fp` x29 and
+    /// `lr` x30, each the 64-bit register.
+    #[test]
+    fn procedure_call_register_aliases_parse() {
+        let insns = parse_template(b"stp fp, lr, [sp, #-48]!\n\tadd ip0, ip1, #4").unwrap();
+        let reg = |num| AsmOpndA64::Reg {
+            num,
+            is64: true,
+            sp: false,
+        };
+        assert_eq!(insns[0].operands[..2], [reg(29), reg(30)]);
+        assert_eq!(insns[1].operands[..2], [reg(16), reg(17)]);
+    }
+
     #[test]
     fn parse_location_counter_targets() {
         // `.` alone and with a signed byte offset, decimal or hex.
@@ -2240,7 +2328,7 @@ mod tests {
             let insns = parse_template(t).unwrap();
             assert_eq!(insns[0].operands, [AsmOpndA64::Here(off)], "{t:?}");
         }
-        // A dotted name is an ordinary GNU as symbol, not the location
+        // A dotted name is an ordinary symbol, not the location
         // counter: it parses as a symbol branch.
         let insns = parse_template(b"b .foo").unwrap();
         assert_eq!(insns[0].sym_target.as_deref(), Some(".foo"));
@@ -2437,7 +2525,7 @@ mod tests {
 
     #[test]
     fn bare_immediate_operand() {
-        // GAS accepts an immediate without `#`; a bare integer literal parses
+        // An immediate may omit the `#`; a bare integer literal parses
         // to the same operand as the `#`-prefixed form.
         let insns = parse_template(b"brk 0x800; hlt 0xf000; brk #0x800").unwrap();
         assert_eq!(insns[0].operands, [AsmOpndA64::Imm(0x800)]);
@@ -2562,7 +2650,7 @@ mod tests {
                 b".balignw 16, 0x1234, 3",
                 align(16, fill(0x1234, 2), Some(3)),
             ),
-            // A zero alignment is an alignment of one, as GNU as reads it.
+            // A zero alignment is an alignment of one.
             (b".align 0", align(1, None, None)),
             (b".balign 0", align(1, None, None)),
             (
@@ -3415,7 +3503,7 @@ mod tests {
 
     #[test]
     fn shift_and_immediate_accept_gas_spellings() {
-        // GAS makes `#` optional on a shift amount, and an immediate is a
+        // `#` is optional on a shift amount, and an immediate is a
         // constant expression, not just a literal.
         let insns = parse_template(b"add x0, x0, #0, lsl 12; add x1, x1, #(1 << 16)").unwrap();
         assert_eq!(insns[0].operands[3], AsmOpndA64::Lsl(12));
@@ -3500,8 +3588,8 @@ mod tests {
 
     #[test]
     fn mnemonics_registers_and_keywords_read_in_either_case() {
-        // GNU as reads mnemonics, register names, arrangements, lane letters
-        // and shift / extend keywords in either case.
+        // Mnemonics, register names, arrangements, lane letters and shift /
+        // extend keywords read in either case.
         let parsed = |t: &str| {
             (parse_template(t.as_bytes()).unwrap().into_iter())
                 .map(|i| (i.mnemonic, i.operands))
@@ -3602,7 +3690,7 @@ mod tests {
 
     #[test]
     fn parse_rejects_a_duplicate_named_label() {
-        // GNU as rejects a second definition of a name; a numeric local may
+        // A second definition of a name is an error; a numeric local may
         // repeat, and each reference binds by direction.
         let err = parse_template(b"dup:\n\tnop\n\tdup:\n\tnop").unwrap_err();
         assert!(err.contains("`dup` is already defined"), "{err}");

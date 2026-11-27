@@ -3,7 +3,7 @@ branch_arms_converge.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -56,26 +56,19 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0x3, -0x8(%rbp)
-               	movslq	-0x8(%rbp), %rcx
+               	subq	$0x18, %rsp
+               	movl	$0x3, 0x8(%rsp)
+               	movslq	0x8(%rsp), %rax
+               	testq	%rax, %rax
+               	je	<addr>
+               	testq	%rax, %rax
+               	je	<addr>
                	xorl	%eax, %eax
-               	movl	%eax, -0x10(%rbp)
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	movl	$0x1, -0x10(%rbp)
-               	movl	-0x10(%rbp), %ecx
-               	cmpl	$0x1, %ecx
-               	je	<addr>
-               	movl	$0x7, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	leave
+               	movl	$0x7, %eax
+               	addq	$0x18, %rsp
                	retq
                	movl	$0x5, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

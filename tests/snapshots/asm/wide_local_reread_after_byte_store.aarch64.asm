@@ -3,7 +3,7 @@ wide_local_reread_after_byte_store.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -194,8 +194,8 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldrb	w0, [x0, #0x30]
                	dup	v0.16b, w0
-               	sub	x0, x29, #0x10
                	stur	q0, [x29, #-0x10]
+               	sub	x0, x29, #0x10
                	bl	<addr>
                	ldur	q0, [x29, #-0x10]
                	mov	x0, #0x60               // =96

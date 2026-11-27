@@ -3,7 +3,7 @@ paren_string_char_array_init.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -14,37 +14,37 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	ldrb	w0, [x3, #0x8]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrb	w0, [x1, #0x8]
                	cmp	w0, #0x6e
                	b.ne	<addr>
-               	ldrb	w0, [x3, #0x9]
+               	ldrb	w0, [x1, #0x9]
                	cmp	w0, #0x5f
                	b.ne	<addr>
-               	ldrb	w0, [x3, #0xf]
+               	ldrb	w0, [x1, #0xf]
                	cmp	w0, #0x73
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ret
-               	ldrb	w0, [x3, #0x10]
+               	ldrb	w0, [x1, #0x10]
                	cbz	w0, <addr>
                	mov	x0, #0x2                // =2
                	ret
                	mov	x0, #0x0                // =0
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	add	x3, x3, #0x8
-               	ldrb	w4, [x1, x0]
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
+               	add	x1, x1, #0x8
+               	ldrb	w4, [x2, x0]
                	cbz	x4, <addr>
-               	ldrb	w4, [x3, x0]
-               	ldrb	w5, [x2, x0]
+               	ldrb	w4, [x1, x0]
+               	ldrb	w5, [x3, x0]
                	cmp	w4, w5
                	b.ne	<addr>
                	add	x0, x0, #0x1
-               	ldrb	w4, [x1, x0]
+               	ldrb	w4, [x2, x0]
                	cbnz	x4, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

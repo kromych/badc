@@ -3,7 +3,7 @@ strength_reduce_compound_divmod.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -2223,8 +2223,8 @@ Disassembly of section .text:
                	ldrsw	x1, [x0, #0xe0]
                	add	x1, x1, #0x1
                	str	w1, [x0, #0xe0]
-               	mov	x0, #0x0                // =0
                	sub	x1, x29, #0x88
+               	mov	x0, #0x0                // =0
                	ldr	x2, [x20, x0, lsl #3]
                	str	w2, [x1, x0, lsl #2]
                	add	x0, x0, #0x1
@@ -2233,34 +2233,34 @@ Disassembly of section .text:
                	mov	x5, #-0x9               // =-9
                	mov	x4, #0x8e39             // =36409
                	movk	x4, #0x38e3, lsl #16
+               	sub	x2, x29, #0x88
                	mov	x0, #0x0                // =0
                	mov	x1, #-0x9               // =-9
                	stur	w1, [x29, #-0x10]
                	ldr	x1, [x20, x0, lsl #3]
-               	ldursw	x2, [x29, #-0x10]
-               	sdiv	w1, w1, w2
-               	sxtw	x2, w1
-               	sub	x3, x29, #0x88
-               	ldrsw	x1, [x3, x0, lsl #2]
+               	ldursw	x3, [x29, #-0x10]
+               	sdiv	w1, w1, w3
+               	sxtw	x3, w1
+               	ldrsw	x1, [x2, x0, lsl #2]
                	mul	x1, x1, x4
                	asr	x1, x1, #33
                	add	x1, x1, x1, lsr #63
                	neg	x1, x1
-               	str	w1, [x3, x0, lsl #2]
-               	cmp	w1, w2
+               	str	w1, [x2, x0, lsl #2]
+               	cmp	w1, w3
                	b.ne	<addr>
-               	cmp	w1, w2
+               	cmp	w1, w3
                	b.ne	<addr>
                	ldursw	x6, [x29, #-0x10]
-               	sdiv	x17, x2, x6
-               	msub	x6, x17, x6, x2
-               	mul	x2, x1, x4
-               	asr	x2, x2, #33
-               	add	x2, x2, x2, lsr #63
-               	neg	x2, x2
-               	mul	x2, x2, x5
-               	sub	x1, x1, x2
-               	str	w1, [x3, x0, lsl #2]
+               	sdiv	x17, x3, x6
+               	msub	x6, x17, x6, x3
+               	mul	x3, x1, x4
+               	asr	x3, x3, #33
+               	add	x3, x3, x3, lsr #63
+               	neg	x3, x3
+               	mul	x3, x3, x5
+               	sub	x1, x1, x3
+               	str	w1, [x2, x0, lsl #2]
                	cmp	w1, w6
                	b.ne	<addr>
                	add	x0, x0, #0x1

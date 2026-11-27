@@ -3,7 +3,7 @@ param_entry_conversion.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -124,6 +124,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	stur	x0, [x29, #-0x8]
+               	ldur	x6, [x29, #-0x20]
                	mov	x0, #0x5afb             // =23291
                	movk	x0, #0x5a5a, lsl #16
                	movk	x0, #0x5a5a, lsl #32
@@ -144,7 +145,6 @@ Disassembly of section .text:
                	movk	x5, #0x5a5a, lsl #16
                	movk	x5, #0x5a5a, lsl #32
                	movk	x5, #0x5a5a, lsl #48
-               	ldur	x6, [x29, #-0x20]
                	blr	x6
                	mov	x17, #0xf81d            // =63517
                	cmp	x0, x17
@@ -153,6 +153,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	ldur	x4, [x29, #-0x18]
                	mov	x0, #0xa564             // =42340
                	movk	x0, #0xa5a5, lsl #16
                	movk	x0, #0xa5a5, lsl #32
@@ -168,7 +169,6 @@ Disassembly of section .text:
                	mov	x3, #-0x7               // =-7
                	movk	x3, #0x5a5a, lsl #32
                	movk	x3, #0x5a5a, lsl #48
-               	ldur	x4, [x29, #-0x18]
                	blr	x4
                	mov	x17, #0x22b8            // =8888
                	movk	x17, #0x266f, lsl #16
@@ -179,6 +179,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	ldur	x3, [x29, #-0x10]
                	mov	x0, #-0x9c40            // =-40000
                	movk	x0, #0xa5a5, lsl #32
                	movk	x0, #0xa5a5, lsl #48
@@ -190,7 +191,6 @@ Disassembly of section .text:
                	movk	x2, #0xa5a5, lsl #16
                	movk	x2, #0xa5a5, lsl #32
                	movk	x2, #0xa5a5, lsl #48
-               	ldur	x3, [x29, #-0x10]
                	blr	x3
                	mov	x17, #-0x90e            // =-2318
                	movk	x17, #0xfef3, lsl #16
@@ -200,13 +200,13 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	ldur	x2, [x29, #-0x8]
                	mov	x0, #0x3                // =3
                	movk	x0, #0x5a5a, lsl #32
                	movk	x0, #0x5a5a, lsl #48
                	mov	x1, #-0x2               // =-2
                	movk	x1, #0xa5a5, lsl #32
                	movk	x1, #0xa5a5, lsl #48
-               	ldur	x2, [x29, #-0x8]
                	blr	x2
                	cmn	w0, #0x5
                	b.eq	<addr>

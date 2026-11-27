@@ -3,7 +3,7 @@ struct_tm_tm_zone_offset.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,32 +26,30 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
+               	subq	$0x48, %rsp
                	xorl	%edi, %edi
                	callq	<addr>
-               	movq	%rax, -0x40(%rbp)
-               	leaq	-0x40(%rbp), %rdi
-               	leaq	-0x38(%rbp), %rsi
+               	movq	%rax, (%rsp)
+               	leaq	(%rsp), %rdi
+               	leaq	0x8(%rsp), %rsi
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x48, %rsp
                	retq
-               	movq	-0x8(%rbp), %rdi
+               	movq	0x38(%rsp), %rdi
                	testq	%rdi, %rdi
                	jne	<addr>
                	movl	$0x5, %eax
-               	leave
+               	addq	$0x48, %rsp
                	retq
                	callq	<addr>
                	cmpq	$0x40, %rax
                	jbe	<addr>
                	movl	$0x6, %eax
-               	leave
+               	addq	$0x48, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x48, %rsp
                	retq

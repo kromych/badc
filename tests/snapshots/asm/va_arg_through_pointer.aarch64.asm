@@ -3,7 +3,7 @@ va_arg_through_pointer.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -120,12 +120,12 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
+               	fmov	d0, #1.50000000
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x2, #0x2a               // =42
-               	fmov	d0, #1.50000000
                	bl	<addr>
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x28]

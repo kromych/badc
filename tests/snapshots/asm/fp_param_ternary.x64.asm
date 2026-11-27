@@ -3,7 +3,7 @@ fp_param_ternary.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -29,9 +29,7 @@ Disassembly of section .text:
                	testb	$0x1, %dil
                	je	<addr>
                	retq
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	jmp	<addr>
 
 <grad_dot>:
@@ -41,13 +39,9 @@ Disassembly of section .text:
                	je	<addr>
                	addss	%xmm1, %xmm0
                	retq
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
+               	vxorpd	<rip>, %xmm1, %xmm1
                	jmp	<addr>
-               	movl	$0x80000000, %r10d      # imm = 0x80000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	jmp	<addr>
 
 <main>:
@@ -56,8 +50,7 @@ Disassembly of section .text:
                	movl	$0xc0200000, %r11d      # imm = 0xC0200000
                	movq	%r11, %xmm1
                	addss	%xmm1, %xmm0
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x5, %eax
@@ -67,8 +60,7 @@ Disassembly of section .text:
                	movl	$0x3e000000, %r11d      # imm = 0x3E000000
                	movq	%r11, %xmm1
                	addss	%xmm1, %xmm0
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x6, %eax
@@ -78,8 +70,7 @@ Disassembly of section .text:
                	movl	$0x40800000, %r11d      # imm = 0x40800000
                	movq	%r11, %xmm1
                	addss	%xmm1, %xmm0
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x7, %eax

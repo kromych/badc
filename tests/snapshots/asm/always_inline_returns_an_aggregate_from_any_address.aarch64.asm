@@ -3,7 +3,7 @@ always_inline_returns_an_aggregate_from_any_address.aarch64:	file format elf64-l
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -42,14 +42,14 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x16, [x1]
                	str	x16, [x0]
-               	mov	x1, #0x3                // =3
                	sub	x0, x29, #0x18
                	str	xzr, [x0]
-               	sub	x2, x29, #0x10
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	ldp	x16, x17, [x3]
-               	stp	x16, x17, [x2]
+               	sub	x1, x29, #0x10
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldp	x16, x17, [x2]
+               	stp	x16, x17, [x1]
+               	mov	x1, #0x3                // =3
                	bl	<addr>
                	mov	x0, #0x3                // =3
                	bl	<addr>

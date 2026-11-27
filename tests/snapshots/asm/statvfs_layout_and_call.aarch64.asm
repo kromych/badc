@@ -3,7 +3,7 @@ statvfs_layout_and_call.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -63,8 +63,8 @@ Disassembly of section .text:
                	add	sp, sp, #0xf0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x1, x29, #0x70
                	str	x0, [sp]
+               	sub	x1, x29, #0x70
                	bl	<addr>
                	str	x0, [sp, #0x8]
                	ldr	x0, [sp]

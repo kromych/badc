@@ -3,7 +3,7 @@ variadic_optimizer_survives.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -86,8 +86,8 @@ Disassembly of section .text:
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
                	mov	x1, x16
-               	ldrsw	x1, [x1]
-               	sub	x2, x29, #0x20
+               	ldrsw	x2, [x1]
+               	sub	x1, x29, #0x20
                	cmp	w0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
@@ -95,7 +95,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	add	sp, sp, #0xc0
                	ret
-               	cmp	w1, #0x7
+               	cmp	w2, #0x7
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x20

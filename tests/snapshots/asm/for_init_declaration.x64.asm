@@ -3,7 +3,7 @@ for_init_declaration.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,8 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	leaq	<rip>, %rax # <addr>
                	xorl	%ecx, %ecx
                	movabsq	$0x200000001, %rdx      # imm = 0x200000001
@@ -39,11 +38,11 @@ Disassembly of section .text:
                	movl	(%rax), %esi
                	addq	%rsi, %rcx
                	addq	$0x4, %rax
+               	nopw	(%rax,%rax)
                	cmpq	%rdx, %rax
                	jb	<addr>
                	cmpl	$0x7, %ecx
                	je	<addr>
-               	leaq	<rip>, %rdi
                	leaq	<rip>, %rax # <addr>
                	xorl	%esi, %esi
                	movabsq	$0x200000001, %rcx      # imm = 0x200000001
@@ -57,11 +56,12 @@ Disassembly of section .text:
                	addq	$0x4, %rax
                	cmpq	%rcx, %rax
                	jb	<addr>
+               	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x5, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

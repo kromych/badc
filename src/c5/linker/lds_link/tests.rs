@@ -93,7 +93,7 @@ impl TestObj {
     }
 
     /// `rela = false` stores each addend in the field it relocates
-    /// and emits `SHT_REL` tables, the way gas does for i386.
+    /// and emits `SHT_REL` tables, the i386 psABI's form.
     fn build_class(mut self, machine: u16, class: ElfClass, rela: bool) -> Vec<u8> {
         let aw = class.addr_size() as usize;
         let ent = if rela {
@@ -644,8 +644,8 @@ fn script_link_places_sections_and_symbols() {
     assert_eq!(p0_paddr, p0_vaddr - 0x400000);
 }
 
-/// A section aligned past the page raises its load's `p_align`, as bfd and
-/// lld set it, with `p_vaddr` congruent to `p_offset` modulo it.
+/// A section aligned past the page raises its load's `p_align`, with
+/// `p_vaddr` congruent to `p_offset` modulo it.
 #[test]
 fn a_load_takes_the_alignment_of_its_widest_section() {
     let obj = TestObj::new()
@@ -795,7 +795,7 @@ fn orphan_place_appends_compatible_section() {
 
 /// An object placing data under a C-identifier section name keeps
 /// that name as its own output section and gets the `__start_` /
-/// `__stop_` pair bounding it, as bfd does.
+/// `__stop_` pair bounding it.
 #[test]
 fn start_stop_bound_an_identifier_named_section() {
     let script = parse_linker_script(SCRIPT).expect("script parses");
@@ -830,7 +830,7 @@ fn start_stop_bound_an_identifier_named_section() {
     assert_eq!(sec.3, 24);
 }
 
-/// bfd defines the pair only where nothing else does: an object
+/// The pair is defined only where nothing else defines it: an object
 /// defining the name keeps its own definition.
 #[test]
 fn an_object_definition_outranks_the_synthesized_bound() {
@@ -1075,7 +1075,7 @@ fn aarch64_movw_groups_resolve_like_gnu_ld() {
 }
 
 /// A `_S` group is checked: a target past its signed range fails the
-/// link, as it does under GNU ld, rather than writing a truncated
+/// link rather than writing a truncated
 /// address. The `_NC` halves of the same sequence never complain.
 #[test]
 fn aarch64_movw_sabs_overflow_fails_the_link() {
@@ -1104,7 +1104,7 @@ fn aarch64_movw_sabs_overflow_fails_the_link() {
 }
 
 /// A diagnostic names a section symbol, which has no name of its own,
-/// by its section, as GNU ld does.
+/// by its section.
 #[test]
 fn a_section_symbol_is_named_by_its_section_in_a_diagnostic() {
     // Symtab: null(0), .text(1), .data(2).
@@ -1341,7 +1341,7 @@ fn a53_data_spans_are_not_scanned() {
     assert_eq!(a53_words(&res.image, 0xff8, 0, 4), insns.to_vec());
 }
 
-/// bfd's stack rule: `-z execstack` / `noexecstack` decide; without one,
+/// The stack rule: `-z execstack` / `noexecstack` decide; without one,
 /// an input whose `.note.GNU-stack` is executable makes the stack
 /// executable, with a warning naming it that `--no-warn-execstack`
 /// withholds and `--warn-execstack` extends to `-z execstack`.
@@ -1389,7 +1389,7 @@ fn an_executable_stack_note_makes_the_stack_executable() {
     }
 }
 
-/// GNU ld's warnings for a loaded segment that is readable, writable and
+/// The warnings for a loaded segment that is readable, writable and
 /// executable and for an executable thread-local one, naming the output;
 /// `--no-warn-rwx-segments` withholds both, and a layout keeping code and
 /// data on pages of their own draws neither.
@@ -1697,9 +1697,9 @@ fn merge_pools_keep_the_input_alignment() {
 }
 
 /// A section-symbol reference into a merge pool whose addend is not
-/// an offset the section covers has no entry to name. bfd reports
-/// it and resolves to the pool end; the link must say so rather
-/// than fold the miss into an address.
+/// an offset the section covers has no entry to name. It resolves to
+/// the pool end, and the link reports it rather than fold the miss
+/// into an address.
 #[test]
 fn merge_section_symbol_addend_out_of_range_is_reported() {
     let script = parse_linker_script(
@@ -2044,8 +2044,8 @@ fn narrow_abs_object() -> Vec<u8> {
 /// form -- `R_X86_64_RELATIVE` writes an 8-byte word -- so an
 /// ET_DYN image cannot carry the site. The engine used to write
 /// the link-time address and emit no `.rela.dyn` entry covering
-/// it, which the loader's slide then invalidated. GNU ld declines
-/// the same input. The ET_EXEC link, where the address is a
+/// it, which the loader's slide then invalidated. The ET_EXEC link,
+/// where the address is a
 /// link-time constant, still writes it.
 #[test]
 fn a_narrow_absolute_is_declined_in_a_dyn_link() {
@@ -2310,8 +2310,7 @@ VERSION { LINUX_2.6 { global: __vdso_time; time; local: *; }; }
     );
     assert_eq!(dynsym[0].0, "", "index 0 is the null entry");
 
-    // The exported alias shares the longer name's bytes, as bfd's
-    // `.dynstr` does.
+    // The exported alias shares the longer name's bytes.
     let dynstr_off = section_file_off(&res.image, sec(".dynstr").2);
     let dynstr = &res.image[dynstr_off..dynstr_off + sec(".dynstr").3 as usize];
     assert_eq!(
@@ -2556,7 +2555,7 @@ SECTIONS {
     );
 }
 
-/// bfd merge layout for an aligned string class: entries keep the
+/// Merge layout for an aligned string class: entries keep the
 /// alignment implied by their input offsets, deduplicate on
 /// identity, tail-merge only when the length difference is a
 /// multiple of the shorter entry's alignment, assign offsets in
@@ -2622,7 +2621,7 @@ fn merge_pool_matches_bfd_layout() {
 
 /// Fixed-entsize pools deduplicate on identity in first-seen
 /// order; a section whose entsize is below its alignment fails
-/// bfd's sanity check and stays unmerged.
+/// the entsize check and stays unmerged.
 #[test]
 fn merge_fixed_pool_dedupes_and_rejects_underaligned() {
     let script = parse_linker_script(
@@ -2745,8 +2744,8 @@ fn dynstr_at(image: &[u8], off: u64) -> String {
     strz(&s, off as usize)
 }
 
-/// A `-pie` link carries `DT_FLAGS_1` with `DF_1_PIE`, as GNU ld's and
-/// lld's do; a `-shared` link does not.
+/// A `-pie` link carries `DT_FLAGS_1` with `DF_1_PIE`; a `-shared` link
+/// does not.
 #[test]
 fn only_a_pie_link_carries_df_1_pie() {
     let script = parse_linker_script(&default_script(true)).expect("parses");
@@ -2806,8 +2805,7 @@ fn loader_keywords_record_their_dynamic_flags() {
 }
 
 /// An executable's `.dynamic` carries `DT_DEBUG`, the slot the loader
-/// writes its `r_debug` into for a debugger; a shared object's does not,
-/// as under GNU ld.
+/// writes its `r_debug` into for a debugger; a shared object's does not.
 #[test]
 fn an_executable_takes_dt_debug_and_a_shared_object_does_not() {
     let script = parse_linker_script(&default_script(true)).expect("parses");
@@ -3087,8 +3085,8 @@ fn image_section(image: &[u8], name: &str) -> (u64, Vec<u8>) {
     )
 }
 
-/// bfd folds the identical CIEs of separately compiled units into
-/// one and repoints every FDE at it. The pointer is the distance
+/// The identical CIEs of separately compiled units fold into one,
+/// and every FDE points at it. The pointer is the distance
 /// back from its own field, so each FDE takes a different value.
 #[test]
 fn eh_frame_folds_identical_cies() {
@@ -3141,7 +3139,7 @@ fn eh_frame_folds_identical_cies() {
 
 /// A zero length ends `.eh_frame`, so the alignment padding between
 /// two inputs may not fall inside the linked stream: the entry
-/// before it absorbs the gap, as bfd's writer does.
+/// before it absorbs the gap.
 #[test]
 fn eh_frame_entries_leave_no_gap_at_an_input_boundary() {
     let script = parse_linker_script(
@@ -3182,7 +3180,7 @@ fn eh_frame_entries_leave_no_gap_at_an_input_boundary() {
     assert_eq!(eh_frame::count_fdes(&body), 2);
 }
 
-/// bfd keys a CIE on the personality routine it resolves to, not on
+/// A CIE is keyed on the personality routine it resolves to, not on
 /// the bytes of the pointer, which relocation leaves zero in every
 /// input.
 #[test]
@@ -3340,7 +3338,7 @@ fn eh_frame_gc_prunes_unwind_typed_inputs() {
 }
 
 /// A CIE no FDE names describes nothing wherever it came from, so
-/// bfd drops it whether or not anything was collected.
+/// it is dropped whether or not anything was collected.
 #[test]
 fn eh_frame_drops_a_cie_no_fde_names() {
     let script = parse_linker_script(EH_GC_SCRIPT).expect("parses");
@@ -3357,12 +3355,10 @@ fn eh_frame_drops_a_cie_no_fde_names() {
     assert_eq!(eh_frame::count_fdes(&body), 1);
 }
 
-/// An ABS64 against a non-local symbol in an allocated section the
-/// script discards reserves a `.rela.dyn` slot that is never
-/// written (bfd sizes the global path without a discard check);
-/// local-target relocs in the same section reserve nothing.
+/// A relocation in a section the script discards needs no dynamic
+/// relocation: `.rela.dyn` holds only the live sections' entries.
 #[test]
-fn discarded_alloc_relocs_reserve_none_slots() {
+fn discarded_alloc_relocs_reserve_no_dynamic_slots() {
     let script = parse_linker_script(
         r#"
 SECTIONS {
@@ -3402,13 +3398,11 @@ SECTIONS {
     };
     let res = link_with_script(&script, objs, &opts).expect("links");
     let secs = readelf_sections(&res.image);
-    let rela = secs.iter().find(|s| s.0 == ".rela.dyn").expect("rela");
-    // One reserved slot for the discarded global-target reloc; the
-    // local-target one reserves nothing; the live .data slot packs
-    // into RELR.
-    assert_eq!(rela.3, 24, "one zeroed reservation");
-    let off = section_file_off(&res.image, rela.2);
-    assert_eq!(&res.image[off..off + 24], &[0u8; 24], "slot reads R_*_NONE");
+    let rela = secs.iter().find(|s| s.0 == ".rela.dyn");
+    assert!(
+        rela.is_none_or(|r| r.3 == 0),
+        "no slot for the discarded section"
+    );
     let relr = secs.iter().find(|s| s.0 == ".relr.dyn").expect("relr");
     assert!(relr.3 > 0, "live slot packed into RELR");
 }
@@ -3525,7 +3519,7 @@ SECTIONS {
 }
 "#;
 
-/// bfd's `.symtab` composition: no section symbols in a final link
+/// The `.symtab` composition: no section symbols in a final link
 /// that emits no relocations, a file symbol heading every object's
 /// locals in placement order, compiler temporaries of a merged
 /// section dropped, and an assignment carrying the type of the one
@@ -3611,7 +3605,7 @@ alias_sum = etext + 4;
 }
 
 /// An undefined weak symbol reaches `.symtab` only where a
-/// relocation the output keeps names it, as in bfd.
+/// relocation the output keeps names it.
 #[test]
 fn undefined_weak_symbols_need_a_relocation_naming_them() {
     let script = parse_linker_script(
@@ -3659,8 +3653,8 @@ SECTIONS {
     assert_eq!(weak, alloc::vec![("wu_kept".to_string(), SHN_UNDEF)]);
 }
 
-/// Without a PHDRS command a PT_LOAD ends where bfd ends one: at a
-/// protection change the sections do not share a page across, and
+/// Without a PHDRS command a PT_LOAD ends at a protection change
+/// the sections do not share a page across, and
 /// at a skipped page. A same-page change and file-backed content
 /// after zero fill both stay in the segment.
 #[test]
@@ -3711,8 +3705,8 @@ SECTIONS {
     );
 }
 
-/// Link order describes the whole output section, so bfd takes it
-/// from the section that opens one and points `sh_link` at the
+/// Link order describes the whole output section, so it comes from
+/// the section that opens one, with `sh_link` pointing at the
 /// output section its target landed in; the retain flag survives
 /// while the group flag does not.
 #[test]
@@ -3884,7 +3878,7 @@ fn emit_relocs_keeps_the_entries_relocations_name() {
 /// A shared object's unresolved default-visibility weak reference keeps
 /// symbol-based dynamic entries (ABS64 at its slots, GLOB_DAT for its GOT
 /// entry), where a PIE linked against no library resolves it to 0 with
-/// none, as GNU ld 2.46.1 links them; a hidden global is emitted with
+/// none (measured against GNU ld 2.46.1); a hidden global is emitted with
 /// local binding in a dynamic link.
 #[test]
 fn undefweak_keeps_symbol_entries_and_hidden_forces_local() {
@@ -4164,7 +4158,7 @@ fn i386_emit_relocs_writes_rel_tables() {
 }
 
 /// An i386 shared object's dynamic relocations go in `.rel.dyn`, typed
-/// `SHT_REL` as GNU ld types it, so section-based tools read them.
+/// `SHT_REL`, so section-based tools read them.
 #[test]
 fn i386_shared_object_types_its_dynamic_relocations_rel() {
     let script = parse_linker_script(
@@ -4435,9 +4429,9 @@ fn link_got_sym(machine: u16, emit: LdsEmit, pcrel: u32, wide: u32) -> LdsResult
     .expect("links")
 }
 
-/// bfd defines `_GLOBAL_OFFSET_TABLE_` as a sizeless local OBJECT
-/// on `.got.plt` for the x86 targets, in a static link as in a
-/// dynamic one, and builds the section on demand where an input
+/// `_GLOBAL_OFFSET_TABLE_` is a sizeless local OBJECT on `.got.plt`
+/// for the x86 targets, in a static link as in a dynamic one, and
+/// the section is built on demand where an input
 /// names the symbol. Both GOTPC forms yield that same base
 /// relative to their own site. Measured against GNU ld 2.46.1 on
 /// linux-x86_64.
@@ -4519,7 +4513,7 @@ fn aarch64_got_symbol_follows_ld() {
 
 /// A static aarch64 image gives each symbol a GOT reference names a `.got`
 /// slot holding its address, after the reserved header, and keeps the
-/// `adrp` + `ldr` reading it, as GNU ld 2.46.1 links it.
+/// `adrp` + `ldr` reading it (measured against GNU ld 2.46.1).
 #[test]
 fn a_static_aarch64_image_fills_a_got_slot_per_referenced_symbol() {
     let script = parse_linker_script(GOT_SYM_SCRIPT).expect("script parses");
@@ -4564,7 +4558,7 @@ fn a_static_aarch64_image_fills_a_got_slot_per_referenced_symbol() {
     );
 }
 
-/// bfd emits no `_GLOBAL_OFFSET_TABLE_` where the link built no
+/// No `_GLOBAL_OFFSET_TABLE_` is emitted where the link built no
 /// GOT, so a static link that never names it carries neither the
 /// symbol nor the sections.
 #[test]
@@ -4629,7 +4623,7 @@ VERSION { LINUX_2.6 { global: exported; local: *; }; }
     let res = link_with_script(&script, objs, &opts).expect("links");
     assert_eq!(elf32_section(&res.image, ".dynsym").6, 16);
     assert_eq!(elf32_section(&res.image, ".dynamic").6, 8);
-    // bfd gives `.gnu.hash` an entsize on ELF32 only.
+    // `.gnu.hash` has an entsize on ELF32 only.
     assert_eq!(elf32_section(&res.image, ".gnu.hash").6, 4);
     // `.gnu.hash` Bloom words are address-width, so ELF32 needs
     // twice as many for the same mask and always shifts by 5.
@@ -4721,8 +4715,8 @@ fn code_padding_is_the_architecture_nop() {
 
 #[test]
 fn orphan_anchors_on_the_canonically_named_section() {
-    // bfd puts a code orphan after the output section named
-    // `.text`, not after the last executable one.
+    // A code orphan goes after the output section named `.text`,
+    // not after the last executable one.
     let script = parse_linker_script(I386_SCRIPT).expect("script parses");
     let a = TestObj::new()
         .sec(
@@ -5318,9 +5312,9 @@ fn a_dynamic_symbol_takes_the_most_constraining_visibility() {
 }
 
 /// A shared object imports a default-visibility weak reference nothing
-/// defines, as GNU ld 2.46.1 does: a WEAK UND `.dynsym` row named by the GOT
-/// slot's GLOB_DAT and the address field's R_X86_64_64, so the loader writes
-/// 0 or another component's definition rather than the load base.
+/// defines: a WEAK UND `.dynsym` row named by the GOT slot's GLOB_DAT and
+/// the address field's R_X86_64_64, so the loader writes 0 or another
+/// component's definition rather than the load base.
 #[test]
 fn a_shared_object_imports_an_undefined_weak_reference() {
     let script = parse_linker_script(SHARED_SCRIPT).expect("script parses");
@@ -5370,8 +5364,8 @@ fn symtab_entries(image: &[u8]) -> Vec<(String, u8, u8)> {
 
 /// In a shared object's `.symtab`, a global forced local by a hidden or
 /// internal visibility is written LOCAL DEFAULT, and a definition a
-/// reference declares protected GLOBAL PROTECTED, as GNU ld 2.46.1 writes
-/// them.
+/// reference declares protected GLOBAL PROTECTED (measured against GNU ld
+/// 2.46.1).
 #[test]
 fn a_shared_objects_symtab_states_the_merged_visibility_as_gnu_ld_does() {
     let script = parse_linker_script(SHARED_SCRIPT).expect("script parses");
@@ -5774,7 +5768,7 @@ fn a_definition_the_loader_cannot_preempt_binds_directly() {
 /// GNU ld 2.46.1 makes a symbol the script defines preemptible when it
 /// is exported, provided or not, and binds a hidden one directly. Under
 /// `-Bsymbolic-functions` an untyped script symbol binds directly, as
-/// bfd counts only an object as data.
+/// only an object counts as data.
 #[test]
 fn a_script_symbol_is_preemptible_unless_hidden() {
     let script = parse_linker_script(SHARED_SCRIPT).expect("script parses");
@@ -6105,7 +6099,7 @@ fn i386_got32x_loads_relax_as_gnu_ld_relaxes_them() {
 /// the slot's offset from `_GLOBAL_OFFSET_TABLE_` plus the addend and
 /// the slot holds the address. A position-independent image fills each
 /// slot with an `R_386_RELATIVE` but the absolute symbol's, which holds
-/// a number, as bfd leaves it in a PIE.
+/// a number.
 #[test]
 fn i386_got32_keeps_every_load_on_a_slot() {
     for pic in [None, Some(false), Some(true)] {
@@ -6145,7 +6139,7 @@ fn i386_got32_keeps_every_load_on_a_slot() {
     }
 }
 
-/// A GOT load with no base register, as GNU ld 2.46.1 links it: a
+/// A GOT load with no base register, measured against GNU ld 2.46.1: a
 /// position-dependent executable relaxes `mov` and `call` and gives
 /// `lea foo@GOT` the slot's GOT-relative offset; a position-independent
 /// image refuses the `mov`, having no GOT address to give, and still
@@ -6359,8 +6353,8 @@ fn i386_lazy_plt(pic: bool, plt: i64, g: i64, slot: i64) -> Vec<u8> {
 }
 
 /// An i386 executable calls an import through a lazy PLT entry and loads
-/// it through a GOT slot `R_386_GLOB_DAT` fills, as GNU ld 2.46.1 links
-/// one (Intel386 psABI, procedure linkage table): the entry jumps through
+/// it through a GOT slot `R_386_GLOB_DAT` fills (Intel386 psABI,
+/// procedure linkage table): the entry jumps through
 /// its `.got.plt` slot, which holds the entry's `push` until an
 /// `R_386_JUMP_SLOT` binds it; an address-width field naming the import
 /// takes an `R_386_32` against it. A PIE reaches the slots from `%ebx`; a
@@ -6418,8 +6412,8 @@ fn an_i386_executable_reaches_an_import_through_a_lazy_plt_entry() {
 }
 
 /// A position-dependent x86-64 executable linked against a shared library
-/// is an `ET_EXEC` with the dynamic tables, as GNU ld 2.46.1 links one,
-/// its PLT entries reaching their slots through `%rip`.
+/// is an `ET_EXEC` with the dynamic tables (measured against GNU ld
+/// 2.46.1), its PLT entries reaching their slots through `%rip`.
 #[test]
 fn a_position_dependent_executable_imports_from_a_shared_library() {
     let script = parse_linker_script(&default_script(false)).expect("parses");
@@ -6611,8 +6605,8 @@ fn aarch64_pointer_user() -> Vec<u8> {
 
 /// AAELF64: a `JUMP_SLOT` naming a symbol marked
 /// `STO_AARCH64_VARIANT_PCS` sets `DT_AARCH64_VARIANT_PCS`, and the
-/// output's symbols keep the flag. As bfd merges it, either the
-/// reference in an object or the library's export marks the symbol; an
+/// output's symbols keep the flag. Either the reference in an object
+/// or the library's export marks the symbol; an
 /// unmarked import sets no tag.
 #[test]
 fn a_variant_pcs_import_marks_its_dynamic_symbol_and_the_dynamic_section() {
@@ -6899,7 +6893,7 @@ fn an_executable_reaches_an_imported_object_through_a_copy() {
     }
 }
 
-/// A library object's copy takes bfd's alignment: the largest power of two
+/// A library object's copy takes the largest power of two
 /// up to its section's alignment that divides its offset in the section;
 /// one in a read-only section is copied to `.data.rel.ro`.
 #[test]
@@ -6995,8 +6989,8 @@ fn pc_word_user(machine: u16, name: &str, flags: u64) -> Vec<u8> {
 }
 
 /// A PC-relative word naming a library's function in an x86-64 PIE's data
-/// makes the function's PLT entry its address, as GNU ld 2.46.1 links it,
-/// so it compares equal to the library's own; an address-width word keeps
+/// makes the function's PLT entry its address, so it compares equal to
+/// the library's own; an address-width word keeps
 /// its relocation against the symbol. A shared object leaves both to
 /// relocations naming the function and takes no PLT entry for them; a PIE
 /// or shared object's word in read-only data is refused.
@@ -7049,8 +7043,8 @@ fn an_x86_64_pie_s_pc_relative_word_makes_a_library_function_s_plt_entry_its_add
 }
 
 /// An i386 PC-relative word naming a library's function takes an
-/// `R_386_PC32` naming it in a PIE and a shared object, as GNU ld 2.46.1
-/// links it, the field holding the addend; a position-dependent
+/// `R_386_PC32` naming it in a PIE and a shared object, the field
+/// holding the addend; a position-dependent
 /// executable makes the function's PLT entry its address.
 #[test]
 fn an_i386_pc_relative_word_naming_a_library_function_takes_a_relocation_naming_it() {
@@ -7239,8 +7233,8 @@ fn dynamic_tags_name_the_init_and_fini_functions_ahead_of_the_arrays() {
 }
 
 /// The symbol table lists each import as `.dynsym` does: undefined, with
-/// the type the library gives it and the binding of the references, as
-/// GNU ld 2.46.1 lists them.
+/// the type the library gives it and the binding of the references
+/// (measured against GNU ld 2.46.1).
 #[test]
 fn the_symbol_table_lists_the_imports() {
     let body = [
@@ -7341,8 +7335,8 @@ fn weak_caller(addressed: bool) -> Vec<u8> {
 /// through a PLT entry its `JUMP_SLOT` binds, the name a weak undefined
 /// `.dynsym` row, so that a library the loader finds can define it; one
 /// its code also addresses directly resolves to 0, call and all. A shared
-/// object linked against no library imports it the same way. GNU ld
-/// 2.46.1 links each so on x86-64.
+/// object linked against no library imports it the same way. Measured
+/// against GNU ld 2.46.1 on x86-64.
 #[test]
 fn an_undefined_weak_function_an_executable_calls_takes_a_plt_entry() {
     let link = |emit: LdsEmit, shared: bool, addressed: bool| {
@@ -7401,8 +7395,8 @@ fn an_undefined_weak_function_an_executable_calls_takes_a_plt_entry() {
 
 /// An aarch64 PIE linked against a library exports an undefined weak name
 /// a data word holds, which takes an `R_AARCH64_ABS64` naming it; a
-/// position-dependent executable writes 0 with no relocation, as GNU ld
-/// 2.46.1 links them.
+/// position-dependent executable writes 0 with no relocation (measured
+/// against GNU ld 2.46.1).
 #[test]
 fn an_aarch64_pie_exports_an_undefined_weak_name_a_data_word_holds() {
     // Symtab: null(0), sections(1, 2), _start(3), wf(4).
@@ -7470,8 +7464,8 @@ fn pc_word_data_user(rtype: u32, code: bool) -> Vec<u8> {
 
 /// An executable whose only references to a library's data object are
 /// address-width PC-relative words in writable data leaves each to a
-/// relocation of its type naming the object and takes no copy, as GNU ld
-/// 2.46.1 links them. One that code also reaches at a fixed address
+/// relocation of its type naming the object and takes no copy (measured
+/// against GNU ld 2.46.1). One that code also reaches at a fixed address
 /// copies the object and binds the word to the copy, and so does a
 /// narrower `R_X86_64_PC32` word, which the loader could not fill with a
 /// library's address more than 2 GiB away.
@@ -7574,8 +7568,8 @@ fn narrow_import_user(machine: u16, rtype: u32, writable: bool) -> Vec<u8> {
 
 /// An absolute field narrower than an address cannot hold a library
 /// object's address in a PIE, and a position-dependent x86-64
-/// executable's writable data takes no copy for one, so GNU ld 2.46.1
-/// refuses both; a position-dependent executable's code reaches the
+/// executable's writable data takes no copy for one, so both are
+/// refused; a position-dependent executable's code reaches the
 /// object through a copy.
 #[test]
 fn a_narrow_absolute_field_naming_a_library_object_is_refused_where_gnu_ld_refuses_it() {
@@ -7654,7 +7648,7 @@ fn weak_pc_user() -> Vec<u8> {
 }
 
 /// An x86-64 PIE's PC-relative reference in code to an undefined weak name
-/// would yield the load base rather than 0, so GNU ld 2.46.1 refuses it,
+/// would yield the load base rather than 0, so it is refused,
 /// with or without libraries; a position-dependent executable resolves it
 /// to 0.
 #[test]
@@ -7760,7 +7754,7 @@ fn an_aarch64_pc_relative_field_naming_an_undefined_weak_name_holds_0() {
 
 /// A PIE that names an interpreter is dynamically linked with no library
 /// on the command line too, so it imports an undefined weak function it
-/// calls, as GNU ld 2.46.1 links one; a PIE that names none resolves it.
+/// calls; a PIE that names none resolves it.
 #[test]
 fn a_pie_with_an_interpreter_imports_an_undefined_weak_function_it_calls() {
     let script = parse_linker_script(&default_script(true)).expect("parses");
@@ -7790,7 +7784,7 @@ fn a_pie_with_an_interpreter_imports_an_undefined_weak_function_it_calls() {
 
 /// `-z lazy` is the engine's binding, lazy PLT entries bound through
 /// `R_*_JUMP_SLOT`, so it is taken and records nothing; the later of it
-/// and `-z now` stands, as GNU ld 2.46.1 takes them.
+/// and `-z now` stands.
 #[test]
 fn z_lazy_is_taken_and_the_later_of_it_and_z_now_stands() {
     let script = parse_linker_script(&default_script(true)).expect("parses");
@@ -7820,7 +7814,7 @@ fn z_lazy_is_taken_and_the_later_of_it_and_z_now_stands() {
 /// so that the field holds the distance to the name's final address, 0
 /// where nothing defines it; its code's call, a direct reference beside
 /// the field, takes no PLT entry and reaches 0. A position-dependent
-/// executable resolves the fields itself. GNU ld 2.46.1 links them so.
+/// executable resolves the fields itself. Measured against GNU ld 2.46.1.
 #[test]
 fn an_i386_pies_pc_relative_field_naming_an_undefined_weak_name_takes_a_relocation() {
     // .text: `.long wf - .`, `call wf@PLT`; .data: `.long wf - .`.

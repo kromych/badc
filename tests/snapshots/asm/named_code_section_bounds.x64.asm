@@ -3,7 +3,7 @@ named_code_section_bounds.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -30,30 +30,29 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	leaq	<rip>, %rdx # <addr>
-               	leaq	<rip>, %rax # <addr>
-               	cmpq	%rax, %rdx
-               	jb	<addr>
+               	pushq	%rax
                	leaq	<rip>, %rcx # <addr>
-               	cmpq	%rcx, %rdx
-               	jae	<addr>
-               	leaq	<rip>, %rdx # <addr>
-               	cmpq	%rax, %rdx
+               	leaq	<rip>, %rax # <addr>
+               	cmpq	%rax, %rcx
                	jb	<addr>
-               	cmpq	%rcx, %rdx
+               	leaq	<rip>, %rdx # <addr>
+               	cmpq	%rdx, %rcx
+               	jae	<addr>
+               	leaq	<rip>, %rcx # <addr>
+               	cmpq	%rax, %rcx
+               	jb	<addr>
+               	cmpq	%rdx, %rcx
                	jb	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	leaq	-<rip>, %rdx # <addr>
-               	cmpq	%rax, %rdx
+               	leaq	-<rip>, %rcx # <addr>
+               	cmpq	%rax, %rcx
                	jb	<addr>
-               	cmpq	%rcx, %rdx
+               	cmpq	%rdx, %rcx
                	jae	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x3, %edi
                	callq	<addr>
@@ -64,7 +63,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x3, %eax
                	jmp	<addr>
@@ -74,9 +73,8 @@ Disassembly of section .text:
                	retq
 
 <second>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	callq	<addr>
                	shlq	%rax
-               	popq	%rbp
+               	popq	%r11
                	retq

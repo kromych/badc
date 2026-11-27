@@ -3,7 +3,7 @@ inline_naked_not_inlined.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -30,16 +30,14 @@ Disassembly of section .text:
                	retq
 
 <use_identity>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	callq	<addr>
                	incq	%rax
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x29, %edi
                	callq	<addr>
                	incq	%rax
@@ -48,5 +46,5 @@ Disassembly of section .text:
                	cmpq	$0x2a, %rax
                	cmovneq	%rdx, %rcx
                	movq	%rcx, %rax
-               	popq	%rbp
+               	popq	%r11
                	retq

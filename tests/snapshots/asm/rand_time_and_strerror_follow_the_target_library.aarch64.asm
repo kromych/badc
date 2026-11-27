@@ -3,7 +3,7 @@ rand_time_and_strerror_follow_the_target_library.aarch64:	file format elf64-litt
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -34,11 +34,11 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cmp	x23, x0
                	cset	x2, eq
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	mov	x1, x22
                	mov	x4, x21
                	mov	x3, x20
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	bl	<addr>
                	mov	x0, #0x2a               // =42
                	bl	<addr>
@@ -63,11 +63,11 @@ Disassembly of section .text:
                	mov	x0, #0xa                // =10
                	mov	x1, #0x4                // =4
                	bl	<addr>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	mov	x1, x20
                	mov	x3, x22
                	mov	x2, x21
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	bl	<addr>
                	mov	x0, #0x2                // =2
                	bl	<addr>
@@ -78,10 +78,10 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	bl	<addr>
                	mov	x3, x0
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	mov	x1, x20
                	mov	x2, x21
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	bl	<addr>
                	bl	<addr>
                	mov	x1, #0xd                // =13

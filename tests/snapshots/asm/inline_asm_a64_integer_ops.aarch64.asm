@@ -3,7 +3,7 @@ inline_asm_a64_integer_ops.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -28,11 +28,10 @@ Disassembly of section .text:
                	mov	w7, w5
                	add	x0, x5, x6, lsl #4
                	add	x2, x5, x6, lsl #4
-               	mov	x3, #0x1                // =1
-               	mov	x4, #0x0                // =0
                	cmp	x0, x2
-               	csel	x4, x4, x3, eq
-               	sub	x11, x5, x6, lsr #8
+               	mov	x17, #0x1               // =1
+               	csel	x4, xzr, x17, eq
+               	sub	x2, x5, x6, lsr #8
                	cbz	x4, <addr>
                	add	x0, x5, w9, sxtw #2
                	cbz	x4, <addr>
@@ -96,7 +95,7 @@ Disassembly of section .text:
                	cbz	x4, <addr>
                	umull	x0, w9, w10
                	cbz	x4, <addr>
-               	umulh	x1, x5, x6
+               	umulh	x0, x5, x6
                	cbz	x4, <addr>
                	smulh	x0, x5, x6
                	cbz	x4, <addr>
@@ -177,195 +176,165 @@ Disassembly of section .text:
                	ret
                	lsr	x1, x7, #17
                	mvn	x1, x1
-               	mov	x2, #0x3c               // =60
-               	mov	x3, #0x0                // =0
                	cmp	w0, w1
-               	csel	x4, x3, x2, eq
+               	mov	x17, #0x3c              // =60
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	asr	x1, x6, #63
                	mvn	x1, x1
-               	mov	x2, #0x3b               // =59
-               	mov	x3, #0x0                // =0
                	cmp	x0, x1
-               	csel	x4, x3, x2, eq
+               	mov	x17, #0x3b              // =59
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	ror	w1, w7, #0x3
                	mvn	x1, x1
-               	mov	x2, #0x3a               // =58
-               	mov	x3, #0x0                // =0
                	cmp	w0, w1
-               	csel	x4, x3, x2, eq
+               	mov	x17, #0x3a              // =58
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	lsl	x1, x5, #4
                	mvn	x1, x1
-               	mov	x2, #0x39               // =57
-               	mov	x3, #0x0                // =0
                	cmp	x0, x1
-               	csel	x4, x3, x2, eq
+               	mov	x17, #0x39              // =57
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	mvn	x1, x7
-               	mov	x2, #0x38               // =56
-               	mov	x3, #0x0                // =0
                	cmp	w0, w1
-               	csel	x4, x3, x2, eq
+               	mov	x17, #0x38              // =56
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	mvn	x1, x5
-               	mov	x2, #0x37               // =55
-               	mov	x3, #0x0                // =0
                	cmp	x0, x1
-               	csel	x4, x3, x2, eq
+               	mov	x17, #0x37              // =55
+               	csel	x4, xzr, x17, eq
                	b	<addr>
-               	mov	x1, #0x36               // =54
-               	mov	x2, #0x0                // =0
                	cmp	x0, x5
-               	csel	x4, x2, x1, eq
+               	mov	x17, #0x36              // =54
+               	csel	x4, xzr, x17, eq
                	b	<addr>
-               	mov	x1, #0x35               // =53
-               	mov	x2, #0x0                // =0
                	mov	x17, #0xfffffffe        // =4294967294
                	cmp	x0, x17
-               	csel	x4, x2, x1, eq
+               	mov	x17, #0x35              // =53
+               	csel	x4, xzr, x17, eq
                	b	<addr>
-               	mov	x1, #0x34               // =52
-               	mov	x2, #0x0                // =0
                	cmn	x0, #0x2
-               	csel	x4, x2, x1, eq
+               	mov	x17, #0x34              // =52
+               	csel	x4, xzr, x17, eq
                	b	<addr>
-               	mov	x1, #0x33               // =51
-               	mov	x2, #0x0                // =0
                	cmn	x0, #0x1
-               	csel	x4, x2, x1, eq
+               	mov	x17, #0x33              // =51
+               	csel	x4, xzr, x17, eq
                	b	<addr>
-               	mov	x1, #0x32               // =50
-               	mov	x2, #0x0                // =0
                	mov	x17, #0x5678            // =22136
                	movk	x17, #0x1234, lsl #16
                	cmp	x0, x17
-               	csel	x4, x2, x1, eq
+               	mov	x17, #0x32              // =50
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	lsr	x1, x6, #16
                	orr	x1, x1, x5, lsl #48
-               	mov	x2, #0x31               // =49
-               	mov	x3, #0x0                // =0
                	cmp	x0, x1
-               	csel	x4, x3, x2, eq
+               	mov	x17, #0x31              // =49
+               	csel	x4, xzr, x17, eq
                	b	<addr>
-               	mov	x1, #0x30               // =48
-               	mov	x2, #0x0                // =0
                	mov	x17, #-0x7fff           // =-32767
                	cmp	x0, x17
-               	csel	x4, x2, x1, eq
+               	mov	x17, #0x30              // =48
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	and	x1, x7, #0xff
-               	mov	x2, #0x2f               // =47
-               	mov	x3, #0x0                // =0
                	cmp	w0, w1
-               	csel	x4, x3, x2, eq
+               	mov	x17, #0x2f              // =47
+               	csel	x4, xzr, x17, eq
                	b	<addr>
-               	mov	x1, #0x2e               // =46
-               	mov	x2, #0x0                // =0
                	mov	x17, #-0x80000000       // =-2147483648
                	cmp	x0, x17
-               	csel	x4, x2, x1, eq
+               	mov	x17, #0x2e              // =46
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	and	x1, x5, #0xffffffffffffff00
                	ubfx	x2, x6, #4, #8
                	orr	x1, x1, x2
-               	mov	x2, #0x2d               // =45
-               	mov	x3, #0x0                // =0
                	cmp	x0, x1
-               	csel	x4, x3, x2, eq
+               	mov	x17, #0x2d              // =45
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	and	x1, x5, #0xffffffffffff00ff
                	mov	x17, #0x500             // =1280
                	orr	x1, x1, x17
-               	mov	x2, #0x2c               // =44
-               	mov	x3, #0x0                // =0
                	cmp	x0, x1
-               	csel	x4, x3, x2, eq
+               	mov	x17, #0x2c              // =44
+               	csel	x4, xzr, x17, eq
                	b	<addr>
-               	mov	x1, #0x2b               // =43
-               	mov	x2, #0x0                // =0
                	cmn	x0, #0x10
-               	csel	x4, x2, x1, eq
+               	mov	x17, #0x2b              // =43
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	and	x1, x5, #0xff
                	lsl	x1, x1, #4
-               	mov	x2, #0x2a               // =42
-               	mov	x3, #0x0                // =0
                	cmp	x0, x1
-               	csel	x4, x3, x2, eq
+               	mov	x17, #0x2a              // =42
+               	csel	x4, xzr, x17, eq
                	b	<addr>
-               	mov	x1, #0x29               // =41
-               	mov	x2, #0x0                // =0
                	cmn	x0, #0x1
-               	csel	x4, x2, x1, eq
+               	mov	x17, #0x29              // =41
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	ubfx	x1, x5, #8, #12
-               	mov	x2, #0x28               // =40
-               	mov	x3, #0x0                // =0
                	cmp	x0, x1
-               	csel	x4, x3, x2, eq
+               	mov	x17, #0x28              // =40
+               	csel	x4, xzr, x17, eq
                	b	<addr>
-               	mov	x1, #0x27               // =39
-               	mov	x2, #0x0                // =0
                	mov	x17, #0xab89            // =43913
                	movk	x17, #0xefcd, lsl #16
                	movk	x17, #0x2301, lsl #32
                	movk	x17, #0x6745, lsl #48
                	cmp	x0, x17
-               	csel	x4, x2, x1, eq
+               	mov	x17, #0x27              // =39
+               	csel	x4, xzr, x17, eq
                	b	<addr>
-               	mov	x1, #0x26               // =38
-               	mov	x2, #0x0                // =0
                	mov	x17, #0xefcd            // =61389
                	movk	x17, #0xab89, lsl #16
                	movk	x17, #0x6745, lsl #32
                	movk	x17, #0x2301, lsl #48
                	cmp	x0, x17
-               	csel	x4, x2, x1, eq
+               	mov	x17, #0x26              // =38
+               	csel	x4, xzr, x17, eq
                	b	<addr>
-               	mov	x1, #0x25               // =37
-               	mov	x2, #0x0                // =0
                	mov	x17, #0xab89            // =43913
                	movk	x17, #0xefcd, lsl #16
                	cmp	w0, w17
-               	csel	x4, x2, x1, eq
+               	mov	x17, #0x25              // =37
+               	csel	x4, xzr, x17, eq
                	b	<addr>
-               	mov	x1, #0x24               // =36
-               	mov	x2, #0x0                // =0
                	mov	x17, #0x2301            // =8961
                	movk	x17, #0x6745, lsl #16
                	movk	x17, #0xab89, lsl #32
                	movk	x17, #0xefcd, lsl #48
                	cmp	x0, x17
-               	csel	x4, x2, x1, eq
+               	mov	x17, #0x24              // =36
+               	csel	x4, xzr, x17, eq
                	b	<addr>
-               	mov	x1, #0x23               // =35
-               	mov	x2, #0x0                // =0
                	mov	x17, #-0x6000000000000000 // =-6917529027641081856
                	cmp	x0, x17
-               	csel	x4, x2, x1, eq
+               	mov	x17, #0x23              // =35
+               	csel	x4, xzr, x17, eq
                	b	<addr>
-               	mov	x1, #0x22               // =34
-               	mov	x2, #0x0                // =0
                	cmp	x0, #0x6
-               	csel	x4, x2, x1, eq
+               	mov	x17, #0x22              // =34
+               	csel	x4, xzr, x17, eq
                	b	<addr>
-               	mov	x1, #0x21               // =33
-               	mov	x2, #0x0                // =0
                	cmp	w0, #0x1d
-               	csel	x4, x2, x1, eq
+               	mov	x17, #0x21              // =33
+               	csel	x4, xzr, x17, eq
                	b	<addr>
-               	mov	x1, #0x20               // =32
-               	mov	x2, #0x0                // =0
                	cmp	x0, #0x3d
-               	csel	x4, x2, x1, eq
+               	mov	x17, #0x20              // =32
+               	csel	x4, xzr, x17, eq
                	b	<addr>
-               	mov	x1, #0x1f               // =31
-               	mov	x2, #0x0                // =0
                	cmp	x0, #0x0
-               	csel	x4, x1, x2, ne
+               	mov	x16, #0x1f              // =31
+               	csel	x4, x16, xzr, ne
                	b	<addr>
                	mov	x0, #0x4925             // =18725
                	movk	x0, #0x2492, lsl #16
@@ -374,10 +343,9 @@ Disassembly of section .text:
                	smulh	x0, x6, x0
                	asr	x0, x0, #1
                	add	x0, x0, x0, lsr #63
-               	mov	x2, #0x1e               // =30
-               	mov	x3, #0x0                // =0
                	cmp	x1, x0
-               	csel	x4, x3, x2, eq
+               	mov	x17, #0x1e              // =30
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	mov	x0, #0x2493             // =9363
                	movk	x0, #0x9249, lsl #16
@@ -387,186 +355,156 @@ Disassembly of section .text:
                	sub	x2, x5, x0
                	add	x0, x0, x2, lsr #1
                	lsr	x0, x0, #2
-               	mov	x2, #0x1d               // =29
-               	mov	x3, #0x0                // =0
                	cmp	x1, x0
-               	csel	x4, x3, x2, eq
+               	mov	x17, #0x1d              // =29
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	asr	x1, x5, #63
                	asr	x2, x6, #63
                	umulh	x3, x5, x6
                	madd	x2, x5, x2, x3
                	madd	x1, x1, x6, x2
-               	mov	x2, #0x1c               // =28
-               	mov	x3, #0x0                // =0
                	cmp	x0, x1
-               	csel	x4, x3, x2, eq
+               	mov	x17, #0x1c              // =28
+               	csel	x4, xzr, x17, eq
                	b	<addr>
-               	mov	x0, #0x0                // =0
-               	umulh	x2, x5, x6
-               	madd	x2, x5, x0, x2
-               	madd	x2, x0, x6, x2
-               	mov	x3, #0x1b               // =27
-               	cmp	x1, x2
-               	csel	x4, x0, x3, eq
+               	umulh	x1, x5, x6
+               	cmp	x0, x1
+               	mov	x17, #0x1b              // =27
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	mov	w1, w9
                	mov	x17, #0x7               // =7
                	mul	x1, x1, x17
-               	mov	x2, #0x1a               // =26
-               	mov	x3, #0x0                // =0
                	cmp	x0, x1
-               	csel	x4, x3, x2, eq
+               	mov	x17, #0x1a              // =26
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	sxtw	x1, w9
                	mov	x17, #0x7               // =7
                	mul	x1, x1, x17
-               	mov	x2, #0x19               // =25
-               	mov	x3, #0x0                // =0
                	cmp	x0, x1
-               	csel	x4, x3, x2, eq
+               	mov	x17, #0x19              // =25
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	msub	x1, x5, x6, x8
-               	mov	x2, #0x18               // =24
-               	mov	x3, #0x0                // =0
                	cmp	x0, x1
-               	csel	x4, x3, x2, eq
+               	mov	x17, #0x18              // =24
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	madd	x1, x5, x6, x8
-               	mov	x2, #0x17               // =23
-               	mov	x3, #0x0                // =0
                	cmp	x0, x1
-               	csel	x4, x3, x2, eq
+               	mov	x17, #0x17              // =23
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	mul	x1, x5, x6
-               	mov	x2, #0x16               // =22
-               	mov	x3, #0x0                // =0
                	cmp	x0, x1
-               	csel	x4, x3, x2, eq
+               	mov	x17, #0x16              // =22
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	sxtw	x1, w6
                	asr	x1, x1, #3
-               	mov	x2, #0x15               // =21
-               	mov	x3, #0x0                // =0
                	cmp	w0, w1
-               	csel	x4, x3, x2, eq
+               	mov	x17, #0x15              // =21
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	lsl	x2, x5, #5
-               	mov	x3, #0x14               // =20
-               	mov	x4, #0x0                // =0
                	cmp	x0, x2
-               	csel	x4, x4, x3, eq
+               	mov	x17, #0x14              // =20
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	ror	x2, x5, #0x10
-               	mov	x3, #0x13               // =19
-               	mov	x4, #0x0                // =0
                	cmp	x0, x2
-               	csel	x4, x4, x3, eq
+               	mov	x17, #0x13              // =19
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	asr	x2, x6, #5
-               	mov	x3, #0x12               // =18
-               	mov	x4, #0x0                // =0
                	cmp	x0, x2
-               	csel	x4, x4, x3, eq
+               	mov	x17, #0x12              // =18
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	lsr	x2, x5, #9
-               	mov	x3, #0x11               // =17
-               	mov	x4, #0x0                // =0
                	cmp	x0, x2
-               	csel	x4, x4, x3, eq
+               	mov	x17, #0x11              // =17
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	lsl	x2, x5, #7
-               	mov	x3, #0x10               // =16
-               	mov	x4, #0x0                // =0
                	cmp	x0, x2
-               	csel	x4, x4, x3, eq
+               	mov	x17, #0x10              // =16
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	neg	x2, x5
-               	mov	x3, #0xf                // =15
-               	mov	x4, #0x0                // =0
                	cmp	x0, x2
-               	csel	x4, x4, x3, eq
+               	mov	x17, #0xf               // =15
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	mvn	x2, x5
-               	mov	x3, #0xe                // =14
-               	mov	x4, #0x0                // =0
                	cmp	x0, x2
-               	csel	x4, x4, x3, eq
+               	mov	x17, #0xe               // =14
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	and	x2, x5, #0xff00ff00ff00ff00
-               	mov	x3, #0xd                // =13
-               	mov	x4, #0x0                // =0
                	cmp	x0, x2
-               	csel	x4, x4, x3, eq
+               	mov	x17, #0xd               // =13
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	mvn	x2, x6
                	eor	x2, x5, x2
-               	mov	x3, #0xc                // =12
-               	mov	x4, #0x0                // =0
                	cmp	x0, x2
-               	csel	x4, x4, x3, eq
+               	mov	x17, #0xc               // =12
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	mvn	x2, x6
                	orr	x2, x5, x2
-               	mov	x3, #0xb                // =11
-               	mov	x4, #0x0                // =0
                	cmp	x0, x2
-               	csel	x4, x4, x3, eq
+               	mov	x17, #0xb               // =11
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	mvn	x2, x6
                	and	x2, x5, x2
-               	mov	x3, #0xa                // =10
-               	mov	x4, #0x0                // =0
                	cmp	x0, x2
-               	csel	x4, x4, x3, eq
+               	mov	x17, #0xa               // =10
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	eor	x2, x5, x6, asr #3
-               	mov	x3, #0x9                // =9
-               	mov	x4, #0x0                // =0
                	cmp	x0, x2
-               	csel	x4, x4, x3, eq
+               	mov	x17, #0x9               // =9
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	ror	x2, x6, #0xc
                	orr	x2, x5, x2
-               	mov	x3, #0x8                // =8
-               	mov	x4, #0x0                // =0
                	cmp	x0, x2
-               	csel	x4, x4, x3, eq
+               	mov	x17, #0x8               // =8
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	and	x2, x5, x6
-               	mov	x3, #0x7                // =7
-               	mov	x4, #0x0                // =0
                	cmp	x0, x2
-               	csel	x4, x4, x3, eq
+               	mov	x17, #0x7               // =7
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	add	x2, x7, x6
-               	mov	x3, #0x6                // =6
-               	mov	x4, #0x0                // =0
                	cmp	w0, w2
-               	csel	x4, x4, x3, eq
+               	mov	x17, #0x6               // =6
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	sub	x2, x5, #0x1, lsl #12   // =0x1000
-               	mov	x3, #0x5                // =5
-               	mov	x4, #0x0                // =0
                	cmp	x0, x2
-               	csel	x4, x4, x3, eq
+               	mov	x17, #0x5               // =5
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	add	x2, x5, #0x123
-               	mov	x3, #0x4                // =4
-               	mov	x4, #0x0                // =0
                	cmp	x0, x2
-               	csel	x4, x4, x3, eq
+               	mov	x17, #0x4               // =4
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	sxtw	x2, w9
                	add	x2, x5, x2, lsl #2
-               	mov	x3, #0x3                // =3
-               	mov	x4, #0x0                // =0
                	cmp	x0, x2
-               	csel	x4, x4, x3, eq
+               	mov	x17, #0x3               // =3
+               	csel	x4, xzr, x17, eq
                	b	<addr>
                	sub	x0, x5, x6, lsr #8
-               	mov	x2, #0x2                // =2
-               	mov	x3, #0x0                // =0
-               	cmp	x11, x0
-               	csel	x4, x3, x2, eq
+               	cmp	x2, x0
+               	mov	x17, #0x2               // =2
+               	csel	x4, xzr, x17, eq
                	b	<addr>

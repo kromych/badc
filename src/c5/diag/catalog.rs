@@ -202,7 +202,7 @@ catalog! {
     3010, "constant-conversion", ["overflow"], Warning, Controllable,
         [DEFAULT], Live,
         "an integer constant converted implicitly to an integer type or a bit-field whose width holds the value at neither signedness";
-    3011, "incompatible-pointer-types-discards-qualifiers", [], Warning, Controllable,
+    3011, "incompatible-pointer-types-discards-qualifiers", ["incompatible-pointer-types"], Warning, Controllable,
         [DEFAULT], Live,
         "a pointer assigned, initialized, passed or returned as a pointer to a type that differs from the one it points to only in the qualifiers of a type further down: `T **` as `const T **`";
     3012, "switch-bool", [], Warning, Controllable,
@@ -210,7 +210,7 @@ catalog! {
         "a `switch` on a boolean value with a case label outside 0 and 1, or with a `default` beside labels covering both";
     3013, "excess-initializers", [], Warning, Controllable,
         [DEFAULT], Live,
-        "a string literal longer than the array, member or row it initializes, a terminator aside; the characters past the bound are dropped";
+        "an initializer element with no object to initialize -- past an array's, a row's, a structure's or a braced scalar's end, a union's second, one after a braced string -- or a string literal longer than the array, member or row it initializes, a terminator aside; the surplus is dropped unevaluated";
     3015, "cast-function-type", [], Ignore, Controllable,
         [EXTRA], Live,
         "a cast between pointers to function types whose returns or common leading parameters differ other than as pointers or as integers of one precision";
@@ -292,12 +292,21 @@ catalog! {
     4008, "attribute-warning", [], Warning, Controllable,
         [DEFAULT], Live,
         "a call left in the emitted code to a function declared with `__attribute__((warning(\"message\")))`, which the diagnostic quotes";
+    4009, "stack-protector", [], Ignore, Controllable,
+        [], Live,
+        "under `-fstack-protector*`, a function `-fstack-protector` leaves unprotected because its character arrays are all shorter than `--param ssp-buffer-size=`, or a variable-length array or `alloca` buffer, which lies below the other locals, so the canary catches an overflow of it only past them";
     5001, "asm-syntax", [], Error, Hard,
         [], Live,
         "an `asm` statement whose operand list, constraints or template does not parse";
     5002, "assembler", [], Error, Hard,
         [], Live,
         "an instruction or directive the assembler cannot parse or encode for the target";
+    5003, "asm-operand-size", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "an x86 instruction whose memory operand neither a suffix nor a register operand sizes, encoded at its default width, which the diagnostic names";
+    5004, "asm-warning", [], Warning, Controllable,
+        [DEFAULT], Live,
+        "a `.warning` directive the assembler reaches, whose text the diagnostic quotes";
     6001, "orphan-section", [], Warning, Controllable,
         [DEFAULT], Live,
         "an input section no script rule names, placed by the linker's own rule";
@@ -577,6 +586,9 @@ impl Code {
     pub const GENERAL_REGS_ONLY: Code = Code::new(4006);
     pub const ATTRIBUTE_ERROR: Code = Code::new(4007);
     pub const ATTRIBUTE_WARNING: Code = Code::new(4008);
+    pub const STACK_PROTECTOR: Code = Code::new(4009);
     pub const ASM_SYNTAX: Code = Code::new(5001);
     pub const ASSEMBLER: Code = Code::new(5002);
+    pub const ASM_OPERAND_SIZE: Code = Code::new(5003);
+    pub const ASM_WARNING: Code = Code::new(5004);
 }

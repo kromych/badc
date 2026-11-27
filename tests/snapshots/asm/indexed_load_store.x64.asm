@@ -3,7 +3,7 @@ indexed_load_store.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,36 +26,34 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
+               	subq	$0x48, %rsp
                	movabsq	$0x200000001, %rax      # imm = 0x200000001
                	movabsq	$0x140000000a, %rcx     # imm = 0x140000000A
-               	movq	%rax, -0x40(%rbp)
-               	movq	%rcx, -0x20(%rbp)
+               	movq	%rax, (%rsp)
+               	movq	%rcx, 0x20(%rsp)
                	movabsq	$0x400000003, %rax      # imm = 0x400000003
                	movabsq	$0x280000001e, %rcx     # imm = 0x280000001E
-               	movq	%rax, -0x38(%rbp)
-               	movq	%rcx, -0x18(%rbp)
+               	movq	%rax, 0x8(%rsp)
+               	movq	%rcx, 0x28(%rsp)
                	movabsq	$0x600000005, %rax      # imm = 0x600000005
                	movabsq	$0x3c00000032, %rcx     # imm = 0x3C00000032
-               	movq	%rax, -0x30(%rbp)
-               	movq	%rcx, -0x10(%rbp)
+               	movq	%rax, 0x10(%rsp)
+               	movq	%rcx, 0x30(%rsp)
                	movabsq	$0x800000007, %rax      # imm = 0x800000007
                	movabsq	$0x5000000046, %rcx     # imm = 0x5000000046
-               	movq	%rax, -0x28(%rbp)
-               	movq	%rcx, -0x8(%rbp)
+               	movq	%rax, 0x18(%rsp)
+               	movq	%rcx, 0x38(%rsp)
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
-               	movl	-0x40(%rbp,%rax,4), %edi
+               	movl	(%rsp,%rax,4), %edi
                	addq	$0x3, %rdi
-               	movl	-0x20(%rbp,%rax,4), %r8d
+               	movl	0x20(%rsp,%rax,4), %r8d
                	subq	$0x3, %r8
-               	movl	%r8d, -0x40(%rbp,%rax,4)
-               	movl	%edi, -0x20(%rbp,%rax,4)
-               	movl	-0x40(%rbp,%rax,4), %r8d
-               	imulq	%r8, %rdi
-               	addq	%rdi, %rcx
+               	movl	%r8d, (%rsp,%rax,4)
+               	movl	%edi, 0x20(%rsp,%rax,4)
+               	movl	(%rsp,%rax,4), %r8d
+               	imulq	%rdi, %r8
+               	addq	%r8, %rcx
                	incq	%rax
                	cmpl	$0x8, %eax
                	jl	<addr>
@@ -63,5 +61,5 @@ Disassembly of section .text:
                	movl	$0x1, %edx
                	cmpl	$0xb7c, %ecx            # imm = 0xB7C
                	cmovneq	%rdx, %rax
-               	leave
+               	addq	$0x48, %rsp
                	retq

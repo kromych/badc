@@ -3,7 +3,7 @@ thread_local_per_thread.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -37,9 +37,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x28, %rsp
+               	subq	$0x30, %rsp
                	pushq	%rbx
                	movq	%fs:0x0, %rax
                	addq	$-0x8, %rax
@@ -48,30 +46,30 @@ Disassembly of section .text:
                	movl	$0x2, %esi
                	callq	<addr>
                	movq	%rax, %rbx
-               	leaq	<rip>, %rsi
                	movq	%rbx, %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	movq	%rax, %r10
                	movq	%r10, 0x18(%rsp)
-               	leaq	<rip>, %rsi
                	movq	%rbx, %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	movq	%rax, %rbx
-               	leaq	-0x10(%rbp), %rdi
+               	movq	0x18(%rsp), %r11
+               	leaq	0x20(%rsp), %rdi
                	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
-               	movq	0x18(%rsp), %r11
-               	movq	%rsi, %rcx
+               	xorl	%ecx, %ecx
                	callq	*%r11
-               	movq	-0x10(%rbp), %rdi
-               	leaq	-0x8(%rbp), %rsi
+               	movq	0x20(%rsp), %rdi
+               	leaq	0x28(%rsp), %rsi
                	callq	*%rbx
-               	movq	-0x8(%rbp), %rax
+               	movq	0x28(%rsp), %rax
                	cmpq	$0x63, %rax
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x30, %rsp
                	retq
                	movq	%fs:0x0, %rax
                	addq	$-0x8, %rax
@@ -80,9 +78,9 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x30, %rsp
                	retq
                	xorl	%eax, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x30, %rsp
                	retq

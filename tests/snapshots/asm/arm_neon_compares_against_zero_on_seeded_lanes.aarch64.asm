@@ -3,7 +3,7 @@ arm_neon_compares_against_zero_on_seeded_lanes.aarch64:	file format elf64-little
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -2249,15 +2249,14 @@ Disassembly of section .text:
                	cmp	w20, #0x3e8
                	b.lt	<addr>
                	adrp	x0, <page>
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x1                // =1
-               	ldr	x0, [x0, #0x18]
+               	ldr	x0, [x0, <lo12>]
                	mov	x17, #0x20e2            // =8418
                	movk	x17, #0xb242, lsl #16
                	movk	x17, #0x142c, lsl #32
                	movk	x17, #0x3789, lsl #48
                	cmp	x0, x17
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, eq
                	ldr	x20, [sp]
                	add	sp, sp, #0x5a0
                	ldp	x29, x30, [sp], #0x10

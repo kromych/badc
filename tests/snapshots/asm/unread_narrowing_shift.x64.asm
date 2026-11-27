@@ -3,7 +3,7 @@ unread_narrowing_shift.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -31,20 +31,19 @@ Disassembly of section .text:
                	retq
 
 <narrow48>:
+               	shlq	$0x30, %rdi
+               	xorq	$0x1, %rdi
                	movq	%rdi, %rax
-               	shlq	$0x30, %rax
-               	xorq	$0x1, %rax
                	retq
 
 <narrow56>:
+               	shlq	$0x38, %rdi
+               	orq	$0x1, %rdi
                	movq	%rdi, %rax
-               	shlq	$0x38, %rax
-               	orq	$0x1, %rax
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movq	<rip>, %rdi # <addr>
                	movl	$0x1, %esi
                	callq	<addr>
@@ -52,7 +51,7 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movq	<rip>, %rdi # <addr>
                	movl	$0x1, %esi
@@ -61,7 +60,7 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movq	<rip>, %rdi # <addr>
                	movl	$0x1, %esi
@@ -70,8 +69,8 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

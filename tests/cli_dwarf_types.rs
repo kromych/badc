@@ -801,7 +801,7 @@ fn void_pointer_has_no_pointee_type() {
 /// C99 6.2.5p15: `char`, `signed char` and `unsigned char` are three
 /// types, so a unit declaring all three describes three base types, with
 /// `char` at the target's signedness (`DW_ATE_signed_char` on x86-64,
-/// `DW_ATE_unsigned_char` on AArch64), as gcc 16.2.1 and clang 22.1.8 emit.
+/// `DW_ATE_unsigned_char` on AArch64).
 #[test]
 fn the_three_character_types_have_their_own_base_types() {
     for (target, plain) in [

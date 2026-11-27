@@ -3,7 +3,7 @@ alloca_far_spill_slots.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -78,8 +78,8 @@ Disassembly of section .text:
                	mov	x17, #0x35              // =53
                	mul	x16, x0, x17
                	str	x16, [x19, #0x68]
-               	add	x0, x19, #0xa8
                	mov	x1, x20
+               	add	x0, x19, #0xa8
                	bl	<addr>
                	add	x0, x21, x22
                	add	x0, x0, x23
@@ -103,8 +103,8 @@ Disassembly of section .text:
                	ldr	x17, [x19, #0x68]
                	add	x16, x0, x17
                	str	x16, [x19, #0x60]
-               	add	x0, x19, #0xa8
                	mov	x1, x20
+               	add	x0, x19, #0xa8
                	bl	<addr>
                	mul	x0, x23, x24
                	madd	x0, x21, x22, x0

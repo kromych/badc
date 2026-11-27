@@ -3,7 +3,7 @@ perf_loop_shapes.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -132,11 +132,11 @@ Disassembly of section .text:
                	ret
 
 <lcg_wide>:
-               	mov	x0, #0x3039             // =12345
-               	mov	x1, #0x0                // =0
                	mov	x2, #0x3039             // =12345
+               	mov	x1, #0x0                // =0
                	mov	x3, #0x4e6d             // =20077
                	movk	x3, #0x41c6, lsl #16
+               	mov	x0, x2
                	mul	x0, x0, x3
                	add	x0, x0, x2
                	mov	w0, w0
@@ -250,9 +250,8 @@ Disassembly of section .text:
 
 <guarded_negate>:
                	neg	x1, x1
-               	mov	x2, #0x0                // =0
                	cmp	x0, #0x0
-               	csel	x0, x1, x2, gt
+               	csel	x0, x1, xzr, gt
                	ret
 
 <main>:
@@ -280,33 +279,33 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x4, x29, #0x28
+               	sub	x1, x29, #0x28
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x4]
+               	stp	x16, x17, [x1]
                	ldp	x16, x17, [x0, #0x10]
-               	stp	x16, x17, [x4, #0x10]
+               	stp	x16, x17, [x1, #0x10]
                	ldr	w16, [x0, #0x20]
-               	str	w16, [x4, #0x20]
+               	str	w16, [x1, #0x20]
+               	str	x1, [sp]
+               	mov	x0, x1
                	mov	x1, #0x0                // =0
                	mov	x2, #0x8                // =8
                	mov	x3, #0x4                // =4
-               	str	x4, [sp]
-               	mov	x0, x4
                	bl	<addr>
-               	ldr	x4, [sp]
+               	ldr	x1, [sp]
                	mov	x0, #0x0                // =0
-               	ldrsw	x1, [x4, x0, lsl #2]
-               	cmp	w1, #0x4
+               	ldrsw	x2, [x1, x0, lsl #2]
+               	cmp	w2, #0x4
                	b.gt	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x9
                	b.lt	<addr>
                	cmp	w0, #0x9
                	b.ge	<addr>
-               	ldrsw	x1, [x4, x0, lsl #2]
-               	cmp	w1, #0x4
+               	ldrsw	x2, [x1, x0, lsl #2]
+               	cmp	w2, #0x4
                	b.lt	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x9
@@ -446,13 +445,12 @@ Disassembly of section .text:
                	sub	x0, x29, #0x28
                	mov	x1, #0x0                // =0
                	bl	<addr>
-               	sub	x2, x29, #0x28
                	ldursw	x1, [x29, #-0x28]
                	mul	x1, x1, x1
                	cmp	x0, x1
                	b.ne	<addr>
+               	sub	x0, x29, #0x28
                	mov	x1, #0x8                // =8
-               	mov	x0, x2
                	bl	<addr>
                	ldursw	x1, [x29, #-0x8]
                	mul	x1, x1, x1
@@ -607,7 +605,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x1                // =1
-               	mov	x1, x0
+               	mov	x1, #0x1                // =1
                	bl	<addr>
                	cmn	x0, #0x1
                	b.ne	<addr>

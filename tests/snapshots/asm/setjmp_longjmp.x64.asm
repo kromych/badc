@@ -3,7 +3,7 @@ setjmp_longjmp.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,8 +26,7 @@ Disassembly of section .text:
                	int3
 
 <trigger>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x7, %esi
                	movl	%esi, 0xc8(%rdi)
                	callq	<addr>

@@ -3,7 +3,7 @@ fp_constant_conversion.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -89,23 +89,21 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0x3dcccccd, -0x8(%rbp) # imm = 0x3DCCCCCD
-               	movl	$0x5, %edi
+               	subq	$0x18, %rsp
+               	movl	$0x3dcccccd, 0x8(%rsp)  # imm = 0x3DCCCCCD
                	movsd	<rip>, %xmm0 # <addr>
                	movsd	<rip>, %xmm1 # <addr>
                	movsd	<rip>, %xmm2 # <addr>
                	movsd	<rip>, %xmm3 # <addr>
                	movsd	<rip>, %xmm4 # <addr>
+               	movl	$0x5, %edi
                	movb	$0x5, %al
                	callq	<addr>
-               	movss	-0x8(%rbp), %xmm0
+               	movss	0x8(%rsp), %xmm0
                	leaq	0x1(%rax), %rcx
                	movss	<rip>, %xmm1 # <addr>
                	ucomiss	%xmm0, %xmm1
                	cmovneq	%rcx, %rax
                	cmovpq	%rcx, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq

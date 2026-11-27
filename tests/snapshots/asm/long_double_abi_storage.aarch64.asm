@@ -3,7 +3,7 @@ long_double_abi_storage.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -78,37 +78,35 @@ Disassembly of section .text:
                	add	x16, sp, #0x40
                	fmov	x17, d0
                	bl	<addr>
-               	ldurb	w0, [x29, #-0x10]
-               	ldurb	w1, [x29, #-0xf]
-               	ldurb	w2, [x29, #-0xe]
-               	ldurb	w3, [x29, #-0xd]
-               	ldurb	w4, [x29, #-0xc]
-               	ldurb	w5, [x29, #-0xb]
-               	ldurb	w6, [x29, #-0xa]
-               	ldurb	w7, [x29, #-0x9]
-               	ldurb	w8, [x29, #-0x8]
-               	ldurb	w9, [x29, #-0x7]
-               	ldurb	w10, [x29, #-0x6]
-               	ldurb	w11, [x29, #-0x5]
-               	ldurb	w12, [x29, #-0x4]
-               	ldurb	w13, [x29, #-0x3]
-               	ldurb	w14, [x29, #-0x2]
-               	ldurb	w15, [x29, #-0x1]
-               	cmp	w15, #0x3f
+               	ldurb	w2, [x29, #-0x10]
+               	ldurb	w3, [x29, #-0xf]
+               	ldurb	w4, [x29, #-0xe]
+               	ldurb	w5, [x29, #-0xd]
+               	ldurb	w6, [x29, #-0xc]
+               	ldurb	w7, [x29, #-0xb]
+               	ldurb	w8, [x29, #-0xa]
+               	ldurb	w9, [x29, #-0x9]
+               	ldurb	w10, [x29, #-0x8]
+               	ldurb	w11, [x29, #-0x7]
+               	ldurb	w12, [x29, #-0x6]
+               	ldurb	w13, [x29, #-0x5]
+               	ldurb	w14, [x29, #-0x4]
+               	ldurb	w15, [x29, #-0x3]
+               	ldurb	w1, [x29, #-0x2]
+               	ldurb	w0, [x29, #-0x1]
+               	cmp	w0, #0x3f
                	b.ne	<addr>
-               	cmp	w14, #0xff
+               	cmp	w1, #0xff
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cbz	w0, <addr>
+               	cbz	w2, <addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cbnz	w1, <addr>
-               	cbnz	w2, <addr>
                	cbnz	w3, <addr>
                	cbnz	w4, <addr>
                	cbnz	w5, <addr>
@@ -120,6 +118,8 @@ Disassembly of section .text:
                	cbnz	w11, <addr>
                	cbnz	w12, <addr>
                	cbnz	w13, <addr>
+               	cbnz	w14, <addr>
+               	cbnz	w15, <addr>
                	mov	x16, #0x1               // =1
                	fmov	d0, x16
                	add	x16, sp, #0x40

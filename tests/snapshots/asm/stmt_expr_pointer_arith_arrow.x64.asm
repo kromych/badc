@@ -3,7 +3,7 @@ stmt_expr_pointer_arith_arrow.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,14 +26,11 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	leaq	-0x20(%rbp), %rax
-               	leaq	0x14(%rax), %rcx
-               	leaq	0x4(%rax), %rdx
-               	movq	%rcx, %rax
-               	subq	%rdx, %rax
+               	subq	$0x28, %rsp
+               	leaq	(%rsp), %rcx
+               	leaq	0x14(%rcx), %rax
+               	addq	$0x4, %rcx
+               	subq	%rcx, %rax
                	movq	%rax, %rcx
                	sarq	$0x3f, %rcx
                	shrq	$0x3e, %rcx
@@ -42,8 +39,8 @@ Disassembly of section .text:
                	cmpq	$0x4, %rax
                	je	<addr>
                	movl	$0x6, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq

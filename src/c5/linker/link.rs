@@ -34,8 +34,10 @@ use super::object::{
 use super::section_groups::SectionGroups;
 use crate::c5::codegen::{
     BinaryFormat, CompactUnwind, DataImportBind, EhFrameBlock, EhFrameField, EhFrameTarget,
-    PointerSlot,
+    GuardTableSymbol, PointerSlot,
 };
+
+mod guard_cf;
 use crate::c5::layout::{pad_to_align as align_up, round_up as align_usize};
 // A tail-call `b <sym>` reaches its target the same way `bl` does --
 // a 26-bit PC-relative branch immediate -- so `R_AARCH64_JUMP26` shares
@@ -78,6 +80,26 @@ pub(crate) const TLS_INDEX: &str = "_tls_index";
 
 /// A PE image's `IMAGE_TLS_DIRECTORY`, as the MSVC runtime names it.
 pub(crate) const TLS_DIRECTORY: &str = "_tls_used";
+
+/// A PE image's `IMAGE_LOAD_CONFIG_DIRECTORY`, as the MSVC and WDK
+/// runtimes name it.
+const LOAD_CONFIG: &str = "_load_config_used";
+
+/// The control-flow-guard tables and counts a load-config directory names,
+/// which link.exe and lld-link define for a PE image: 0 in one linked
+/// without `/guard:cf`, which carries none of the tables.
+const PE_GUARD_SYMBOLS: [&str; 10] = [
+    "__guard_fids_table",
+    "__guard_fids_count",
+    "__guard_flags",
+    "__guard_iat_table",
+    "__guard_iat_count",
+    "__guard_longjmp_table",
+    "__guard_longjmp_count",
+    "__guard_eh_cont_table",
+    "__guard_eh_cont_count",
+    "__enclave_config",
+];
 
 /// A relocation whose site reads a GOT slot: the value it wants is the
 /// symbol's address, taken from storage the loader fills, not a
@@ -298,9 +320,9 @@ pub struct MergedNative {
     /// Indices into [`Self::imports`] whose call stub code takes as a value,
     /// not as a branch target; filled by the PLT pass.
     pub stub_address_imports: alloc::collections::BTreeSet<usize>,
-    /// The `.text` offsets of the sites that read an import-address slot by
-    /// its name (`__imp_X`): the slot keeps the import's address, which the
-    /// PE thunk does not replace.
+    /// The `.text` offsets of the sites that read an import-address slot or
+    /// take its address by its name (`__imp_X`, a CONST import's own): the
+    /// slot keeps the import's address, which the PE thunk does not replace.
     pub slot_reads: alloc::collections::BTreeSet<u64>,
     /// The link's warnings, for the driver to report.
     pub warnings: Vec<(Code, String)>,
@@ -408,6 +430,8 @@ pub struct MergedNative {
     pub eh_frame: Vec<EhFrameBlock>,
     /// The COFF inputs' `.pdata` entries, placed in the merged streams.
     pub(crate) pe_unwind: Vec<crate::c5::codegen::PeUnwindRange>,
+    /// Control Flow Guard's targets and slots, under `--guard-cf`.
+    pub guard_cf: Option<crate::c5::codegen::GuardCfLink>,
     /// C-identifier-named sections grouped across units, in the order
     /// their bytes sit in the merged streams. A writer able to carry a
     /// variable section list gives each its own output section; the
@@ -1134,8 +1158,8 @@ pub(crate) enum Supplier {
 }
 
 /// A PE import names its DLL: an import library or DLL the link read that
-/// exports `name` supplies it ahead of a binding, as link.exe and GNU ld
-/// take the import from it. Otherwise a routed name keeps its routing and
+/// exports `name` supplies it ahead of a binding. Otherwise a routed name
+/// keeps its routing and
 /// an unrouted one binds against the first library exporting it, as a
 /// system linker resolves it; `usable` admits a library by index.
 pub(crate) fn supplier(
@@ -1184,6 +1208,8 @@ pub struct LinkOptions {
     pub format: BinaryFormat,
     /// The DLLs a PE image loads on the first call of an import from them.
     pub delay_load: Vec<String>,
+    /// `--guard-cf`: collect a PE image's valid indirect-call targets.
+    pub guard_cf: bool,
 }
 
 /// [`link_native_objects_with_shared_libs`] under `opts`.
@@ -1209,7 +1235,10 @@ pub fn link_native_objects_with<'a>(
         .and_then(|d| d.object.clone())
         .map(|o| objs.iter().cloned().chain([o]).collect());
     let objs = with_delayed.as_deref().unwrap_or(objs);
-    let slot_reads = super::import_slots::bind_slot_reads(objs)?;
+    let consts = (shared_libs.iter())
+        .flat_map(|l| l.slot_exports.iter().map(String::as_str))
+        .collect();
+    let slot_reads = super::import_slots::bind_slot_reads(objs, &consts)?;
     let objs = slot_reads.as_ref().map_or(objs, |s| &s.objs[..]);
     let routes = (opts.format == BinaryFormat::Pe)
         .then(|| super::import_routes::split_routes(objs))
@@ -1243,6 +1272,9 @@ pub fn link_native_objects_with<'a>(
     link.allocate_got_slots();
     link.place_unwind_tables()?;
     link.place_pe_unwind()?;
+    if link.guard_cf.is_some() {
+        link.collect_guard_targets()?;
+    }
     let resolved = (link.resolve_text_relocs())
         .and_then(|()| link.resolve_tls_fixups())
         .and_then(|()| link.resolve_data_relocs());
@@ -1384,8 +1416,8 @@ struct Link<'a> {
     objs: &'a [NativeObject],
     machine: NativeMachine,
     allow_undefined: bool,
-    /// A weak reference no input defines resolves to 0, as GNU ld and
-    /// link.exe resolve it; ld64 resolves it only through a dylib that
+    /// A weak reference no input defines resolves to 0 in an ELF or PE
+    /// image; ld64 resolves it only through a dylib that
     /// exports it, else it is undefined (a Mach-O image).
     weak_undefined_is_zero: bool,
     preemption: Preemption,
@@ -1515,6 +1547,7 @@ struct Link<'a> {
     compact_unwind: Vec<CompactUnwind>,
     eh_frame: Vec<EhFrameBlock>,
     pe_unwind: Vec<crate::c5::codegen::PeUnwindRange>,
+    guard_cf: Option<crate::c5::codegen::GuardCfLink>,
     /// Import indices the note channel names as data references, and
     /// those some site branches to; a branch makes the import code.
     object_imports: BTreeSet<usize>,
@@ -1646,6 +1679,7 @@ impl<'a> Link<'a> {
             compact_unwind: Vec::new(),
             eh_frame: Vec::new(),
             pe_unwind: Vec::new(),
+            guard_cf: opts.guard_cf.then(Default::default),
             object_imports: BTreeSet::new(),
             branch_imports: BTreeSet::new(),
             tls_imports: BTreeSet::new(),
@@ -2000,7 +2034,7 @@ impl<'a> Link<'a> {
     /// variable. A shared library's thread-local sits where the loader places
     /// that library's block, so an initial-exec reference to it reads a GOT
     /// slot the loader fills, and a general-dynamic or descriptor sequence is
-    /// rewritten to that reference, as GNU ld rewrites it. A shared library
+    /// rewritten to that reference. A shared library
     /// needs the loader's dynamic TLS relocations, which this link does not
     /// make.
     fn apply_tls_reloc(
@@ -2094,8 +2128,8 @@ impl<'a> Link<'a> {
         Ok(())
     }
 
-    /// A shared library's thread-local access keeps its dynamic model, as
-    /// GNU ld keeps it: the loader places the library's block, so each model
+    /// A shared library's thread-local access keeps its dynamic model: the
+    /// loader places the library's block, so each model
     /// reads a GOT entry the TLS dynamic relocations fill, and only an
     /// offset into the module's block is known at link time.
     fn apply_shared_tls_reloc(
@@ -2275,8 +2309,8 @@ impl<'a> Link<'a> {
     }
 
     /// A reference other than a thread-local access to a name the binding
-    /// shared library exports as a thread-local is refused, as GNU ld
-    /// refuses it: the variable has an offset in each thread's block, not
+    /// shared library exports as a thread-local is refused: the variable
+    /// has an offset in each thread's block, not
     /// an address the loader could bind.
     fn refuse_library_thread_local(&self, name: &str) -> Result<(), C5Error> {
         match self.shared_libs.iter().find(|l| l.exports.contains(name)) {
@@ -2659,8 +2693,7 @@ impl<'a> Link<'a> {
     /// `_tls_used` directory a unit names follow them. Each 8-byte slot is
     /// a `.text` pointer, so a `DataAbsReloc` gives the PIE its load-time
     /// R_*_RELATIVE.
-    /// Point each entry naming another unit's function at its definition,
-    /// as GNU ld resolves an `.init_array` slot's relocation.
+    /// Point each entry naming another unit's function at its definition.
     fn resolve_named_init_entries(&mut self) -> Result<(), C5Error> {
         for (array, k, name) in core::mem::take(&mut self.named_init_entries) {
             let at = match self.defined.get(name) {
@@ -2925,6 +2958,13 @@ impl<'a> Link<'a> {
         for (name, value) in weak_absolute {
             self.absolute_defined.entry(name).or_insert(value);
         }
+        if self.pe_image {
+            for name in PE_GUARD_SYMBOLS {
+                if !self.defined.contains_key(name) {
+                    self.absolute_defined.entry(name).or_insert(0);
+                }
+            }
+        }
         // A name nothing defines takes its alternate's definition, transitively.
         let objs = self.objs;
         let mut progress = true;
@@ -3069,7 +3109,7 @@ impl<'a> Link<'a> {
                 .find(|l| l.data_exports.contains(&name))
                 .expect("a candidate is a shared-library data object");
             // The library binds its own references to a protected object,
-            // which a copy would leave behind, as GNU ld refuses it.
+            // which a copy would leave behind, so the copy is refused.
             if lib.protected_exports.contains(&name) {
                 return Err(link_err(
                     Code::RELOCATION,
@@ -3120,8 +3160,8 @@ impl<'a> Link<'a> {
     /// The symbols the link itself defines: the init/fini array bounds
     /// (always, so the runtime's references never dangle; an empty
     /// array leaves start == end), the GOT base, and the `__start_` /
-    /// `__stop_` pair of each grouped section. bfd defines the latter
-    /// two only where nothing else does, so an object that already
+    /// `__stop_` pair of each grouped section. The latter two are
+    /// defined only where nothing else defines them, so an object that already
     /// defines the name keeps its definition -- `__start_tty` is an
     /// ordinary function in one such tree.
     fn define_link_symbols(&mut self) {
@@ -3138,7 +3178,7 @@ impl<'a> Link<'a> {
                     value: off,
                     size: 0,
                     // A boundary address, not an object: `STT_NOTYPE`, hidden
-                    // as GNU ld's default script provides it.
+                    // as the module's own.
                     kind: super::object::STT_NOTYPE,
                     visibility: super::object::STV_HIDDEN,
                     weak: false,
@@ -3229,7 +3269,7 @@ impl<'a> Link<'a> {
                 },
             );
         }
-        // Protected, GNU ld's `-z start-stop-visibility` default.
+        // Protected, the `-z start-stop-visibility` default.
         for (sym, section, value) in &self.start_stop_bounds {
             if self.defined.contains_key(sym.as_str()) {
                 continue;
@@ -3331,6 +3371,22 @@ impl<'a> Link<'a> {
                 || is_got_reloc(self.machine, rtype)
                 || noted_pair)
             && self.preemptible.contains(name)
+    }
+
+    /// Whether a code reference to a preemptible definition has a form GNU
+    /// ld refuses in a shared object: one binding it to the image's own
+    /// definition, which no dynamic relocation of read-only code redirects.
+    fn refuses_preempted(&self, sym: &NativeSymbol, reloc: &NativeReloc) -> bool {
+        let name = sym.name.as_str();
+        let machine = match self.machine {
+            NativeMachine::X86_64 => super::relocatable::EM_X86_64,
+            NativeMachine::Aarch64 => super::relocatable::EM_AARCH64,
+        };
+        let noted = self.extern_data_names.contains(name);
+        sym.binding != 0
+            && self.preemptible.contains(name)
+            && super::lds_link::reach(machine, reloc.rtype, false, noted, reloc.addend)
+                == super::lds_link::Reach::Refused
     }
 
     /// Whether `reloc` takes only an import's address, which its GOT slot
@@ -3787,7 +3843,7 @@ impl<'a> Link<'a> {
             .or_insert_with(|| (order, site.to_string()));
     }
 
-    /// One diagnostic per undefined name, as GNU ld reports them all, then `err`.
+    /// One diagnostic per undefined name, then `err`.
     fn undefined_error(&mut self, err: Option<C5Error>) -> Option<C5Error> {
         let mut names: Vec<_> = core::mem::take(&mut self.undefined).into_iter().collect();
         names.sort_by_key(|(_, (order, _))| *order);
@@ -3855,6 +3911,11 @@ impl<'a> Link<'a> {
                     self.admit_preempted(sym, reloc, patch_offset);
                     continue;
                 }
+                if self.refuses_preempted(sym, reloc) {
+                    let name = origin.symbol_name(sym);
+                    let site = origin.at(self.machine, reloc.rtype, name, reloc.offset);
+                    return Err(site.preempted_in_shared());
+                }
                 let sym_section = self.reference_section(i, sym);
                 if let Some(&slot) = self.got_slot_sites.get(&(i, reloc.offset)) {
                     let site = origin.at(
@@ -3919,15 +3980,10 @@ impl<'a> Link<'a> {
             return None;
         }
         if reloc.rtype == R_AARCH64_ADR_GOT_PAGE || reloc.rtype == R_AARCH64_LD64_GOT_LO12_NC {
-            if reloc.rtype == R_AARCH64_LD64_GOT_LO12_NC && patch_offset + 4 <= self.text.len() {
-                let ldr = u32::from_le_bytes([
-                    self.text[patch_offset],
-                    self.text[patch_offset + 1],
-                    self.text[patch_offset + 2],
-                    self.text[patch_offset + 3],
-                ]);
-                let add = 0x9100_0000u32 | (ldr & 0x3ff); // add Xrd, Xrn, #0
-                self.text[patch_offset..patch_offset + 4].copy_from_slice(&add.to_le_bytes());
+            if reloc.rtype == R_AARCH64_LD64_GOT_LO12_NC
+                && !got_relax::a64_ldr_to_add(&mut self.text, patch_offset)
+            {
+                return None;
             }
             return Some(NativeReloc {
                 rtype: if reloc.rtype == R_AARCH64_ADR_GOT_PAGE {
@@ -3959,8 +4015,8 @@ impl<'a> Link<'a> {
         patch_offset: usize,
         site: &RelocSite<'_>,
     ) -> Result<(), C5Error> {
-        // `GOT + A - P` names the GOT base whatever the symbol, as GNU ld
-        // resolves it; the assemblers emit it against the base's name.
+        // `GOT + A - P` (x86-64 psABI) names the GOT base whatever the
+        // symbol; the assemblers emit it against the base's name.
         if self.machine == NativeMachine::X86_64
             && matches!(reloc.rtype, R_X86_64_GOTPC32 | R_X86_64_GOTPC64)
         {
@@ -4083,6 +4139,9 @@ impl<'a> Link<'a> {
             return self.place_target(patch_offset, reloc, (def.section, def.value as i64), site);
         }
         if let Some(&value) = self.absolute_defined.get(sym.name.as_str()) {
+            if self.guard_cf.is_some() && GuardTableSymbol::named(&sym.name).is_some() {
+                return Err(site.unsupported());
+            }
             return apply_absolute_reloc(&mut self.text, patch_offset, value + reloc.addend, site);
         }
         if sym.name.is_empty() {
@@ -4132,6 +4191,7 @@ impl<'a> Link<'a> {
         // keeps its stub whatever the note says of the name.
         let slot_load = is_data_binding
             || is_got_reloc(self.machine, reloc.rtype)
+            || self.slot_reads.contains(&(patch_offset as u64))
             || (!is_branch_reloc(self.machine, reloc.rtype)
                 && self.extern_data_names.contains(name));
         if slot_load
@@ -4164,7 +4224,7 @@ impl<'a> Link<'a> {
         }
         if unresolved_weak && self.weak_undefined_is_zero {
             // A distance from the GOT base takes address 0 for the
-            // symbol, as GNU ld resolves it; the site's guard skips it.
+            // symbol; the site's guard skips it.
             if is_x86_64_got_distance(self.machine, reloc.rtype) {
                 self.pending_imports.push(PendingImportReloc {
                     text_offset: patch_offset as u64,
@@ -4270,7 +4330,7 @@ impl<'a> Link<'a> {
     ///     TLS array (`r10`/`x16 = tls_array[_tls_index]`), so the
     ///     register already holds the module's block base and the
     ///     immediate is `merged_offset` with no bias (an x86_64 `lea`
-    ///     disp32, an aarch64 `add` imm12).
+    ///     disp32, an aarch64 `add` pair).
     /// `machine` does not separate the Windows and ELF models; the
     /// Windows TEB sequence always records a `_tls_index` fixup, so an
     /// object carrying any such fixup uses the Windows no-bias offset.
@@ -4374,21 +4434,10 @@ impl<'a> Link<'a> {
                             insn = (insn & !(0xFFF << 10)) | ((imm & 0xFFF) << 10);
                             text[at..at + 4].copy_from_slice(&insn.to_le_bytes());
                         };
-                        if win_teb {
-                            // TEB sequence: a single `add rd, x16, #imm12`.
-                            if tpoff >= 4096 {
-                                return Err(internal_err(
-                                    MODULE,
-                                    &format!(
-                                        "link_native_objects: TLS offset 0x{tpoff:x} exceeds the 12-bit \
-                                     `add` immediate",
-                                    ),
-                                ));
-                            }
-                            patch_imm12(&mut self.text, patch, tpoff as u32);
-                        } else {
-                            // Variant-1 local-exec pair: `add #hi12, lsl 12`
-                            // at the fixup, `add #lo12` right after it.
+                        {
+                            // The `add #hi12, lsl 12` at the fixup and the
+                            // `add #lo12` right after it: the variant-1
+                            // local-exec pair, or the TEB sequence's last two.
                             if patch + 8 > self.text.len() {
                                 return Err(internal_err(
                                     MODULE,
@@ -4541,6 +4590,9 @@ impl<'a> Link<'a> {
             _ => None,
         };
         if let Some(value) = abs_value {
+            if let Some(guard) = self.guard_slot(sym, slot_offset, reloc.addend, in_tls)? {
+                self.guard_cf.as_mut().unwrap().slots.push(guard);
+            }
             return self.write_data_slot(slot_offset, in_tls, value + reloc.addend, "absolute");
         }
         if !in_tls && sym.binding != 0 && self.preemptible.contains(sym.name.as_str()) {
@@ -5568,6 +5620,9 @@ impl<'a> Link<'a> {
         let symbols = self.image_symbols();
         let exec_stack_input = (self.objs.iter().find(|o| o.exec_stack)).map(|o| o.source.clone());
         let host_aliases = self.host_aliases;
+        let load_config = (self.defined.get(LOAD_CONFIG))
+            .filter(|d| self.pe_image && d.section == NativeSymSection::Data)
+            .map(|d| d.value);
         let defined: BTreeMap<String, MergedSymbol> = self
             .defined
             .into_iter()
@@ -5691,12 +5746,14 @@ impl<'a> Link<'a> {
                     .then_some((self.fini_array.0, self.fini_array.1 - self.fini_array.0)),
                 tls_callbacks: self.tls_callback_array,
                 tls_directory: self.tls_directory_slot,
+                load_config,
             },
             section_map: self.section_map,
             exec_stack_input,
             compact_unwind: self.compact_unwind,
             eh_frame: self.eh_frame,
             pe_unwind: self.pe_unwind,
+            guard_cf: self.guard_cf,
         })
     }
 }
@@ -5966,7 +6023,7 @@ fn plt_eligible(machine: NativeMachine, rtype: u32) -> bool {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DataImportSlots {
     /// The stub, which an ELF executable placed at its link address publishes
-    /// as the import's address (GNU ld's canonical PLT entry).
+    /// as the import's address (a canonical PLT entry).
     Stub,
     /// The symbol (Mach-O, ELF).
     Bind,
@@ -6024,16 +6081,12 @@ fn relax_slot_load(
         }
         (NativeMachine::Aarch64, R_AARCH64_ADR_GOT_PAGE) => R_AARCH64_ADR_PREL_PG_HI21,
         (NativeMachine::Aarch64, _) => {
-            let word = u32::from_le_bytes(merged.text[at..at + 4].try_into().expect("4 bytes"));
-            // `ldr xT, [xN, #imm]` becomes `add xT, xN, #imm`.
-            if word & 0xFFC0_0000 != 0xF940_0000 {
+            if !got_relax::a64_ldr_to_add(&mut merged.text, at) {
                 return Err(internal_err(
                     MODULE,
-                    &format!("a GOT low-12 site at .text+{at:#x} is no 64-bit ldr: {word:#010x}"),
+                    &format!("a GOT low-12 site at .text+{at:#x} is no 64-bit ldr"),
                 ));
             }
-            let add = 0x9100_0000 | (word & 0x3FF);
-            merged.text[at..at + 4].copy_from_slice(&add.to_le_bytes());
             R_AARCH64_ADD_ABS_LO12_NC
         }
     };
@@ -7071,7 +7124,7 @@ mod tests {
         use crate::c5::codegen::aarch64::encode::{Reg, enc_adr};
         for disp in [0x10i32, -0x24, (1 << 20) - 1, -(1 << 20)] {
             let mut text = alloc::vec![0u8; 4];
-            text[..4].copy_from_slice(&enc_adr(Reg(7), 0).to_le_bytes());
+            text[..4].copy_from_slice(&enc_adr(Reg(7), 0).word.to_le_bytes());
             apply_reloc(
                 &mut text,
                 0,
@@ -7080,10 +7133,10 @@ mod tests {
             )
             .expect("an in-range displacement patches");
             let got = u32::from_le_bytes(text[..4].try_into().unwrap());
-            assert_eq!(got, enc_adr(Reg(7), disp), "disp {disp:#x}");
+            assert_eq!(got, enc_adr(Reg(7), disp).word, "disp {disp:#x}");
         }
         let mut text = alloc::vec![0u8; 4];
-        text[..4].copy_from_slice(&enc_adr(Reg(7), 0).to_le_bytes());
+        text[..4].copy_from_slice(&enc_adr(Reg(7), 0).word.to_le_bytes());
         apply_reloc(
             &mut text,
             0,
@@ -7221,7 +7274,7 @@ mod tests {
     }
 
     /// A section symbol has no name of its own; a diagnostic names the
-    /// input section it stands for, as GNU ld does.
+    /// input section it stands for.
     #[test]
     fn a_section_symbol_is_named_by_its_section_in_a_diagnostic() {
         use crate::c5::linker::object::{InputSection, NativeSymbol, STT_FUNC, STT_SECTION};
@@ -7281,7 +7334,7 @@ mod tests {
 
     /// An absolute form in a position-independent image is refused on
     /// the reference, not on a missing patcher, and names the output
-    /// kind the way GNU ld does.
+    /// kind.
     #[test]
     fn an_absolute_in_a_pie_names_the_constraint_and_the_output_kind() {
         let origin = RelocOrigin::in_named_section("t.o", ".text");
@@ -7442,6 +7495,8 @@ mod tests {
         ] {
             let mut opts = NativeOptions::new().with_debug_info(false);
             opts.output_kind = OutputKind::Relocatable;
+            // The unit's `.eh_frame` relocates against its text.
+            opts.unwind_tables = false;
             let obj = compile_native_with(
                 "#include <stdio.h>\nint (*fp)(const char *) = puts;\n\
                  int main(void) { return fp == 0; }\n",
@@ -7507,6 +7562,7 @@ mod tests {
             soname: alloc::string::String::from("libext.so.1"),
             machine: NativeMachine::Aarch64,
             exports: names("tbl"),
+            slot_exports: Default::default(),
             data_exports: names("tbl"),
             tls_exports: Default::default(),
             object_sizes: Default::default(),
@@ -7653,6 +7709,7 @@ mod tests {
             soname: alloc::string::String::from("libext.so.1"),
             machine: NativeMachine::Aarch64,
             exports: core::iter::once(alloc::string::String::from("ext_fn")).collect(),
+            slot_exports: Default::default(),
             data_exports: alloc::collections::BTreeSet::new(),
             tls_exports: Default::default(),
             object_sizes: Default::default(),
@@ -7697,6 +7754,7 @@ mod tests {
             soname: alloc::string::String::from("libext.so.1"),
             machine: NativeMachine::Aarch64,
             exports: core::iter::once(alloc::string::String::from("ext_fn")).collect(),
+            slot_exports: Default::default(),
             data_exports: alloc::collections::BTreeSet::new(),
             tls_exports: Default::default(),
             object_sizes: Default::default(),
@@ -8384,6 +8442,7 @@ mod tests {
                 compact_unwind: alloc::vec::Vec::new(),
                 eh_frame: None,
                 pe_unwind: alloc::vec::Vec::new(),
+                guard_fids: None,
             }
         };
         // Weak definition of `weak_target` in `.text`.
@@ -8966,7 +9025,7 @@ mod tests {
     }
 
     /// GOT references to a symbol the link defines: a load, a call and a
-    /// jump take the direct forms GNU ld gives them; any other instruction,
+    /// jump take their direct forms; any other instruction,
     /// and every reference to an absolute symbol, reads an 8-byte `.data`
     /// slot the link fills; an import's slot read stays with the writer.
     #[test]
@@ -9120,8 +9179,8 @@ mod tests {
         alloc::vec![a, b]
     }
 
-    /// Each x86-64 model's sequence becomes the local-exec one GNU ld and lld
-    /// make of it, without its `__tls_get_addr` call. The block, 0x2014 bytes
+    /// Each x86-64 model's sequence becomes its local-exec form, without its
+    /// `__tls_get_addr` call. The block, 0x2014 bytes
     /// rounded to 0x2018, ends at the thread pointer: `ext` at -8, `tl` -0x2014.
     #[test]
     fn foreign_x86_64_thread_local_sequences_become_local_exec() {
@@ -9308,6 +9367,7 @@ mod tests {
             soname: "libtl.so".to_string(),
             machine,
             exports: ext(),
+            slot_exports: Default::default(),
             data_exports: if tls { Default::default() } else { ext() },
             tls_exports: if tls { ext() } else { Default::default() },
             object_sizes: Default::default(),
@@ -9384,8 +9444,8 @@ mod tests {
     }
 
     /// The general-dynamic and descriptor sequences reaching a shared
-    /// library's thread-local become the initial-exec ones GNU ld makes of
-    /// them, reading the GOT slot of the thread-local's import, without the
+    /// library's thread-local become initial-exec ones, reading the GOT
+    /// slot of the thread-local's import, without the
     /// `__tls_get_addr` call.
     #[test]
     fn a_library_thread_locals_dynamic_sequences_become_initial_exec() {
@@ -9540,7 +9600,7 @@ mod tests {
 
     /// A thread-local access binds no library's ordinary symbol, and no
     /// other reference binds a library's thread-local: neither names an
-    /// address the loader could give the other, and GNU ld refuses both.
+    /// address the loader could give the other, so both are refused.
     #[test]
     fn a_thread_local_and_an_ordinary_symbol_do_not_bind_to_each_other() {
         use crate::c5::object::elf_reloc_types::R_X86_64_GOTTPOFF;
@@ -9700,6 +9760,7 @@ mod tests {
             soname: "libcnt.so".to_string(),
             machine: NativeMachine::X86_64,
             exports: ["counter".to_string()].into_iter().collect(),
+            slot_exports: Default::default(),
             data_exports: ["counter".to_string()].into_iter().collect(),
             tls_exports: Default::default(),
             object_sizes: if sizes {
@@ -9808,6 +9869,7 @@ mod tests {
             soname: "libcnt.so".to_string(),
             machine: NativeMachine::X86_64,
             exports: ["counter".to_string()].into_iter().collect(),
+            slot_exports: Default::default(),
             data_exports: ["counter".to_string()].into_iter().collect(),
             tls_exports: Default::default(),
             object_sizes: [("counter".to_string(), (4, 4))].into_iter().collect(),

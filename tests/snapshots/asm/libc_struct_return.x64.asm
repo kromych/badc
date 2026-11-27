@@ -3,7 +3,7 @@ libc_struct_return.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,39 +26,35 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	pushq	%rax
                	movl	$0x11, %edi
                	movl	$0x5, %esi
                	callq	<addr>
-               	movq	%rax, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
-               	movl	-0x4(%rbp), %ecx
+               	movq	%rax, %rcx
+               	shrq	$0x20, %rcx
                	leaq	(%rax,%rcx), %rdx
                	cmpl	$0x5, %edx
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	popq	%r11
                	retq
                	imulq	%rcx, %rax
                	cmpl	$0x6, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	popq	%r11
                	retq
                	movl	$0x64, %edi
                	movl	$0x7, %esi
                	callq	<addr>
-               	movq	%rax, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
-               	movl	-0x4(%rbp), %ecx
+               	movq	%rax, %rcx
+               	shrq	$0x20, %rcx
                	addq	%rcx, %rax
                	cmpl	$0x10, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	leave
+               	popq	%r11
                	retq

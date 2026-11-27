@@ -3,7 +3,7 @@ arm_neon_roundings_on_seeded_lanes.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -61,7 +61,7 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x360
+               	sub	sp, sp, #0x350
                	stp	d8, d9, [sp]
                	stp	x20, x21, [sp, #0x10]
                	str	x22, [sp, #0x20]
@@ -207,7 +207,6 @@ Disassembly of section .text:
                	str	q0, [sp, #0x220]
                	bl	<addr>
                	ldr	q0, [sp, #0x220]
-               	stur	x0, [x29, #-0x8]
                	fmov	d9, x0
                	tbz	w20, #0x0, <addr>
                	adrp	x0, <addr>
@@ -219,47 +218,21 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	q2, [x0]
                	fmul	v0.2d, v0.2d, v2.2d
-               	mov	x0, #0x1f               // =31
                	str	q0, [sp, #0x220]
                	str	q1, [sp, #0x210]
+               	mov	x0, #0x1f               // =31
                	bl	<addr>
                	ldr	q0, [sp, #0x220]
                	ldr	q1, [sp, #0x210]
                	frintz	v2.4s, v1.4s
-               	sub	x2, x29, #0x330
+               	sub	x2, x29, #0x320
                	str	q2, [sp, #0x30]
                	frintz	v2.2s, v8.2s
-               	str	d2, [sp, #0x258]
+               	stur	d2, [x29, #-0x100]
                	frintz	v2.2d, v0.2d
                	str	q2, [sp, #0x40]
                	frintz	d2, d9
-               	stur	d2, [x29, #-0x100]
-               	mov	x0, #0x0                // =0
-               	adrp	x1, <page>
-               	ldr	x3, [x1, #0x18]
-               	ldrb	w4, [x2, x0]
-               	eor	x3, x3, x4
-               	mov	x17, #0x1b3             // =435
-               	movk	x17, #0x100, lsl #32
-               	mul	x3, x3, x17
-               	str	x3, [x1, #0x18]
-               	add	x0, x0, #0x1
-               	cmp	w0, #0x10
-               	b.lo	<addr>
-               	sub	x2, x29, #0x108
-               	mov	x0, #0x0                // =0
-               	adrp	x1, <page>
-               	ldr	x3, [x1, #0x18]
-               	ldrb	w4, [x2, x0]
-               	eor	x3, x3, x4
-               	mov	x17, #0x1b3             // =435
-               	movk	x17, #0x100, lsl #32
-               	mul	x3, x3, x17
-               	str	x3, [x1, #0x18]
-               	add	x0, x0, #0x1
-               	cmp	w0, #0x8
-               	b.lo	<addr>
-               	sub	x2, x29, #0x320
+               	stur	d2, [x29, #-0xf8]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -285,15 +258,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
-               	frintn	v2.4s, v1.4s
                	sub	x2, x29, #0x310
-               	str	q2, [sp, #0x50]
-               	frintn	v2.2s, v8.2s
-               	stur	d2, [x29, #-0xf8]
-               	frintn	v2.2d, v0.2d
-               	str	q2, [sp, #0x60]
-               	frintn	d2, d9
-               	stur	d2, [x29, #-0xf0]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -319,7 +284,15 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
+               	frintn	v2.4s, v1.4s
                	sub	x2, x29, #0x300
+               	str	q2, [sp, #0x50]
+               	frintn	v2.2s, v8.2s
+               	stur	d2, [x29, #-0xf0]
+               	frintn	v2.2d, v0.2d
+               	str	q2, [sp, #0x60]
+               	frintn	d2, d9
+               	stur	d2, [x29, #-0xe8]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -345,15 +318,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
-               	frintm	v2.4s, v1.4s
                	sub	x2, x29, #0x2f0
-               	str	q2, [sp, #0x70]
-               	frintm	v2.2s, v8.2s
-               	stur	d2, [x29, #-0xe8]
-               	frintm	v2.2d, v0.2d
-               	str	q2, [sp, #0x80]
-               	frintm	d2, d9
-               	stur	d2, [x29, #-0xe0]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -379,7 +344,15 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
+               	frintm	v2.4s, v1.4s
                	sub	x2, x29, #0x2e0
+               	str	q2, [sp, #0x70]
+               	frintm	v2.2s, v8.2s
+               	stur	d2, [x29, #-0xe0]
+               	frintm	v2.2d, v0.2d
+               	str	q2, [sp, #0x80]
+               	frintm	d2, d9
+               	stur	d2, [x29, #-0xd8]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -405,15 +378,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
-               	frintp	v2.4s, v1.4s
                	sub	x2, x29, #0x2d0
-               	str	q2, [sp, #0x90]
-               	frintp	v2.2s, v8.2s
-               	stur	d2, [x29, #-0xd8]
-               	frintp	v2.2d, v0.2d
-               	str	q2, [sp, #0xa0]
-               	frintp	d2, d9
-               	stur	d2, [x29, #-0xd0]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -439,7 +404,15 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
+               	frintp	v2.4s, v1.4s
                	sub	x2, x29, #0x2c0
+               	str	q2, [sp, #0x90]
+               	frintp	v2.2s, v8.2s
+               	stur	d2, [x29, #-0xd0]
+               	frintp	v2.2d, v0.2d
+               	str	q2, [sp, #0xa0]
+               	frintp	d2, d9
+               	stur	d2, [x29, #-0xc8]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -465,15 +438,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
-               	frinta	v2.4s, v1.4s
                	sub	x2, x29, #0x2b0
-               	str	q2, [sp, #0xb0]
-               	frinta	v2.2s, v8.2s
-               	stur	d2, [x29, #-0xc8]
-               	frinta	v2.2d, v0.2d
-               	str	q2, [sp, #0xc0]
-               	frinta	d2, d9
-               	stur	d2, [x29, #-0xc0]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -499,7 +464,15 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
+               	frinta	v2.4s, v1.4s
                	sub	x2, x29, #0x2a0
+               	str	q2, [sp, #0xb0]
+               	frinta	v2.2s, v8.2s
+               	stur	d2, [x29, #-0xc0]
+               	frinta	v2.2d, v0.2d
+               	str	q2, [sp, #0xc0]
+               	frinta	d2, d9
+               	stur	d2, [x29, #-0xb8]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -525,15 +498,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
-               	frinti	v2.4s, v1.4s
                	sub	x2, x29, #0x290
-               	str	q2, [sp, #0xd0]
-               	frinti	v2.2s, v8.2s
-               	stur	d2, [x29, #-0xb8]
-               	frinti	v2.2d, v0.2d
-               	str	q2, [sp, #0xe0]
-               	frinti	d2, d9
-               	stur	d2, [x29, #-0xb0]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -559,7 +524,15 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
+               	frinti	v2.4s, v1.4s
                	sub	x2, x29, #0x280
+               	str	q2, [sp, #0xd0]
+               	frinti	v2.2s, v8.2s
+               	stur	d2, [x29, #-0xb0]
+               	frinti	v2.2d, v0.2d
+               	str	q2, [sp, #0xe0]
+               	frinti	d2, d9
+               	stur	d2, [x29, #-0xa8]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -585,15 +558,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
-               	frintx	v2.4s, v1.4s
                	sub	x2, x29, #0x270
-               	str	q2, [sp, #0xf0]
-               	frintx	v2.2s, v8.2s
-               	stur	d2, [x29, #-0xa8]
-               	frintx	v2.2d, v0.2d
-               	str	q2, [sp, #0x100]
-               	frintx	d2, d9
-               	stur	d2, [x29, #-0xa0]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -619,7 +584,15 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
+               	frintx	v2.4s, v1.4s
                	sub	x2, x29, #0x260
+               	str	q2, [sp, #0xf0]
+               	frintx	v2.2s, v8.2s
+               	stur	d2, [x29, #-0xa0]
+               	frintx	v2.2d, v0.2d
+               	str	q2, [sp, #0x100]
+               	frintx	d2, d9
+               	stur	d2, [x29, #-0x98]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -645,15 +618,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
-               	frint32x	v2.4s, v1.4s
                	sub	x2, x29, #0x250
-               	str	q2, [sp, #0x110]
-               	frint32x	v2.2s, v8.2s
-               	stur	d2, [x29, #-0x98]
-               	frint32x	v2.2d, v0.2d
-               	str	q2, [sp, #0x120]
-               	frint32x	d2, d9
-               	stur	d2, [x29, #-0x90]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -679,7 +644,15 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
+               	frint32x	v2.4s, v1.4s
                	sub	x2, x29, #0x240
+               	str	q2, [sp, #0x110]
+               	frint32x	v2.2s, v8.2s
+               	stur	d2, [x29, #-0x90]
+               	frint32x	v2.2d, v0.2d
+               	str	q2, [sp, #0x120]
+               	frint32x	d2, d9
+               	stur	d2, [x29, #-0x88]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -705,15 +678,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
-               	frint32z	v2.4s, v1.4s
                	sub	x2, x29, #0x230
-               	str	q2, [sp, #0x130]
-               	frint32z	v2.2s, v8.2s
-               	stur	d2, [x29, #-0x88]
-               	frint32z	v2.2d, v0.2d
-               	str	q2, [sp, #0x140]
-               	frint32z	d2, d9
-               	stur	d2, [x29, #-0x80]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -739,7 +704,15 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
+               	frint32z	v2.4s, v1.4s
                	sub	x2, x29, #0x220
+               	str	q2, [sp, #0x130]
+               	frint32z	v2.2s, v8.2s
+               	stur	d2, [x29, #-0x80]
+               	frint32z	v2.2d, v0.2d
+               	str	q2, [sp, #0x140]
+               	frint32z	d2, d9
+               	stur	d2, [x29, #-0x78]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -765,15 +738,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
-               	frint64x	v2.4s, v1.4s
                	sub	x2, x29, #0x210
-               	str	q2, [sp, #0x150]
-               	frint64x	v2.2s, v8.2s
-               	stur	d2, [x29, #-0x78]
-               	frint64x	v2.2d, v0.2d
-               	str	q2, [sp, #0x160]
-               	frint64x	d2, d9
-               	stur	d2, [x29, #-0x70]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -799,7 +764,15 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
+               	frint64x	v2.4s, v1.4s
                	sub	x2, x29, #0x200
+               	str	q2, [sp, #0x150]
+               	frint64x	v2.2s, v8.2s
+               	stur	d2, [x29, #-0x70]
+               	frint64x	v2.2d, v0.2d
+               	str	q2, [sp, #0x160]
+               	frint64x	d2, d9
+               	stur	d2, [x29, #-0x68]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -825,15 +798,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
-               	frint64z	v2.4s, v1.4s
                	sub	x2, x29, #0x1f0
-               	str	q2, [sp, #0x170]
-               	frint64z	v2.2s, v8.2s
-               	stur	d2, [x29, #-0x68]
-               	frint64z	v2.2d, v0.2d
-               	str	q2, [sp, #0x180]
-               	frint64z	d2, d9
-               	stur	d2, [x29, #-0x60]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -859,7 +824,15 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
+               	frint64z	v2.4s, v1.4s
                	sub	x2, x29, #0x1e0
+               	str	q2, [sp, #0x170]
+               	frint64z	v2.2s, v8.2s
+               	stur	d2, [x29, #-0x60]
+               	frint64z	v2.2d, v0.2d
+               	str	q2, [sp, #0x180]
+               	frint64z	d2, d9
+               	stur	d2, [x29, #-0x58]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -885,12 +858,38 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
+               	sub	x2, x29, #0x1d0
+               	mov	x0, #0x0                // =0
+               	adrp	x1, <page>
+               	ldr	x3, [x1, #0x18]
+               	ldrb	w4, [x2, x0]
+               	eor	x3, x3, x4
+               	mov	x17, #0x1b3             // =435
+               	movk	x17, #0x100, lsl #32
+               	mul	x3, x3, x17
+               	str	x3, [x1, #0x18]
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x10
+               	b.lo	<addr>
+               	sub	x2, x29, #0x58
+               	mov	x0, #0x0                // =0
+               	adrp	x1, <page>
+               	ldr	x3, [x1, #0x18]
+               	ldrb	w4, [x2, x0]
+               	eor	x3, x3, x4
+               	mov	x17, #0x1b3             // =435
+               	movk	x17, #0x100, lsl #32
+               	mul	x3, x3, x17
+               	str	x3, [x1, #0x18]
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x8
+               	b.lo	<addr>
                	mov	s2, v1.s[0]
                	mov	x0, #0x0                // =0
                	fmov	s2, s2
                	frintn	v2.2s, v2.2s
-               	stur	s2, [x29, #-0x58]
-               	sub	x2, x29, #0x58
+               	stur	s2, [x29, #-0x50]
+               	sub	x2, x29, #0x50
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
                	ldrb	w4, [x2, x0]
@@ -902,9 +901,9 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
                	b.lo	<addr>
-               	mov	x0, #0x1                // =1
                	str	q0, [sp, #0x220]
                	str	q1, [sp, #0x210]
+               	mov	x0, #0x1                // =1
                	bl	<addr>
                	sxtw	x0, w0
                	ldr	q0, [sp, #0x220]
@@ -913,9 +912,9 @@ Disassembly of section .text:
                	cset	x0, eq
                	cmp	w0, #0x0
                	cset	x22, eq
-               	mov	x0, #0x2                // =2
                	str	q0, [sp, #0x220]
                	str	q1, [sp, #0x210]
+               	mov	x0, #0x2                // =2
                	bl	<addr>
                	sxtw	x0, w0
                	ldr	q0, [sp, #0x220]
@@ -925,9 +924,9 @@ Disassembly of section .text:
                	cmp	w0, #0x0
                	cset	x0, eq
                	orr	x22, x22, x0, lsl #1
-               	mov	x0, #0x4                // =4
                	str	q0, [sp, #0x220]
                	str	q1, [sp, #0x210]
+               	mov	x0, #0x4                // =4
                	bl	<addr>
                	sxtw	x0, w0
                	ldr	q0, [sp, #0x220]
@@ -937,9 +936,9 @@ Disassembly of section .text:
                	cmp	w0, #0x0
                	cset	x0, eq
                	orr	x22, x22, x0, lsl #2
-               	mov	x0, #0x8                // =8
                	str	q0, [sp, #0x220]
                	str	q1, [sp, #0x210]
+               	mov	x0, #0x8                // =8
                	bl	<addr>
                	sxtw	x0, w0
                	ldr	q0, [sp, #0x220]
@@ -949,9 +948,9 @@ Disassembly of section .text:
                	cmp	w0, #0x0
                	cset	x0, eq
                	orr	x22, x22, x0, lsl #3
-               	mov	x0, #0x10               // =16
                	str	q0, [sp, #0x220]
                	str	q1, [sp, #0x210]
+               	mov	x0, #0x10               // =16
                	bl	<addr>
                	sxtw	x0, w0
                	ldr	q0, [sp, #0x220]
@@ -961,8 +960,8 @@ Disassembly of section .text:
                	cmp	w0, #0x0
                	cset	x0, eq
                	orr	x0, x22, x0, lsl #4
-               	stur	w0, [x29, #-0x50]
-               	sub	x2, x29, #0x50
+               	stur	w0, [x29, #-0x8]
+               	sub	x2, x29, #0x8
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -979,17 +978,17 @@ Disassembly of section .text:
                	cmp	w0, #0x2
                	b.ne	<addr>
                	and	x0, x20, #0x7
-               	mov	x1, #0x400000           // =4194304
-               	mov	x2, #0xc00000           // =12582912
                	cmp	w0, #0x2
-               	csel	x0, x1, x2, eq
+               	mov	x16, #0x400000          // =4194304
+               	mov	x17, #0xc00000          // =12582912
+               	csel	x0, x16, x17, eq
                	str	q0, [sp, #0x220]
                	str	q1, [sp, #0x210]
                	bl	<addr>
                	ldr	q0, [sp, #0x220]
                	ldr	q1, [sp, #0x210]
                	frinti	v2.4s, v1.4s
-               	sub	x2, x29, #0x1d0
+               	sub	x2, x29, #0x1c0
                	str	q2, [sp, #0x190]
                	frinti	v2.2s, v8.2s
                	stur	d2, [x29, #-0x48]
@@ -1022,7 +1021,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
-               	sub	x2, x29, #0x1c0
+               	sub	x2, x29, #0x1b0
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -1049,7 +1048,7 @@ Disassembly of section .text:
                	cmp	w0, #0x8
                	b.lo	<addr>
                	frintx	v2.4s, v1.4s
-               	sub	x2, x29, #0x1b0
+               	sub	x2, x29, #0x1a0
                	str	q2, [sp, #0x1b0]
                	frintx	v2.2s, v8.2s
                	stur	d2, [x29, #-0x38]
@@ -1082,7 +1081,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
-               	sub	x2, x29, #0x1a0
+               	sub	x2, x29, #0x190
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -1109,7 +1108,7 @@ Disassembly of section .text:
                	cmp	w0, #0x8
                	b.lo	<addr>
                	frint32x	v2.4s, v1.4s
-               	sub	x2, x29, #0x190
+               	sub	x2, x29, #0x180
                	str	q2, [sp, #0x1d0]
                	frint32x	v2.2s, v8.2s
                	stur	d2, [x29, #-0x28]
@@ -1142,7 +1141,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
-               	sub	x2, x29, #0x180
+               	sub	x2, x29, #0x170
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -1169,7 +1168,7 @@ Disassembly of section .text:
                	cmp	w0, #0x8
                	b.lo	<addr>
                	frint64x	v1.4s, v1.4s
-               	sub	x2, x29, #0x170
+               	sub	x2, x29, #0x160
                	str	q1, [sp, #0x1f0]
                	frint64x	v1.2s, v8.2s
                	stur	d1, [x29, #-0x18]
@@ -1202,7 +1201,7 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lo	<addr>
-               	sub	x2, x29, #0x160
+               	sub	x2, x29, #0x150
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -1312,18 +1311,17 @@ Disassembly of section .text:
                	lsr	x1, x1, #16
                	b	<addr>
                	adrp	x0, <page>
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x1                // =1
-               	ldr	x0, [x0, #0x18]
+               	ldr	x0, [x0, <lo12>]
                	mov	x17, #0x8f04            // =36612
                	movk	x17, #0x8a03, lsl #16
                	movk	x17, #0xa214, lsl #32
                	movk	x17, #0x110c, lsl #48
                	cmp	x0, x17
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, eq
                	ldr	x22, [sp, #0x20]
                	ldp	x20, x21, [sp, #0x10]
                	ldp	d8, d9, [sp]
-               	add	sp, sp, #0x360
+               	add	sp, sp, #0x350
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -3,7 +3,7 @@ scoped_state_loop_dead_arm.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -23,20 +23,20 @@ Disassembly of section .text:
 <main>:
                	mov	x2, #0x0                // =0
                	mov	x1, #0x3                // =3
-               	adrp	x5, <page>
-               	ldr	x0, [x5, #0x10]
+               	adrp	x6, <page>
+               	ldr	x0, [x6, #0x10]
                	adrp	x4, <page>
                	mov	x3, x2
                	cbz	w1, <addr>
-               	ldr	x6, [x4, #0x30]
-               	add	x6, x6, x0
-               	str	x6, [x4, #0x30]
+               	ldr	x5, [x4, #0x30]
+               	add	x5, x5, x0
+               	str	x5, [x4, #0x30]
                	add	x3, x3, #0x1
                	cmp	w1, #0x2
                	b.lo	<addr>
                	cmp	w1, #0x3
                	b.lo	<addr>
-               	ldr	x1, [x5, #0x10]
+               	ldr	x1, [x6, #0x10]
                	cmp	x0, x1
                	b.ne	<addr>
                	mov	x1, x2

@@ -3,7 +3,7 @@ strtod_family_reads_c99s_subject_sequences.aarch64:	file format elf64-littleaarc
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -248,57 +248,57 @@ Disassembly of section .text:
                	mov	x23, #0x0               // =0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	add	x20, x0, x23, lsl #5
+               	add	x21, x0, x23, lsl #5
+               	ldr	x1, [x21]
                	sub	x0, x29, #0x80
-               	ldr	x1, [x20]
                	mov	x2, #0x20               // =32
                	bl	<addr>
-               	mov	x21, #0x0               // =0
+               	mov	x20, #0x0               // =0
                	b	<addr>
-               	add	x21, x21, #0x1
-               	cmp	w21, #0x3
+               	add	x20, x20, #0x1
+               	cmp	w20, #0x3
                	b.ge	<addr>
-               	ldrsw	x22, [x20, #0x8]
+               	ldrsw	x22, [x21, #0x8]
                	bl	<addr>
                	str	wzr, [x0]
-               	cbnz	w21, <addr>
-               	ldr	x0, [x20]
+               	cbnz	w20, <addr>
+               	ldr	x0, [x21]
                	sub	x1, x29, #0x88
                	bl	<addr>
                	fmov	d8, d0
                	ldur	x0, [x29, #-0x88]
-               	ldr	x1, [x20]
+               	ldr	x1, [x21]
                	sub	x22, x0, x1
                	bl	<addr>
                	ldrsw	x0, [x0]
                	cmp	w0, #0x22
-               	cset	x1, eq
-               	ldr	x0, [x20, #0x10]
+               	cset	x3, eq
+               	ldr	x0, [x21, #0x10]
                	fmov	x2, d8
                	cmn	x0, #0x1
                	b.ne	<addr>
                	fcmp	d8, d8
                	cset	x0, ne
                	cbz	w0, <addr>
-               	ldrsw	x0, [x20, #0x8]
+               	ldrsw	x0, [x21, #0x8]
                	cmp	w22, w0
                	b.ne	<addr>
-               	cmp	w21, #0x2
+               	cmp	w20, #0x2
                	b.ge	<addr>
-               	ldrsw	x0, [x20, #0x18]
+               	ldrsw	x0, [x21, #0x18]
                	cmp	w0, #0x0
                	b.lt	<addr>
-               	cmp	w1, w0
+               	cmp	w3, w0
                	b.eq	<addr>
                	b	<addr>
                	cmp	x2, x0
                	cset	x0, eq
                	b	<addr>
-               	cmp	w21, #0x1
+               	cmp	w20, #0x1
                	b.ne	<addr>
                	sub	x22, x29, #0x80
-               	sub	x1, x29, #0x90
                	mov	x0, x22
+               	sub	x1, x29, #0x90
                	bl	<addr>
                	fmov	d8, d0
                	ldur	x0, [x29, #-0x90]
@@ -307,11 +307,11 @@ Disassembly of section .text:
                	add	x0, x0, x1, lsr #62
                	asr	x22, x0, #2
                	b	<addr>
-               	ldr	x0, [x20]
+               	ldr	x0, [x21]
                	bl	<addr>
                	fmov	d8, d0
                	b	<addr>
-               	add	x0, x21, #0x1
+               	add	x0, x20, #0x1
                	cbz	x0, <addr>
                	b	<addr>
                	mov	x0, #0x0                // =0
@@ -327,27 +327,27 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp, #0x10]
                	ldr	d8, [sp], #0xd0
                	ret
+               	adrp	x0, <page>
+               	ldr	x1, [x0, #0x10]
                	mov	x0, #0x1                // =1
-               	adrp	x1, <page>
-               	ldr	x1, [x1, <lo12>]
                	bl	<addr>
                	cbnz	x0, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0, #0x8]
                	mov	x0, #0x1                // =1
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x8]
                	bl	<addr>
                	cbnz	x0, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0, #0x10]
                	mov	x0, #0x1                // =1
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x10]
                	bl	<addr>
                	cbnz	x0, <addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldr	x1, [x0, #0x18]
                	mov	x0, #0x1                // =1
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldr	x1, [x1, #0x18]
                	bl	<addr>
                	cbnz	x0, <addr>
                	mov	x20, #0x0               // =0

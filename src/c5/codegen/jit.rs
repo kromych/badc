@@ -84,14 +84,14 @@ pub fn jit_run_with_options(
         ),
     ))]
     {
-        #[cfg(feature = "full")]
+        #[cfg(feature = "linker")]
         {
             let front =
                 crate::c5::compiler::CompileOptions::default().with_optimize(options.optimize);
             let sources = crate::c5::linker::OnDemandSources::new(Target::host(), front);
             jit_impl::jit_run(program, args, options, Some(&sources), report)
         }
-        #[cfg(not(feature = "full"))]
+        #[cfg(not(feature = "linker"))]
         jit_impl::jit_run(program, args, options, None, report)
     }
     #[cfg(not(all(
@@ -112,7 +112,7 @@ pub fn jit_run_with_options(
 }
 
 /// [`jit_run_with_options`] joining `sources` as a native link joins them.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 pub fn jit_run_with_sources(
     program: &Program,
     args: &[String],
@@ -142,6 +142,150 @@ pub fn jit_run_with_sources(
     {
         let _ = sources;
         jit_run_with_options(program, args, options, report)
+    }
+}
+
+/// A program the JIT mapped into this process, as a loader maps a shared
+/// object: [`jit_load`] runs its constructors, and dropping it runs the
+/// `atexit` handlers registered on the dropping thread and its destructors,
+/// last registered first, and unmaps it. The addresses it returns are valid
+/// while it lives; an `exit` the program calls ends the process.
+pub struct JitModule {
+    loaded: Loaded,
+}
+
+#[cfg(all(
+    feature = "std",
+    any(
+        target_os = "linux",
+        all(target_os = "macos", target_arch = "aarch64"),
+        target_os = "windows",
+    ),
+))]
+type Loaded = jit_impl::Loaded;
+#[cfg(not(all(
+    feature = "std",
+    any(
+        target_os = "linux",
+        all(target_os = "macos", target_arch = "aarch64"),
+        target_os = "windows",
+    ),
+)))]
+type Loaded = core::convert::Infallible;
+
+impl JitModule {
+    /// The address of the function or object the program defines with
+    /// external linkage as `name`.
+    pub fn symbol(&self, name: &str) -> Option<*const core::ffi::c_void> {
+        self.symbols().find(|&(n, _)| n == name).map(|(_, a)| a)
+    }
+
+    /// Each function and object the program defines with external
+    /// linkage, by name, with its address.
+    pub fn symbols(&self) -> impl Iterator<Item = (&str, *const core::ffi::c_void)> {
+        #[cfg(all(
+            feature = "std",
+            any(
+                target_os = "linux",
+                all(target_os = "macos", target_arch = "aarch64"),
+                target_os = "windows",
+            ),
+        ))]
+        return (self.loaded.symbols.iter())
+            .map(|(n, &a)| (n.as_str(), a as *const core::ffi::c_void));
+        #[cfg(not(all(
+            feature = "std",
+            any(
+                target_os = "linux",
+                all(target_os = "macos", target_arch = "aarch64"),
+                target_os = "windows",
+            ),
+        )))]
+        core::iter::empty()
+    }
+
+    /// The machine code of the program's unit, as mapped.
+    pub fn code(&self) -> &[u8] {
+        #[cfg(all(
+            feature = "std",
+            any(
+                target_os = "linux",
+                all(target_os = "macos", target_arch = "aarch64"),
+                target_os = "windows",
+            ),
+        ))]
+        return self.loaded.code();
+        #[cfg(not(all(
+            feature = "std",
+            any(
+                target_os = "linux",
+                all(target_os = "macos", target_arch = "aarch64"),
+                target_os = "windows",
+            ),
+        )))]
+        match self.loaded {}
+    }
+}
+
+impl Drop for JitModule {
+    fn drop(&mut self) {
+        #[cfg(all(
+            feature = "std",
+            any(
+                target_os = "linux",
+                all(target_os = "macos", target_arch = "aarch64"),
+                target_os = "windows",
+            ),
+        ))]
+        self.loaded.stop();
+    }
+}
+
+/// Map `program` into this process for the host and run its constructors,
+/// without running `main`; `report` takes each diagnostic the lowering
+/// produced. A program without `main` is compiled with
+/// `CompileOptions::with_no_entry_point`.
+pub fn jit_load(
+    program: &Program,
+    options: NativeOptions,
+    report: &mut dyn FnMut(&Diagnostic),
+) -> Result<JitModule, C5Error> {
+    #[cfg(all(
+        feature = "std",
+        any(
+            target_os = "linux",
+            all(target_os = "macos", target_arch = "aarch64"),
+            target_os = "windows",
+        ),
+    ))]
+    {
+        #[cfg(feature = "linker")]
+        let sources = crate::c5::linker::OnDemandSources::new(
+            Target::host(),
+            crate::c5::compiler::CompileOptions::default().with_optimize(options.optimize),
+        );
+        #[cfg(feature = "linker")]
+        let sources = Some(&sources);
+        #[cfg(not(feature = "linker"))]
+        let sources = None;
+        let loaded = jit_impl::load(program, options, sources, report)?;
+        loaded.start();
+        Ok(JitModule { loaded })
+    }
+    #[cfg(not(all(
+        feature = "std",
+        any(
+            target_os = "linux",
+            all(target_os = "macos", target_arch = "aarch64"),
+            target_os = "windows",
+        ),
+    )))]
+    {
+        let _ = (program, options, report);
+        Err(C5Error::internal(
+            "JIT: requires the `std` feature on Linux (any arch), \
+             macOS/aarch64, or Windows (x86_64 / aarch64)",
+        ))
     }
 }
 
@@ -182,7 +326,6 @@ mod jit_impl {
     use super::super::Target;
     use super::super::ssa::shadow;
     use super::super::{AddrPart, Build, NativeOptions, ResolvedImports, UnitDef, UnitDefs};
-    use super::super::{aarch64, x86_64};
     use super::host_target;
     use crate::c5::object::weak_undef;
     use alloc::collections::{BTreeMap, BTreeSet};
@@ -612,9 +755,9 @@ mod jit_impl {
     }
 
     /// The on-demand sources a run may join; none without the linker.
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     pub(super) type Sources<'a> = Option<&'a crate::c5::linker::OnDemandSources>;
-    #[cfg(not(feature = "full"))]
+    #[cfg(not(feature = "linker"))]
     pub(super) type Sources<'a> = Option<&'a core::convert::Infallible>;
 
     pub fn jit_run(
@@ -685,7 +828,7 @@ mod jit_impl {
         // reaches, so an uncompacted `.data` keeps relocations against
         // functions this build never emits. `segregate` is false --
         // the data region is one flat mapping with no zero-fill tail.
-        let compacted = shadow::compact_program_data(program, target, false, options.optimize)?;
+        let compacted = shadow::compact_program_data(program, target, false, options.optimizes())?;
         let mut program = compacted.program;
         // The JIT fills each import's slot with the library's address, so
         // `&puts` and a data slot naming it take that slot's value, as in an
@@ -742,13 +885,13 @@ mod jit_impl {
     }
 
     impl JitUnit {
-        #[cfg(feature = "full")]
+        #[cfg(feature = "linker")]
         fn data_bound(&self, name: &str) -> bool {
             (self.build.imports.data_bindings.iter()).any(|(local, ..)| local == name)
         }
 
         /// The strong external names referenced, neither defined nor bound.
-        #[cfg(feature = "full")]
+        #[cfg(feature = "linker")]
         fn undefined(&self) -> BTreeSet<String> {
             use crate::c5::asm::AsmSectionTarget;
             let build = &self.build;
@@ -794,7 +937,7 @@ mod jit_impl {
     /// The program, then the members a native link would pull for it: the
     /// pool is offered once a name stays undefined that the C library lacks.
     /// With them, the C library's symbol for each name it exports as another.
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     fn join_on_demand(
         user: JitUnit,
         sources: Sources<'_>,
@@ -802,8 +945,16 @@ mod jit_impl {
         options: &NativeOptions,
     ) -> Result<(Vec<JitUnit>, Spellings), C5Error> {
         let mut undefined = user.undefined();
-        let mut libc = crate::c5::linker::TargetCLibrary::new(target);
+        // A name `-u` lists is one the run references; only a member can
+        // define it.
+        let (strong, weak) = user.program.external_definitions();
         let mut stalled = false;
+        for n in sources.map_or(&[][..], |s| s.required()) {
+            if !strong.contains(n) && !weak.contains(n) {
+                stalled |= undefined.insert(n.clone());
+            }
+        }
+        let mut libc = crate::c5::linker::TargetCLibrary::new(target);
         for n in &undefined {
             stalled |= !(n.starts_with("__imp_")
                 || crate::c5::linker::link_resolves_symbol(n)
@@ -982,6 +1133,26 @@ mod jit_impl {
         code_vmaddr: u64,
     }
 
+    /// How far apart `build`'s code and data may lie: the code addresses the
+    /// data pc-relatively -- a signed 32-bit displacement on x86-64, `adrp`'s
+    /// 4 GiB on AArch64 -- and a pc-relative word of the data image into the
+    /// code bounds the distance further.
+    fn code_data_reach(build: &Build) -> u64 {
+        let code_reach: u64 = if cfg!(target_arch = "x86_64") {
+            1 << 31
+        } else {
+            1 << 32
+        };
+        (build.data_pcrel_relocs.iter())
+            .filter(|r| !r.target_in_data)
+            .map(|r| match (r.branch26, r.width) {
+                (true, _) => 1u64 << 27,
+                (false, 4) => 1 << 31,
+                _ => u64::MAX,
+            })
+            .fold(code_reach, u64::min)
+    }
+
     /// Map `unit`'s data, and its code with the read-only blob at its tail.
     fn place_unit(unit: &BoundUnit) -> Result<PlacedUnit, C5Error> {
         let build = &unit.build;
@@ -993,20 +1164,8 @@ mod jit_impl {
             None
         };
         let data_vmaddr = data.as_ref().map(|r| r.as_ptr() as u64).unwrap_or(0);
-        // A pc-relative word of the data image into the code bounds their
-        // distance.
-        let reach = build
-            .data_pcrel_relocs
-            .iter()
-            .filter(|r| !r.target_in_data)
-            .map(|r| match (r.branch26, r.width) {
-                (true, _) => 1u64 << 27,
-                (false, 4) => 1 << 31,
-                _ => u64::MAX,
-            })
-            .min()
-            .filter(|&r| r != u64::MAX);
-        let near = reach.filter(|_| data.is_some()).map(|reach| Near {
+        let reach = code_data_reach(build);
+        let near = data.is_some().then_some(reach).map(|reach| Near {
             data: data_vmaddr,
             span: build.data.len() as u64,
             reach,
@@ -1033,6 +1192,42 @@ mod jit_impl {
         (build.text.len() + 7) & !7
     }
 
+    /// A program mapped into this process: its units' code and data, the
+    /// address of each external definition, its constructors and
+    /// destructors in run order, and its entry.
+    pub(super) struct Loaded {
+        bound: Vec<BoundUnit>,
+        placed: Vec<PlacedUnit>,
+        pub(super) symbols: BTreeMap<String, usize>,
+        pub(super) init: Vec<usize>,
+        pub(super) fini: Vec<usize>,
+        entry: usize,
+    }
+
+    impl Loaded {
+        /// The machine code of the program's own unit, as mapped.
+        pub(super) fn code(&self) -> &[u8] {
+            let len = self.bound[0].build.text.len();
+            unsafe { core::slice::from_raw_parts(self.placed[0].code.as_ptr(), len) }
+        }
+
+        /// Register the destructors and run the constructors on this
+        /// thread, as a loader does for a shared object it maps.
+        pub(super) fn start(&self) {
+            register_dtors(&self.fini);
+            for &ctor in &self.init {
+                let ctor: extern "C" fn() = unsafe { core::mem::transmute(ctor as *const ()) };
+                ctor();
+            }
+        }
+
+        /// Run the `atexit` handlers registered on this thread and the
+        /// destructors, last registered first.
+        pub(super) fn stop(&self) {
+            drain_jit_atexit_chain();
+        }
+    }
+
     fn jit_run_inner(
         program: &Program,
         args: &[String],
@@ -1040,6 +1235,54 @@ mod jit_impl {
         sources: Sources<'_>,
         report: &mut dyn FnMut(&Diagnostic),
     ) -> Result<i32, C5Error> {
+        let loaded = load(program, options, sources, report)?;
+        // Build a System V argv: a NULL-terminated array of `char *`
+        // pointers. The CStrings live for the duration of the call;
+        // the function pointer table only needs to outlive the
+        // single `main_fn(...)` invocation.
+        let argv_cstrings: Vec<CString> = args
+            .iter()
+            .map(|s| CString::new(s.as_str()).unwrap_or_default())
+            .collect();
+        let mut argv_ptrs: Vec<*const c_char> =
+            argv_cstrings.iter().map(|cs| cs.as_ptr()).collect();
+        argv_ptrs.push(std::ptr::null());
+        // SAFETY: the JIT'd main was lowered with extern "C" / System V
+        // ABI conventions and reachable via a normal `call`-equivalent
+        // (transmuting + invoking is the same as the call instruction
+        // a parent function would make). main reads argc/argv from
+        // the System V argument registers and returns its exit code
+        // in rax / x0.
+        //
+        // Dispatch through a fresh `pthread_create` worker on POSIX
+        // hosts. The cargo test harness's parallel scheduler runs
+        // each lib test on a thread it owns; calling the JIT'd code
+        // directly on that thread exposes it to whatever signal mask,
+        // stack guard size, alternate-stack setup, and TLS the
+        // harness has installed for itself. A pthread worker has the
+        // kernel-defaulted register state, signal mask, and TLS, so
+        // the JIT'd code observes the environment a freshly-launched
+        // native binary would. Windows keeps the in-thread call: it
+        // has no concurrent native-fixture parity harness pressuring
+        // the same thread.
+        run_main_threaded(
+            loaded.entry as *const u8,
+            args.len() as c_int,
+            argv_ptrs.as_ptr(),
+            argv_cstrings,
+            loaded.init.clone(),
+            loaded.fini.clone(),
+        )
+    }
+
+    /// Lower `program` for the host, join the units it needs, and map and
+    /// bind them.
+    pub(super) fn load(
+        program: &Program,
+        options: NativeOptions,
+        sources: Sources<'_>,
+        report: &mut dyn FnMut(&Diagnostic),
+    ) -> Result<Loaded, C5Error> {
         let target = host_target()?;
         let machine = if target.is_aarch64() {
             super::super::Machine::Aarch64
@@ -1047,16 +1290,16 @@ mod jit_impl {
             super::super::Machine::X86_64
         };
         let user = prepare_unit(program, target, &options, report)?;
-        #[cfg(feature = "full")]
+        #[cfg(feature = "linker")]
         let (units, spellings) = join_on_demand(user, sources, target, &options)?;
-        #[cfg(not(feature = "full"))]
+        #[cfg(not(feature = "linker"))]
         let (units, spellings) = {
             let _ = sources;
             (alloc::vec![user], Spellings::new())
         };
-        let table = link_table(&units);
+        let links = link_table(&units);
         let bound = (units.into_iter().enumerate())
-            .map(|(i, u)| bind_unit(i, u, &table, &spellings, machine))
+            .map(|(i, u)| bind_unit(i, u, &links, &spellings, machine))
             .collect::<Result<Vec<_>, _>>()?;
         let mut placed = bound
             .iter()
@@ -1091,18 +1334,6 @@ mod jit_impl {
             at.code.make_executable()?;
             flush_icache(at.code.as_ptr(), at.code.len());
         }
-
-        // Build a System V argv: a NULL-terminated array of `char *`
-        // pointers. The CStrings live for the duration of the call;
-        // the function pointer table only needs to outlive the
-        // single `main_fn(...)` invocation.
-        let argv_cstrings: Vec<CString> = args
-            .iter()
-            .map(|s| CString::new(s.as_str()).unwrap_or_default())
-            .collect();
-        let mut argv_ptrs: Vec<*const c_char> =
-            argv_cstrings.iter().map(|cs| cs.as_ptr()).collect();
-        argv_ptrs.push(std::ptr::null());
 
         // Constructor / destructor addresses in `.init_array` layout
         // order (prioritized ascending, then unprioritized). Resolved
@@ -1173,34 +1404,18 @@ mod jit_impl {
             .chain(ordered_addrs(true))
             .collect();
 
-        let entry_ptr = unsafe { placed[0].code.as_ptr().add(bound[0].build.entry_offset) };
-        // SAFETY: the JIT'd main was lowered with extern "C" / System V
-        // ABI conventions and reachable via a normal `call`-equivalent
-        // (transmuting + invoking is the same as the call instruction
-        // a parent function would make). main reads argc/argv from
-        // the System V argument registers and returns its exit code
-        // in rax / x0.
-        //
-        // Dispatch through a fresh `pthread_create` worker on POSIX
-        // hosts. The cargo test harness's parallel scheduler runs
-        // each lib test on a thread it owns; calling the JIT'd code
-        // directly on that thread exposes it to whatever signal mask,
-        // stack guard size, alternate-stack setup, and TLS the
-        // harness has installed for itself. A pthread worker has the
-        // kernel-defaulted register state, signal mask, and TLS, so
-        // the JIT'd code observes the environment a freshly-launched
-        // native binary would. Windows keeps the in-thread call: it
-        // has no concurrent native-fixture parity harness pressuring
-        // the same thread.
-        let exit_code = run_main_threaded(
-            entry_ptr,
-            args.len() as c_int,
-            argv_ptrs.as_ptr(),
-            argv_cstrings,
-            init_addrs,
-            fini_addrs,
-        )?;
-        Ok(exit_code)
+        let symbols = (links.iter())
+            .map(|(name, &(r, _))| (name.clone(), address(r) as usize))
+            .collect();
+        let entry = placed[0].code.as_ptr() as usize + bound[0].build.entry_offset;
+        Ok(Loaded {
+            bound,
+            placed,
+            symbols,
+            init: init_addrs,
+            fini: fini_addrs,
+            entry,
+        })
     }
 
     /// Patch `unit`'s own fixups against its mapped addresses.
@@ -1736,24 +1951,14 @@ mod jit_impl {
             in_process: true,
             ..options
         };
-        let mut build = match target {
-            Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => aarch64::lower(
-                program,
-                target,
-                options,
-                &imports,
-                None,
-                crate::c5::codegen::LowerMode::Full,
-            )?,
-            Target::LinuxX64 | Target::WindowsX64 => x86_64::lower(
-                program,
-                target,
-                options,
-                &imports,
-                None,
-                crate::c5::codegen::LowerMode::Full,
-            )?,
-        };
+        let mut build = crate::c5::codegen::lower_arch(
+            program,
+            target,
+            options,
+            &imports,
+            None,
+            crate::c5::codegen::LowerMode::Full,
+        )?;
         build.imports = imports;
         build.abi = target.abi();
         build.data_relocs = program.data_relocs.clone();
@@ -2688,7 +2893,11 @@ mod jit_impl {
             };
             let at = r.instr_offset;
             let site_vmaddr = (code_vmaddr + at as u64) as i64;
-            match r.kind {
+            // The JIT reaches every target in place, so a GOT access takes
+            // its direct form.
+            let kind = crate::c5::asm::relax_a64_got(r.kind, code, at)
+                .map_err(|m| internal(format!("JIT: {m}")))?;
+            match kind {
                 AsmRelocKind::A64AdrpPage21 => {
                     a64patch::patch_adrp(code, at, site_vmaddr, target_vmaddr as i64)
                 }
@@ -3018,9 +3227,13 @@ mod jit_impl {
                 }
                 !inside(handler)
             });
-            // Walk back from the filter in place past each of the region's
-            // to the one the earliest replaced.
+            // Reading the filter swaps it out and back, so a region that set
+            // none leaves it alone. Else walk back from the filter in place
+            // past each of the region's to the one the earliest replaced.
             let mut f = FILTERS.lock().unwrap_or_else(|e| e.into_inner());
+            if !f.iter().any(|&(filter, ..)| inside(filter)) {
+                return;
+            }
             let current = unsafe { SetUnhandledExceptionFilter(0) };
             let mut restore = current;
             for &(filter, prior, held) in f.iter().rev() {
@@ -3165,7 +3378,21 @@ mod jit_impl {
 
     #[cfg(test)]
     mod placement {
-        use super::{JitRegion, Near, page_size};
+        use super::{JitRegion, Near, code_data_reach, page_size};
+
+        /// The code addresses its data pc-relatively, so a data image with
+        /// no word into the code still bounds the distance: the signed
+        /// 32-bit displacement on x86-64, `adrp`'s reach on AArch64.
+        #[test]
+        fn code_is_mapped_within_its_own_reach_of_the_data() {
+            let build = crate::c5::codegen::Build::default();
+            let want: u64 = if cfg!(target_arch = "x86_64") {
+                1 << 31
+            } else {
+                1 << 32
+            };
+            assert_eq!(code_data_reach(&build), want);
+        }
 
         /// The code a data image branches into is mapped within the
         /// branch's 128 MiB of the data wherever the data lies: here an

@@ -3,7 +3,7 @@ inline_multi_block_phi_caller.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -30,38 +30,38 @@ Disassembly of section .text:
                	movl	<rip>, %edi # <addr>
                	xorl	%eax, %eax
                	movl	$0xaaaaaaab, %r8d       # imm = 0xAAAAAAAB
-               	leaq	<rip>, %rdx # <addr>
+               	leaq	<rip>, %rsi # <addr>
                	jmp	<addr>
                	imulq	$0x41c64e6d, %rcx, %rcx # imm = 0x41C64E6D
                	addq	$0x3039, %rcx           # imm = 0x3039
                	incq	%rax
                	cmpl	%edi, %eax
                	jae	<addr>
-               	movq	%rax, %rsi
-               	imulq	%r8, %rsi
-               	shrq	$0x21, %rsi
-               	leaq	(%rsi,%rsi,2), %r9
-               	movq	%rax, %rsi
-               	subq	%r9, %rsi
-               	cmpl	$0x1, %esi
+               	movq	%rax, %rdx
+               	imulq	%r8, %rdx
+               	shrq	$0x21, %rdx
+               	leaq	(%rdx,%rdx,2), %r9
+               	movq	%rax, %rdx
+               	subq	%r9, %rdx
+               	cmpl	$0x1, %edx
                	jb	<addr>
-               	cmpl	$0x1, %esi
+               	cmpl	$0x1, %edx
                	je	<addr>
-               	movq	%rax, %rsi
-               	andq	$0x3, %rsi
-               	movl	%ecx, (%rdx,%rsi,4)
+               	movq	%rax, %rdx
+               	andq	$0x3, %rdx
+               	movl	%ecx, (%rsi,%rdx,4)
                	jmp	<addr>
-               	movq	%rax, %rsi
-               	andq	$0x3, %rsi
-               	movl	(%rdx,%rsi,4), %r9d
+               	movq	%rax, %rdx
+               	andq	$0x3, %rdx
+               	movl	(%rsi,%rdx,4), %r9d
                	xorq	%rcx, %r9
-               	movl	%r9d, (%rdx,%rsi,4)
+               	movl	%r9d, (%rsi,%rdx,4)
                	jmp	<addr>
-               	movq	%rax, %rsi
-               	andq	$0x3, %rsi
-               	movl	(%rdx,%rsi,4), %r9d
+               	movq	%rax, %rdx
+               	andq	$0x3, %rdx
+               	movl	(%rsi,%rdx,4), %r9d
                	addq	%rcx, %r9
-               	movl	%r9d, (%rdx,%rsi,4)
+               	movl	%r9d, (%rsi,%rdx,4)
                	jmp	<addr>
                	movl	<rip>, %eax # <addr>
                	movl	<rip>, %ecx # <addr>

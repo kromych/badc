@@ -3,7 +3,7 @@ libc_mlock_and_fmemopen.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -44,10 +44,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x20, [sp], #0x40
                	ret
+               	mov	x0, #0x7878787878787878 // =8680820740569200760
+               	stur	x0, [x29, #-0x10]
+               	stur	x0, [x29, #-0x8]
                	sub	x0, x29, #0x10
-               	mov	x1, #0x7878787878787878 // =8680820740569200760
-               	stur	x1, [x29, #-0x10]
-               	stur	x1, [x29, #-0x8]
                	mov	x1, #0x10               // =16
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
@@ -58,9 +58,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x20, [sp], #0x40
                	ret
+               	mov	x1, x20
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x1, x20
                	bl	<addr>
                	sxtw	x0, w0
                	cmn	x0, #0x1
@@ -86,10 +86,10 @@ Disassembly of section .text:
                	ret
                	mov	x0, x20
                	bl	<addr>
+               	mov	x0, x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	sub	x2, x29, #0x18
-               	mov	x0, x20
                	bl	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0x1
@@ -126,9 +126,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x20, [sp], #0x40
                	ret
+               	mov	x0, x20
                	mov	x1, #0x0                // =0
                	mov	x2, #0x2                // =2
-               	mov	x0, x20
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>

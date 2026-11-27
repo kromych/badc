@@ -3,7 +3,7 @@ anon_bitfield_reserves_bits.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -19,9 +19,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	sub	x1, x29, #0x10
                	mov	x0, #0x0                // =0
-               	stur	wzr, [x29, #-0x10]
                	mov	x2, #0x1                // =1
-               	stur	xzr, [x29, #-0x8]
                	stur	x2, [x29, #-0x10]
                	mov	x2, #0x3344             // =13124
                	movk	x2, #0x1122, lsl #16

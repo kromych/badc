@@ -3,7 +3,7 @@ dlopen_atoi.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,9 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x18, %rsp
+               	subq	$0x20, %rsp
                	pushq	%rbx
                	xorl	%edi, %edi
                	movl	$0x2, %esi
@@ -38,10 +36,10 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x20, %rsp
                	retq
-               	leaq	<rip>, %rsi
                	movq	%rbx, %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
@@ -49,7 +47,7 @@ Disassembly of section .text:
                	callq	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x20, %rsp
                	retq
                	leaq	<rip>, %rdi
                	callq	*%rax
@@ -58,5 +56,5 @@ Disassembly of section .text:
                	callq	<addr>
                	movq	0x18(%rsp), %rax
                	popq	%rbx
-               	leave
+               	addq	$0x20, %rsp
                	retq

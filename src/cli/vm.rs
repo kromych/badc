@@ -105,7 +105,8 @@ pub(crate) fn run_in_process(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) ->
             cli,
             super::native_link::embedded_compile_options(cli, "on-demand.c"),
         );
-        let sources = OnDemandSources::new(badc::Target::host(), front);
+        let sources = OnDemandSources::new(badc::Target::host(), front)
+            .with_required(cli.link.required.clone());
         match jit_run_with_sources(&program, &c_args, jit_opts, &sources, &mut report) {
             Ok(code) => std::process::exit(code),
             Err(e) => {
@@ -118,7 +119,8 @@ pub(crate) fn run_in_process(cli: &Cli, inputs: &Inputs, stdin: &StdinSource) ->
         cli,
         super::native_link::embedded_compile_options(cli, "on-demand.c"),
     );
-    let sources = OnDemandSources::new(program.target, front);
+    let sources =
+        OnDemandSources::new(program.target, front).with_required(cli.link.required.clone());
     let mut vm = Vm::with_sources(program, badc::StdHost::default(), &sources).with_args(c_args);
     if cli.track_pointers {
         vm = vm.with_pointer_tracking();

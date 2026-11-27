@@ -30,7 +30,7 @@ fn shifted_operand(op: BinOp, e: &ShadowExpr) -> Option<(u32, RegShift, &ShadowE
 }
 
 struct Shadow<'a> {
-    code: &'a mut Vec<u8>,
+    code: &'a mut CodeBuf,
     next: usize,
     fixed: FixedRegs,
 }
@@ -161,6 +161,8 @@ impl Shadow<'_> {
     /// predicted return that follows it; the offset of the word to patch.
     fn test(&mut self, exit: &EarlyExit, far: bool) -> Option<usize> {
         let inverted = far || exit.predicted;
+        // A far test skips the `B` that follows it.
+        let off = if far { 2 } else { 0 };
         let word = match &exit.test {
             ShadowTest::Cmp {
                 op,
@@ -175,7 +177,7 @@ impl Shadow<'_> {
                 } else {
                     holds.flip()
                 };
-                enc_b_cond(taken, 0)
+                enc_b_cond(taken, off)
             }
             ShadowTest::Value { value, low_word } => {
                 let rt = if *low_word {
@@ -184,18 +186,16 @@ impl Shadow<'_> {
                     self.reg(value)?
                 };
                 match (exit.exit_when != inverted, low_word) {
-                    (true, false) => enc_cbnz(rt, 0),
-                    (false, false) => enc_cbz(rt, 0),
-                    (true, true) => super::encode::enc_cbnz_w(rt, 0),
-                    (false, true) => super::encode::enc_cbz_w(rt, 0),
+                    (true, false) => enc_cbnz(rt, off),
+                    (false, false) => enc_cbz(rt, off),
+                    (true, true) => super::encode::enc_cbnz_w(rt, off),
+                    (false, true) => super::encode::enc_cbz_w(rt, off),
                 }
             }
         };
+        emit(self.code, word);
         if far {
-            emit(self.code, word | (2 << 5));
             emit(self.code, enc_b(0));
-        } else {
-            emit(self.code, word);
         }
         Some(self.code.len() - 4)
     }
@@ -205,7 +205,7 @@ impl Shadow<'_> {
 /// when `far`, or past a predicted one. The branch's offset, or `None`, with
 /// nothing emitted, where the test needs more temporaries than it has.
 pub(super) fn emit_early_test(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     exit: &EarlyExit,
     far: bool,
     fixed: FixedRegs,
@@ -225,7 +225,7 @@ pub(super) fn emit_early_test(
 
 /// The early return of `exit`: the returned value into x0, then `ret`.
 /// `false`, with nothing emitted, where it needs more temporaries than it has.
-pub(super) fn emit_early_return(code: &mut Vec<u8>, exit: &EarlyExit, fixed: FixedRegs) -> bool {
+pub(super) fn emit_early_return(code: &mut CodeBuf, exit: &EarlyExit, fixed: FixedRegs) -> bool {
     let start = code.len();
     let mut sh = Shadow {
         code,
@@ -243,7 +243,7 @@ pub(super) fn emit_early_return(code: &mut Vec<u8>, exit: &EarlyExit, fixed: Fix
 }
 
 /// Point the test's branch at `site` to `target`; `false` when a
-/// conditional branch does not reach.
+/// conditional branch does not reach. The branch's text reads the field.
 pub(super) fn patch_early_branch(code: &mut [u8], site: usize, target: usize, far: bool) -> bool {
     let words = (target - site) / 4;
     let word = u32::from_le_bytes(code[site..site + 4].try_into().expect("a branch word"));

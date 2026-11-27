@@ -169,6 +169,24 @@ fn sign_only_difference(structs: &[super::StructDef], a: i64, b: i64) -> bool {
             .any(|&t| pointee == t as i64)
 }
 
+/// A file's lines as a diagnostic quotes them: its text, `None` for the
+/// unit's own, which the compiler keeps, and where each line starts.
+pub(super) struct Written {
+    text: Option<alloc::string::String>,
+    starts: alloc::vec::Vec<usize>,
+}
+
+#[cfg(feature = "std")]
+fn read_written(path: &str) -> Option<alloc::string::String> {
+    let bytes = std::fs::read(path).ok()?;
+    Some(alloc::string::String::from_utf8_lossy(&bytes).into_owned())
+}
+
+#[cfg(not(feature = "std"))]
+fn read_written(_: &str) -> Option<alloc::string::String> {
+    None
+}
+
 /// What the AST integer folder admits.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Fold {
@@ -619,10 +637,47 @@ impl Compiler {
         }
     }
 
+    /// The line a diagnostic quotes: as written, where the file can be
+    /// read, else as the unit holds it after preprocessing.
     fn echo_of(&self, file: &str, line: usize) -> Option<alloc::string::String> {
-        (self.lex.line_text_by_number(file, line))
-            .filter(|s| !s.is_empty())
-            .map(alloc::string::ToString::to_string)
+        let preprocessed = self.lex.line_text_by_number(file, line)?;
+        let text = (self.written_line(file, line)).unwrap_or_else(|| preprocessed.into());
+        (!text.is_empty()).then_some(text)
+    }
+
+    /// Line `line` of `file` before preprocessing: the unit's own text, or
+    /// the file's, read when a diagnostic first quotes it.
+    fn written_line(&self, file: &str, line: usize) -> Option<alloc::string::String> {
+        let unit = (self.unit_text.as_deref())
+            .map(alloc::string::String::as_str)
+            .filter(|_| file == self.unit_file());
+        let mut files = self.written.borrow_mut();
+        let written = files.entry(file.into()).or_insert_with(|| {
+            let text = match unit {
+                Some(_) => None,
+                None => Some(read_written(file)?),
+            };
+            let body = text.as_deref().or(unit)?;
+            let starts = core::iter::once(0)
+                .chain(body.match_indices('\n').map(|(i, _)| i + 1))
+                .collect();
+            Some(Written { text, starts })
+        });
+        let written = written.as_ref()?;
+        let body = written.text.as_deref().or(unit)?;
+        let start = *written.starts.get(line.checked_sub(1)?)?;
+        let end = written.starts.get(line).copied().unwrap_or(body.len());
+        let text = body.get(start..end)?.trim_end();
+        Some(text.strip_prefix('\u{feff}').unwrap_or(text).into())
+    }
+
+    /// The name the unit's own lines carry: its label, or the
+    /// preprocessor's placeholder without one.
+    fn unit_file(&self) -> &str {
+        match self.source_label.is_empty() {
+            true => "<source>",
+            false => &self.source_label,
+        }
     }
 
     /// Read the source line of each of `e`'s diagnostics that left it to
@@ -770,7 +825,7 @@ impl Compiler {
     /// pathological nesting gets a diagnostic instead of exhausting
     /// the native stack. C99 5.2.4.1 requires 63 nesting levels for
     /// expressions / declarators and 127 for blocks; 512 stays well
-    /// above any real source (and above Clang's default of 256) while
+    /// above any real source while
     /// capping the worst-case native stack the driver must reserve.
     pub(super) fn with_nesting<T>(
         &mut self,
@@ -1319,7 +1374,7 @@ impl Compiler {
     /// and shift operators over them, each computed in the type its node
     /// carries (C99 6.6, 6.3.1.3). `None` for anything else, a division by
     /// zero and a shift by more than the width.
-    fn ast_const_value(&self, e: ExprId) -> Option<(i128, i64)> {
+    pub(super) fn ast_const_value(&self, e: ExprId) -> Option<(i128, i64)> {
         // TODO: constants of the 128-bit integer types, whose arithmetic the
         // AST carries as aggregate operations.
         let norm = |v: i128, ty: i64| {
@@ -1441,6 +1496,15 @@ impl Compiler {
                 .is_some_and(|t| self.initializes_as_is(t, to));
         if !as_is {
             self.check_enum_conversion(self.expr_enum(e), to, bits, at);
+        }
+        if let Some(from) = crate::c5::ast::expr_ty(self.ast.expr(e))
+            && self.unevaluated == 0
+        {
+            let at = match at.offset {
+                Some(offset) => self.lex.position_at(offset as usize),
+                None => (at.line as u32, 0),
+            };
+            self.sanitize_conversion(e, from, to, at);
         }
     }
 

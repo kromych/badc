@@ -3,7 +3,7 @@ narrow_param_entry_extend.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,21 +26,19 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	movl	<rip>, %edx # <addr>
                	movsbq	%dl, %rsi
                	movswq	%dx, %rdi
                	xorl	%eax, %eax
-               	movl	%eax, -0x10(%rbp)
-               	movl	-0x10(%rbp), %ecx
+               	movl	%eax, (%rsp)
+               	movl	(%rsp), %ecx
                	addq	%rax, %rcx
-               	movl	%ecx, -0x10(%rbp)
+               	movl	%ecx, (%rsp)
                	incq	%rax
                	cmpl	$0x3, %eax
                	jl	<addr>
-               	movl	-0x10(%rbp), %eax
+               	movl	(%rsp), %eax
                	imulq	$0x186a0, %rsi, %rax    # imm = 0x186A0
                	imulq	$0xa, %rdi, %rcx
                	addq	%rcx, %rax
@@ -48,17 +46,17 @@ Disassembly of section .text:
                	cmpl	$0x6bcd17, %eax         # imm = 0x6BCD17
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	movl	%eax, -0x8(%rbp)
-               	movl	-0x8(%rbp), %ecx
+               	movl	%eax, 0x8(%rsp)
+               	movl	0x8(%rsp), %ecx
                	addq	%rax, %rcx
-               	movl	%ecx, -0x8(%rbp)
+               	movl	%ecx, 0x8(%rsp)
                	incq	%rax
                	cmpl	$0x3, %eax
                	jl	<addr>
-               	movl	-0x8(%rbp), %eax
+               	movl	0x8(%rsp), %eax
                	movq	%rdx, %rax
                	andq	$0xff, %rax
                	imulq	$0x186a0, %rax, %rax    # imm = 0x186A0
@@ -67,8 +65,8 @@ Disassembly of section .text:
                	cmpl	$0x696c65, %eax         # imm = 0x696C65
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

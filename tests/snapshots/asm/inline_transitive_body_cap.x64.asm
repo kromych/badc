@@ -3,7 +3,7 @@ inline_transitive_body_cap.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -45,9 +45,9 @@ Disassembly of section .text:
                	xorq	%rcx, %rax
                	movq	%rax, %rcx
                	shlq	$0xd, %rcx
-               	addq	%rcx, %rax
-               	movq	%rax, %rcx
-               	shrq	$0x11, %rcx
+               	addq	%rax, %rcx
+               	movq	%rcx, %rax
+               	shrq	$0x11, %rax
                	xorq	%rax, %rcx
                	leaq	0x1(%rdi), %rax
                	leaq	(%rax,%rax,4), %rax
@@ -127,9 +127,6 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
                	pushq	%rbx
                	movq	<rip>, %rdi # <addr>
                	callq	<addr>
@@ -153,5 +150,4 @@ Disassembly of section .text:
                	cmovneq	%rdx, %rcx
                	movq	%rcx, %rax
                	popq	%rbx
-               	leave
                	retq

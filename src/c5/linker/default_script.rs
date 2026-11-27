@@ -1,5 +1,5 @@
-//! Built-in default linker script, used when a final link names none,
-//! as GNU ld falls back on its internal one. It names the sections
+//! Built-in default linker script, used when a final link names none.
+//! It names the sections
 //! whose order a consumer depends on and leaves the rest to orphan
 //! placement.
 

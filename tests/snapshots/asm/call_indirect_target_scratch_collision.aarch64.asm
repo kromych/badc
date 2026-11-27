@@ -3,7 +3,7 @@ call_indirect_target_scratch_collision.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -24,22 +24,22 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x30]!
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	stur	x0, [x29, #-0x10]
+               	mov	x2, #0x0                // =0
+               	stur	w2, [x29, #-0x8]
                	sub	x0, x29, #0x10
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	stur	x1, [x29, #-0x10]
-               	mov	x2, #0x0                // =0
-               	stur	w2, [x29, #-0x8]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	sub	x4, x29, #0x8
                	mov	x3, #0xffff             // =65535
+               	sub	x4, x29, #0x8
                	bl	<addr>
                	mov	x20, x0
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldursw	x2, [x29, #-0x8]
                	mov	x1, x20
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	bl	<addr>
                	cbnz	w20, <addr>
                	ldursw	x0, [x29, #-0x8]

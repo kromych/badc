@@ -3,7 +3,7 @@ libc_div.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -53,10 +53,10 @@ Disassembly of section .text:
                	mov	x0, #0x5                // =5
                	bl	<addr>
                	sdiv	w1, w20, w0
-               	msub	x0, x1, x0, x20
+               	msub	x2, x1, x0, x20
                	cmp	w1, #0x3
                	b.ne	<addr>
-               	cmp	w0, #0x2
+               	cmp	w2, #0x2
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x10]
@@ -68,20 +68,12 @@ Disassembly of section .text:
                	mov	x0, #0x5                // =5
                	bl	<addr>
                	sdiv	w1, w20, w0
-               	msub	x0, x1, x0, x20
+               	msub	x2, x1, x0, x20
                	cmn	w1, #0x3
                	b.ne	<addr>
-               	cmn	w0, #0x2
+               	cmn	w2, #0x2
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	ldp	x29, x30, [sp, #0x10]
-               	ldr	x20, [sp], #0x20
-               	ret
-               	add	x1, x1, x1, lsl #2
-               	add	x0, x1, x0
-               	cmn	w0, #0x11
-               	b.eq	<addr>
-               	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
@@ -91,10 +83,10 @@ Disassembly of section .text:
                	mov	x0, #0x7                // =7
                	bl	<addr>
                	sdiv	x1, x20, x0
-               	msub	x0, x1, x0, x20
+               	msub	x2, x1, x0, x20
                	cmp	x1, #0xe
                	b.ne	<addr>
-               	cmp	x0, #0x2
+               	cmp	x2, #0x2
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ldp	x29, x30, [sp, #0x10]
@@ -106,10 +98,10 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	bl	<addr>
                	sdiv	x1, x20, x0
-               	msub	x0, x1, x0, x20
+               	msub	x2, x1, x0, x20
                	cmp	x1, #0x14d
                	b.ne	<addr>
-               	cmp	x0, #0x1
+               	cmp	x2, #0x1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	ldp	x29, x30, [sp, #0x10]

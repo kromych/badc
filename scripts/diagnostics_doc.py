@@ -58,7 +58,8 @@ A selector names one diagnostic or one group:
 | `-w` | report no warnings |
 | `-Wall`, `-Wextra`, `-Wpedantic` | turn on the group of that name |
 | `-pedantic`, `-pedantic-errors` | `-Wpedantic`, `-Werror=pedantic` |
-| `-fpermissive` | report `int-conversion`, `incompatible-pointer-types`, `implicit-int` and `return-mismatch` as warnings |
+| `-fpermissive` | report `int-conversion`, `incompatible-pointer-types`, `implicit-int` and `return-mismatch` as warnings; the default under `--msvc`, as cl reports each as a warning or not at all |
+| `-fno-permissive` | report them as errors, under `--msvc` too |
 
 Before C99, `implicit-int` is off unless `-Wall` or its own selector turns it
 on.
@@ -68,8 +69,8 @@ Turning one on reports B7012 and has no other effect. Any other unknown name is
 an error, except after `-Wno-`, which accepts any name.
 
 A warning at a line of a system header--one found through `-isystem` or a
-system directory, and the compiler's own headers--is not reported, as gcc
-and clang do not report it; a `#warning` there is, and an error always is.
+system directory, and the compiler's own headers--is not reported; a
+`#warning` there is, and an error always is.
 
 ## Pragmas
 

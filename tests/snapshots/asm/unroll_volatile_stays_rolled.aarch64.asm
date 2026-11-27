@@ -3,7 +3,7 @@ unroll_volatile_stays_rolled.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -24,11 +24,10 @@ Disassembly of section .text:
                	b.lt	<addr>
                	adrp	x1, <page>
                	ldr	x1, [x1, <lo12>]
-               	mov	x2, #0x0                // =0
                	cmp	w0, #0x4
                	cset	x0, eq
                	cmp	x1, #0x4
-               	csel	x0, x0, x2, eq
+               	csel	x0, x0, xzr, eq
                	cmp	w0, #0x0
                	cset	x0, eq
                	ret

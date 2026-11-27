@@ -96,6 +96,7 @@ pub(super) fn emit_inst(
             };
             load_imm64(code, rd, *value as u64);
             store_spilled_int(code, frame, dst, rd);
+            super::mem::store_spilled_int_rest(code, frame, alloc.width(v), dst, rd);
             Ok(())
         }
         // The language handler leaves the code in x0.
@@ -419,6 +420,7 @@ pub(super) fn emit_inst(
             *callee_variadic,
             *fixed_args,
             *fp_return,
+            &mut *cx.user_extern_data_refs,
         ),
         Inst::Mcpy {
             dst: d,
@@ -606,6 +608,9 @@ pub(super) fn emit_inst(
         // The predecessor-exit moves placed the value; nothing at the phi
         // position.
         Inst::Phi { .. } => Ok(()),
+        Inst::InlineAsm { .. } if !cfg!(feature = "inline-asm") => {
+            Err(Unsupported::new(crate::c5::asm::NO_INLINE_ASM))
+        }
         Inst::InlineAsm { asm, args } => emit_inline_asm_aarch64(
             code,
             asm,
@@ -631,6 +636,7 @@ pub(super) fn emit_inst(
             text_map_state,
             asm_text_labels,
             asm_section_text_refs,
+            cx.asm_warnings,
             None,
         ),
         // `BlockAddr` is lowered in the block walk and `TailExt` is a
@@ -685,7 +691,7 @@ fn note_in_page(
     Ok(())
 }
 
-pub(super) fn emit_adrp_add(code: &mut Vec<u8>, rd: Reg) {
+pub(super) fn emit_adrp_add(code: &mut CodeBuf, rd: Reg) {
     emit(code, enc_adrp(rd, 0));
     emit(code, enc_add_imm(rd, rd, 0));
 }
@@ -695,7 +701,7 @@ pub(super) fn emit_adrp_add(code: &mut Vec<u8>, rd: Reg) {
 /// converted from the low `kind` bytes per C99 6.3.1.3.
 #[allow(clippy::too_many_arguments)]
 fn emit_incoming(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     inst: &Inst,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -752,7 +758,7 @@ fn emit_incoming(
         return fail(alloc::format!("{name}: integer value from an FP register"));
     }
     let ext = param_entry_ext(*kind, v, alloc);
-    let sign_extend = |code: &mut Vec<u8>, rd: Reg| {
+    let sign_extend = |code: &mut CodeBuf, rd: Reg| {
         emit_sign_extend(code, rd, Reg(src), ext.unwrap_or(LoadKind::I64));
     };
     match dst {
@@ -791,13 +797,13 @@ fn emit_vec_binop(
         else {
             return fail("VecBinop: rhs not fp reg / spill");
         };
-        let Some(word) = super::encode::enc_vec_binop(op, lane, qd, dn, u32::from(dm)) else {
+        let Some(word) = super::encode::enc_vec_binop(op, lane, qd, dn, u32::from(dm), false)
+        else {
             return fail(alloc::format!(
                 "VecBinop: no instruction for {op:?} on {lane:?}"
             ));
         };
-        // The 64-bit form: Q clear.
-        emit(code, word & !0x4000_0000);
+        emit(code, word);
         store_spilled_fp(code, frame, dst, qd);
         return Ok(());
     }
@@ -819,7 +825,7 @@ fn emit_vec_binop(
     ) else {
         return fail("VecBinop: rhs not fp reg / spill");
     };
-    let Some(word) = super::encode::enc_vec_binop(op, lane, qd, qn, u32::from(qm)) else {
+    let Some(word) = super::encode::enc_vec_binop(op, lane, qd, qn, u32::from(qm), true) else {
         return fail(alloc::format!(
             "VecBinop: no instruction for {op:?} on {lane:?}"
         ));
@@ -1086,7 +1092,7 @@ pub(super) fn post_indexed(func: &FunctionSsa, alloc: &Allocation) -> Vec<Option
 /// The post-indexed access [`post_indexed`] paired with the step ahead of
 /// it; `None` for any other instruction.
 pub(super) fn emit_post_indexed(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     v: super::super::ir::ValueId,
     paired: &[Option<PostIndex>],
     fcx: &FnCtx,
@@ -1195,7 +1201,7 @@ pub(super) fn flag_steps(func: &FunctionSsa, alloc: &Allocation) -> Vec<Option<F
 /// The step or comparison [`flag_steps`] marked; `None` for any other
 /// instruction.
 pub(super) fn emit_flag_step(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     v: super::super::ir::ValueId,
     steps: &[Option<FlagStep>],
     fcx: &FnCtx,
@@ -1235,9 +1241,16 @@ pub(super) fn emit_flag_step(
 /// flags: the comparison's answer, or the step's own zero test.
 pub(super) fn flag_step_cond(
     steps: &[Option<FlagStep>],
+    block: &super::super::ir::Block,
     cond: super::super::ir::ValueId,
     negate: bool,
 ) -> Option<Cond> {
+    // [`flag_steps`] vouches for the flags at the branch ending the step's
+    // own block only; a branch of another block reading the same value
+    // follows code that may have set them.
+    if !block.inst_range.contains(&cond) {
+        return None;
+    }
     let cc = match steps.get(cond as usize).copied().flatten()? {
         FlagStep::Answered(cc) => cc,
         FlagStep::Sets { .. } => Cond::Ne,
@@ -1517,7 +1530,7 @@ fn emit_vec_const(
     (imm, kind, bytes): (i64, StoreKind, u8),
     (dst, frame, scratch): (Place, Frame, &ScratchPool),
 ) -> Emit {
-    use super::table::{self, Opnd};
+    use super::table::Opnd;
     if bytes != 16 && bytes != 8 {
         return fail("VecConst: only 8- and 16-byte vectors");
     }
@@ -1541,25 +1554,22 @@ fn emit_vec_const(
         size: size as u8,
         q,
     };
-    let modified = |m: &str, v: u64, shift: u32| {
-        (v >> 8 == 0)
-            .then(|| {
-                table::encode(
-                    m,
-                    &[
-                        vreg(esize.trailing_zeros()),
-                        Opnd::Imm(v as i64),
-                        Opnd::Lsl(shift),
-                    ],
-                )
-            })
-            .and_then(Result::ok)
+    // A form the catalog encodes: its mnemonic and operands.
+    let encodes =
+        |m: &'static str, ops: Vec<Opnd>| super::table::encode(m, &ops).is_ok().then_some((m, ops));
+    let modified = |m: &'static str, v: u64, shift: u32| {
+        let ops = alloc::vec![
+            vreg(esize.trailing_zeros()),
+            Opnd::Imm(v as i64),
+            Opnd::Lsl(shift)
+        ];
+        (v >> 8 == 0).then(|| encodes(m, ops)).flatten()
     };
     let bytewise = pattern.to_le_bytes().iter().all(|&b| b == 0 || b == 0xFF);
     let word = if bytewise {
-        table::encode("movi", &[vreg(3), Opnd::Imm(pattern as i64)]).ok()
+        encodes("movi", alloc::vec![vreg(3), Opnd::Imm(pattern as i64)])
     } else if esize == 1 {
-        table::encode("movi", &[vreg(0), Opnd::Imm(lane as i64)]).ok()
+        encodes("movi", alloc::vec![vreg(0), Opnd::Imm(lane as i64)])
     } else if esize <= 4 {
         (0..bits).step_by(8).find_map(|s| {
             let (v, n) = (lane >> s, !lane & mask);
@@ -1576,7 +1586,11 @@ fn emit_vec_const(
         None
     };
     match word {
-        Some(w) => emit(code, w),
+        Some((m, ops)) => {
+            if let Err(e) = super::encode::emit_table(code, m, &ops) {
+                return fail(e);
+            }
+        }
         None => {
             super::encode::load_imm64(code, scratch.primary, lane);
             emit(
@@ -1788,7 +1802,7 @@ fn emit_fp_cast(
 /// Sequentialize register-to-register copies `(src, tgt)`: leaves first,
 /// cycles broken through `scratch`, which lies outside the allocator's
 /// bank.
-pub(super) fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch: Reg) {
+pub(super) fn schedule_int_reg_moves(code: &mut CodeBuf, moves: &mut Vec<(u8, u8)>, scratch: Reg) {
     super::ssa::emit_common::schedule_reg_moves_via_scratch(
         code,
         moves,
@@ -1798,7 +1812,7 @@ pub(super) fn schedule_int_reg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8
 }
 
 /// `schedule_int_reg_moves` over d-registers with `fmov d, d`.
-pub(super) fn schedule_dreg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>, scratch_d: u8) {
+pub(super) fn schedule_dreg_moves(code: &mut CodeBuf, moves: &mut Vec<(u8, u8)>, scratch_d: u8) {
     super::ssa::emit_common::schedule_reg_moves_via_scratch(
         code,
         moves,
@@ -1817,7 +1831,7 @@ pub(super) fn schedule_dreg_moves(code: &mut Vec<u8>, moves: &mut Vec<(u8, u8)>,
 /// A constant rebuilt from a literal adds its load to `fp_literals`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_phi_predecessor_moves(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     self_block: super::super::ir::BlockId,
     func: &super::super::ir::FunctionSsa,
     alloc: &Allocation,
@@ -1846,7 +1860,7 @@ pub(super) fn emit_phi_predecessor_moves(
 /// two instructions, else an `adrp` + `ldr` of a read-only literal, whose
 /// `(site, bits, single)` joins `literals`. `stage` is free.
 pub(super) fn emit_fp_imm(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     d: u8,
     bits: u64,
     single: bool,
@@ -1871,7 +1885,7 @@ pub(super) fn emit_fp_imm(
 /// new leaf. `hold` and `stage` lie outside the allocator's bank.
 /// `Err` for an FP or `None` location.
 pub(super) fn schedule_place_moves(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     moves: &mut Vec<PlaceMove>,
     frame: Frame,
     hold: Reg,
@@ -1894,17 +1908,17 @@ use super::ssa::sve_alloc::PredPlace as SvePred;
 impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::Aarch64Backend {
     const ARCH: &'static str = "aarch64";
     type Frame = Frame;
-    fn fp_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
+    fn fp_reg_mov(&self, code: &mut CodeBuf, dst: u8, src: u8) {
         emit(code, super::encode::enc_fmov_d_d(dst, src));
     }
-    fn fp_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
+    fn fp_spill_store(&self, code: &mut CodeBuf, frame: Frame, slot: u32, src: u8) {
         // FP phi moves hold no integer value, so x16 is free for the base.
         emit_spill_str_d_auto(code, frame, src, spill_off(frame, slot));
     }
-    fn fp_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
+    fn fp_spill_load(&self, code: &mut CodeBuf, frame: Frame, slot: u32, dst: u8) {
         emit_spill_ldr_d_auto(code, frame, dst, spill_off(frame, slot));
     }
-    fn wide_reg_mov(&self, code: &mut Vec<u8>, w: SveWidth, dst: u8, src: u8) {
+    fn wide_reg_mov(&self, code: &mut CodeBuf, w: SveWidth, dst: u8, src: u8) {
         assert_eq!(
             w,
             SveWidth::Scalable,
@@ -1912,7 +1926,7 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::Aarch64Ba
         );
         emit(code, super::sve::enc_mov_z(dst, src));
     }
-    fn wide_spill_store(&self, code: &mut Vec<u8>, frame: Frame, w: SveWidth, slot: u32, src: u8) {
+    fn wide_spill_store(&self, code: &mut CodeBuf, frame: Frame, w: SveWidth, slot: u32, src: u8) {
         assert_eq!(
             w,
             SveWidth::Scalable,
@@ -1920,7 +1934,7 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::Aarch64Ba
         );
         super::sve::z_slot(code, frame, false, src, slot, Reg(16));
     }
-    fn wide_spill_load(&self, code: &mut Vec<u8>, frame: Frame, w: SveWidth, slot: u32, dst: u8) {
+    fn wide_spill_load(&self, code: &mut CodeBuf, frame: Frame, w: SveWidth, slot: u32, dst: u8) {
         assert_eq!(
             w,
             SveWidth::Scalable,
@@ -1930,40 +1944,40 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::Aarch64Ba
     }
     fn pred_place_moves(
         &self,
-        code: &mut Vec<u8>,
+        code: &mut CodeBuf,
         frame: Frame,
         moves: &mut Vec<(SvePred, SvePred)>,
     ) -> Emit {
         super::sve::schedule_pred_moves(code, frame, moves);
         Ok(())
     }
-    fn v128_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
+    fn v128_reg_mov(&self, code: &mut CodeBuf, dst: u8, src: u8) {
         emit(code, super::encode::enc_mov_v16b(dst, src));
     }
-    fn v128_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
+    fn v128_spill_store(&self, code: &mut CodeBuf, frame: Frame, slot: u32, src: u8) {
         emit_spill_str_q(code, frame, src, v128_spill_off(frame, slot), Reg(16));
     }
-    fn v128_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
+    fn v128_spill_load(&self, code: &mut CodeBuf, frame: Frame, slot: u32, dst: u8) {
         emit_spill_ldr_q(code, frame, dst, v128_spill_off(frame, slot), Reg(16));
     }
-    fn int_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
+    fn int_reg_mov(&self, code: &mut CodeBuf, dst: u8, src: u8) {
         emit_mov_reg(code, Reg(dst), Reg(src));
     }
-    fn int_reg_ext(&self, code: &mut Vec<u8>, dst: u8, src: u8, kind: LoadKind) {
+    fn int_reg_ext(&self, code: &mut CodeBuf, dst: u8, src: u8, kind: LoadKind) {
         emit_sign_extend(code, Reg(dst), Reg(src), kind);
     }
-    fn int_reg_xchg(&self, _code: &mut Vec<u8>, _a: u8, _b: u8) -> bool {
+    fn int_reg_xchg(&self, _code: &mut CodeBuf, _a: u8, _b: u8) -> bool {
         false
     }
-    fn int_spill_store(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8, base: u8) {
+    fn int_spill_store(&self, code: &mut CodeBuf, frame: Frame, slot: u32, src: u8, base: u8) {
         emit_spill_str_x(code, frame, Reg(src), spill_off(frame, slot), Reg(base));
     }
-    fn int_spill_load(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, dst: u8) {
+    fn int_spill_load(&self, code: &mut CodeBuf, frame: Frame, slot: u32, dst: u8) {
         emit_spill_ldr_x(code, frame, Reg(dst), spill_off(frame, slot));
     }
     fn int_spill_store_staged(
         &self,
-        code: &mut Vec<u8>,
+        code: &mut CodeBuf,
         frame: Frame,
         slot: u32,
         stage: u8,
@@ -1971,20 +1985,20 @@ impl super::ssa::emit_common::EmitBackend for super::ssa::emit_common::Aarch64Ba
     ) {
         emit_spill_str_x_borrow(code, frame, Reg(stage), spill_off(frame, slot), Reg(hold));
     }
-    fn int_spill_store_auto(&self, code: &mut Vec<u8>, frame: Frame, slot: u32, src: u8) {
+    fn int_spill_store_auto(&self, code: &mut CodeBuf, frame: Frame, slot: u32, src: u8) {
         emit_spill_str_x_auto(code, frame, Reg(src), spill_off(frame, slot));
     }
-    fn int_reg_load_imm(&self, code: &mut Vec<u8>, dst: u8, bits: i64) {
+    fn int_reg_load_imm(&self, code: &mut CodeBuf, dst: u8, bits: i64) {
         super::encode::load_imm64(code, Reg(dst), bits as u64);
     }
-    fn fp_reg_from_int_reg(&self, code: &mut Vec<u8>, dst: u8, src: u8, is_f64: bool) {
+    fn fp_reg_from_int_reg(&self, code: &mut CodeBuf, dst: u8, src: u8, is_f64: bool) {
         if is_f64 {
             emit(code, super::encode::enc_fmov_x_to_d(dst, Reg(src)));
         } else {
             emit(code, super::encode::enc_fmov_w_to_s(dst, Reg(src)));
         }
     }
-    fn fp_reg_load_const(&self, code: &mut Vec<u8>, dst: u8, stage: u8, bits: i64, is_f64: bool) {
+    fn fp_reg_load_const(&self, code: &mut CodeBuf, dst: u8, stage: u8, bits: i64, is_f64: bool) {
         let mut literals = self.fp_literals.borrow_mut();
         emit_fp_imm(code, dst, bits as u64, !is_f64, Reg(stage), &mut literals);
     }

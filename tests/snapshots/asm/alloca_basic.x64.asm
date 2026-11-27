@@ -3,7 +3,7 @@ alloca_basic.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -86,6 +86,7 @@ Disassembly of section .text:
                	subq	$0x3, %rcx
                	movl	%ecx, (%rsi,%rax,4)
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0xa, %eax
                	jl	<addr>
                	xorl	%ecx, %ecx
@@ -178,6 +179,7 @@ Disassembly of section .text:
                	movq	%rax, (%rdx)
                	addq	%rax, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	%edi, %eax
                	jl	<addr>
                	movq	%rcx, %rax
@@ -189,7 +191,6 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0x18, %rsp
                	pushq	%rbx
-               	movl	$0x33, %esi
                	movl	$0x40, %edx
                	movq	%rdx, %r11
                	addq	$0xf, %r11
@@ -205,6 +206,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%rbx, %rsp
                	movq	%rbx, %rdi
+               	movl	$0x33, %esi
                	callq	<addr>
                	movl	$0x14, %edi
                	callq	<addr>
@@ -234,8 +236,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
@@ -243,7 +244,7 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0xa, %edi
                	callq	<addr>
@@ -256,7 +257,7 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	callq	<addr>
                	testl	%eax, %eax
@@ -265,7 +266,7 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x32, %edi
                	callq	<addr>
@@ -278,7 +279,7 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x4, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x33, %edi
                	callq	<addr>
@@ -288,8 +289,8 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x5, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

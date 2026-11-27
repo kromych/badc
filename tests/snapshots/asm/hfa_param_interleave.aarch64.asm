@@ -3,7 +3,7 @@ hfa_param_interleave.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -41,41 +41,41 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40
-               	sub	x7, x29, #0x28
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x16, [x0]
-               	str	x16, [x7]
-               	sub	x1, x29, #0x20
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	sub	x2, x29, #0x18
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x16, [x0]
-               	str	x16, [x2]
-               	sub	x3, x29, #0x8
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x16, [x0]
-               	str	x16, [x3]
+               	sub	x0, x29, #0x28
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x16, [x1]
+               	str	x16, [x0]
+               	sub	x0, x29, #0x20
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x16, [x1]
+               	str	x16, [x0]
+               	sub	x0, x29, #0x18
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x16, [x1]
+               	str	x16, [x0]
                	sub	x0, x29, #0x10
-               	adrp	x4, <page>
-               	add	x4, x4, <lo12>
-               	ldr	w16, [x4]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x16, [x1]
+               	str	x16, [x0]
+               	sub	x0, x29, #0x8
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	w16, [x1]
                	str	w16, [x0]
-               	fmov	s0, #9.50000000
-               	str	d0, [sp]
-               	ldr	s0, [x7]
-               	ldr	s1, [x7, #0x4]
-               	ldr	s2, [x1]
-               	ldr	s3, [x1, #0x4]
-               	ldr	s4, [x2]
-               	ldr	s5, [x2, #0x4]
-               	ldr	s6, [x3]
-               	ldr	s7, [x3, #0x4]
+               	fmov	s19, #9.50000000
+               	ldur	s0, [x29, #-0x28]
+               	ldur	s1, [x29, #-0x24]
+               	ldur	s2, [x29, #-0x20]
+               	ldur	s3, [x29, #-0x1c]
+               	ldur	s4, [x29, #-0x18]
+               	ldur	s5, [x29, #-0x14]
+               	ldur	s6, [x29, #-0x10]
+               	ldur	s7, [x29, #-0xc]
+               	str	d19, [sp]
                	ldr	w0, [x0]
                	bl	<addr>
                	mov	x16, #0x425e0000        // =1113456640
@@ -86,19 +86,17 @@ Disassembly of section .text:
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x7, x29, #0x8
-               	str	xzr, [x7]
-               	fmov	s0, #0.25000000
-               	sub	x0, x29, #0x10
-               	str	d0, [sp]
-               	ldr	s0, [x7]
-               	ldr	s1, [x7, #0x4]
-               	ldr	s2, [x7]
-               	ldr	s3, [x7, #0x4]
-               	ldr	s4, [x7]
-               	ldr	s5, [x7, #0x4]
-               	ldr	s6, [x7]
-               	ldr	s7, [x7, #0x4]
+               	movi	d0, #0000000000000000
+               	fmov	s1, #0.25000000
+               	sub	x0, x29, #0x8
+               	str	d1, [sp]
+               	fmov	d1, d0
+               	fmov	d7, d0
+               	fmov	d6, d0
+               	fmov	d5, d0
+               	fmov	d4, d0
+               	fmov	d3, d0
+               	fmov	d2, d0
                	ldr	w0, [x0]
                	bl	<addr>
                	mov	x16, #0x41240000        // =1092878336

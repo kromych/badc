@@ -3,7 +3,7 @@ narrow_phi_reads.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -19,10 +19,9 @@ Disassembly of section .text:
                	ret
 
 <join_masked>:
-               	mov	x1, #0x0                // =0
-               	and	x2, x0, #0xff
+               	and	x1, x0, #0xff
                	cmp	w0, #0x80
-               	csel	x0, x2, x1, lo
+               	csel	x0, x1, xzr, lo
                	cmp	w0, #0x2a
                	cset	x0, ne
                	ret
@@ -82,26 +81,24 @@ Disassembly of section .text:
                	ret
 
 <join_u16>:
-               	mov	x1, #0x7                // =7
-               	and	x2, x0, #0xffff
+               	and	x1, x0, #0xffff
                	cmp	w0, #0x3e8
-               	csel	x0, x2, x1, gt
+               	mov	x17, #0x7               // =7
+               	csel	x0, x1, x17, gt
                	add	x0, x0, #0x1
                	ret
 
 <join_unmasked>:
                	sxtw	x1, w1
-               	mov	x2, #0x0                // =0
                	cmp	w0, #0x0
-               	csel	x0, x1, x2, gt
+               	csel	x0, x1, xzr, gt
                	and	x0, x0, #0xff
                	ret
 
 <join_byte_as_signed>:
-               	mov	x1, #0x0                // =0
-               	and	x2, x0, #0xff
+               	and	x1, x0, #0xff
                	cmp	w0, #0x0
-               	csel	x0, x2, x1, gt
+               	csel	x0, x1, xzr, gt
                	sxtb	x0, w0
                	ret
 

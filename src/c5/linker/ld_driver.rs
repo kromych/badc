@@ -89,7 +89,7 @@ struct LdArgs {
     print_version: bool,
     // Final-link options; ignored under `-r`, which has no layout.
     /// `-shared` / `-pie`: ET_DYN output. The last of those two and
-    /// `-no-pie` wins, as under GNU ld.
+    /// `-no-pie` wins.
     shared: bool,
     /// `-shared` alone: a shared object rather than a
     /// position-independent executable.
@@ -129,7 +129,7 @@ struct LdArgs {
     /// selects the older tag.
     new_dtags: bool,
     /// `-Bstatic` / `-Bdynamic`: whether `-l` may resolve to a shared
-    /// library. GNU ld starts dynamic and `-static` turns it off.
+    /// library. The search starts dynamic and `-static` turns it off.
     search_shared: bool,
     /// `--fix-cortex-a53-843419`: erratum workaround on final links.
     fix_cortex_a53_843419: bool,
@@ -144,7 +144,7 @@ fn ld_err(msg: impl core::fmt::Display) -> i32 {
     1
 }
 
-/// The `strerror` text GNU ld quotes for `e`: the C library's wording for
+/// The `strerror` text a diagnostic quotes for `e`: the C library's wording for
 /// a missing or forbidden file on every host, otherwise the system's
 /// text without std's ` (os error N)`.
 pub fn os_error_text(e: &std::io::Error) -> String {
@@ -160,7 +160,7 @@ pub fn os_error_text(e: &std::io::Error) -> String {
     }
 }
 
-/// GNU ld's text for a `-T` script it cannot open.
+/// The text for a `-T` script the link cannot open.
 pub fn script_unreadable(path: &Path, e: &std::io::Error) -> String {
     format!(
         "cannot open linker script file {}: {}",
@@ -238,7 +238,7 @@ fn split_response_on(text: &str, path_sep_backslash: bool) -> Vec<String> {
 }
 
 /// Replace each `@file` with the arguments the file holds, recursively.
-/// GNU ld leaves a `@file` it cannot read literal, so an input whose
+/// A `@file` that cannot be read stays literal, so an input whose
 /// name starts with `@` still reaches the link. `seen` breaks a cycle
 /// between files that name each other.
 fn expand_response_files(args: &[String]) -> Vec<String> {
@@ -307,13 +307,19 @@ fn print_ld_version() {
         .split_once('\n')
         .map(|(_, tail)| tail)
         .unwrap_or("");
-    println!(
-        "GNU ld (badc {}) {LD_COMPAT_VERSION}",
-        env!("CARGO_PKG_VERSION")
-    );
+    println!("{}", ld_identity());
     if !git_tail.is_empty() {
         println!("{git_tail}");
     }
+}
+
+/// The linker's `-v` line, also the answer to the compiler driver's
+/// `-Wl,-v`.
+pub fn ld_identity() -> alloc::string::String {
+    alloc::format!(
+        "GNU ld (badc {}) {LD_COMPAT_VERSION}",
+        env!("CARGO_PKG_VERSION")
+    )
 }
 
 impl LdArgs {
@@ -574,9 +580,9 @@ impl LdArgs {
     }
 
     /// One `-z` keyword. A final link takes it as the engine answers it
-    /// ([`LdsOptions::take_z_keywords`]); a relocatable one, as GNU ld
-    /// does, only the stack note and the duplicate-definition rule.
-    /// Returns the exit code of a keyword GNU ld does not have.
+    /// ([`LdsOptions::take_z_keywords`]); a relocatable one only the stack
+    /// note and the duplicate-definition rule.
+    /// Returns the exit code of an unknown keyword.
     fn apply_z_keyword(&mut self, kw: &str) -> Option<i32> {
         match parse_z_keyword(kw) {
             Ok(kw) => self.z.push(kw),
@@ -586,8 +592,8 @@ impl LdArgs {
     }
 }
 
-/// `-r`: a relocatable link. GNU ld ignores --emit-relocs under -r,
-/// since every relocation survives a relocatable link anyway.
+/// `-r`: a relocatable link. --emit-relocs is ignored under -r, since
+/// every relocation survives a relocatable link anyway.
 fn run_relocatable_link(a: &LdArgs, machine: Option<u16>) -> i32 {
     let mut script = match &a.script {
         None => None,
@@ -709,18 +715,10 @@ impl InputObject for LdsObject {
         &self.source
     }
     fn defined(&self) -> Vec<&str> {
-        self.symbols
-            .iter()
-            .filter(|s| (s.info >> 4) != 0 && s.shndx != 0 && !s.name.is_empty())
-            .map(|s| s.name.as_str())
-            .collect()
+        self.defined_globals().collect()
     }
     fn strong_undef(&self) -> Vec<&str> {
-        self.symbols
-            .iter()
-            .filter(|s| (s.info >> 4) == 1 && s.shndx == 0 && !s.name.is_empty())
-            .map(|s| s.name.as_str())
-            .collect()
+        self.strong_undefs().collect()
     }
 }
 
@@ -807,13 +805,13 @@ fn collect_inputs<T: InputObject>(
         let members = ar.members.into_iter().map(|m| (m.name, m.bytes)).collect();
         Ok((members, ar.symbols))
     };
-    // GNU ld takes the first directory holding either spelling, and
-    // prefers the shared one there unless the search is static. A file
-    // built for another machine than `want` is skipped, as bfd skips it.
+    // The first directory holding either spelling wins, and the shared
+    // one there unless the search is static. A file built for another
+    // machine than `want` is skipped.
     let find_lib = |name: &str, shared: bool, want: Option<u16>| -> Option<PathBuf> {
         for dir in &a.lib_paths {
-            // bfd joins the directory and the file name with `/` on every
-            // host, and that path is what its diagnostics print.
+            // The directory and the file name join with `/` on every
+            // host, and that path is what diagnostics print.
             let d = dir.to_string_lossy();
             let sep = if d.ends_with(['/', '\\']) { "" } else { "/" };
             let so = PathBuf::from(format!("{d}{sep}lib{name}.so"));
@@ -843,7 +841,7 @@ fn collect_inputs<T: InputObject>(
         }
         None
     };
-    // GNU ld reports every input it cannot find before it stops.
+    // Every input that cannot be found is reported before the link stops.
     let mut missing: Vec<String> = Vec::new();
     let mut queue: Vec<InputItem> = a.inputs.clone();
     queue.reverse();
@@ -1014,7 +1012,7 @@ fn collect_inputs<T: InputObject>(
             }
         }
     }
-    // bfd refuses a library built for another machine than the link's.
+    // A library built for another machine than the link's is refused.
     if let Some(m) = machine.or_else(|| objs.first().map(|o| o.machine())) {
         for (lib, path) in libs.iter().zip(&lib_paths) {
             if lib.lib.machine != m {
@@ -1125,8 +1123,7 @@ fn strip_comments(text: &str) -> String {
 
 /// Whether the file at `path` can enter a link for `machine`: an ELF image
 /// of that machine, an archive whose first ELF member is one, or anything
-/// else, a linker script among it. bfd's search judges an archive by the
-/// same member.
+/// else, a linker script among it.
 fn built_for(path: &Path, machine: u16) -> bool {
     let elf_machine = |b: &[u8]| {
         (b.len() >= 20 && b.starts_with(b"\x7fELF")).then(|| u16::from_le_bytes([b[18], b[19]]))
@@ -1154,7 +1151,7 @@ fn is_shared_object(bytes: &[u8]) -> bool {
 
 /// Final (non-`-r`) link: lay the inputs out under the script and
 /// write the image. With no `-T`/`--script` the built-in default
-/// script runs, as GNU ld's does.
+/// script runs.
 fn run_final_link(a: &LdArgs, machine: Option<u16>) -> i32 {
     let text = match &a.script {
         Some(spath) => match std::fs::read_to_string(spath) {
@@ -1399,7 +1396,7 @@ mod tests {
     }
 
     /// `-shared`, `-pie` and `-no-pie` each name the output kind, and
-    /// the last one given wins, as under GNU ld.
+    /// the last one given wins.
     #[test]
     fn the_last_output_kind_flag_wins() {
         let kind = |args: &[&str]| {
@@ -1492,8 +1489,8 @@ mod tests {
             expand_response_files(&args),
             vec!["-r", "a.o", "c.o", "d.o", "b.o", "-o", "out.o"]
         );
-        // GNU ld leaves an unreadable `@file` literal, so an input
-        // whose name starts with `@` still reaches the link.
+        // An unreadable `@file` stays literal, so an input whose name
+        // starts with `@` still reaches the link.
         let missing = alloc::format!("@{}", dir.join("absent.rsp").display());
         assert_eq!(
             expand_response_files(std::slice::from_ref(&missing)),

@@ -3,7 +3,7 @@ snprintf_truncation_c99.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -62,12 +62,12 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
+               	mov	x0, #0x4141             // =16705
+               	movk	x0, #0x4141, lsl #16
+               	movk	x0, #0x4141, lsl #32
+               	movk	x0, #0x4141, lsl #48
+               	stur	x0, [x29, #-0x8]
                	sub	x0, x29, #0x8
-               	mov	x1, #0x4141             // =16705
-               	movk	x1, #0x4141, lsl #16
-               	movk	x1, #0x4141, lsl #32
-               	movk	x1, #0x4141, lsl #48
-               	stur	x1, [x29, #-0x8]
                	mov	x1, #0x4                // =4
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
@@ -92,11 +92,11 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
+               	mov	x1, #0x0                // =0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	mov	x1, x0
                	bl	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0x5
@@ -105,12 +105,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, #0x4141             // =16705
+               	movk	x0, #0x4141, lsl #16
+               	movk	x0, #0x4141, lsl #32
+               	movk	x0, #0x4141, lsl #48
+               	stur	x0, [x29, #-0x8]
                	sub	x0, x29, #0x8
-               	mov	x1, #0x4141             // =16705
-               	movk	x1, #0x4141, lsl #16
-               	movk	x1, #0x4141, lsl #32
-               	movk	x1, #0x4141, lsl #48
-               	stur	x1, [x29, #-0x8]
                	mov	x1, #0x4                // =4
                	adrp	x2, <page>
                	add	x2, x2, <lo12>

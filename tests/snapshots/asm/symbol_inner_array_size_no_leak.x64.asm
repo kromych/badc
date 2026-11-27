@@ -3,7 +3,7 @@ symbol_inner_array_size_no_leak.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,29 +26,27 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	xorl	%eax, %eax
                	leaq	(%rax,%rax,2), %rdx
-               	movw	%dx, -0x10(%rbp,%rax,2)
+               	movw	%dx, (%rsp,%rax,2)
                	incq	%rax
                	cmpl	$0x8, %eax
                	jl	<addr>
-               	movswq	-0x2(%rbp), %rax
+               	movswq	0xe(%rsp), %rax
                	cmpl	$0x15, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	cmpw	$0x0, -0x10(%rbp)
+               	cmpw	$0x0, (%rsp)
                	jne	<addr>
-               	movswq	-0x2(%rbp), %rax
+               	movswq	0xe(%rsp), %rax
                	cmpl	$0x15, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

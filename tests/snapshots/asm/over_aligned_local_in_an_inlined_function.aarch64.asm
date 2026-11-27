@@ -3,7 +3,7 @@ over_aligned_local_in_an_inlined_function.aarch64:	file format elf64-littleaarch
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -24,49 +24,48 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
-               	mov	x1, sp
-               	mov	x0, #0x0                // =0
-               	mov	x2, #0x100000000        // =4294967296
-               	str	x2, [sp]
+               	mov	x0, sp
+               	mov	x1, #0x100000000        // =4294967296
+               	str	x1, [sp]
+               	mov	x1, #0x2                // =2
                	mov	x2, #0x2                // =2
-               	mov	x3, #0x2                // =2
-               	movk	x3, #0x3, lsl #32
-               	str	x3, [sp, #0x8]
-               	mov	x3, #0x4                // =4
-               	movk	x3, #0x5, lsl #32
-               	str	x3, [sp, #0x10]
-               	mov	x3, #0x6                // =6
-               	movk	x3, #0x7, lsl #32
-               	str	x3, [sp, #0x18]
-               	mov	x3, #0x3e8              // =1000
-               	tst	x1, #0x1f
-               	csel	x1, x3, x0, ne
-               	ldrsw	x3, [sp, #0x4]
-               	add	x1, x1, x3
-               	ldrsw	x3, [sp, #0x8]
-               	add	x1, x1, x3
-               	ldrsw	x3, [sp, #0xc]
-               	add	x1, x1, x3
-               	ldrsw	x3, [sp, #0x10]
-               	add	x1, x1, x3
-               	ldrsw	x3, [sp, #0x14]
-               	add	x1, x1, x3
-               	ldrsw	x3, [sp, #0x18]
-               	add	x1, x1, x3
-               	ldrsw	x3, [sp, #0x1c]
-               	add	x1, x1, x3
-               	mov	x3, sp
-               	mov	x4, #0x100              // =256
-               	strh	w4, [sp]
-               	strb	w2, [sp, #0x2]
-               	mov	x2, #0x3e8              // =1000
-               	tst	x3, #0x3f
-               	csel	x0, x2, x0, ne
+               	movk	x2, #0x3, lsl #32
+               	str	x2, [sp, #0x8]
+               	mov	x2, #0x4                // =4
+               	movk	x2, #0x5, lsl #32
+               	str	x2, [sp, #0x10]
+               	mov	x2, #0x6                // =6
+               	movk	x2, #0x7, lsl #32
+               	str	x2, [sp, #0x18]
+               	tst	x0, #0x1f
+               	mov	x16, #0x3e8             // =1000
+               	csel	x0, x16, xzr, ne
+               	ldrsw	x2, [sp, #0x4]
+               	add	x0, x0, x2
+               	ldrsw	x2, [sp, #0x8]
+               	add	x0, x0, x2
+               	ldrsw	x2, [sp, #0xc]
+               	add	x0, x0, x2
+               	ldrsw	x2, [sp, #0x10]
+               	add	x0, x0, x2
+               	ldrsw	x2, [sp, #0x14]
+               	add	x0, x0, x2
+               	ldrsw	x2, [sp, #0x18]
+               	add	x0, x0, x2
+               	ldrsw	x2, [sp, #0x1c]
+               	add	x0, x0, x2
+               	mov	x2, sp
+               	mov	x3, #0x100              // =256
+               	strh	w3, [sp]
+               	strb	w1, [sp, #0x2]
+               	tst	x2, #0x3f
+               	mov	x16, #0x3e8             // =1000
+               	csel	x1, x16, xzr, ne
                	ldrb	w2, [sp, #0x1]
-               	add	x0, x0, x2
+               	add	x1, x1, x2
                	ldrb	w2, [sp, #0x2]
-               	add	x0, x0, x2
-               	add	x0, x1, x0
+               	add	x1, x1, x2
+               	add	x0, x0, x1
                	mov	x1, sp
                	mov	x2, #0x1                // =1
                	movk	x2, #0x2, lsl #32
@@ -81,10 +80,9 @@ Disassembly of section .text:
                	mov	x2, #0x7                // =7
                	movk	x2, #0x8, lsl #32
                	str	x2, [sp, #0x18]
-               	mov	x2, #0x3e8              // =1000
-               	mov	x4, #0x0                // =0
                	tst	x1, #0x1f
-               	csel	x1, x2, x4, ne
+               	mov	x16, #0x3e8             // =1000
+               	csel	x1, x16, xzr, ne
                	ldrsw	x2, [sp]
                	add	x1, x1, x2
                	ldrsw	x2, [sp, #0x4]
@@ -105,10 +103,9 @@ Disassembly of section .text:
                	mov	x4, #0x101              // =257
                	strh	w4, [sp]
                	strb	w3, [sp, #0x2]
-               	mov	x3, #0x3e8              // =1000
-               	mov	x4, #0x0                // =0
                	tst	x2, #0x3f
-               	csel	x2, x3, x4, ne
+               	mov	x16, #0x3e8             // =1000
+               	csel	x2, x16, xzr, ne
                	ldrb	w3, [sp]
                	add	x2, x2, x3
                	ldrb	w3, [sp, #0x1]
@@ -130,10 +127,9 @@ Disassembly of section .text:
                	mov	x2, #0x8                // =8
                	movk	x2, #0x9, lsl #32
                	str	x2, [sp, #0x18]
-               	mov	x2, #0x3e8              // =1000
-               	mov	x3, #0x0                // =0
                	tst	x1, #0x1f
-               	csel	x1, x2, x3, ne
+               	mov	x16, #0x3e8             // =1000
+               	csel	x1, x16, xzr, ne
                	ldrsw	x2, [sp]
                	add	x1, x1, x2
                	ldrsw	x2, [sp, #0x4]
@@ -155,10 +151,9 @@ Disassembly of section .text:
                	mov	x4, #0x102              // =258
                	strh	w4, [sp]
                	strb	w3, [sp, #0x2]
-               	mov	x3, #0x3e8              // =1000
-               	mov	x4, #0x0                // =0
                	tst	x2, #0x3f
-               	csel	x2, x3, x4, ne
+               	mov	x16, #0x3e8             // =1000
+               	csel	x2, x16, xzr, ne
                	ldrb	w3, [sp]
                	add	x2, x2, x3
                	ldrb	w3, [sp, #0x1]

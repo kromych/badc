@@ -3,7 +3,7 @@ thread_local_tentative_completed_later.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -31,8 +31,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movq	%fs:0x0, %rax
                	addq	$-0x30, %rax
                	cmpq	$0x0, (%rax)
@@ -46,13 +45,13 @@ Disassembly of section .text:
                	cmpq	$0x0, 0x8(%rcx)
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movq	$0x1, (%rax)
                	movq	$0x2, 0x8(%rax)
                	movq	$0x3, 0x10(%rax)
                	movq	%fs:0x0, %rcx
-               	addq	$-0x40, %rcx
+               	addq	$-0x3c, %rcx
                	movl	$0x0, (%rcx)
                	movq	0x8(%rax), %rcx
                	cmpq	$0x2, %rcx
@@ -66,25 +65,25 @@ Disassembly of section .text:
                	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movq	%fs:0x0, %rax
                	addq	$-0x10, %rax
                	movq	$0x4, 0x8(%rax)
+               	movq	%fs:0x0, %rcx
+               	addq	$-0x38, %rcx
                	movq	%fs:0x0, %rdx
-               	addq	$-0x3c, %rdx
-               	movq	%fs:0x0, %rsi
-               	addq	$-0x3a, %rsi
-               	movb	$0x5, (%rsi)
+               	addq	$-0x36, %rdx
                	movb	$0x5, (%rdx)
+               	movb	$0x5, (%rcx)
                	testb	$0xf, %al
                	jne	<addr>
                	movq	0x8(%rax), %rax
                	cmpq	$0x4, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

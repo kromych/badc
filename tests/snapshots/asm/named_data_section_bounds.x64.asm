@@ -3,7 +3,7 @@ named_data_section_bounds.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -28,19 +28,21 @@ Disassembly of section .text:
 <main>:
                	xorl	%ecx, %ecx
                	leaq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	movq	%rcx, %rdx
                	movq	%rcx, %rsi
-               	jmp	<addr>
-               	movl	0x8(%rax), %edi
-               	movq	(%rax), %r8
-               	movl	$0x3e8, %r9d            # imm = 0x3E8
-               	cmpb	$0x0, 0x1(%r8)
-               	cmoveq	%rcx, %r9
-               	addq	%r9, %rdi
-               	addq	%rdi, %rsi
+               	cmpq	%rdi, %rax
+               	jae	<addr>
+               	movl	0x8(%rax), %r8d
+               	movq	(%rax), %r9
+               	movl	$0x3e8, %r10d           # imm = 0x3E8
+               	cmpb	$0x0, 0x1(%r9)
+               	cmoveq	%rcx, %r10
+               	addq	%r10, %r8
+               	addq	%r8, %rsi
                	addq	$0x10, %rax
                	incq	%rdx
-               	leaq	<rip>, %rdi # <addr>
+               	nop
                	cmpq	%rdi, %rax
                	jb	<addr>
                	cmpl	$0x3, %edx
@@ -49,10 +51,10 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
                	leaq	<rip>, %rcx # <addr>
-               	movq	%rax, %rdx
-               	subq	%rcx, %rdx
+               	leaq	<rip>, %rax # <addr>
+               	movq	%rcx, %rdx
+               	subq	%rax, %rdx
                	movq	%rdx, %rsi
                	sarq	$0x3f, %rsi
                	shrq	$0x3e, %rsi
@@ -64,13 +66,13 @@ Disassembly of section .text:
                	retq
                	leaq	<rip>, %rdx # <addr>
                	leaq	<rip>, %rsi # <addr>
-               	cmpq	%rcx, %rdx
-               	jb	<addr>
                	cmpq	%rax, %rdx
-               	jae	<addr>
-               	cmpq	%rcx, %rsi
                	jb	<addr>
+               	cmpq	%rcx, %rdx
+               	jae	<addr>
                	cmpq	%rax, %rsi
+               	jb	<addr>
+               	cmpq	%rcx, %rsi
                	jae	<addr>
                	cmpl	$0x0, <rip> # <addr>
                	jne	<addr>

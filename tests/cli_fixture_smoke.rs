@@ -39,9 +39,7 @@ const COMPILE_SKIPLIST: &[&str] = &[
     "inline_asm_x64_riprel_param.c",
     // x86-64 asm: aarch64 rejects the `sym(,%reg,8)` operand. On
     // x86-64 the absolute `R_X86_64_32S` displacement has no link-time
-    // value in the position-independent image badc emits -- GNU ld rejects
-    // the same object with "relocation R_X86_64_32S ...
-    // can not be used when making a PIE object". The object-path
+    // value in the position-independent image badc emits. The object-path
     // relocation shape is locked by a linker test.
     "file_scope_asm_sym_mem.c",
     // `-mcmodel=kernel` relocatable-object fixture: its externs have no
@@ -107,6 +105,7 @@ const TARGET_SPECIFIC_ASM: &[(&str, &str)] = &[
     ("inline_asm_a64_labels.c", "linux-x64"),   // aarch64 local-label branches
     ("inline_asm_a64_section_branches.c", "linux-x64"), // aarch64 branches into a pushed section
     ("inline_asm_a64_label_directive.c", "linux-x64"), // aarch64 label sharing a directive statement
+    ("inline_asm_a64_if_over_operands.c", "linux-x64"), // aarch64 register-number symbols
     ("asm_goto_immediate_operand_no_frame.c", "linux-x64"), // aarch64 asm goto + .align 3
     ("inline_asm_a64_barriers.c", "linux-x64"),        // aarch64 dmb/dsb/isb/clrex
     ("inline_asm_a64_acqrel.c", "linux-x64"),          // aarch64 ldar/stlr via `Q`
@@ -469,6 +468,7 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("file_scope_asm_section_placement.c", 42),
     ("file_scope_asm_rept_type_size.c", 42),
     ("file_scope_asm_incbin.c", 0),
+    ("file_scope_asm_incbin_skip_count.c", 0),
     ("file_scope_asm_weak_set.c", 0),
     ("inline_asm_section_label.c", 42),
     ("attribute_weak_alias.c", 0),
@@ -513,6 +513,7 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("seh_context_record.c", 0),
     ("unwind_restores_callee_saved.c", 0),
     ("unwind_from_epilogue.c", 0),
+    ("unwind_from_a_fault_in_each_frame_shape.c", 0),
     ("seh_except_constant_filter.c", 0),
     ("seh_except_filter.c", 0),
     ("seh_finally.c", 0),
@@ -620,7 +621,7 @@ fn linked_image_fixtures_run_on_the_native_target() {
 // Compiling `sub/main.c` from the parent directory must still find
 // `sub/helper.h`; a CWD-relative-only search would miss it.
 #[cfg(any(target_os = "linux", target_os = "macos"))]
-/// `-fsyntax-only` as gcc 16 runs it: each unit through the front end (an
+/// `-fsyntax-only`: each unit through the front end (an
 /// assembler unit through the assembler) with its diagnostics and status,
 /// no output written whatever `-o` or `-c` asks for, and `-E` taking
 /// precedence.
@@ -855,6 +856,157 @@ fn quoted_include_resolves_relative_to_including_file() {
         run.status.code(),
         Some(42),
         "quoted-include program returned wrong value"
+    );
+}
+
+/// The loops `-finline-stringops` makes compute what the library calls
+/// do: a fill, a copy, a move overlapping above and below, a comparison's
+/// sign as `unsigned char`, and a loop the idiom pass would make a fill.
+#[test]
+fn inline_stringops_loops_compute_what_the_calls_do() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-inline-stringops");
+    let src = dir.join("s.c");
+    std::fs::write(
+        &src,
+        "#include <stdio.h>\n#include <string.h>\n\
+         __attribute__((noinline)) void var_set(char *p, int c, unsigned long n) { __builtin_memset(p, c, n); }\n\
+         __attribute__((noinline)) void const_set(char *p) { __builtin_memset(p, 0x5a, 4096); }\n\
+         __attribute__((noinline)) void var_copy(char *d, const char *s, unsigned long n) { memcpy(d, s, n); }\n\
+         __attribute__((noinline)) void var_move(char *d, const char *s, unsigned long n) { memmove(d, s, n); }\n\
+         __attribute__((noinline)) int var_cmp(const char *a, const char *b, unsigned long n) { return memcmp(a, b, n); }\n\
+         __attribute__((noinline)) void idiom(char *p, unsigned long n) { for (unsigned long i = 0; i < n; i++) p[i] = 0; }\n\
+         static char big[4096];\n\
+         int main(void) {\n\
+             char buf[32] = \"0123456789abcdefghijklmnopqrstu\";\n\
+             var_set(buf + 2, 'x', 3);\n\
+             const_set(big);\n\
+             char out[32];\n\
+             var_copy(out, buf, 32);\n\
+             var_move(out + 4, out, 10);\n\
+             var_move(out, out + 20, 6);\n\
+             int c1 = var_cmp(\"abcd\", \"abce\", 4), c2 = var_cmp(\"abc\", \"abc\", 3), c3 = var_cmp(\"\\xff\", \"\\x01\", 1);\n\
+             idiom(buf + 28, 3);\n\
+             printf(\"%s|%.31s|%d %d %d|%d|%d\\n\", buf, out, c1 < 0, c2, c3 > 0, big[4095], big[0]);\n\
+             return 0;\n\
+         }\n",
+    )
+    .expect("write source");
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("s{opt}"));
+        let built = Command::new(badc)
+            .args(["-q", opt, "-finline-stringops", "-o"])
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let run = Command::new(&exe).output().expect("run program");
+        assert_eq!(
+            String::from_utf8_lossy(&run.stdout).trim_end(),
+            "01xxx56789abcdefghijklmnopqr|klmnopxxx56789efghijklmnopqrstu|1 0 1|90|90",
+            "{opt}"
+        );
+    }
+}
+
+/// Under `#pragma STDC FENV_ACCESS ON` a floating operation is performed
+/// where the program performs it, at -O as at -O0: a quotient of constants
+/// raises inexact, a quotient nothing reads raises divide-by-zero, and one
+/// product taken under two rounding modes rounds each way (C17 F.8.4,
+/// F.9.1).
+#[test]
+fn fenv_access_keeps_floating_operations_where_they_are() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-fenv-access");
+    let src = dir.join("f.c");
+    std::fs::write(
+        &src,
+        "#include <fenv.h>\n#pragma STDC FENV_ACCESS ON\n\
+         #define NOINLINE __attribute__((noinline))\n\
+         NOINLINE int inexact(void) { feclearexcept(FE_ALL_EXCEPT); double a = 1.0, b = 3.0;\n\
+             volatile double r = a / b; (void)r; return fetestexcept(FE_INEXACT) != 0; }\n\
+         NOINLINE int divbyzero(double x) { feclearexcept(FE_ALL_EXCEPT); double q = x / 0.0;\n\
+             (void)q; return fetestexcept(FE_DIVBYZERO) != 0; }\n\
+         NOINLINE int rounds(double x, double y) { int saved = fegetround();\n\
+             fesetround(FE_DOWNWARD); double down = x * y;\n\
+             fesetround(FE_UPWARD); double up = x * y;\n\
+             fesetround(saved); return up > down; }\n\
+         int main(void) { volatile double t = 3.0;\n\
+             if (!inexact()) return 1;\n\
+             if (!divbyzero(t)) return 2;\n\
+             if (!rounds(1.0 / t, t)) return 3;\n\
+             return 0; }\n",
+    )
+    .expect("write source");
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("f{opt}"));
+        let built = Command::new(badc)
+            .args(["-q", opt, "-o"])
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let run = Command::new(&exe).output().expect("run program");
+        assert_eq!(run.status.code(), Some(0), "{opt}");
+    }
+}
+
+/// Under `--msvc` a quoted include searches cl's way: the including file's
+/// directory, then those of the files including it, innermost first, before
+/// the `-I` directories. Without it the search stops at the including file's
+/// directory.
+#[test]
+fn msvc_quoted_include_searches_the_including_files_directories() {
+    let badc = env!("CARGO_BIN_EXE_badc");
+    let dir = TempDir::new("badc-msvc-qinc");
+    for (path, body) in [
+        (
+            "prog/main.c",
+            "#include \"inc/app.h\"\nint v = FROM_PROG + FROM_INNER;\n",
+        ),
+        ("prog/inc/app.h", "#include \"inner/deep.h\"\n"),
+        (
+            "prog/inc/inner/deep.h",
+            "#include \"near.h\"\n#include \"top.h\"\n",
+        ),
+        ("prog/inc/near.h", "#define FROM_INNER 2\n"),
+        ("prog/top.h", "#define FROM_PROG 1\n"),
+        ("other/top.h", "#define FROM_PROG 9\n"),
+    ] {
+        let path = dir.join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).expect("create dir");
+        std::fs::write(path, body).expect("write file");
+    }
+    let run = |args: &[&str]| {
+        Command::new(badc)
+            .args(["-q", "-E", "--target=windows-x64"])
+            .args(args)
+            .arg("prog/main.c")
+            .current_dir(&dir)
+            .output()
+            .expect("run badc")
+    };
+    let cl = run(&["--msvc", "-I", "other"]);
+    let text = String::from_utf8_lossy(&cl.stdout);
+    assert!(
+        cl.status.success() && text.contains("int v = 1 + 2;"),
+        "{cl:?}"
+    );
+    let gnu = run(&[]);
+    assert!(!gnu.status.success(), "{gnu:?}");
+    assert!(
+        String::from_utf8_lossy(&gnu.stderr).contains("`near.h` not found"),
+        "{gnu:?}"
     );
 }
 
@@ -1938,6 +2090,29 @@ fn interp_exits_with_the_program_status() {
     assert_eq!(interp.status.code(), Some(3));
     assert_eq!(String::from_utf8_lossy(&interp.stdout), "partial");
     assert_eq!(run("--jit").status.code(), Some(3));
+}
+
+// `abort()` under `--interp` ends the program with the status a shell
+// reports for a process SIGABRT ends, 128 + 6, or the C runtime's 3 on
+// Windows, after what it wrote; the interpreter's own process goes on.
+#[test]
+fn interp_abort_ends_the_program_abnormally() {
+    let dir = TempDir::new("badc-interp-abort");
+    let src = dir.join("ab.c");
+    std::fs::write(
+        &src,
+        "#include <stdio.h>\n#include <stdlib.h>\n\
+         int main(void) { fputs(\"before\\n\", stdout); abort(); }\n",
+    )
+    .expect("write source");
+    let out = Command::new(env!("CARGO_BIN_EXE_badc"))
+        .arg("--interp")
+        .arg(&src)
+        .output()
+        .expect("run badc");
+    let want = if cfg!(windows) { 3 } else { 134 };
+    assert_eq!(out.status.code(), Some(want), "{out:?}");
+    assert_eq!(String::from_utf8_lossy(&out.stdout), "before\n");
 }
 
 // The address constants a function designator builds keep their offsets in
@@ -3496,8 +3671,8 @@ fn auto_var_init_and_padding_flags_are_validated_by_name() {
 }
 
 /// A build may name the guard's register and symbol without naming the
-/// form, because gcc's x86 default for `-mstack-protector-guard=` is
-/// `tls`. aarch64 has no such default and still requires it.
+/// form, which on x86 defaults to `-mstack-protector-guard=tls`. aarch64
+/// has no such default and still requires it.
 #[test]
 fn the_x86_guard_form_defaults_the_way_gcc_does() {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -4310,7 +4485,7 @@ fn mcpu_extensions_gate_the_feature_macros() {
     }
 }
 
-/// The profiling options are refused where gcc has none, by name.
+/// The profiling options a target does not implement are refused by name.
 #[test]
 fn profiling_options_are_refused_by_name_where_gcc_has_none() {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -4662,7 +4837,7 @@ fn a_failed_unit_prints_the_warnings_reported_before_the_error() {
 }
 
 /// A `return` that does not fit the function's return type is an error
-/// the user can lower, as gcc 14's `-Wreturn-mismatch` is.
+/// the user can lower (`-Wreturn-mismatch`).
 #[test]
 fn a_return_mismatch_is_an_error_the_user_can_lower() {
     let badc = env!("CARGO_BIN_EXE_badc");
@@ -5395,17 +5570,18 @@ fn no_instruction_follows_a_trap_unreached() {
 }
 
 /// `-mno-sse` and `-mgeneral-regs-only` keep a unit off the SIMD register
-/// file, and the SSE feature macros go with it; `__MMX__` stays.
+/// file, and the SSE feature macros go with it; `__MMX__` stays under
+/// `-mno-sse` and goes with `-mgeneral-regs-only`.
 #[test]
 fn no_sse_drops_the_sse_feature_macros() {
     let badc = env!("CARGO_BIN_EXE_badc");
     let dir = TempDir::new("badc-no-sse");
     let src = dir.join("e.c");
     std::fs::write(&src, "int x;\n").expect("write source");
-    for (flags, sse) in [
-        (&[][..], true),
-        (&["-mno-sse"][..], false),
-        (&["-mgeneral-regs-only"][..], false),
+    for (flags, sse, mmx) in [
+        (&[][..], true, true),
+        (&["-mno-sse"][..], false, true),
+        (&["-mgeneral-regs-only"][..], false, false),
     ] {
         let out = Command::new(badc)
             .args(["--target=linux-x64", "-dM", "-E"])
@@ -5418,7 +5594,7 @@ fn no_sse_drops_the_sse_feature_macros() {
             let defined = text.contains(&format!("#define {name} 1\n"));
             assert_eq!(defined, sse, "{flags:?}: {name}");
         }
-        assert!(text.contains("#define __MMX__ 1\n"), "{flags:?}");
+        assert_eq!(text.contains("#define __MMX__ 1\n"), mmx, "{flags:?}");
     }
 }
 

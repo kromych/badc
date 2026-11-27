@@ -3,7 +3,7 @@ variably_modified_type_names.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -45,9 +45,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x8]
-               	mov	x1, #0x1                // =1
-               	stur	w1, [x29, #-0x8]
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret

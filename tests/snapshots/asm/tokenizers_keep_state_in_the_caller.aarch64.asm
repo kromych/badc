@@ -3,7 +3,7 @@ tokenizers_keep_state_in_the_caller.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -42,9 +42,9 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	sub	x2, x29, #0x70
                	blr	x20
+               	cbz	x0, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	cbz	x0, <addr>
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -59,9 +59,9 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	sub	x2, x29, #0x68
                	blr	x20
+               	cbz	x0, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	cbz	x0, <addr>
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -76,9 +76,9 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	sub	x2, x29, #0x70
                	blr	x20
+               	cbz	x0, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	cbz	x0, <addr>
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -91,9 +91,9 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	sub	x2, x29, #0x68
                	blr	x20
+               	cbz	x0, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	cbz	x0, <addr>
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -106,9 +106,9 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	sub	x2, x29, #0x70
                	blr	x20
+               	cbz	x0, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	cbz	x0, <addr>
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -121,9 +121,9 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	sub	x2, x29, #0x68
                	blr	x20
+               	cbz	x0, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	cbz	x0, <addr>
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>

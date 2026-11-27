@@ -3,7 +3,7 @@ builtin_library_alias_macro_shadow.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -74,10 +74,10 @@ Disassembly of section .text:
                	mov	x0, #0xa                // =10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x65               // =101
-               	mov	x2, #0x5                // =5
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
+               	mov	x1, #0x65               // =101
+               	mov	x2, #0x5                // =5
                	bl	<addr>
                	mov	x1, x0
                	adrp	x0, <addr>
@@ -98,18 +98,18 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
-               	mov	x2, #0x5                // =5
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
+               	mov	x2, #0x5                // =5
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x0, #0xd                // =13
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x6c               // =108
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
+               	mov	x1, #0x6c               // =108
                	bl	<addr>
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
@@ -119,9 +119,9 @@ Disassembly of section .text:
                	mov	x0, #0xe                // =14
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x6c               // =108
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
+               	mov	x1, #0x6c               // =108
                	bl	<addr>
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
@@ -131,10 +131,10 @@ Disassembly of section .text:
                	mov	x0, #0xf                // =15
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x1, <addr>
-               	add	x1, x1, <lo12>
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
+               	adrp	x1, <addr>
+               	add	x1, x1, <lo12>
                	bl	<addr>
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
@@ -144,10 +144,10 @@ Disassembly of section .text:
                	mov	x0, #0x10               // =16
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x1, <addr>
-               	add	x1, x1, <lo12>
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
+               	adrp	x1, <addr>
+               	add	x1, x1, <lo12>
                	bl	<addr>
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
@@ -157,20 +157,20 @@ Disassembly of section .text:
                	mov	x0, #0x11               // =17
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x1, <addr>
-               	add	x1, x1, <lo12>
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
+               	adrp	x1, <addr>
+               	add	x1, x1, <lo12>
                	bl	<addr>
                	cmp	x0, #0x4
                	b.eq	<addr>
                	mov	x0, #0x12               // =18
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x1, <addr>
-               	add	x1, x1, <lo12>
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
+               	adrp	x1, <addr>
+               	add	x1, x1, <lo12>
                	bl	<addr>
                	cmp	x0, #0x2
                	b.eq	<addr>
@@ -194,9 +194,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	strb	wzr, [x0]
-               	mov	x2, #0x3                // =3
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
+               	mov	x2, #0x3                // =3
                	bl	<addr>
                	mov	x1, x0
                	adrp	x0, <page>

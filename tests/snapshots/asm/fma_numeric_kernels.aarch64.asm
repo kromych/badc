@@ -3,7 +3,7 @@ fma_numeric_kernels.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -60,8 +60,8 @@ Disassembly of section .text:
                	b.ge	<addr>
                	fmov	d0, #1.00000000
                	fsub	d1, d1, d0
-               	mov	x3, #0x0                // =0
-               	fmov	d17, x3
+               	mov	x2, #0x0                // =0
+               	fmov	d17, x2
                	fcmpe	d1, d17
                	b.pl	<addr>
                	fneg	d1, d1
@@ -74,93 +74,93 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x7, #0x18               // =24
+               	sub	x8, x29, #0x90
+               	sub	x9, x29, #0x48
                	mov	x1, #0x0                // =0
-               	mul	x2, x3, x7
-               	add	x4, x3, x3, lsl #1
+               	mul	x0, x2, x7
+               	add	x3, x8, x0
+               	add	x4, x2, x2, lsl #1
+               	add	x5, x9, x0
                	mov	x0, x1
-               	sub	x5, x29, #0x90
-               	add	x5, x5, x2
                	add	x6, x4, x0
                	add	x6, x6, #0x1
-               	sxtw	x6, w6
                	scvtf	d1, x6
-               	str	d1, [x5, x0, lsl #3]
-               	sub	x5, x29, #0x48
-               	add	x5, x5, x2
-               	cmp	w3, w0
+               	str	d1, [x3, x0, lsl #3]
+               	cmp	w2, w0
                	fmov	d17, x1
                	fcsel	d1, d0, d17, eq
                	str	d1, [x5, x0, lsl #3]
                	add	x0, x0, #0x1
                	cmp	w0, #0x3
                	b.lt	<addr>
-               	add	x3, x3, #0x1
-               	cmp	w3, #0x3
+               	add	x2, x2, #0x1
+               	cmp	w2, #0x3
                	b.lt	<addr>
-               	mov	x2, #0x0                // =0
-               	mov	x3, #0x18               // =24
+               	mov	x0, #0x0                // =0
+               	mov	x4, #0x18               // =24
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x8]
-               	ldur	d3, [x29, #-0x48]
-               	ldur	d4, [x29, #-0x30]
-               	ldur	d5, [x29, #-0x18]
-               	ldur	d6, [x29, #-0x40]
-               	ldur	d7, [x29, #-0x28]
-               	ldur	d19, [x29, #-0x10]
-               	ldur	d20, [x29, #-0x38]
-               	ldur	d21, [x29, #-0x20]
-               	ldur	d22, [x29, #-0x8]
-               	mov	x1, x2
-               	sub	x0, x29, #0x90
-               	mul	x4, x1, x3
-               	add	x0, x0, x4
-               	ldr	d0, [x0]
-               	fmov	d18, x2
-               	fmadd	d2, d0, d3, d18
-               	ldr	d23, [x0, #0x8]
-               	fmadd	d2, d23, d4, d2
-               	ldr	d23, [x0, #0x10]
-               	fmadd	d2, d23, d5, d2
-               	fsub	d0, d2, d0
-               	fmov	d17, x2
+               	ldur	d2, [x29, #-0x48]
+               	ldur	d3, [x29, #-0x30]
+               	ldur	d4, [x29, #-0x18]
+               	ldur	d5, [x29, #-0x40]
+               	ldur	d6, [x29, #-0x28]
+               	ldur	d7, [x29, #-0x10]
+               	ldur	d19, [x29, #-0x38]
+               	ldur	d20, [x29, #-0x20]
+               	ldur	d21, [x29, #-0x8]
+               	sub	x3, x29, #0x90
+               	mov	x2, x0
+               	mul	x5, x2, x4
+               	add	x1, x3, x5
+               	ldr	d0, [x1]
+               	fmov	d18, x0
+               	fmadd	d22, d0, d2, d18
+               	ldr	d23, [x1, #0x8]
+               	fmadd	d22, d23, d3, d22
+               	ldr	d23, [x1, #0x10]
+               	fmadd	d22, d23, d4, d22
+               	fsub	d0, d22, d0
+               	fmov	d17, x0
                	fcmpe	d0, d17
                	b.pl	<addr>
                	fneg	d0, d0
                	fcmpe	d0, d1
                	b.pl	<addr>
-               	ldr	d0, [x0]
-               	fmov	d18, x2
-               	fmadd	d0, d0, d6, d18
-               	ldr	d2, [x0, #0x8]
-               	fmadd	d0, d2, d7, d0
-               	ldr	d2, [x0, #0x10]
-               	fmadd	d0, d2, d19, d0
-               	sub	x0, x29, #0x90
-               	add	x4, x0, x4
-               	ldr	d2, [x4, #0x8]
-               	fsub	d0, d0, d2
-               	movi	d2, #0000000000000000
-               	fcmpe	d0, d2
+               	ldr	d0, [x1]
+               	fmov	d18, x0
+               	fmadd	d0, d0, d5, d18
+               	ldr	d22, [x1, #0x8]
+               	fmadd	d0, d22, d6, d0
+               	ldr	d22, [x1, #0x10]
+               	fmadd	d0, d22, d7, d0
+               	add	x1, x3, x5
+               	ldr	d22, [x1, #0x8]
+               	fsub	d0, d0, d22
+               	fmov	d17, x0
+               	fcmpe	d0, d17
                	b.pl	<addr>
                	fneg	d0, d0
                	fcmpe	d0, d1
                	b.pl	<addr>
-               	mul	x4, x1, x3
-               	add	x0, x0, x4
-               	ldr	d0, [x0]
-               	fmadd	d0, d0, d20, d2
-               	ldr	d23, [x0, #0x8]
-               	fmadd	d23, d23, d21, d0
-               	ldr	d0, [x0, #0x10]
-               	fmadd	d23, d0, d22, d23
-               	fsub	d0, d23, d0
-               	fcmpe	d0, d2
+               	mul	x1, x2, x4
+               	add	x1, x3, x1
+               	ldr	d0, [x1]
+               	fmov	d18, x0
+               	fmadd	d0, d0, d19, d18
+               	ldr	d22, [x1, #0x8]
+               	fmadd	d22, d22, d20, d0
+               	ldr	d0, [x1, #0x10]
+               	fmadd	d22, d0, d21, d22
+               	fsub	d0, d22, d0
+               	fmov	d17, x0
+               	fcmpe	d0, d17
                	b.pl	<addr>
                	fneg	d0, d0
                	fcmpe	d0, d1
                	b.pl	<addr>
-               	add	x1, x1, #0x1
-               	cmp	w1, #0x3
+               	add	x2, x2, #0x1
+               	cmp	w2, #0x3
                	b.lt	<addr>
                	mov	x0, #0x0                // =0
                	ldur	d0, [x29, #-0x78]

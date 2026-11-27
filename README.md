@@ -22,17 +22,25 @@ Linux on ARM64 and x86-64, and Windows on ARM64 and x86-64. It has its own
 preprocessor, assembler, linker, archiver, and debug-info writers (DWARF and
 PDB), as well as an in-process JIT and an SSA interpreter. CI runs more than
 80 jobs and more than 5,000 tests on every pull request and every push to
-`master`, and fuzzing jobs run daily.
+`master`. The tests run a second time with the register allocator held to two
+registers per bank; programs must give the same result in the interpreter and
+natively; the SSA and the x86-64 and ARM64 assembly of every test fixture are
+kept as snapshots, so each change shows its code as a diff; and daily csmith
+jobs compare `badc -O` against `-O0` and the reference compilers.
 
 `badc` ships as a single binary. The project can also be used as a Rust
 library.
 
-> * `badc` was bad when the project started, and the name stuck.
+> * `badc` was bad when the project started, and the name stuck. The letters
+>   can also read *Batteries-included, All-in-one, Dependency-free C*.
 > * `--dump-ssa` prints each function's SSA IR and the register allocator's
 >   placement of each value to stderr before lowering.
 > * `--dump-records` prints the size, alignment and member offsets of each
 >   tagged structure and union, and of each typedef naming one, as laid out
 >   for `--target`.
+> * `-S` writes the listing of the object `-c` would write: each function's
+>   instructions with their offsets, bytes and text, the block labels, and the
+>   symbols the operands name.
 
 ## Contents
 
@@ -68,8 +76,10 @@ exercises.
     [the kernel page](./doc/linux-kernel.md).
 * _Cryptography and compression_: [TweetNaCl](./demos/tweetnacl/),
   [Monocypher](./demos/monocypher/), [BearSSL](./demos/bearssl/),
-  [miniz](./demos/miniz/), [bzip2](./demos/bzip2/), and
-  [OpenSSL](./demos/openssl/) with its `make test`.
+  [miniz](./demos/miniz/), [bzip2](./demos/bzip2/),
+  [OpenSSL](./demos/openssl/) with its `make test`, and
+  [SymCrypt](./demos/symcrypt/) with its unit test, which the host's C++
+  compiler builds against the badc-built library.
 * _Graphics and math_: [stb](./demos/README.md#stb),
   [raylib](./demos/raylib/) with a Lode Runner game,
   [Nuklear](./demos/nuklear/), [kissfft](./demos/kissfft/), and the
@@ -80,9 +90,12 @@ exercises.
 * _Windows system code_: the [WDM](./demos/README.md#wdm_driver) kernel
   driver; [SimpleVisor](./demos/simplevisor/), an Intel VT-x hypervisor built
   as a native-subsystem driver; [nt_hello](./demos/README.md#nt_hello), an
-  `IMAGE_SUBSYSTEM_NATIVE` program that runs on `ntdll` alone; and
+  `IMAGE_SUBSYSTEM_NATIVE` program that runs on `ntdll` alone;
   [nt_loader](./demos/README.md#nt_loader), which starts one through
-  `NtCreateUserProcess`.
+  `NtCreateUserProcess`; and [System Informer](./demos/systeminformer/), the
+  system monitor, its PE viewer, and its kernel driver, built from the
+  project's own CMake lists for both Windows targets and checked by phlib's
+  self-test.
 * _Coroutines_: [libmill](./demos/README.md#libmill-libdill-coroutines),
   [libdill](./demos/README.md#libmill-libdill-coroutines), and
   [coroutines](./demos/README.md#libmill-libdill-coroutines), whose context

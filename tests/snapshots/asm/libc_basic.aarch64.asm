@@ -3,7 +3,7 @@ libc_basic.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -55,30 +55,29 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	bl	<addr>
-               	sub	x0, x29, #0x80
-               	ldurb	w1, [x29, #-0x80]
-               	ldurb	w3, [x29, #-0x7f]
-               	ldurb	w4, [x29, #-0x7e]
-               	ldurb	w5, [x29, #-0x7d]
-               	ldurb	w2, [x29, #-0x7c]
-               	sturb	w1, [x29, #-0x7e]
-               	sturb	w3, [x29, #-0x7d]
-               	sturb	w4, [x29, #-0x7c]
-               	sturb	w5, [x29, #-0x7b]
-               	sturb	w2, [x29, #-0x7a]
-               	cmp	w1, #0x30
+               	ldurb	w0, [x29, #-0x80]
+               	ldurb	w2, [x29, #-0x7f]
+               	ldurb	w3, [x29, #-0x7e]
+               	ldurb	w4, [x29, #-0x7d]
+               	ldurb	w1, [x29, #-0x7c]
+               	sturb	w0, [x29, #-0x7e]
+               	sturb	w2, [x29, #-0x7d]
+               	sturb	w3, [x29, #-0x7c]
+               	sturb	w4, [x29, #-0x7b]
+               	sturb	w1, [x29, #-0x7a]
+               	cmp	w0, #0x30
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	and	x1, x2, #0xff
                	cmp	w1, #0x34
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	sub	x0, x29, #0x80
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x2, #0x7                // =7

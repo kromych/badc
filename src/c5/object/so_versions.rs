@@ -234,13 +234,13 @@ fn parse_versioned_exports(bytes: &[u8]) -> Option<BTreeMap<String, String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     use crate::c5::codegen::Target;
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     use crate::c5::linker::target_libc::library_bindings;
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     use crate::c5::preprocessor::Preprocessor;
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     use alloc::vec::Vec;
 
     /// The manifest states a requirement for every name the headers can
@@ -250,7 +250,7 @@ mod tests {
     ///
     /// The binding walk lives in the linker, so both directions of the
     /// check need that feature.
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     #[test]
     fn the_manifest_covers_every_linux_binding() {
         for (target, machine, table) in [
@@ -276,7 +276,7 @@ mod tests {
 
     /// The reverse: an entry no header binds is stale data the link can
     /// never reach.
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     #[test]
     fn the_manifest_states_nothing_the_headers_do_not_bind() {
         for (target, table) in [
@@ -347,7 +347,7 @@ mod tests {
     /// four accessors a second definition to match; whichever form
     /// `<termios.h>` states, the pin has to select the definition that
     /// implements it.
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     #[test]
     fn the_speed_codes_and_the_pinned_accessors_agree() {
         /// The release that made `speed_t` a literal rate.

@@ -3,7 +3,7 @@ setjmp_posix_forms_return_twice.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,16 +26,14 @@ Disassembly of section .text:
                	int3
 
 <jump_plain>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	leaq	<rip>, %rdi # <addr>
                	movl	$0x3, %esi
                	callq	<addr>
                	ud2
 
 <jump_sig>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	leaq	<rip>, %rdi # <addr>
                	movl	$0x5, %esi
                	callq	<addr>
@@ -100,7 +98,7 @@ Disassembly of section .text:
                	movl	$0x2, -0x108(%rbp)
                	xorl	%edi, %edi
                	leaq	-0x100(%rbp), %rsi
-               	movq	%rdi, %rdx
+               	xorl	%edx, %edx
                	callq	<addr>
                	callq	<addr>
                	ud2

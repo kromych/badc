@@ -3,7 +3,7 @@ get_cpuid_leaf_checks.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -36,9 +36,9 @@ Disassembly of section .text:
                	je	<addr>
                	xorl	%eax, %eax
                	cpuid
-               	orq	%rbx, %rcx
-               	orq	%rdx, %rcx
-               	testl	%ecx, %ecx
+               	orq	%rcx, %rbx
+               	orq	%rdx, %rbx
+               	testl	%ebx, %ebx
                	jne	<addr>
                	movl	$0x1, %eax
                	popq	%rbx

@@ -3,7 +3,7 @@ logical_op_normalize.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -14,10 +14,9 @@ Disassembly of section .text:
                	brk	#0x1
 
 <or_ll>:
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x0                // =0
                	cmp	x0, #0x0
-               	csel	x0, x1, x2, ne
+               	mov	x16, #0x1               // =1
+               	csel	x0, x16, xzr, ne
                	ret
 
 <or_rr>:
@@ -40,8 +39,8 @@ Disassembly of section .text:
                	add	x29, sp, #0x20
                	adrp	x0, <page>
                	ldrsw	x20, [x0, #0xc]
-               	mov	x1, #0x0                // =0
                	mov	x0, x20
+               	mov	x1, #0x0                // =0
                	bl	<addr>
                	cmp	w0, #0x1
                	b.eq	<addr>
@@ -57,8 +56,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x20]
                	ldr	x20, [sp], #0x30
                	ret
-               	mov	x0, #0x0                // =0
                	mov	x1, x20
+               	mov	x0, #0x0                // =0
                	bl	<addr>
                	cmp	w0, #0x1
                	b.eq	<addr>
@@ -88,8 +87,8 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	ldr	x16, [x1]
                	str	x16, [x0]
-               	mov	x1, #0x0                // =0
                	mov	x0, x20
+               	mov	x1, #0x0                // =0
                	bl	<addr>
                	sub	x1, x29, #0x8
                	ldrsw	x0, [x1, w0, sxtw #2]

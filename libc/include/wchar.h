@@ -107,6 +107,88 @@ typedef struct { int __state; unsigned char __opaque[124]; } mbstate_t;
 
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
+// glibc's checking entry points, which an object built against glibc's headers
+// with _FORTIFY_SOURCE calls in place of the functions.
+#pragma binding(libc::__wcpcpy_chk,          "__wcpcpy_chk")
+#pragma binding(libc::__wcpncpy_chk,         "__wcpncpy_chk")
+#pragma binding(libc::__wcrtomb_chk,         "__wcrtomb_chk")
+#pragma binding(libc::__wcscat_chk,          "__wcscat_chk")
+#pragma binding(libc::__wcscpy_chk,          "__wcscpy_chk")
+#pragma binding(libc::__wcslcat_chk,         "__wcslcat_chk")
+#pragma binding(libc::__wcslcpy_chk,         "__wcslcpy_chk")
+#pragma binding(libc::__wcsncat_chk,         "__wcsncat_chk")
+#pragma binding(libc::__wcsncpy_chk,         "__wcsncpy_chk")
+#pragma binding(libc::__wcsnrtombs_chk,      "__wcsnrtombs_chk")
+#pragma binding(libc::__wcsrtombs_chk,       "__wcsrtombs_chk")
+#pragma binding(libc::__wmemcpy_chk,         "__wmemcpy_chk")
+#pragma binding(libc::__wmemmove_chk,        "__wmemmove_chk")
+#pragma binding(libc::__wmempcpy_chk,        "__wmempcpy_chk")
+#pragma binding(libc::__wmemset_chk,         "__wmemset_chk")
+#pragma binding(libc::__mbsnrtowcs_chk,      "__mbsnrtowcs_chk")
+#pragma binding(libc::__mbsrtowcs_chk,       "__mbsrtowcs_chk")
+#pragma binding(libc::__fgetws_chk,          "__fgetws_chk")
+#pragma binding(libc::__fgetws_unlocked_chk, "__fgetws_unlocked_chk")
+#pragma binding(libc::__swprintf_chk,        "__swprintf_chk")
+#pragma binding(libc::__vswprintf_chk,       "__vswprintf_chk")
+#pragma binding(libc::__fwprintf_chk,        "__fwprintf_chk")
+#pragma binding(libc::__wprintf_chk,         "__wprintf_chk")
+#pragma binding(libc::__vfwprintf_chk,       "__vfwprintf_chk")
+#pragma binding(libc::__vwprintf_chk,        "__vwprintf_chk")
+wchar_t *__wcpcpy_chk(wchar_t *, const wchar_t *, size_t);
+wchar_t *__wcpncpy_chk(wchar_t *, const wchar_t *, size_t, size_t);
+size_t __wcrtomb_chk(char *, wchar_t, mbstate_t *, size_t);
+wchar_t *__wcscat_chk(wchar_t *, const wchar_t *, size_t);
+wchar_t *__wcscpy_chk(wchar_t *, const wchar_t *, size_t);
+size_t __wcslcat_chk(wchar_t *, const wchar_t *, size_t, size_t);
+size_t __wcslcpy_chk(wchar_t *, const wchar_t *, size_t, size_t);
+wchar_t *__wcsncat_chk(wchar_t *, const wchar_t *, size_t, size_t);
+wchar_t *__wcsncpy_chk(wchar_t *, const wchar_t *, size_t, size_t);
+size_t __wcsnrtombs_chk(char *, const wchar_t **, size_t, size_t, mbstate_t *, size_t);
+size_t __wcsrtombs_chk(char *, const wchar_t **, size_t, mbstate_t *, size_t);
+wchar_t *__wmemcpy_chk(wchar_t *, const wchar_t *, size_t, size_t);
+wchar_t *__wmemmove_chk(wchar_t *, const wchar_t *, size_t, size_t);
+wchar_t *__wmempcpy_chk(wchar_t *, const wchar_t *, size_t, size_t);
+wchar_t *__wmemset_chk(wchar_t *, wchar_t, size_t, size_t);
+size_t __mbsnrtowcs_chk(wchar_t *, const char **, size_t, size_t, mbstate_t *, size_t);
+size_t __mbsrtowcs_chk(wchar_t *, const char **, size_t, mbstate_t *, size_t);
+wchar_t *__fgetws_chk(wchar_t *, size_t, int, struct __c5_FILE *);
+wchar_t *__fgetws_unlocked_chk(wchar_t *, size_t, int, struct __c5_FILE *);
+int __swprintf_chk(wchar_t *, size_t, int, size_t, const wchar_t *, ...);
+int __vswprintf_chk(wchar_t *, size_t, int, size_t, const wchar_t *, __builtin_va_list);
+int __fwprintf_chk(struct __c5_FILE *, int, const wchar_t *, ...);
+int __wprintf_chk(int, const wchar_t *, ...);
+int __vfwprintf_chk(struct __c5_FILE *, int, const wchar_t *, __builtin_va_list);
+int __vwprintf_chk(int, const wchar_t *, __builtin_va_list);
+// glibc 2.38's C23 entry points, which an object built against its headers in
+// C23 mode calls: there strtol and the scanners' %i take a 0b prefix.
+#pragma binding(libc::__isoc23_wcstol,     "__isoc23_wcstol")
+#pragma binding(libc::__isoc23_wcstoll,    "__isoc23_wcstoll")
+#pragma binding(libc::__isoc23_wcstoul,    "__isoc23_wcstoul")
+#pragma binding(libc::__isoc23_wcstoull,   "__isoc23_wcstoull")
+#pragma binding(libc::__isoc23_wcstol_l,   "__isoc23_wcstol_l")
+#pragma binding(libc::__isoc23_wcstoll_l,  "__isoc23_wcstoll_l")
+#pragma binding(libc::__isoc23_wcstoul_l,  "__isoc23_wcstoul_l")
+#pragma binding(libc::__isoc23_wcstoull_l, "__isoc23_wcstoull_l")
+#pragma binding(libc::__isoc23_wscanf,     "__isoc23_wscanf")
+#pragma binding(libc::__isoc23_fwscanf,    "__isoc23_fwscanf")
+#pragma binding(libc::__isoc23_swscanf,    "__isoc23_swscanf")
+#pragma binding(libc::__isoc23_vwscanf,    "__isoc23_vwscanf")
+#pragma binding(libc::__isoc23_vfwscanf,   "__isoc23_vfwscanf")
+#pragma binding(libc::__isoc23_vswscanf,   "__isoc23_vswscanf")
+long __isoc23_wcstol(const wchar_t *, wchar_t **, int);
+long long __isoc23_wcstoll(const wchar_t *, wchar_t **, int);
+unsigned long __isoc23_wcstoul(const wchar_t *, wchar_t **, int);
+unsigned long long __isoc23_wcstoull(const wchar_t *, wchar_t **, int);
+long __isoc23_wcstol_l(const wchar_t *, wchar_t **, int, struct __locale_struct *);
+long long __isoc23_wcstoll_l(const wchar_t *, wchar_t **, int, struct __locale_struct *);
+unsigned long __isoc23_wcstoul_l(const wchar_t *, wchar_t **, int, struct __locale_struct *);
+unsigned long long __isoc23_wcstoull_l(const wchar_t *, wchar_t **, int, struct __locale_struct *);
+int __isoc23_wscanf(const wchar_t *, ...);
+int __isoc23_fwscanf(struct __c5_FILE *, const wchar_t *, ...);
+int __isoc23_swscanf(const wchar_t *, const wchar_t *, ...);
+int __isoc23_vwscanf(const wchar_t *, __builtin_va_list);
+int __isoc23_vfwscanf(struct __c5_FILE *, const wchar_t *, __builtin_va_list);
+int __isoc23_vswscanf(const wchar_t *, const wchar_t *, __builtin_va_list);
 #pragma binding(libc::wcslen,   "wcslen")
 #pragma binding(libc::wcscmp,   "wcscmp")
 #pragma binding(libc::wcsncmp,  "wcsncmp")

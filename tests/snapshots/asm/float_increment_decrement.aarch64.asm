@@ -3,7 +3,7 @@ float_increment_decrement.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -48,28 +48,28 @@ Disassembly of section .text:
                	fadd	d1, d1, d0
                	fcvt	s1, d1
                	stur	s1, [x29, #-0x10]
-               	ldur	d2, [x29, #-0x8]
-               	fmov	d1, #-1.00000000
-               	fadd	d2, d2, d1
-               	stur	d2, [x29, #-0x8]
+               	ldur	d1, [x29, #-0x8]
+               	fmov	d2, #-1.00000000
+               	fadd	d1, d1, d2
+               	stur	d1, [x29, #-0x8]
                	ldur	s3, [x29, #-0x10]
                	fmov	s4, #2.50000000
                	fcmp	s3, s4
                	b.ne	<addr>
                	fmov	d3, #1.50000000
-               	fcmp	d2, d3
+               	fcmp	d1, d3
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
-               	ldr	d2, [x0, #0x10]
-               	fadd	d2, d2, d0
-               	fadd	d2, d2, d0
-               	str	d2, [x0, #0x10]
+               	ldr	d1, [x0, #0x10]
+               	fadd	d1, d1, d0
+               	fadd	d1, d1, d0
+               	str	d1, [x0, #0x10]
                	fmov	d3, #7.00000000
-               	fcmp	d2, d3
+               	fcmp	d1, d3
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x20
@@ -82,16 +82,16 @@ Disassembly of section .text:
                	stp	x16, x17, [x1]
                	ldr	x16, [x0, #0x10]
                	str	x16, [x1, #0x10]
-               	ldr	d2, [x0, #0x8]
-               	fadd	d2, d2, d0
-               	stur	d2, [x29, #-0x10]
+               	ldr	d1, [x0, #0x8]
+               	fadd	d1, d1, d0
+               	stur	d1, [x29, #-0x10]
                	ldur	d3, [x29, #-0x8]
-               	fadd	d1, d3, d1
-               	stur	d1, [x29, #-0x8]
+               	fadd	d2, d3, d2
+               	stur	d2, [x29, #-0x8]
                	fmov	d3, #2.00000000
-               	fcmp	d2, d3
+               	fcmp	d1, d3
                	b.ne	<addr>
-               	fcmp	d1, d0
+               	fcmp	d2, d0
                	b.eq	<addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x20

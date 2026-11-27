@@ -3,7 +3,7 @@ variadic_fn_ptr_init.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -109,7 +109,7 @@ Disassembly of section .text:
                	mov	x1, #0x3                // =3
                	mov	x2, #0x32               // =50
                	mov	x3, #0x46               // =70
-               	mov	x4, x1
+               	mov	x4, #0x3                // =3
                	bl	<addr>
                	ldursw	x0, [x29, #-0x8]
                	cmp	w0, #0x7b

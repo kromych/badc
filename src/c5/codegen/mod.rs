@@ -9,8 +9,7 @@
 //! SSA + CFG, sourced from the walker / cached `user_ssa_funcs`) ->
 //! [`ssa_alloc::allocate`] (graph-coloring register allocation) ->
 //! per-arch SSA emit (`ssa_emit_aarch64` / `ssa_emit_x86_64`) ->
-//! raw machine code -> per-OS image writer -> bytes on disk ->
-//! (Apple Silicon only) shell to `codesign --sign -`.
+//! raw machine code -> per-OS image writer -> bytes on disk.
 //!
 //! ## What we trade away
 //!
@@ -45,6 +44,7 @@ pub(crate) mod aarch64;
 pub(crate) mod abi_classify;
 pub(crate) mod asm_fold;
 mod jit;
+pub(crate) mod listing;
 pub(crate) mod magic;
 pub(crate) mod map_syms;
 pub(crate) mod passes;
@@ -52,7 +52,7 @@ pub(crate) mod ssa;
 pub(crate) mod x86_64;
 
 /// The link tests check the emitter's recorded unwind steps against it.
-#[cfg(all(test, feature = "full"))]
+#[cfg(all(test, feature = "linker"))]
 pub(crate) use x86_64::decode_x86_64_prologue_unwind;
 
 /// Which fields of a page-relative reference a fixup record covers;
@@ -87,9 +87,9 @@ pub(crate) fn require_whole_addr(part: AddrPart, label: &str) -> Result<(), erro
     )))
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 pub use jit::jit_run_with_sources;
-pub use jit::{jit_run, jit_run_with_options};
+pub use jit::{JitModule, jit_load, jit_run, jit_run_with_options};
 
 pub use crate::c5::object::elf_class::ElfClass;
 
@@ -99,8 +99,8 @@ pub use crate::c5::object::elf_class::ElfClass;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Target {
     /// macOS on Apple Silicon. Mach-O / arm64e-not-required, links
-    /// against `libSystem.B.dylib` for libc, signed ad-hoc with
-    /// `codesign --sign -` so dyld will load it.
+    /// against `libSystem.B.dylib` for libc, signed ad hoc by the
+    /// writer so the kernel and dyld accept it.
     MacOSAarch64,
     /// Linux on AArch64. ELF / EM_AARCH64, links against `libc.so.6`
     /// via `/lib/ld-linux-aarch64.so.1`. No code-signing step.
@@ -321,9 +321,9 @@ impl Target {
 
     /// The ceiling on a vector type's alignment, `None` where the ABI gives
     /// a vector its width. AAPCS64 5.1 defines the 8- and 16-byte short
-    /// vectors and a wider vector keeps the 16-byte boundary in gcc's and
-    /// clang's layout; the x86-64 psABI aligns `__m256` at 32 and `__m512`
-    /// at 64.
+    /// vectors and a wider vector keeps the 16-byte boundary gcc- and
+    /// clang-compiled code reads; the x86-64 psABI aligns `__m256` at 32
+    /// and `__m512` at 64.
     pub fn vector_align_cap(self) -> Option<usize> {
         self.is_aarch64().then_some(16)
     }
@@ -1053,7 +1053,8 @@ pub(super) fn plan_call_args_aggs(
                 placements.push(placement);
                 continue;
             }
-            // An unnamed 32-byte vector goes in memory, as gcc passes it.
+            // An unnamed 32-byte vector goes in memory, where a gcc-compiled
+            // `va_arg` reads it.
             let memory = AggClass::ByStack;
             let class = match &agg.class {
                 AggClass::Regs(c) if i >= fixed_args && c[..] == [RegClass::Vector256] => &memory,
@@ -1344,16 +1345,24 @@ pub(crate) fn return_extension(return_type_tag: i64, target: Target) -> ReturnEx
     ReturnExt::None
 }
 
-/// True when `return_type_tag` is an integer type that is narrower than
-/// the return register on every target, so the result occupies the low
-/// word and bits 32..63 carry none of it (SysV AMD64 3.2.3, AAPCS64 6.9,
-/// Win64: a sub-register return leaves the rest of the register
-/// unspecified). A caller reading such a result above the type's width
-/// extends it itself.
-///
-/// `long` is excluded because its width is per-target (4 bytes on LLP64,
-/// 8 on LP64) and the mid-end asks this before the target is fixed.
-pub(crate) fn return_is_low_word(return_type_tag: i64) -> bool {
+/// Which x86-64 jump groups keep off 32-byte boundaries, which a core with
+/// the update for Intel erratum SKX102 otherwise decodes on every pass
+/// through: none, those of blocks inside a loop or of a function that calls
+/// itself, or all. Calls and returns pad in those blocks unless it is none.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BranchPadding {
+    Off,
+    Loops,
+    All,
+}
+
+/// True when `return_type_tag` is an integer type narrower than the return
+/// register at `target`, so the result occupies the low word and bits 32..63
+/// carry none of it (SysV AMD64 3.2.3, AAPCS64 6.9, Win64: a sub-register
+/// return leaves the rest of the register unspecified): `long` on LLP64,
+/// and the types narrower than `int` on every target. A caller reading such
+/// a result above the type's width extends it itself.
+pub(crate) fn return_rides_low_word(return_type_tag: i64, target: Target) -> bool {
     use crate::c5::compiler::types as ty_helpers;
     use crate::c5::token::Ty;
     if ty_helpers::is_void_ty(return_type_tag) {
@@ -1366,6 +1375,7 @@ pub(crate) fn return_is_low_word(return_type_tag: i64) -> bool {
     [Ty::Bool, Ty::Char, Ty::Short, Ty::Int]
         .iter()
         .any(|&t| bare == t as i64)
+        || (bare == Ty::Long as i64 && target.is_windows())
 }
 
 /// One resolved external import: a binding the program reaches
@@ -2072,6 +2082,9 @@ pub struct InitFiniArrays {
     pub tls_callbacks: Option<u64>,
     /// The PE TLS directory's own place, when a unit names `_tls_used`.
     pub tls_directory: Option<u64>,
+    /// The PE load-config directory, `_load_config_used`, where an input
+    /// defines it.
+    pub load_config: Option<u64>,
 }
 
 /// Stream a resolved relocation's site or target lives in. `Data`
@@ -2411,6 +2424,9 @@ pub(crate) struct Build {
     /// Number of `tls_data` bytes that are statically initialized.
     /// `tls_data.len() - tls_init_size` bytes are zero-fill.
     pub tls_init_size: usize,
+    /// Zero-filled thread-local bytes past `tls_data`
+    /// ([`Program::tls_zero_fill_len`]).
+    pub tls_zero_fill_len: usize,
     /// Alignment of `tls_data`, at least 8: the ELF writer's `PT_TLS`
     /// `p_align`, and the rounding the thread-pointer-relative offsets
     /// take (variant II rounds the block size up to it, variant I the
@@ -2565,6 +2581,8 @@ pub(crate) struct Build {
     /// appear in the output image. `Build::default()` derives
     /// `false`.
     pub debug_info: bool,
+    /// [`NativeOptions::unwind_tables`].
+    pub unwind_tables: bool,
     /// Pre-baked merged DWARF byte streams. Set by the
     /// multi-TU link synthesizer (`synth_build.rs`) so the
     /// final-image writer consumes the linker-merged bytes
@@ -2582,8 +2600,8 @@ pub(crate) struct Build {
     pub pdb_path: Option<String>,
     /// The compiled resource files (`.res`) a PE image carries in `.rsrc`.
     pub resources: Vec<Vec<u8>>,
-    /// A PE image's `--stack` reserve and commit; `None` keeps the default.
-    pub stack_size: Option<(u64, u64)>,
+    /// A PE image's form, see [`PeImageOptions`].
+    pub pe: PeImageOptions,
     /// A Mach-O image's form, see [`MachOImageOptions`].
     pub mach_o: MachOImageOptions,
     /// Byte offset within `Build::text` of each import's PLT
@@ -2613,6 +2631,9 @@ pub(crate) struct Build {
     /// straight to stderr: a build discarded by the compaction retry
     /// must not leave its dump behind next to the final one.
     pub ssa_dump: alloc::string::String,
+    /// Each instruction's text, under [`NativeOptions::listing`].
+    #[cfg(feature = "listing")]
+    pub listing: Option<listing::Listing>,
     /// Post-prologue native byte offset of each function, keyed by
     /// `ent_pc`. The SSA emit records `code.len()` right after the
     /// prologue; the DWARF CFI pass turns the value into the FDE's
@@ -2645,10 +2666,11 @@ pub(crate) struct Build {
     /// subtracts it from the slot's frame offset. Absent where it is 0.
     pub local_shift_bytes: alloc::collections::BTreeMap<usize, u32>,
     /// Frame-base-relative byte offset of each parameter's memory home,
-    /// by `ent_pc`, indexed by parameter number; the debug-info emitter
-    /// places `DW_TAG_formal_parameter` locations with it. Absent for a
-    /// function with no parameters and on the multi-TU link path.
-    pub param_frame_offsets: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
+    /// by `ent_pc`, indexed by parameter number, `None` for one the frame
+    /// keeps no home for; the debug-info emitter places
+    /// `DW_TAG_formal_parameter` locations with it. Absent for a function
+    /// with no parameters and on the multi-TU link path.
+    pub param_frame_offsets: alloc::collections::BTreeMap<usize, alloc::vec::Vec<Option<i64>>>,
     /// Where each over-aligned region member's storage is, by `ent_pc` and
     /// member slot: its frame-base-relative byte offset in a static region,
     /// or `None` past a realignment, which leaves it no frame-base offset.
@@ -2671,6 +2693,8 @@ pub(crate) struct Build {
     pub a64_unwind: Vec<A64Unwind>,
     /// Functions the inputs' own unwind tables describe.
     pub pe_unwind: Vec<PeUnwindRange>,
+    /// What a `--guard-cf` link collected for the image's guard table.
+    pub guard_cf: Option<GuardCfLink>,
     /// Inline-asm main-stream references to labels defined in the template's
     /// pushed sections. The relocatable ELF writer emits one PC-relative
     /// reloc per entry against the target section's symbol.
@@ -2690,8 +2714,8 @@ pub(crate) struct Build {
     /// single-image and JIT paths patch each site in place.
     pub asm_sym_fixups: Vec<AsmSymFixup>,
     /// Symbol directives inline-asm templates carried outside any section
-    /// (`.globl` / `.local` / `.weak` / `.type` / `.size`). GNU as scopes
-    /// them to the unit; the writers apply each to the definition the unit
+    /// (`.globl` / `.local` / `.weak` / `.type` / `.size`). They scope to
+    /// the unit; the writers apply each to the definition the unit
     /// holds, or emit an undefined symbol when it holds none.
     pub asm_sym_decls: Vec<crate::c5::asm::AsmSymDecl>,
     /// `(offset, len)` of every run of data placed in `text`, ascending: an
@@ -2702,6 +2726,12 @@ pub(crate) struct Build {
 }
 
 impl Build {
+    /// The size of the thread-local block: the template and the
+    /// zero-filled storage past it.
+    pub fn tls_len(&self) -> usize {
+        self.tls_data.len() + self.tls_zero_fill_len
+    }
+
     /// Byte offset just past function `i`'s last instruction. Read from
     /// [`Self::func_ends`] when the producer recorded one; otherwise the
     /// next function's entry offset stands in, which is the same number
@@ -2727,7 +2757,7 @@ impl Build {
 }
 
 /// A named label an inline-asm template defines in the emitted code stream
-/// (`asm volatile ("some_label:\n\t...")`). GNU as makes such a label a
+/// (`asm volatile ("some_label:\n\t...")`). Such a label is a
 /// definition of the unit, so a reference from C binds to it instead of
 /// leaving an undefined symbol.
 #[derive(Debug, Clone)]
@@ -2766,6 +2796,60 @@ pub(crate) struct FnUnwind {
     pub leaf: bool,
     /// The described steps, each with its offset from `begin`.
     pub steps: alloc::vec::Vec<(u32, PrologueStep)>,
+    /// The System V callee saves past the steps.
+    pub saves: alloc::vec::Vec<X64Save>,
+    /// The epilogues, which the DWARF frame tables describe.
+    pub exits: alloc::vec::Vec<X64Exit>,
+}
+
+impl FnUnwind {
+    /// For a frame with no pointer, rsp's distance below where `push rbp`
+    /// would have put rbp once the prologue is done: what the steps move
+    /// rsp, less those 8 bytes. `None` for a frame that sets rbp.
+    pub(crate) fn sp_frame_base(&self) -> Option<i64> {
+        let mut moved = 0i64;
+        for &(_, step) in &self.steps {
+            match step {
+                PrologueStep::Push(_) => moved += 8,
+                PrologueStep::Alloc(n) => moved += i64::from(n),
+                PrologueStep::SaveXmm { .. } => {}
+                PrologueStep::SetFrame(_) => return None,
+            }
+        }
+        Some(moved - 8)
+    }
+}
+
+/// A callee save after rbp is set: machine register `reg`, an xmm register
+/// when `xmm`, `below_fp` bytes below rbp, stored by the instruction ending
+/// at `at` bytes from [`FnUnwind::begin`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct X64Save {
+    pub at: u32,
+    pub reg: u8,
+    pub xmm: bool,
+    pub below_fp: u32,
+}
+
+/// An x86_64 epilogue: each instruction that reloads a saved register or
+/// drops the frame, at the offset past it from [`FnUnwind::begin`], and the
+/// offset past its `ret` or jump.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct X64Exit {
+    pub steps: Vec<(u32, X64ExitStep)>,
+    pub end: u32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum X64ExitStep {
+    /// `pop r`; `pop rbp` drops the frame as `leave` does.
+    Pop(u8),
+    /// `leave`.
+    Leave,
+    /// `add rsp, n`, dropping a frame with no pointer.
+    Dealloc(u32),
+    /// `movups xmm, [...]`, the reload of a saved non-volatile xmm register.
+    LoadXmm(u8),
 }
 
 /// One x86_64 prologue instruction an unwinder replays.
@@ -2784,7 +2868,7 @@ pub(crate) enum PrologueStep {
 /// An arm64 function's `[begin, end)` in `Build::text`, its prologue's
 /// steps as the emitter recorded them, one per instruction from `begin`,
 /// or from the frame path's start where an [`EarlyReturn`] precedes it,
-/// and its exits.
+/// its exits, and the callee saves past the steps.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct A64Unwind {
     pub begin: u32,
@@ -2792,6 +2876,20 @@ pub(crate) struct A64Unwind {
     pub steps: Vec<A64Step>,
     /// Empty for a frameless function, which states no prologue.
     pub exits: Vec<A64Exit>,
+    pub saves: Vec<A64Save>,
+}
+
+/// A callee save the prologue makes at the frame bottom, after the steps
+/// end: `reg`, and `reg2` in the slot above it, x or (`fp`) d registers,
+/// `below_fp` bytes below x29, stored by the instruction ending at `at`
+/// bytes from [`A64Unwind::begin`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct A64Save {
+    pub at: u32,
+    pub fp: bool,
+    pub reg: u8,
+    pub reg2: Option<u8>,
+    pub below_fp: u32,
 }
 
 /// An arm64 epilogue: the offset of its first instruction from
@@ -2839,23 +2937,28 @@ pub(crate) enum A64Step {
 /// them to the link, keyed by its entry.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum UnwindSteps {
-    /// [`FnUnwind::leaf`] and [`FnUnwind::steps`].
+    /// [`FnUnwind::leaf`], [`FnUnwind::steps`], [`FnUnwind::saves`] and
+    /// [`FnUnwind::exits`].
     X64 {
         leaf: bool,
         steps: Vec<(u32, PrologueStep)>,
+        saves: Vec<X64Save>,
+        exits: Vec<X64Exit>,
     },
-    /// [`A64Unwind::steps`] and [`A64Unwind::exits`]; none for a frameless
-    /// function.
+    /// [`A64Unwind::steps`], [`A64Unwind::exits`] and [`A64Unwind::saves`];
+    /// none for a frameless function.
     A64 {
         steps: Vec<A64Step>,
         exits: Vec<A64Exit>,
+        saves: Vec<A64Save>,
     },
 }
 
 impl UnwindSteps {
-    /// Append the record: its kind, step count and (arm64) exit count, then
-    /// 12 bytes per step, `[offset u32, tag u8, a u8, b u8, flags u8, value
-    /// u32]`; an arm64 exit is its offset and step count, then its steps.
+    /// Append the record, 12-byte fields `[offset u32, tag u8, a u8, b u8,
+    /// flags u8, value u32]`: its kind and counts, its steps, then an arm64
+    /// record's exits (each a header and its steps) and saves, an x86_64
+    /// record's saves and exits.
     pub(crate) fn encode(&self, out: &mut Vec<u8>) {
         let mut step = |offset: u32, tag: u8, a: u8, b: u8, flags: u8, value: u32| {
             out.extend(offset.to_le_bytes());
@@ -2863,8 +2966,14 @@ impl UnwindSteps {
             out.extend(value.to_le_bytes());
         };
         match self {
-            UnwindSteps::X64 { leaf, steps } => {
-                step(0, u8::from(*leaf), 0, 0, 0, steps.len() as u32);
+            UnwindSteps::X64 {
+                leaf,
+                steps,
+                saves,
+                exits,
+            } => {
+                let (n_exits, n_saves) = (exits.len() as u32, saves.len() as u8);
+                step(n_exits, u8::from(*leaf), n_saves, 0, 0, steps.len() as u32);
                 for &(at, s) in steps {
                     match s {
                         PrologueStep::Push(r) => step(at, 0, r, 0, 0, 0),
@@ -2873,9 +2982,34 @@ impl UnwindSteps {
                         PrologueStep::SetFrame(off) => step(at, 3, 0, 0, 0, off),
                     }
                 }
+                for s in saves {
+                    step(s.at, 11, s.reg, u8::from(s.xmm), 0, s.below_fp);
+                }
+                for e in exits {
+                    step(e.end, 10, 0, 0, 0, e.steps.len() as u32);
+                    for &(at, s) in &e.steps {
+                        match s {
+                            X64ExitStep::Pop(r) => step(at, 0, r, 0, 0, 0),
+                            X64ExitStep::Leave => step(at, 1, 0, 0, 0, 0),
+                            X64ExitStep::Dealloc(n) => step(at, 2, 0, 0, 0, n),
+                            X64ExitStep::LoadXmm(x) => step(at, 3, x, 0, 0, 0),
+                        }
+                    }
+                }
             }
-            UnwindSteps::A64 { steps, exits } => {
-                step(exits.len() as u32, 2, 0, 0, 0, steps.len() as u32);
+            UnwindSteps::A64 {
+                steps,
+                exits,
+                saves,
+            } => {
+                step(
+                    exits.len() as u32,
+                    2,
+                    saves.len() as u8,
+                    0,
+                    0,
+                    steps.len() as u32,
+                );
                 let exits = exits.iter().map(|e| (Some(e), &e.steps[..]));
                 for (exit, steps) in core::iter::once((None, &steps[..])).chain(exits) {
                     if let Some(e) = exit {
@@ -2905,6 +3039,10 @@ impl UnwindSteps {
                         step(0, tag, reg, reg2, flags, value);
                     }
                 }
+                for s in saves {
+                    let flags = u8::from(s.fp) | u8::from(s.reg2.is_some()) << 1;
+                    step(s.at, 9, s.reg, s.reg2.unwrap_or(0), flags, s.below_fp);
+                }
             }
         }
     }
@@ -2917,7 +3055,7 @@ impl UnwindSteps {
             let word = |i: usize| u32::from_le_bytes([b[i], b[i + 1], b[i + 2], b[i + 3]]);
             Some((word(0), [b[4], b[5], b[6], b[7]], word(8)))
         };
-        let (exit_count, [kind, ..], count) = field(0)?;
+        let (exit_count, [kind, save_count, ..], count) = field(0)?;
         let records = (1..=count as usize).map(|i| field(12 * i));
         let mut len = 12 * (count as usize + 1);
         // `count` arm64 steps from record `first`.
@@ -2946,9 +3084,8 @@ impl UnwindSteps {
                 .collect()
         };
         let steps = match kind {
-            0 | 1 => UnwindSteps::X64 {
-                leaf: kind == 1,
-                steps: records
+            0 | 1 => {
+                let steps = records
                     .map(|r| {
                         let (at, [tag, a, ..], value) = r?;
                         Some((
@@ -2962,8 +3099,49 @@ impl UnwindSteps {
                             },
                         ))
                     })
-                    .collect::<Option<_>>()?,
-            },
+                    .collect::<Option<_>>()?;
+                let mut saves = Vec::with_capacity(save_count.into());
+                for _ in 0..save_count {
+                    let (at, [tag, reg, xmm, _], below_fp) = field(len)?;
+                    if tag != 11 {
+                        return None;
+                    }
+                    saves.push(X64Save {
+                        at,
+                        reg,
+                        xmm: xmm != 0,
+                        below_fp,
+                    });
+                    len += 12;
+                }
+                let mut exits = Vec::new();
+                for _ in 0..exit_count {
+                    let (end, [tag, ..], n) = field(len)?;
+                    if tag != 10 {
+                        return None;
+                    }
+                    let steps = (1..=n as usize)
+                        .map(|i| {
+                            let (at, [tag, reg, ..], value) = field(len + 12 * i)?;
+                            match tag {
+                                0 => Some((at, X64ExitStep::Pop(reg))),
+                                1 => Some((at, X64ExitStep::Leave)),
+                                2 => Some((at, X64ExitStep::Dealloc(value))),
+                                3 => Some((at, X64ExitStep::LoadXmm(reg))),
+                                _ => None,
+                            }
+                        })
+                        .collect::<Option<_>>()?;
+                    exits.push(X64Exit { steps, end });
+                    len += 12 * (n as usize + 1);
+                }
+                UnwindSteps::X64 {
+                    leaf: kind == 1,
+                    steps,
+                    saves,
+                    exits,
+                }
+            }
             2 => {
                 let steps = a64(1, count)?;
                 let mut exits = Vec::new();
@@ -2978,7 +3156,26 @@ impl UnwindSteps {
                     });
                     len += 12 * (n as usize + 1);
                 }
-                UnwindSteps::A64 { steps, exits }
+                let mut saves = Vec::with_capacity(save_count.into());
+                for _ in 0..save_count {
+                    let (at, [tag, reg, reg2, flags], below_fp) = field(len)?;
+                    if tag != 9 {
+                        return None;
+                    }
+                    saves.push(A64Save {
+                        at,
+                        fp: flags & 1 != 0,
+                        reg,
+                        reg2: (flags & 2 != 0).then_some(reg2),
+                        below_fp,
+                    });
+                    len += 12;
+                }
+                UnwindSteps::A64 {
+                    steps,
+                    exits,
+                    saves,
+                }
             }
             _ => return None,
         };
@@ -3142,13 +3339,14 @@ pub(crate) enum TlsGotForm {
 }
 
 /// A site holding a link-defined base plus `offset`: the GOT base
-/// `_GLOBAL_OFFSET_TABLE_` names, or PE's `__ImageBase`. Same encoding
-/// shapes as [`DataFixup`]; the writer supplies the base's address.
+/// `_GLOBAL_OFFSET_TABLE_` names, PE's `__ImageBase`, or an import's slot.
+/// Same encoding shapes as [`DataFixup`]; the writer supplies the base's
+/// address.
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct BaseFixup {
     /// Byte offset within `Build::text` of the relocated instruction.
     pub instr_offset: usize,
-    /// [`ImageAddr::GotBase`] or [`ImageAddr::ImageBase`].
+    /// [`ImageAddr::GotBase`], [`ImageAddr::ImageBase`] or [`ImageAddr::ImportSlot`].
     pub base: ImageAddr,
     pub offset: i64,
     /// Fields of the reference this record covers.
@@ -3390,16 +3588,23 @@ pub(crate) struct RodataBuild {
 #[derive(Debug, Default)]
 pub(crate) struct LiteralPool {
     slots: alloc::collections::BTreeMap<(u64, u8), u64>,
-    runs: [Vec<u8>; 2],
+    runs: [Vec<u8>; 3],
     /// `(code_offset, width, offset in run, part)` per load.
     loads: Vec<(usize, u8, u64, AddrPart)>,
     /// `(offset, len)` of each run in `RodataBuild::bytes` once placed.
-    pub spans: [(u64, u64); 2],
+    pub spans: [(u64, u64); 3],
 }
 
 impl LiteralPool {
+    /// The widths of the runs, in placement order.
+    pub(crate) const WIDTHS: [u8; 3] = [8, 4, 16];
+
     fn run(width: u8) -> usize {
-        usize::from(width == 4)
+        match width {
+            4 => 1,
+            16 => 2,
+            _ => 0,
+        }
     }
 
     /// The `adrp` + `ldr` pair at `code_offset` loads `width` bytes of `bits`.
@@ -3408,7 +3613,7 @@ impl LiteralPool {
     }
 
     /// The rip-relative operand whose displacement is at `field` reads
-    /// `width` bytes of `bits`.
+    /// `width` bytes of `bits`; a 16-byte literal's upper half is zero.
     pub(crate) fn load_disp32(&mut self, field: usize, bits: u64, width: u8) {
         self.load_part(field, bits, width, AddrPart::Disp32);
     }
@@ -3417,7 +3622,9 @@ impl LiteralPool {
         let run = &mut self.runs[Self::run(width)];
         let at = *self.slots.entry((bits, width)).or_insert_with(|| {
             let at = run.len() as u64;
-            run.extend_from_slice(&bits.to_le_bytes()[..width.into()]);
+            let mut bytes = [0u8; 16];
+            bytes[..8].copy_from_slice(&bits.to_le_bytes());
+            run.extend_from_slice(&bytes[..width.into()]);
             at
         });
         self.loads.push((code_offset, width, at, part));
@@ -3429,7 +3636,8 @@ impl RodataBuild {
     /// once, after the last function.
     pub(crate) fn place_literals(&mut self) {
         let pool = &mut self.literals;
-        for (k, width) in [(0, 8), (1, 4)] {
+        for (k, width) in LiteralPool::WIDTHS.into_iter().enumerate() {
+            let width = usize::from(width);
             if pool.runs[k].is_empty() {
                 continue;
             }
@@ -3687,7 +3895,7 @@ pub(crate) struct RelocCallSite {
     /// `true` for tail-jumps (`b` / `jmp rel32`), `false` for
     /// calls (`bl` / `call rel32`). x86_64 uses `R_X86_64_PLT32`
     /// for both; aarch64 types the field `R_AARCH64_JUMP26` /
-    /// `R_AARCH64_CALL26` as GNU as does.
+    /// `R_AARCH64_CALL26`, the AAELF64 relocations for `b` / `bl`.
     pub is_tail: bool,
     /// `true` for an address-of site (`lea` rip-relative on
     /// x86_64, `adrp + add` on aarch64) materializing the import's
@@ -4012,8 +4220,12 @@ impl DataImportSlots {
     ) -> Result<(), C5Error> {
         use crate::c5::asm::AsmRelocKind;
         let part = match fx.kind {
-            AsmRelocKind::A64AdrpPage21 if fx.addend == 0 => AddrPart::Page,
-            AsmRelocKind::A64AddLo12 if fx.addend == 0 => AddrPart::InPage,
+            AsmRelocKind::A64AdrpPage21 | AsmRelocKind::A64GotPage21 if fx.addend == 0 => {
+                AddrPart::Page
+            }
+            AsmRelocKind::A64AddLo12 | AsmRelocKind::A64GotLo12 if fx.addend == 0 => {
+                AddrPart::InPage
+            }
             _ => return Err(self.used_in_place(name)),
         };
         let import_index = self.slot(build, name);
@@ -4129,6 +4341,12 @@ pub struct Hardening {
     /// which is the only instruction CET permits an indirect transfer to
     /// land on (Intel SDM Vol. 1, 18.3.1).
     pub cf_protection_branch: bool,
+    /// `-mguard=cf`: a PE image's indirect call reaches its target through
+    /// Control Flow Guard's check, as MSVC's `/guard:cf` makes it -- on
+    /// x86-64 the call goes to `__guard_dispatch_icall_fptr` with the target
+    /// in rax, on AArch64 `__guard_check_icall_fptr` takes it in x15 ahead
+    /// of the `blr`.
+    pub guard_cf: bool,
 }
 
 impl Hardening {
@@ -4143,6 +4361,7 @@ impl Hardening {
         pac_ret_leaf: false,
         pac_b_key: false,
         cf_protection_branch: false,
+        guard_cf: false,
     };
 }
 
@@ -4542,6 +4761,7 @@ pub struct NativeOptions {
     /// inlining (bounded by `inline_cap`), rotate-idiom recognition,
     /// branch const-folding, and immediate deduplication. Off by
     /// default; the per-arch lowering runs these passes only when set.
+    /// A build without the `optimizer` feature refuses the lowering.
     pub optimize: bool,
     /// Pick the kind of binary the writer should produce.
     /// Default is [`OutputKind::Executable`] -- a normal
@@ -4561,10 +4781,16 @@ pub struct NativeOptions {
     /// the source path, a no-DWARF build is also byte-identical
     /// across runs, useful for golden-hash bisection.
     pub debug_info: bool,
+    /// `.eh_frame` in a Linux object, rules for every instruction of each
+    /// function (`-fasynchronous-unwind-tables`); on by default.
+    pub unwind_tables: bool,
     /// Print each SSA function's IR + allocator output to stderr
-    /// before lowering. Same as `--dump-asm` for native code: a
-    /// diagnostic emitted alongside the build. Off by default.
+    /// before lowering. Off by default.
     pub dump_ssa: bool,
+    /// Record each instruction's text for the assembly listing (`-S`) of a
+    /// relocatable object. A build without the `listing` feature refuses
+    /// the lowering.
+    pub listing: bool,
     /// Check the SSA rules after each pass and stop at the first pass
     /// that breaks them. A debug build of badc always checks.
     pub verify_ssa: bool,
@@ -4631,6 +4857,25 @@ pub struct NativeOptions {
     /// returns into the frame that made it, which a frame-pointer unwinder
     /// walking the call chain relies on.
     pub sibling_calls: bool,
+    /// `-fomit-frame-pointer` (`Some(true)`) or `-fno-omit-frame-pointer`
+    /// (`Some(false)`); `None` omits it under `-O`. An x86-64 System V or
+    /// Win64 function whose body keeps rsp fixed then addresses its frame
+    /// from rsp and keeps no rbp record (`x86_64::emit::frame`).
+    pub omit_frame_pointer: Option<bool>,
+    /// `-mno-red-zone` (false): x86-64 code stores nothing below rsp, as
+    /// code that runs where an interrupt or exception pushes onto the
+    /// current stack must (System V AMD64 3.2.2 grants the 128 bytes below
+    /// rsp to the function). A frame with no pointer then keeps what its
+    /// lowerings borrow in slots of its own.
+    pub red_zone: bool,
+    /// `-fno-plt`: a call to a function the link resolves loads the
+    /// callee's address from its GOT entry and calls through it, with no
+    /// PLT stub between, in x86-64 ELF objects and in aarch64 ELF objects
+    /// under `-fPIC`. PE and Mach-O have no PLT.
+    pub no_plt: bool,
+    /// `-funroll-loops` / `-fno-unroll-loops`: whether `-O` fully unrolls
+    /// a constant-trip loop.
+    pub unroll_loops: bool,
     /// Position-independent relocatable output (`-fPIC` / `-fpic`).
     /// A switch table then emits in the label-difference form the
     /// final images use -- no absolute relocation reaches the object,
@@ -4679,7 +4924,7 @@ pub struct NativeOptions {
     pub elf_class: ElfClass,
     /// `-Wa,-L` / `-Wa,--keep-locals`: keep the assembler's local-label
     /// temporaries (the `.L`-prefixed names) in a relocatable object's
-    /// `.symtab`. Off by default, as in GNU as. The relocations are the
+    /// `.symtab`. Off by default. The relocations are the
     /// same either way -- a reference to one reduces to its section plus
     /// an addend regardless -- so this only changes what a symbol dump
     /// shows.
@@ -4693,10 +4938,11 @@ pub struct NativeOptions {
     /// A symbol's `st_size`
     /// covers its code only; the fill belongs to no function.
     pub min_function_alignment: u32,
-    /// x86-64 `-mbranches-within-32B-boundaries`: function entries on 32
-    /// bytes, and no local jump or fused compare-and-jump crossing or ending
-    /// on a 32-byte boundary.
-    pub branches_within_32b: bool,
+    /// x86-64 `-m[no-]branches-within-32B-boundaries`: function entries on
+    /// 32 bytes, and no jump or fused compare-and-jump crossing or ending on
+    /// a 32-byte boundary, everywhere or nowhere; unset, those of the blocks
+    /// that run repeatedly under `-O` ([`Self::branch_padding`]).
+    pub branches_within_32b: Option<bool>,
     /// Leave the program, the lowering and dead bodies unfreed to the process exit.
     pub freed_by_exit: bool,
     /// `-fpatchable-function-entry=N,M`: the NOP area at every function
@@ -4810,15 +5056,23 @@ impl FunctionEntry {
     }
 }
 
-/// Fill `code` with `nop` up to a multiple of `align`, for the gap ahead
-/// of a function entry under [`NativeOptions::min_function_alignment`].
-/// `align` is a power of two and `nop.len()` divides it, so the fill is
-/// whole instructions: the gap is unreachable (the preceding function
-/// returns) but decodes, which unwind-metadata generators reading `.text`
-/// as an instruction stream require.
-pub(crate) fn pad_to_alignment(code: &mut Vec<u8>, align: usize, nop: &[u8]) {
-    while !code.len().is_multiple_of(align) {
+/// Fill `code` with `nop` until `lead` more bytes end at a multiple of
+/// `align`, for the gap ahead of a function entry under
+/// [`NativeOptions::min_function_alignment`], `lead` the bytes the entry
+/// is preceded by. `align` is a power of two and `nop.len()` divides it and
+/// `lead`, so the fill is whole instructions: the gap is unreachable (the
+/// preceding function returns) but decodes, which unwind-metadata
+/// generators reading `.text` as an instruction stream require.
+pub(crate) fn pad_to_alignment(
+    code: &mut ssa::code_buf::CodeBuf,
+    align: usize,
+    lead: usize,
+    nop: &[u8],
+) {
+    while !(code.len() + lead).is_multiple_of(align) {
+        let at = code.len();
         code.extend_from_slice(nop);
+        code.describe(at, || String::from("nop"));
     }
 }
 
@@ -5044,17 +5298,84 @@ pub struct ElfImageOptions {
     pub symbolic: bool,
 }
 
+/// A PE image's form: `--stack` reserve and commit, link.exe's `/STACK`
+/// (`None` keeps the default), and `--force-integrity`, link.exe's
+/// `/INTEGRITYCHECK`, which sets `IMAGE_DLLCHARACTERISTICS_FORCE_INTEGRITY`:
+/// the kernel registers a driver's process, thread and object callbacks only
+/// for an image carrying it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct PeImageOptions {
+    pub stack: Option<(u64, u64)>,
+    pub force_integrity: bool,
+    /// `--guard-cf`, link.exe's `/guard:cf`: the image lists its valid
+    /// indirect-call targets and claims `IMAGE_DLLCHARACTERISTICS_GUARD_CF`,
+    /// so a process that requires Control Flow Guard loads it.
+    pub guard_cf: bool,
+}
+
+/// Control Flow Guard's inputs from a PE link (`--guard-cf`): the merged
+/// text offsets of the functions an indirect call may enter, the imports
+/// whose address a reference other than a call takes, and the data slots
+/// naming the symbols through which the load-config directory reads the
+/// table. The image writer adds the entry point and fills the slots.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct GuardCfLink {
+    pub targets: Vec<u64>,
+    pub imports: Vec<String>,
+    pub slots: Vec<GuardSlot>,
+}
+
+/// An 8-byte data slot holding `symbol + addend`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GuardSlot {
+    pub data_offset: u64,
+    pub symbol: GuardTableSymbol,
+    pub addend: i64,
+}
+
+/// The names link.exe defines for a `/guard:cf` image's load-config
+/// directory (PE/COFF specification 6.11).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GuardTableSymbol {
+    /// `__guard_fids_table`: the address of the sorted RVA table.
+    FidsTable,
+    /// `__guard_fids_count`: its entry count.
+    FidsCount,
+    /// `__guard_flags`: the `IMAGE_GUARD_*` flags.
+    Flags,
+}
+
+impl GuardTableSymbol {
+    pub fn named(name: &str) -> Option<GuardTableSymbol> {
+        match name {
+            "__guard_fids_table" => Some(GuardTableSymbol::FidsTable),
+            "__guard_fids_count" => Some(GuardTableSymbol::FidsCount),
+            "__guard_flags" => Some(GuardTableSymbol::Flags),
+            _ => None,
+        }
+    }
+}
+
 /// The image forms ld64 selects with `-bundle`, a Mach-O image that only
 /// `dlopen` loads (`MH_BUNDLE`), and `-flat_namespace`, whose imports name
 /// no library and resolve in every image loaded (no `MH_TWOLEVEL`), and
 /// the SDK version `LC_BUILD_VERSION` records (`xxxx.yy.zz` in nibbles),
 /// by which libSystem selects its linked-on-or-after behaviors; none
-/// stamps the writer's default.
+/// stamps the writer's default. `header_pad` (`-headerpad`) is the least
+/// free space after the load commands, and `header_pad_max_install_names`
+/// (`-headerpad_max_install_names`) reserves room for every dylib path to
+/// grow to MAXPATHLEN, as `install_name_tool` rewrites them in place.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct MachOImageOptions {
     pub bundle: bool,
     pub flat_namespace: bool,
     pub sdk: Option<u32>,
+    /// The deployment target `LC_BUILD_VERSION` records as its minimum, in
+    /// the same nibbles; none, or one before 11.0, records 11.0, the first
+    /// macOS on arm64, as ld64 does.
+    pub min_os: Option<u32>,
+    pub header_pad: u64,
+    pub header_pad_max_install_names: bool,
 }
 
 impl Default for NativeOptions {
@@ -5094,7 +5415,9 @@ impl NativeOptions {
             optimize: false,
             output_kind: OutputKind::Executable,
             debug_info: false,
+            unwind_tables: true,
             dump_ssa: false,
+            listing: false,
             verify_ssa: false,
             inline_cap: 64,
             frame_larger_than: None,
@@ -5107,6 +5430,10 @@ impl NativeOptions {
             jump_tables: true,
             conserve_stack: false,
             sibling_calls: true,
+            omit_frame_pointer: None,
+            red_zone: true,
+            no_plt: false,
+            unroll_loops: true,
             pic: false,
             pie: false,
             pic_link: false,
@@ -5117,7 +5444,7 @@ impl NativeOptions {
             stack_protect: StackProtect::OFF,
             fixed_regs: FixedRegs::NONE,
             min_function_alignment: 1,
-            branches_within_32b: false,
+            branches_within_32b: None,
             freed_by_exit: false,
             patchable_function_entry: PatchableEntry::NONE,
             profiling: Profiling::OFF,
@@ -5137,8 +5464,7 @@ impl NativeOptions {
         self
     }
 
-    /// Print the SSA IR + allocation for every function. Same
-    /// observability shape as `--dump-asm`.
+    /// Print the SSA IR + allocation for every function.
     pub const fn with_dump_ssa(mut self) -> Self {
         self.dump_ssa = true;
         self
@@ -5154,6 +5480,30 @@ impl NativeOptions {
     pub const fn with_optimize(mut self) -> Self {
         self.optimize = true;
         self
+    }
+
+    /// Whether the lowering runs the optimizer: [`Self::optimize`], in a
+    /// build with the `optimizer` feature.
+    pub(crate) const fn optimizes(&self) -> bool {
+        cfg!(feature = "optimizer") && self.optimize
+    }
+
+    pub(crate) const fn branch_padding(&self) -> BranchPadding {
+        match self.branches_within_32b {
+            Some(true) => BranchPadding::All,
+            Some(false) => BranchPadding::Off,
+            None if self.optimizes() => BranchPadding::Loops,
+            None => BranchPadding::Off,
+        }
+    }
+
+    /// Whether a function may keep no frame pointer: as
+    /// [`Self::omit_frame_pointer`] says, else under `-O`.
+    pub(crate) const fn omits_frame_pointer(&self) -> bool {
+        match self.omit_frame_pointer {
+            Some(on) => on,
+            None => self.optimizes(),
+        }
     }
 
     /// Set [`Self::output_kind`] = [`OutputKind::SharedLibrary`]
@@ -5183,6 +5533,59 @@ pub(crate) fn lower_for(
     options: NativeOptions,
 ) -> Result<Build, C5Error> {
     lower_for_with_prebuilt(program, target, options, None, LowerMode::Full)
+}
+
+/// Lower `program` with the backend of `target`'s architecture, in a
+/// build that carries what `options` asks for.
+pub(crate) fn lower_arch(
+    program: &Program,
+    target: Target,
+    options: NativeOptions,
+    imports: &ResolvedImports,
+    prebuilt: Option<ssa::shadow::PrebuiltSsa>,
+    mode: LowerMode,
+) -> Result<Build, C5Error> {
+    if options.optimize && !options.optimizes() {
+        return Err(C5Error::hard(
+            Code::UNSUPPORTED,
+            "this build of badc has no optimizer (the `optimizer` feature)",
+        ));
+    }
+    if options.debug_info && !cfg!(feature = "debuginfo") {
+        return Err(C5Error::hard(
+            Code::UNSUPPORTED,
+            "this build of badc writes no debug information (the `debuginfo` feature)",
+        ));
+    }
+    if options.listing && !cfg!(feature = "listing") {
+        return Err(C5Error::hard(
+            Code::UNSUPPORTED,
+            "this build of badc writes no assembly listing (the `listing` feature)",
+        ));
+    }
+    match target {
+        #[cfg(any(feature = "target-aarch64", target_arch = "aarch64"))]
+        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
+            aarch64::lower(program, target, options, imports, prebuilt, mode)
+        }
+        #[cfg(any(feature = "target-x86_64", target_arch = "x86_64"))]
+        Target::LinuxX64 | Target::WindowsX64 => {
+            x86_64::lower(program, target, options, imports, prebuilt, mode)
+        }
+        #[allow(unreachable_patterns)]
+        _ => Err(C5Error::hard(
+            Code::UNSUPPORTED,
+            alloc::format!(
+                "this build of badc has no {} backend (the `target-{}` feature)",
+                target.id_str(),
+                if target.is_aarch64() {
+                    "aarch64"
+                } else {
+                    "x86_64"
+                }
+            ),
+        )),
+    }
 }
 
 /// How far a lowering runs.
@@ -5257,7 +5660,7 @@ pub(crate) fn lower_for_with_prebuilt(
         ));
     }
     // The profiling call names `__fentry__` / `mcount` the same way.
-    // TODO: gcc's aarch64 form (`mov x0, x30; bl _mcount` after the
+    // TODO: the aarch64 `_mcount` form (`mov x0, x30; bl _mcount` after the
     // prologue) needs the argument registers kept across the call.
     if options.profiling.enabled {
         if options.output_kind != OutputKind::Relocatable {
@@ -5320,17 +5723,10 @@ pub(crate) fn lower_for_with_prebuilt(
     // no libc function. A dylib entry needs no symbol binding in
     // scope, so this holds for sources that include no header at all;
     // relocatable objects record the list for the linker.
-    if matches!(target, Target::MacOSAarch64) && !program.tls_data.is_empty() {
+    if matches!(target, Target::MacOSAarch64) && program.tls_len() > 0 {
         imports.ensure_dylib("libSystem", program, target);
     }
-    let mut build = match target {
-        Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-            aarch64::lower(program, target, options.clone(), &imports, prebuilt, mode)?
-        }
-        Target::LinuxX64 | Target::WindowsX64 => {
-            x86_64::lower(program, target, options.clone(), &imports, prebuilt, mode)?
-        }
-    };
+    let mut build = lower_arch(program, target, options.clone(), &imports, prebuilt, mode)?;
     if build.stopped_at_data_liveness {
         return Ok(build);
     }
@@ -5359,25 +5755,27 @@ pub(crate) fn lower_for_with_prebuilt(
     build.exports = program.exports.clone();
     build.output_kind = options.output_kind;
     build.dllmain_pc = program.dllmain_pc;
-    build.debug_info = options.debug_info;
+    build.debug_info = cfg!(feature = "debuginfo") && options.debug_info;
+    build.unwind_tables = options.unwind_tables;
     Ok(build)
 }
 
 /// Assemble a file-scope inline-asm named section's instructions to bytes for
 /// `target`, replacing each `Code` item with `CodeBytes`. The compile-time
 /// validation and the object emission both run this so an instruction is
-/// diagnosed and encoded the same way.
+/// diagnosed and encoded the same way; the warnings are the validation's to
+/// report.
 pub(crate) fn encode_file_asm_section_code(
     blocks: &mut [crate::c5::asm::AsmSectionBlock],
     target: Target,
     class: ElfClass,
-) -> Result<(), crate::c5::asm::AsmErrors> {
+) -> Result<Vec<crate::c5::asm::AsmError>, crate::c5::asm::AsmErrors> {
     match target {
         Target::LinuxX64 | Target::WindowsX64 => {
             x86_64::emit::encode_x86_file_asm_section_code(blocks, class)
         }
         Target::MacOSAarch64 | Target::LinuxAarch64 | Target::WindowsAarch64 => {
-            aarch64::emit::encode_a64_file_asm_section_code(blocks)
+            aarch64::emit::encode_a64_file_asm_section_code(blocks).map(|()| Vec::new())
         }
     }
 }
@@ -5482,7 +5880,7 @@ pub(crate) fn reloc_callee_ctx(
         .map(|s| s.def_link_name())
         .collect();
     let interposable_names: alloc::collections::BTreeSet<&str> = defined_funcs()
-        .filter(|s| program.interposable_refs && !s.is_weak && s.is_interposable_definition())
+        .filter(|s| program.interposable_refs && s.is_interposable_definition())
         .map(|s| s.def_link_name())
         .collect();
     if section_of.is_empty() && weak_names.is_empty() && interposable_names.is_empty() {
@@ -5807,6 +6205,9 @@ pub(crate) struct Abi {
     /// A call whose result the function returns unchanged may become a
     /// jump. Per-run (from [`NativeOptions::sibling_calls`]).
     pub sibling_calls: bool,
+    /// Code may store below rsp: the target grants a red zone, which
+    /// Win64 does not, and [`NativeOptions::red_zone`] leaves it.
+    pub red_zone: bool,
     /// Registers the emitters may not pick as scratch or inline-asm
     /// operands. Per-run (from [`NativeOptions::fixed_regs`]).
     pub fixed_regs: FixedRegs,
@@ -5954,6 +6355,7 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                red_zone: true,
                 sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
             },
@@ -5973,6 +6375,7 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                red_zone: true,
                 sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
             },
@@ -5992,6 +6395,7 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                red_zone: true,
                 sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
             },
@@ -6011,6 +6415,7 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                red_zone: false,
                 sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
             },
@@ -6030,6 +6435,7 @@ impl Target {
                 hardening: Hardening::NONE,
                 stack_protect: StackProtect::OFF,
                 mcount_frame: false,
+                red_zone: true,
                 sibling_calls: true,
                 fixed_regs: FixedRegs::NONE,
             },

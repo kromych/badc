@@ -911,10 +911,25 @@ fn binop(op: BinOp, a: Range, b: Range) -> Range {
         },
         BinOp::Add => arith(a, b, false),
         BinOp::Sub => arith(a, b, true),
+        BinOp::Mul => product(a, b),
         BinOp::Or | BinOp::Xor => bitwise(a, b, matches!(op, BinOp::Or)),
         BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu => divmod(op, a, b),
         _ => UNIVERSE,
     }
+}
+
+/// The product of two ranges: the extremes are among the corners' products,
+/// unbounded where one wraps 64 bits.
+fn product(a: Range, b: Range) -> Range {
+    let c = [a.lo * b.lo, a.lo * b.hi, a.hi * b.lo, a.hi * b.hi];
+    let (lo, hi) = (
+        c.into_iter().min().unwrap_or(0),
+        c.into_iter().max().unwrap_or(0),
+    );
+    if lo < i64::MIN as i128 || hi > i64::MAX as i128 {
+        return UNIVERSE;
+    }
+    Range { lo, hi }
 }
 
 /// Forward bounds for an instruction, given its operands' ranges and
@@ -976,6 +991,7 @@ fn eval(inst: &Inst, params: &[Range], mut range_of: impl FnMut(ValueId) -> Rang
             BinOp::And => binop(BinOp::And, range_of(*lhs), Range::exact(*rhs_imm)),
             BinOp::Add => arith(range_of(*lhs), Range::exact(*rhs_imm), false),
             BinOp::Sub => arith(range_of(*lhs), Range::exact(*rhs_imm), true),
+            BinOp::Mul => product(range_of(*lhs), Range::exact(*rhs_imm)),
             BinOp::Or | BinOp::Xor => bitwise(
                 range_of(*lhs),
                 Range::exact(*rhs_imm),
@@ -1017,7 +1033,7 @@ fn eval(inst: &Inst, params: &[Range], mut range_of: impl FnMut(ValueId) -> Rang
         // A width-limited read cannot produce a value outside the width
         // it extends from, nor can a narrow atomic load or the prior
         // contents a compare-exchange zero-extends.
-        Inst::Load { kind, .. } | Inst::LoadLocal { disp: 0, kind, .. } => {
+        Inst::Load { kind, .. } | Inst::LoadLocal { kind, .. } | Inst::LoadIndexed { kind, .. } => {
             extend_range(*kind).unwrap_or(UNIVERSE)
         }
         // So is an SVE reduction into a narrow lane.
@@ -2167,6 +2183,69 @@ pub(crate) fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A narrow read is bounded by its width wherever it reads: a frame
+    /// object's field past the slot's base, and an indexed element.
+    #[test]
+    fn a_narrow_read_is_bounded_at_any_displacement() {
+        use crate::c5::ir::{Block, IndexExt};
+        let insts = vec![
+            Inst::ParamRef {
+                idx: 0,
+                kind: LoadKind::I64,
+            },
+            Inst::LoadLocal {
+                off: -2,
+                disp: 12,
+                kind: LoadKind::U32,
+                volatile: false,
+            },
+            Inst::LoadIndexed {
+                base: 0,
+                index: 0,
+                index_ext: IndexExt::None,
+                scale: 2,
+                kind: LoadKind::I16,
+                abs_base: false,
+            },
+        ];
+        let f = FunctionSsa {
+            inst_src: vec![crate::c5::ir::InstSrc::default(); 3],
+            f32_values: vec![false; 3],
+            insts,
+            blocks: vec![Block {
+                start_pc: 0,
+                inst_range: 0..3,
+                terminator: Terminator::Return(1),
+                exit_acc: 1,
+            }],
+            ..FunctionSsa::default()
+        };
+        let r = def_ranges(&f, &[]);
+        assert!(
+            r[1] == Range {
+                lo: 0,
+                hi: 0xffff_ffff
+            }
+        );
+        assert!(
+            r[2] == Range {
+                lo: -0x8000,
+                hi: 0x7fff
+            }
+        );
+    }
+
+    /// A product's bounds are its corners' extremes, whatever the signs,
+    /// and unbounded where a corner leaves 64 bits.
+    #[test]
+    fn a_product_is_bounded_by_its_corners() {
+        let r = |lo: i128, hi: i128| Range { lo, hi };
+        assert_eq!(product(r(0, 255), r(0, 255)), r(0, 65025));
+        assert_eq!(product(r(-3, 2), r(4, 5)), r(-15, 10));
+        assert_eq!(product(r(-3, -2), r(-5, 4)), r(-12, 15));
+        assert_eq!(product(r(0, 1 << 33), r(0, 1 << 33)), UNIVERSE);
+    }
     use crate::c5::ir::{Block, Terminator};
     use alloc::vec;
 

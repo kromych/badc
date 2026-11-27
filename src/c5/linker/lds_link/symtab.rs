@@ -18,7 +18,7 @@ use super::{
     ScriptSym, SecFate, SymIndex, machine_uses_rela,
 };
 
-/// Name bfd gives a synthesized file symbol: the input's base name,
+/// Name of a synthesized file symbol: the input's base name,
 /// which for an archive member is the member name.
 fn file_sym_name(source: &str) -> String {
     let base = crate::c5::host::path_base_name(source);
@@ -52,8 +52,7 @@ impl<'a> LdsLinker<'a> {
             *e = most_constraining(*e, vis);
         }
         self.visibility = out;
-        // bfd ORs the flag in from every entry, as its AArch64 symbol
-        // attribute merge does.
+        // The flag is ORed in from every entry.
         if self.machine == EM_AARCH64 {
             let objects = (self.objects.iter().flat_map(|o| &o.symbols))
                 .filter(|s| s.binding() != STB_LOCAL && s.other & STO_AARCH64_VARIANT_PCS != 0)
@@ -106,9 +105,9 @@ impl<'a> LdsLinker<'a> {
         }
     }
 
-    /// Object order for local symbols: bfd walks the output sections
-    /// and takes each object the first time one of its input sections
-    /// is reached, then sweeps the objects no output section took.
+    /// Object order for local symbols: a walk of the output sections
+    /// takes each object the first time one of its input sections is
+    /// reached, then sweeps the objects no output section took.
     fn local_symbol_object_order(&self, emit_order: &[usize]) -> Vec<usize> {
         let mut seen = alloc::vec![false; self.objects.len()];
         let mut order: Vec<usize> = Vec::new();
@@ -143,9 +142,8 @@ impl<'a> LdsLinker<'a> {
     ) -> Vec<FinalSym> {
         let track = self.opts.emit_relocs;
         let mut syms: Vec<FinalSym> = Vec::new();
-        // Section symbols exist for relocations to name, so bfd emits
-        // them only when the output carries relocations
-        // (`bfd_link_relocatable(info) || info->emitrelocations`). This
+        // Section symbols exist for relocations to name, so they are
+        // emitted only when the output carries relocations. This
         // engine writes no relocatable output; `-r` is a separate path.
         if track {
             for &oi in emit_order {
@@ -160,8 +158,8 @@ impl<'a> LdsLinker<'a> {
                 });
             }
         }
-        // Local symbols per input object, in the order bfd reaches the
-        // objects; `-x` keeps none.
+        // Local symbols per input object, in that object order; `-x`
+        // keeps none.
         let local_objects = if self.opts.discard_all {
             Vec::new()
         } else {
@@ -169,9 +167,9 @@ impl<'a> LdsLinker<'a> {
         };
         for obj_i in local_objects {
             let o = &self.objects[obj_i];
-            // bfd carries the file symbol of the object whose locals
-            // follow, synthesizing one from the input's name when the
-            // object has none, so a local is never read as belonging
+            // The file symbol of the object whose locals follow leads
+            // them, synthesized from the input's name when the object
+            // has none, so a local is never read as belonging
             // to the preceding file.
             let mut have_file = false;
             for (sym_i, sym) in o.symbols.iter().enumerate() {
@@ -193,7 +191,7 @@ impl<'a> LdsLinker<'a> {
                     });
                     continue;
                 }
-                // `-X` drops every compiler temporary; bfd's default
+                // `-X` drops every compiler temporary; the default
                 // policy drops the ones a merged section holds, whose
                 // offsets deduplication moves, unless the link emits
                 // relocations that can name them.
@@ -234,10 +232,9 @@ impl<'a> LdsLinker<'a> {
             });
         }
         // Hidden or internal globals cannot be preempted and are
-        // emitted with local binding and default visibility, as bfd
-        // writes them; a protected one keeps its binding and states the
-        // visibility. bfd applies both from the dynamic-symbol
-        // adjustment, so only links with dynamic sections see them.
+        // emitted with local binding and default visibility; a
+        // protected one keeps its binding and states the visibility.
+        // Both apply only to links with dynamic sections.
         let forced = |name: &str| {
             let vis = self.visibility_of(name);
             (self.dynamic() && matches!(vis, STV_INTERNAL | STV_HIDDEN)).then_some(vis)
@@ -266,7 +263,7 @@ impl<'a> LdsLinker<'a> {
             }
         }
         // Each import takes its `.dynsym` row: a copied one is defined at
-        // its copy, as bfd's table states.
+        // its copy.
         for name in &self.imports {
             let d = self.import_row(name, &out_shndx);
             if track {
@@ -304,8 +301,8 @@ impl<'a> LdsLinker<'a> {
             });
         }
         // An undefined weak symbol reaches the table only where the
-        // output still names it: bfd keeps the ones its relocations
-        // reference and drops the rest, so a final link that emits no
+        // output still names it: the ones relocations reference are kept
+        // and the rest dropped, so a final link that emits no
         // relocations carries none of them.
         let mut weak_undefs: BTreeSet<&String> = BTreeSet::new();
         for r in &self.emitted {
@@ -333,9 +330,9 @@ impl<'a> LdsLinker<'a> {
                 size: 0,
             });
         }
-        // bfd defines `_GLOBAL_OFFSET_TABLE_` on the section it built
-        // the GOT in, as a sizeless local OBJECT, and emits no entry
-        // where the link built no GOT. Measured against GNU ld 2.46.1:
+        // `_GLOBAL_OFFSET_TABLE_` is a sizeless local OBJECT on the
+        // section the GOT is built in, with no entry where the link
+        // built no GOT (measured against GNU ld 2.46.1):
         // on x86 the entry names `.got.plt` in every mode, on aarch64
         // it names `.got` for non-PIC output and is absolute for PIE
         // and shared objects.
@@ -476,7 +473,7 @@ impl<'a> LdsLinker<'a> {
     /// The `build_symtab` slot an emitted relocation's symbol maps to:
     /// a global by name, a section reference through the output
     /// section's symbol, otherwise the surviving local. A local `-x` or
-    /// `-X` dropped is named through its section's symbol, as bfd does;
+    /// `-X` dropped is named through its section's symbol;
     /// the addend then carries its offset.
     fn emitted_sym_slot(&self, r: &EmittedReloc, index: &SymIndex) -> Option<usize> {
         let sym = self.objects[r.obj].symbols.get(r.sym as usize)?;

@@ -3,7 +3,7 @@ c99_comparison_macros_raise_no_invalid.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -188,10 +188,9 @@ Disassembly of section .text:
                	mov	x0, #0x1                // =1
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x1, #0x9                // =9
-               	mov	x2, #0x0                // =0
                	cmp	x0, #0x0
-               	csel	x0, x1, x2, ne
+               	mov	x16, #0x9               // =9
+               	csel	x0, x16, xzr, ne
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret

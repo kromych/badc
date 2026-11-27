@@ -3,7 +3,7 @@ bitop_common_type_sign_extend.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,18 +26,16 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rax
+               	subq	$0x18, %rsp
+               	leaq	(%rsp), %rax
                	addq	$0x8, %rax
                	leaq	-0x23e(%rax), %rcx
                	subq	%rax, %rcx
                	cmpq	$-0x23e, %rcx           # imm = 0xFDC2
                	je	<addr>
                	movl	$0x5, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

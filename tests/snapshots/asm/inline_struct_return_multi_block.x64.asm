@@ -3,7 +3,7 @@ inline_struct_return_multi_block.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -35,12 +35,10 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movl	$0x20, -0x8(%rbp)
-               	leaq	<rip>, %rdx # <addr>
-               	movl	-0x8(%rbp), %eax
+               	subq	$0x18, %rsp
+               	movl	$0x20, 0x8(%rsp)
+               	leaq	<rip>, %rsi # <addr>
+               	movl	0x8(%rsp), %eax
                	leaq	<rip>, %rcx # <addr>
                	shrq	$0x5, %rax
                	cmpl	$0x9, %eax
@@ -55,27 +53,26 @@ Disassembly of section .text:
                	jne	<addr>
                	movl	$0x1, <rip> # <addr>
                	movl	(%rax), %ecx
-               	movl	0x4(%rax), %esi
+               	movl	0x4(%rax), %edx
                	movzwq	0x8(%rax), %rdi
                	movzbq	0xa(%rax), %r8
                	movzbq	0xb(%rax), %r9
                	movq	0x10(%rax), %r10
-               	movq	%r10, 0x8(%rsp)
                	testl	%ecx, %ecx
                	jne	<addr>
                	movq	$-0x1, %rax
                	testl	%eax, %eax
                	jge	<addr>
                	movl	$0x6, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movslq	%esi, %rcx
+               	movslq	%edx, %rcx
                	addq	%rcx, %rax
                	addq	%rdi, %rax
                	movsbq	%r8b, %rcx
                	addq	%rcx, %rax
                	addq	%r9, %rax
-               	movq	0x8(%rsp), %rcx
+               	movq	%r10, %rcx
                	andq	$0xffff, %rcx           # imm = 0xFFFF
                	addq	%rcx, %rax
                	cmpq	$0x100f1, %rax          # imm = 0x100F1
@@ -86,9 +83,9 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	movq	%rdx, %rax
                	cmovneq	%rcx, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movq	%rcx, %rax
                	andq	$0x3, %rax
-               	movslq	(%rdx,%rax,4), %rax
+               	movslq	(%rsi,%rax,4), %rax
                	jmp	<addr>

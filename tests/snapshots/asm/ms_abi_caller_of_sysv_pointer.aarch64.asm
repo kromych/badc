@@ -3,7 +3,7 @@ ms_abi_caller_of_sysv_pointer.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -23,16 +23,12 @@ Disassembly of section .text:
 <caller>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x2, x0
-               	sub	x0, x29, #0x10
-               	stur	x1, [x29, #-0x10]
-               	mov	x1, #0x7                // =7
-               	stur	x1, [x29, #-0x8]
-               	ldr	x1, [x0, #0x8]
-               	ldr	x0, [x0]
+               	mov	x0, #0x7                // =7
+               	mov	x16, x1
+               	mov	x1, x0
+               	mov	x0, x16
                	blr	x2
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -47,9 +43,9 @@ Disassembly of section .text:
                	ldr	x21, [x0, #0x8]
                	ldr	x22, [x0, #0x10]
                	ldr	x23, [x0, #0x18]
+               	mov	x1, x20
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x1, x20
                	bl	<addr>
                	cmp	x0, #0xa
                	b.ne	<addr>

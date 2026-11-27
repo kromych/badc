@@ -3,7 +3,7 @@ stringize_whitespace.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -32,6 +32,7 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	je	<addr>
                	movsbq	(%rcx), %rsi
+               	nopl	(%rax,%rax)
                	testl	%esi, %esi
                	je	<addr>
                	cmpl	%esi, %edx
@@ -102,6 +103,7 @@ Disassembly of section .text:
                	incq	%rax
                	incq	%rcx
                	movsbq	(%rax), %rdx
+               	nopl	(%rax,%rax)
                	testq	%rdx, %rdx
                	jne	<addr>
                	cmpb	$0x0, (%rax)
@@ -160,6 +162,7 @@ Disassembly of section .text:
                	movsbq	(%rcx), %rsi
                	testl	%esi, %esi
                	je	<addr>
+               	nopl	(%rax,%rax)
                	cmpl	%esi, %edx
                	jne	<addr>
                	incq	%rax

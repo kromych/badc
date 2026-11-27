@@ -72,5 +72,16 @@ int main(void) {
     __sync_synchronize();
     CHECK(27, __atomic_is_lock_free(4, &v) == 1);
 
+    // The generic compare-exchange and exchange take the values by pointer.
+    v = 4;
+    int want = 4, put = 6, got;
+    CHECK(28, __atomic_compare_exchange(&v, &want, &put, 0, __ATOMIC_SEQ_CST,
+              __ATOMIC_SEQ_CST) == 1 && v == 6);
+    CHECK(29, __atomic_compare_exchange(&v, &want, &put, 1, __ATOMIC_ACQUIRE,
+              __ATOMIC_RELAXED) == 0 && want == 6);
+    put = 11;
+    __atomic_exchange(&v, &put, &got, __ATOMIC_SEQ_CST);
+    CHECK(30, got == 6 && v == 11);
+
     return fail;
 }

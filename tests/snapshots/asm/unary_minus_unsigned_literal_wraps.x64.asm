@@ -3,7 +3,7 @@ unary_minus_unsigned_literal_wraps.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,72 +26,70 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	movl	$0x7, %eax
-               	movl	%eax, -0x18(%rbp)
-               	movl	-0x18(%rbp), %ecx
+               	movl	%eax, 0x8(%rsp)
+               	movl	0x8(%rsp), %ecx
                	cmpl	$-0x1, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
-               	movl	-0x18(%rbp), %ecx
+               	movl	0x8(%rsp), %ecx
                	cmpl	$-0x1, %ecx
                	jne	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
-               	movl	-0x18(%rbp), %ecx
+               	movl	0x8(%rsp), %ecx
                	cmpl	$-0x1, %ecx
                	setb	%cl
                	movzbq	%cl, %rcx
                	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x5, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
-               	movl	-0x18(%rbp), %ecx
+               	movl	0x8(%rsp), %ecx
                	cmpl	$-0x2, %ecx
                	setne	%cl
                	movzbq	%cl, %rcx
                	cmpl	$0x1, %ecx
                	je	<addr>
                	movl	$0x6, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
-               	movl	-0x18(%rbp), %ecx
+               	movl	0x8(%rsp), %ecx
                	cmpl	$0x80000000, %ecx       # imm = 0x80000000
                	setne	%cl
                	movzbq	%cl, %rcx
                	cmpl	$0x1, %ecx
                	je	<addr>
-               	leave
+               	addq	$0x28, %rsp
                	retq
-               	movl	$0xffffffff, -0x10(%rbp) # imm = 0xFFFFFFFF
-               	movl	-0x10(%rbp), %eax
+               	movl	$0xffffffff, 0x10(%rsp) # imm = 0xFFFFFFFF
+               	movl	0x10(%rsp), %eax
                	cmpl	$-0x1, %eax
                	je	<addr>
                	movl	$0x8, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
-               	movl	-0x10(%rbp), %eax
+               	movl	0x10(%rsp), %eax
                	cmpl	$-0x1, %eax
                	je	<addr>
                	movl	$0x9, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
-               	movl	$0xffffffff, -0x8(%rbp) # imm = 0xFFFFFFFF
-               	movl	-0x8(%rbp), %eax
+               	movl	$0xffffffff, 0x18(%rsp) # imm = 0xFFFFFFFF
+               	movl	0x18(%rsp), %eax
                	cmpl	$-0x1, %eax
                	je	<addr>
                	movl	$0xe, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq

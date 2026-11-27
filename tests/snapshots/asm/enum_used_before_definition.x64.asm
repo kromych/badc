@@ -3,7 +3,7 @@ enum_used_before_definition.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -51,15 +51,13 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	movl	$0x80000000, %eax       # imm = 0x80000000
                	movl	<rip>, %ecx # <addr>
                	cmpl	%eax, %ecx
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movq	<rip>, %rcx # <addr>
                	movl	(%rcx), %ecx

@@ -3,7 +3,7 @@ variadic_hfa_struct_arg.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -87,25 +87,22 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %r9
+               	subq	$0x18, %rsp
+               	leaq	(%rsp), %r9
                	movsd	<rip>, %xmm0
-               	movsd	%xmm0, -0x10(%rbp)
+               	movsd	%xmm0, (%rsp)
                	movsd	<rip>, %xmm0
-               	movsd	%xmm0, -0x8(%rbp)
-               	movl	$0x1, %edi
+               	movsd	%xmm0, 0x8(%rsp)
                	movq	%r9, %r10
                	movsd	(%r10), %xmm0
                	movsd	0x8(%r10), %xmm1
+               	movl	$0x1, %edi
                	movb	$0x2, %al
                	callq	<addr>
-               	movsd	<rip>, %xmm1
                	xorl	%eax, %eax
                	movl	$0x1, %ecx
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	cmovneq	%rcx, %rax
                	cmovpq	%rcx, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq

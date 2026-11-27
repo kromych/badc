@@ -229,6 +229,53 @@ fn sizeof_int128_is_predefined() {
     );
 }
 
+/// On Linux the feature-test macros come from the program's request, as
+/// the GNU C library's `<features.h>` derives them, once a C library header
+/// is included: nothing is predefined, the defaults stand when nothing is
+/// requested, a requested POSIX level stands alone and silently, and
+/// `_GNU_SOURCE` implies the rest. `<features.h>` is served there.
+#[test]
+fn feature_test_macros_derive_from_the_request_on_linux() {
+    let probe = "_DEFAULT_SOURCE _POSIX_SOURCE _POSIX_C_SOURCE _XOPEN_SOURCE";
+    let derived = |target: Target, head: &str| {
+        let mut pp = Preprocessor::new(target.id_str(), target, "0.1.0");
+        let out = pp
+            .process(&alloc::format!("{head}\n{probe}\n"))
+            .expect("preprocessor failed");
+        assert!(codes(&pp).is_empty(), "{head}: {:?}", codes(&pp));
+        String::from(
+            out.lines()
+                .rev()
+                .find(|l| !l.trim().is_empty())
+                .unwrap_or("")
+                .trim(),
+        )
+    };
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        assert_eq!(derived(target, ""), probe);
+        for (head, want) in [
+            ("#include <stdio.h>", "1 1 200809L _XOPEN_SOURCE"),
+            (
+                "#define _POSIX_C_SOURCE 202405L\n#include <unistd.h>",
+                "_DEFAULT_SOURCE _POSIX_SOURCE 202405L _XOPEN_SOURCE",
+            ),
+            (
+                "#define _GNU_SOURCE\n#include <string.h>",
+                "1 1 200809L 700",
+            ),
+            (
+                "#define _XOPEN_SOURCE 600\n#include <stdlib.h>",
+                "_DEFAULT_SOURCE 1 200112L 600",
+            ),
+            ("#include <features.h>", "1 1 200809L _XOPEN_SOURCE"),
+            ("#include <stddef.h>", probe),
+        ] {
+            assert_eq!(derived(target, head), want, "{head}");
+        }
+    }
+    assert_eq!(derived(Target::MacOSAarch64, "#include <stdio.h>"), probe);
+}
+
 #[test]
 fn trigraphs_are_replaced_in_phase_one_when_enabled() {
     // C17 5.2.1.1: the nine trigraphs, `???=` keeping its first `?`, and
@@ -409,6 +456,19 @@ fn segment_and_utf_capability_macros_track_the_feature() {
     let out = arm.process(probe).expect("preprocessor failed");
     assert!(out.contains("GS no") && out.contains("FS no"), "{out}");
     assert!(out.contains("U16 1") && out.contains("U32 1"), "{out}");
+}
+
+/// `-fgnuc-version=`: the identity claims the given version in the
+/// `__GNUC__` triple and in `__VERSION__`.
+#[test]
+fn gnu_identity_claims_a_set_version() {
+    let mut pp = Preprocessor::new("linux-x64", Target::LinuxX64, "0.1.0");
+    pp.set_gnuc_version([4, 7, 0]);
+    pp.enable_gnu(false, true);
+    let out = pp
+        .process("v __GNUC__ __GNUC_MINOR__ __GNUC_PATCHLEVEL__ __VERSION__\n")
+        .expect("preprocessor failed");
+    assert!(out.contains("v 4 7 0 \"4.7.0 Compatible badc "), "{out}");
 }
 
 #[test]
@@ -656,7 +716,7 @@ fn elf_class_selects_the_data_model_predefines() {
 
 /// The `__code_model_*__` name follows `-mcmodel` on the x86-64
 /// targets, `-m16` / `-m32` override it to the 32-bit model, and the
-/// aarch64 targets define none, all as gcc 16.1.1 does.
+/// aarch64 targets define none (measured with gcc 16.1.1).
 #[test]
 fn the_code_model_predefine_names_the_selected_model() {
     use crate::c5::{CodeModel, ElfClass};
@@ -1300,8 +1360,7 @@ fn push_macro_saves_a_definition_and_pop_macro_reinstates_it() {
 
 #[test]
 fn a_pop_macro_with_no_matching_push_is_reported_and_keeps_the_definition() {
-    // clang reports it under -Wignored-pragmas, MSVC as C4602; gcc is
-    // silent. None of them changes the definition.
+    // Nothing to pop: the pragma is reported and changes no definition.
     let src = "#define X 1\n\
                #pragma pop_macro(\"X\")\n\
                x = X;\n\
@@ -1328,8 +1387,7 @@ fn a_pop_macro_with_no_matching_push_is_reported_and_keeps_the_definition() {
 
 #[test]
 fn a_push_macro_operand_other_than_one_string_literal_is_an_error() {
-    // gcc: "invalid #pragma push_macro directive"; clang: "pragma
-    // push_macro requires a parenthesized string".
+    // The operand is one parenthesized string literal.
     for pragma in [
         "push_macro(X)",
         "push_macro",
@@ -2386,8 +2444,8 @@ fn a_defined_inside_a_macro_argument_takes_the_expanded_operand() {
 
 #[test]
 fn a_produced_defined_is_reported_under_wextra_outside_a_system_header() {
-    // gcc puts -Wexpansion-to-defined under -Wextra and -Wpedantic, and
-    // reports nothing of a system header.
+    // -Wexpansion-to-defined is under -Wextra and -Wpedantic, and nothing
+    // of a system header is reported.
     let text = "#define P(n) defined(D_ ## n)\n#if P(x)\n#endif\n#if defined(D_x)\n#endif\n";
     let dir = std::env::temp_dir().join(format!("badc_pp_produced_defined_{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -4599,6 +4657,8 @@ fn every_gcc_atomic_builtin_in_the_table_compiles() {
             "__atomic_store" => format!("{n}(p, &v, 5);"),
             "__atomic_exchange_n" => format!("r = {n}(p, v, 5);"),
             "__atomic_compare_exchange_n" => format!("r = {n}(p, &e, v, 0, 5, 5);"),
+            "__atomic_exchange" => format!("{n}(p, &v, &r, 5);"),
+            "__atomic_compare_exchange" => format!("r = {n}(p, &e, &v, 0, 5, 5);"),
             "__atomic_test_and_set" | "__atomic_clear" => format!("{n}(b, 5);"),
             "__atomic_thread_fence" | "__atomic_signal_fence" => format!("{n}(5);"),
             "__atomic_is_lock_free" | "__atomic_always_lock_free" => format!("r = {n}(4, 0);"),
@@ -5813,15 +5873,13 @@ fn target_predefines_are_locked() {
         ("__APPLE__", "1"),
         ("__MACH__", "1"),
         ("__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__", "110000"),
+        ("__ENVIRONMENT_OS_VERSION_MIN_REQUIRED__", "110000"),
     ];
     const LINUX: &[(&str, &str)] = &[
         ("__linux__", "1"),
         ("__unix__", "1"),
         ("__GLIBC__", "2"),
         ("__GLIBC_MINOR__", "17"),
-        ("_DEFAULT_SOURCE", "1"),
-        ("_POSIX_SOURCE", "1"),
-        ("_POSIX_C_SOURCE", "200809L"),
     ];
     // The object format's, not the OS's: the Linux targets are the ELF ones.
     const ELF: &[(&str, &str)] = &[("__ELF__", "1")];
@@ -7020,4 +7078,30 @@ fn a_header_name_keeps_its_comment_delimiters() {
     assert!(out.contains("int from_b;"), "{out}");
     assert!(out.lines().any(|l| l.trim() == "yes"), "{out}");
     assert!(out.lines().any(|l| l.trim() == "90"), "{out}");
+}
+
+/// `-mmacosx-version-min=` spells the deployment target as the SDK does:
+/// `MMmmpp` from 10.10 on, `MMmp` before with the patch capped at 9.
+#[test]
+fn the_macos_deployment_target_is_spelled_as_clang_spells_it() {
+    for (version, spelled) in [
+        (None, "110000"),
+        (Some(10 << 16 | 15 << 8), "101500"),
+        (Some(12 << 16 | 3 << 8 | 1), "120301"),
+        (Some(10 << 16 | 4 << 8 | 12), "1049"),
+        (Some(11 << 16 | 15), "110015"),
+    ] {
+        let mut pp = Preprocessor::new("macos-aarch64", Target::MacOSAarch64, "0.1.0");
+        pp.set_macos_min(version);
+        for name in [
+            "__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__",
+            "__ENVIRONMENT_OS_VERSION_MIN_REQUIRED__",
+        ] {
+            assert_eq!(
+                pp.macros.get(name).map(String::as_str),
+                Some(spelled),
+                "{version:?}"
+            );
+        }
+    }
 }

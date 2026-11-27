@@ -2,6 +2,7 @@
 //! the shared emit substrate. The per-target instruction selection lives in
 //! the sibling x86_64/ and aarch64/ modules.
 
+pub(crate) mod alias;
 pub(crate) mod asm_outputs;
 pub(crate) mod ast_reach;
 pub(crate) mod block_plan;
@@ -18,6 +19,7 @@ pub(crate) mod loop_saves;
 pub(crate) mod mem2reg;
 pub(crate) mod native;
 pub(crate) mod phi_class;
+pub(crate) mod pressure_order;
 pub(crate) mod reg_alloc;
 pub(crate) mod remat;
 pub(crate) mod repair;

@@ -3,7 +3,7 @@ posix_legacy_and_gnu_names.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -22,9 +22,9 @@ Disassembly of section .text:
                	mov	x1, #0x62               // =98
                	bl	<addr>
                	mov	x20, x0
-               	mov	x1, #0x62               // =98
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
+               	mov	x1, #0x62               // =98
                	bl	<addr>
                	cmp	x20, x0
                	b.eq	<addr>
@@ -32,14 +32,14 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x20, [sp], #0x40
                	ret
-               	mov	x1, #0x62               // =98
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
+               	mov	x1, #0x62               // =98
                	bl	<addr>
                	mov	x20, x0
-               	mov	x1, #0x62               // =98
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
+               	mov	x1, #0x62               // =98
                	bl	<addr>
                	cmp	x20, x0
                	b.eq	<addr>
@@ -47,9 +47,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x20, [sp], #0x40
                	ret
-               	mov	x1, #0x7a               // =122
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
+               	mov	x1, #0x7a               // =122
                	bl	<addr>
                	cbz	x0, <addr>
                	mov	x0, #0x3                // =3
@@ -84,15 +84,15 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x20, [sp], #0x40
                	ret
-               	sub	x1, x29, #0x10
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	stur	x2, [x29, #-0x10]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	stur	x0, [x29, #-0x10]
                	stur	xzr, [x29, #-0x8]
-               	sub	x2, x29, #0x18
                	stur	xzr, [x29, #-0x18]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
+               	sub	x1, x29, #0x10
+               	sub	x2, x29, #0x18
                	bl	<addr>
                	sxtw	x0, w0
                	cmn	x0, #0x1

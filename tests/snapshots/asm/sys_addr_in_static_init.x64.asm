@@ -3,7 +3,7 @@ sys_addr_in_static_init.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,9 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	movq	<rip>, %rax # <addr>
                	leaq	<rip>, %rdi
                	movl	$0x4, %esi
@@ -36,23 +34,23 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
-               	xorl	%esi, %esi
                	movq	<rip>, %rax # <addr>
                	leaq	<rip>, %rdi
-               	movq	%rsi, %rdx
+               	xorl	%esi, %esi
+               	xorl	%edx, %edx
                	callq	*%rax
                	testl	%eax, %eax
                	jge	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movq	<rip>, %rcx # <addr>
-               	leaq	-0x8(%rbp), %rsi
-               	movl	$0x4, %edx
                	movq	%rax, (%rsp)
                	movq	%rax, %rdi
+               	leaq	0x18(%rsp), %rsi
+               	movl	$0x4, %edx
                	callq	*%rcx
                	movq	%rax, 0x8(%rsp)
                	movq	(%rsp), %rax
@@ -63,8 +61,8 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movl	$0x2a, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq

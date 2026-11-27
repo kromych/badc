@@ -3,7 +3,7 @@ fcntl_lock_via_cast_fnptr.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -37,30 +37,30 @@ Disassembly of section .text:
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0xa0
                	ret
-               	sub	x2, x29, #0x60
                	stur	xzr, [x29, #-0x58]
                	stur	xzr, [x29, #-0x50]
                	stur	xzr, [x29, #-0x48]
                	mov	x0, #0x1                // =1
                	stur	x0, [x29, #-0x60]
-               	mov	x1, #0x6                // =6
                	mov	x0, x20
+               	mov	x1, #0x6                // =6
+               	sub	x2, x29, #0x60
                	bl	<addr>
                	mov	x21, x0
-               	sub	x2, x29, #0x60
                	mov	x0, #0x2                // =2
                	sturh	w0, [x29, #-0x60]
-               	mov	x1, #0x6                // =6
                	mov	x0, x20
+               	mov	x1, #0x6                // =6
+               	sub	x2, x29, #0x60
                	bl	<addr>
                	mov	x22, x0
-               	sub	x2, x29, #0x60
                	mov	x0, #0x1                // =1
                	sturh	w0, [x29, #-0x60]
                	adrp	x0, <page>
                	ldr	x3, [x0, #0x10]
-               	mov	x1, #0x6                // =6
                	mov	x0, x20
+               	mov	x1, #0x6                // =6
+               	sub	x2, x29, #0x60
                	blr	x3
                	str	x0, [sp, #0x28]
                	mov	x0, x20
@@ -74,11 +74,10 @@ Disassembly of section .text:
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0xa0
                	ret
-               	mov	x0, #0x0                // =0
-               	mov	x1, #0x1                // =1
                	ldr	x16, [sp, #0x28]
                	cmp	w16, #0x0
-               	csel	x0, x1, x0, ne
+               	mov	x16, #0x1               // =1
+               	csel	x0, x16, xzr, ne
                	ldp	x29, x30, [sp, #0x90]
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0xa0

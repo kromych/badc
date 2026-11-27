@@ -3,7 +3,7 @@ struct_conditional_reads_its_arm.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -44,6 +44,7 @@ Disassembly of section .text:
                	je	<addr>
                	movq	(%rdi,%rax,8), %rcx
                	orq	$0x1, %rcx
+               	nop
                	jmp	<addr>
                	movq	(%rdi,%rax,8), %rcx
                	jmp	<addr>
@@ -51,10 +52,8 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	leaq	-0x20(%rbp), %rax
+               	subq	$0x28, %rsp
+               	leaq	(%rsp), %rax
                	leaq	<rip>, %rcx
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
@@ -66,7 +65,7 @@ Disassembly of section .text:
                	cmpq	$0x9, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movl	$0x8, %edi
                	xorl	%esi, %esi
@@ -74,16 +73,16 @@ Disassembly of section .text:
                	cmpq	$0x8, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
-               	leaq	-0x20(%rbp), %rdi
+               	leaq	(%rsp), %rdi
                	movl	$0x4, %esi
                	callq	<addr>
                	cmpq	$0xa2, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq

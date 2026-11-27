@@ -3,7 +3,7 @@ slot_coalesce_alloca.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -29,8 +29,8 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x2
-               	mov	x0, #0x74               // =116
-               	str	x0, [x2]
+               	mov	x3, #0x74               // =116
+               	str	x3, [x2]
                	mov	x0, #0x75               // =117
                	str	x0, [x2, #0x8]
                	mov	x0, #0x76               // =118
@@ -45,21 +45,20 @@ Disassembly of section .text:
                	str	x0, [x2, #0x30]
                	mov	x0, #0x7b               // =123
                	str	x0, [x2, #0x38]
-               	mov	x3, #0x74               // =116
+               	sub	x4, x29, #0xc0
                	mov	x1, #0x0                // =0
                	mov	x0, x1
-               	sub	x4, x29, #0xc0
-               	add	x4, x4, x0, lsl #3
+               	add	x5, x4, x0, lsl #3
                	add	x0, x0, #0x1
-               	mul	x5, x0, x3
-               	str	x5, [x4]
+               	mul	x6, x0, x3
+               	str	x6, [x5]
                	cmp	w0, #0x18
                	b.lt	<addr>
-               	mov	x0, #0x0                // =0
                	sub	x3, x29, #0xc0
-               	add	x3, x3, x0, lsl #3
-               	ldr	x3, [x3]
-               	add	x1, x1, x3
+               	mov	x0, #0x0                // =0
+               	add	x4, x3, x0, lsl #3
+               	ldr	x4, [x4]
+               	add	x1, x1, x4
                	add	x0, x0, #0x1
                	cmp	w0, #0x18
                	b.lt	<addr>

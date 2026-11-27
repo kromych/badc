@@ -3,7 +3,7 @@ anon_union_nested_init.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -55,11 +55,11 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x40]
                	ldp	x20, x21, [sp], #0x50
                	ret
-               	sub	x0, x29, #0x28
-               	mov	x1, #0x809              // =2057
-               	movk	x1, #0x607, lsl #16
-               	stur	w1, [x29, #-0x28]
+               	mov	x0, #0x809              // =2057
+               	movk	x0, #0x607, lsl #16
+               	stur	w0, [x29, #-0x28]
                	stur	w20, [x29, #-0x24]
+               	sub	x0, x29, #0x28
                	bl	<addr>
                	ldrb	w1, [x0]
                	cmp	w1, #0x9

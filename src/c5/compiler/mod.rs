@@ -37,6 +37,7 @@ mod loop_idiom;
 mod ms_intrinsic;
 mod redeclaration;
 mod run_compile;
+pub(crate) mod sanitize;
 mod seh;
 mod sizeof_expr;
 pub(crate) use sizeof_expr::object_size_fallback;
@@ -411,6 +412,15 @@ pub struct ObjectRef {
     /// array holding it from the element on: the closest subobject of the
     /// element's address, where the element read as a value is its own.
     pub element_of: Option<Extent>,
+    /// Byte size of the array currently designated by its declared type,
+    /// whatever the offset: the bound `-fsanitize=bounds` holds a subscript
+    /// to. `None` for a pointer's target and an array of no known bound.
+    pub bound: Option<i64>,
+    /// The array is a trailing member taken to extend past its bound
+    /// ([`Compiler::member_is_unbounded`] through a pointer):
+    /// `-fsanitize=bounds` leaves its subscripts alone, `bounds-strict`
+    /// checks them.
+    pub flexible: bool,
 }
 
 impl ObjectRef {
@@ -424,6 +434,8 @@ impl ObjectRef {
         records: 0,
         at_end: true,
         element_of: None,
+        bound: None,
+        flexible: false,
     };
 
     /// A chain starting at a declared object of `size` bytes, `array`
@@ -439,6 +451,8 @@ impl ObjectRef {
             records: 0,
             at_end: true,
             element_of: None,
+            bound: array,
+            flexible: false,
         }
     }
 
@@ -599,6 +613,40 @@ pub struct Preprocessed {
 /// `with_track_includes`) return `self` so the typical CLI shape is
 /// `CompileOptions::default().with_defines(d).with_include_paths(p)`.
 /// Which vector types of one size convert implicitly, as
+/// The string functions `-finline-stringops[=fn,...]` expands inline
+/// whatever their length: a call it would
+/// make to one of them becomes a loop.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct InlineStringOps(u8);
+
+impl InlineStringOps {
+    /// The functions, in the bit order of the set.
+    pub const NAMES: [&'static str; 4] = ["memcmp", "memcpy", "memmove", "memset"];
+    /// The bare option's set: every function.
+    pub const ALL: Self = Self(0b1111);
+
+    /// The set holding the function `name`; `None` for any other name.
+    pub fn named(name: &str) -> Option<Self> {
+        Self::NAMES
+            .iter()
+            .position(|n| *n == name)
+            .map(|i| Self(1 << i))
+    }
+
+    pub fn with(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+
+    pub fn without(self, other: Self) -> Self {
+        Self(self.0 & !other.0)
+    }
+
+    /// Whether the set holds the function `name`.
+    pub fn has(self, name: &str) -> bool {
+        Self::named(name).is_some_and(|f| self.0 & f.0 != 0)
+    }
+}
+
 /// `-flax-vector-conversions` selects them: none (the default), two
 /// integer vectors (clang's default), or any two (gcc's flag; MSVC, whose
 /// NEON vectors are all one `__n128`).
@@ -659,6 +707,8 @@ pub struct CompileOptions {
     /// `-fno-builtin-<name>` -- the same, for one library name each:
     /// that name neither folds nor is declared by the auto-include retry.
     pub no_builtin_fns: Vec<String>,
+    /// `-finline-stringops[=fn,...]`.
+    pub inline_stringops: InlineStringOps,
     /// `-flax-vector-conversions[=...]`: which same-size vector types
     /// convert implicitly; `None` takes the identity's default.
     pub lax_vectors: Option<LaxVectors>,
@@ -723,6 +773,9 @@ pub struct CompileOptions {
     /// most but not all of the GNU C surface, so it claims `__GNUC__`
     /// only when the caller opts in.
     pub gnu: bool,
+    /// `-fgnuc-version=`: the GNU C version the identity macros claim in
+    /// place of [`crate::GNU_COMPAT_VERSION`].
+    pub gnuc_version: Option<[u32; 3]>,
     /// `--msvc`: the MSVC identity predefines in place of `__STDC__`
     /// ([`Preprocessor::enable_msvc`]); the Windows targets only.
     pub msvc: bool,
@@ -751,8 +804,7 @@ pub struct CompileOptions {
     /// takes its standard-C path for the GNU features badc lacks.
     pub gnu_dialect: bool,
     /// Assembler-with-cpp input (a `.S` unit). The preprocessor then
-    /// passes a `#` line naming no directive through as text, as GNU
-    /// cpp does for assembler input.
+    /// passes a `#` line naming no directive through as text.
     pub asm_source: bool,
     /// Mirror of [`crate::NativeOptions::elf_class`]. The assembler's
     /// starting code mode follows it, the way `as --32` starts in
@@ -768,6 +820,10 @@ pub struct CompileOptions {
     /// every target, which narrows `L"..."` / `L'...'` elements and the
     /// `__SIZEOF_WCHAR_T__` / `__WCHAR_TYPE__` predefines with it.
     pub short_wchar: bool,
+    /// `-mmacosx-version-min=`: the macOS deployment target, `xxxx.yy.zz` in
+    /// nibbles, which the `__ENVIRONMENT_*_VERSION_MIN_REQUIRED__`
+    /// predefines spell; `None` for 11.0.
+    pub macos_min: Option<u32>,
     /// `-mno-sse` / `-mgeneral-regs-only`: the unit keeps off the SIMD
     /// register file, so the preprocessor drops the SSE feature macros.
     pub no_fp_regs: bool,
@@ -785,6 +841,8 @@ pub struct CompileOptions {
     /// `++` or `--` is defined to wrap at its type's width. Off, its
     /// overflow is undefined (C99 6.5p5) and the result is marked so.
     pub wrapv: bool,
+    /// The runtime checks `-fsanitize=` inserts; see [`sanitize::Sanitize`].
+    pub sanitize: sanitize::Sanitize,
     /// `-ftrivial-auto-var-init=`: what an automatic object declared
     /// without an initializer holds on entry to its scope; see
     /// [`AutoVarInit`].
@@ -873,7 +931,7 @@ pub enum FpContract {
     #[default]
     On,
     /// Wherever the product has no other use, across statements and the
-    /// pragma aside, gcc's GNU-mode default.
+    /// pragma aside.
     Fast,
 }
 
@@ -898,10 +956,9 @@ pub enum AutoVarInit {
     Pattern,
 }
 
-/// The byte `AutoVarInit::Pattern` repeats over the object. gcc 16
-/// stores `0xFE` for every type on both x86-64 and AArch64; the value
-/// is unlikely to be a valid pointer or a small count and reads back as
-/// a negative integer.
+/// The byte `AutoVarInit::Pattern` repeats over the object, for every
+/// type and target: the value is unlikely to be a valid pointer or a
+/// small count and reads back as a negative integer.
 pub const AUTO_VAR_INIT_PATTERN_BYTE: u8 = 0xFE;
 
 impl AutoVarInit {
@@ -920,6 +977,11 @@ impl CompileOptions {
     /// Enable the `--gnu` identity predefines.
     pub fn with_gnu(mut self, gnu: bool) -> Self {
         self.gnu = gnu;
+        self
+    }
+    /// Claim GNU C `version` in the identity macros (`-fgnuc-version=`).
+    pub fn with_gnuc_version(mut self, version: Option<[u32; 3]>) -> Self {
+        self.gnuc_version = version;
         self
     }
     /// Enable the `--msvc` MSVC identity predefines.
@@ -941,6 +1003,11 @@ impl CompileOptions {
     /// Narrow `wchar_t` to an unsigned 16-bit type (`-fshort-wchar`).
     pub fn with_short_wchar(mut self, on: bool) -> Self {
         self.short_wchar = on;
+        self
+    }
+    /// The macOS deployment target (`-mmacosx-version-min=`).
+    pub fn with_macos_min(mut self, version: Option<u32>) -> Self {
+        self.macos_min = version;
         self
     }
 
@@ -999,6 +1066,11 @@ impl CompileOptions {
         self.no_builtin_fns = names;
         self
     }
+    /// Expand the string functions of `ops` inline (`-finline-stringops`).
+    pub fn with_inline_stringops(mut self, ops: InlineStringOps) -> Self {
+        self.inline_stringops = ops;
+        self
+    }
     /// Compile for a freestanding implementation (`-ffreestanding`).
     pub fn with_freestanding(mut self, on: bool) -> Self {
         self.freestanding = on;
@@ -1023,6 +1095,12 @@ impl CompileOptions {
     /// Define signed overflow to wrap (`-fwrapv`). See [`Self::wrapv`].
     pub fn with_wrapv(mut self, on: bool) -> Self {
         self.wrapv = on;
+        self
+    }
+
+    /// The runtime checks to insert (`-fsanitize=`).
+    pub fn with_sanitize(mut self, sanitize: sanitize::Sanitize) -> Self {
+        self.sanitize = sanitize;
         self
     }
 
@@ -1741,6 +1819,10 @@ pub(super) struct DeclAttrs {
     /// `error("message")` (`true`) or `warning("message")`.
     pub call_diagnostic: Option<(bool, alloc::string::String)>,
     pub patchable_entry: Option<(u32, u32)>,
+    /// `nonnull`'s parameters as `(number, (file, line, column))`, 0 for
+    /// every pointer parameter, and `returns_nonnull`'s site.
+    pub nonnull: Vec<(u32, (u32, u32, u32))>,
+    pub returns_nonnull: Option<(u32, u32, u32)>,
     pub no_instrument: bool,
     pub no_stack_protector: bool,
     /// The target `alias("target")` names.
@@ -2094,7 +2176,7 @@ pub struct Compiler {
     /// while a level is open (declaration, enum body, block-scope or
     /// implicit function declaration) saves the outer binding into the
     /// innermost level. Empty at the function-body top level, whose
-    /// bindings use the per-symbol `h_*` slots instead.
+    /// bindings use the symbol's `outer` record instead.
     block_scopes: Vec<Vec<stmt::BlockShadow>>,
     /// Parameter lists being parsed: each holds a level of
     /// `block_scopes` for the enumeration constants it declares
@@ -2233,9 +2315,9 @@ pub struct Compiler {
 
     /// Nesting depth of constant-expression contexts where a reference
     /// to a `const`-qualified scalar object folds to its recorded
-    /// initializer value (`Symbol::const_object_value`). GCC (GNU mode,
-    /// at -O) applies that fold to case labels (including GNU ranges)
-    /// and `static_assert`, and not to array bounds, enum values,
+    /// initializer value (`Symbol::const_object_value`). The fold applies
+    /// to case labels (including GNU ranges) and `static_assert`, and not
+    /// to array bounds, enum values,
     /// bitfield widths, or alignment specifiers; the entry points for
     /// the folding contexts raise this depth.
     const_object_fold: u32,
@@ -2367,6 +2449,9 @@ pub struct Compiler {
     switch_cases: Vec<stmt::SwitchLabels>,
     /// The array size expressions of the parameter list being parsed.
     param_sizes: Vec<function::ParamSize>,
+    /// The parameters of the list being parsed that are declared `nonnull`
+    /// themselves, as [`DeclAttrs::nonnull`] holds them.
+    param_nonnull: Vec<(u32, (u32, u32, u32))>,
     /// Per nested `switch` body: `true` once a `default:` label
     /// was seen.
     switch_defaults: Vec<bool>,
@@ -2605,6 +2690,8 @@ pub struct Compiler {
     /// body is being parsed, taken off its symbol at the opening brace.
     /// Propagated onto `FinishedFunction::is_noreturn`.
     current_func_is_noreturn: bool,
+    /// `returns_nonnull` on the function whose body is being parsed.
+    current_func_returns_nonnull: Option<(u32, u32, u32)>,
 
     /// Preprocessor failure (e.g. unterminated `#if`) deferred from
     /// `with_target` until `compile` runs, so the construction API
@@ -2688,6 +2775,10 @@ pub struct Compiler {
     /// Base alignment the `.data` image requires, at least 8. Raised
     /// to 16 when a file-scope object requests `_Alignas(16)`.
     data_align: usize,
+    /// The static storage no initializer names, at provisional offsets.
+    zero_region: crate::c5::layout::ZeroRegion,
+    /// The same for thread-local storage, at provisional template offsets.
+    tls_zero_region: crate::c5::layout::ZeroRegion,
     image_align_error: Option<crate::c5::diag::Diagnostic>,
     /// Alignment of the thread-local image, at least 8: the largest
     /// alignment among the objects reserved in it.
@@ -2705,6 +2796,8 @@ pub struct Compiler {
     /// retry would decline the name.
     no_builtin: bool,
     no_builtin_fns: Vec<String>,
+    /// Mirror of [`CompileOptions::inline_stringops`].
+    inline_stringops: InlineStringOps,
     /// [`CompileOptions::lax_vectors`], or the identity's default.
     lax_vectors: LaxVectors,
     /// Mirror of [`CompileOptions::optimize`]. Gates the parse-side
@@ -2732,6 +2825,27 @@ pub struct Compiler {
     preprocessed: bool,
     /// Mirror of [`CompileOptions::wrapv`].
     wrapv: bool,
+    /// The runtime checks `-fsanitize=` inserts.
+    sanitize: sanitize::Sanitize,
+    /// The handlers' `TypeDescriptor`s, by the name, kind and `info` they
+    /// carry.
+    ubsan_types: alloc::collections::BTreeMap<(String, u16, u16), i64>,
+    /// Each source file's name for the handlers, by name.
+    ubsan_files: alloc::collections::BTreeMap<String, i64>,
+    /// The subscript node and index node of the last subscript a bounds
+    /// check was attached to, which a `&` applied to that subscript lets
+    /// reach one past the last element.
+    bounds_subscript: Option<(super::ast::ExprId, super::ast::ExprId)>,
+    /// The handlers the unit's checks call, by symbol slot: the name and
+    /// the prototype.
+    ubsan_handlers: alloc::collections::BTreeMap<usize, (String, &'static str)>,
+    /// The line and column of the last binary operator, which a check's
+    /// site names.
+    operator_at: (u32, u32),
+    /// The line and column of the designator of the lvalue node built next
+    /// (its identifier, member name, `*`, or a subscript's array operand),
+    /// which a load check's site names.
+    lvalue_at: (u32, u32),
     /// Mirror of [`CompileOptions::fp_contract`].
     fp_contract: FpContract,
     /// Mirror of [`CompileOptions::auto_var_init`]. Read where an
@@ -2770,7 +2884,7 @@ pub struct Compiler {
     /// preprocessor's `"<source>"` placeholder then stands in.
     source_label: String,
     /// The unit is assembler source (`.s` / `.S`), carried to
-    /// `Program::asm_unit` for the object writer's GNU as shape.
+    /// `Program::asm_unit` for the object writer's assembled-unit shape.
     asm_unit: bool,
     /// Per-function locals + parameters captured at body close,
     /// before the c5 shadow-symbol restore unwinds the binding.
@@ -2903,7 +3017,11 @@ pub struct Compiler {
     /// implicit declaration C90 6.3.2.2 allowed is gone); the retry
     /// supplies the one a library function's header carries. `None`
     /// after the first retry attempt, so the recursion stops at one level.
-    retry_state: Option<(String, CompileOptions)>,
+    retry_state: Option<(alloc::sync::Arc<String>, CompileOptions)>,
+    /// The unit's text as written, which diagnostics quote.
+    unit_text: Option<alloc::sync::Arc<String>>,
+    /// The files diagnostics quoted, by the name their lines carry.
+    written: core::cell::RefCell<alloc::collections::BTreeMap<String, Option<diag::Written>>>,
 
     /// The first pass's recorded preprocessor state, letting a retry
     /// reuse that pass instead of re-preprocessing when the appended
@@ -3043,36 +3161,49 @@ impl Compiler {
     /// object writers consume. The unit routes through the same
     /// section-directive engine as a file-scope `asm("...")`, so the two
     /// accept the same constructs and diagnose the rest identically, each
-    /// error at its source line as gas reports it.
+    /// error at its source line.
     pub fn assemble(text: &str, target: Target, opts: CompileOptions) -> Result<Program, C5Error> {
         let label = opts.source_label.clone();
         let (text, lines) = crate::c5::asm::AsmSourceMap::read(text, &label);
         // No C source and no retry state: the auto-include retry rebuilds
         // from the source string, which would drop the ingested unit.
         let mut this = Self::build("", target, opts);
-        this.ingest_file_scope_asm(&text, false).map_err(|errors| {
-            let diagnostic = |e: crate::c5::asm::AsmError| {
-                let text = crate::c5::asm::source_message(&e.text);
-                let d = match lines.loc(e.line) {
-                    Some(loc) => Diagnostic::new(Code::ASSEMBLER, Level::Error, Some(loc), text),
-                    None => Diagnostic::new(
-                        Code::ASSEMBLER,
-                        Level::Error,
-                        None,
-                        alloc::format!("{label}: {text}"),
-                    ),
-                };
-                e.invoked_at.iter().fold(d, |d, &line| {
-                    d.with_note(lines.loc(line), "macro invoked from here")
-                })
+        // A row at the level its code resolves to; an ignored warning is none.
+        let diagnostic = |sink: &crate::c5::diag::Sink, e: crate::c5::asm::AsmError| {
+            let loc = lines.loc(e.line);
+            let level = match e.is_error() {
+                true => Level::Error,
+                false => sink.level(e.code, loc.as_ref()),
             };
-            C5Error::Compile(errors.0.into_iter().map(diagnostic).collect())
-        })?;
+            let text = crate::c5::asm::source_message(&e.text);
+            let d = match loc {
+                Some(loc) => Diagnostic::new(e.code, level, Some(loc), text),
+                None => Diagnostic::new(e.code, level, None, alloc::format!("{label}: {text}")),
+            };
+            let d = e.invoked_at.iter().fold(d, |d, &line| {
+                d.with_note(lines.loc(line), "macro invoked from here")
+            });
+            (level != Level::Ignore).then_some(d)
+        };
+        match this.ingest_file_scope_asm(&text, false) {
+            Ok(warnings) => {
+                for e in warnings {
+                    if let Some(d) = diagnostic(&this.sink, e) {
+                        this.sink.record(d);
+                    }
+                }
+            }
+            Err(rows) => {
+                let rows = rows.0.into_iter();
+                let rows = rows.filter_map(|e| diagnostic(&this.sink, e));
+                return Err(C5Error::Compile(rows.collect()));
+            }
+        }
         let mut program = this.compile_one_pass()?;
         // The reserved `.data` prefix keeps a c5 global's address away from
         // the null pointer. An assembled unit has no C source and so no c5
         // global; every byte it defines lives in an asm section, leaving the
-        // prefix as eight bytes of `.data` GNU as does not emit.
+        // prefix as eight bytes of `.data` the source does not define.
         program.data.clear();
         Ok(program)
     }
@@ -3090,6 +3221,9 @@ impl Compiler {
         // `-mcmodel` moves the `__code_model_*__` name the same way, and
         // `-fshort-wchar` the `wchar_t` pair.
         pp.set_unit_model(opts.elf_class, opts.code_model, opts.short_wchar);
+        if target == Target::MacOSAarch64 {
+            pp.set_macos_min(opts.macos_min);
+        }
         if opts.no_fp_regs {
             pp.drop_simd_macros();
         }
@@ -3109,6 +3243,9 @@ impl Compiler {
         }
         pp.set_plain_char_signed(opts.plain_char_signed(target));
         if opts.gnu {
+            if let Some(version) = opts.gnuc_version {
+                pp.set_gnuc_version(version);
+            }
             pp.enable_gnu(opts.gnu89_inline, !opts.gnu_dialect);
         }
         if opts.msvc && target.is_windows() {
@@ -3199,7 +3336,9 @@ impl Compiler {
             || opts.freestanding
             || opts.no_builtin
             || opts.preprocessed);
+        let source = alloc::sync::Arc::new(source);
         let mut this = Self::build_recording(&source, target, opts, record);
+        this.unit_text = Some(source.clone());
         this.retry_state = Some((source, retry_opts));
         this
     }
@@ -3346,6 +3485,7 @@ impl Compiler {
 
         let lex = {
             let mut l = Lexer::new(preprocessed);
+            l.column_places = core::mem::take(&mut pp.column_places);
             // Wide literals take their element width, and `L'...'` its
             // type, from the target's `wchar_t`.
             let wchar = target.wchar_type(opts.short_wchar);
@@ -3430,6 +3570,7 @@ impl Compiler {
             local_label_scopes: LocalLabelScopes::default(),
             switch_cases: Vec::new(),
             param_sizes: Vec::new(),
+            param_nonnull: Vec::new(),
             switch_defaults: Vec::new(),
             structs: Vec::new(),
             tag_scopes: type_layout::TagScopes::file_scope(),
@@ -3486,6 +3627,7 @@ impl Compiler {
             current_func_attrs: DeclAttrs::default(),
             current_func_ret_fn: None,
             current_func_is_noreturn: false,
+            current_func_returns_nonnull: None,
             pending: Pending::default(),
             pending_store_symbols: Vec::new(),
             warn_dead_store,
@@ -3493,11 +3635,14 @@ impl Compiler {
             prototypes: opts.prototypes,
             msvc: opts.msvc && target.is_windows(),
             data_align: 8,
+            zero_region: Default::default(),
+            tls_zero_region: Default::default(),
             image_align_error: None,
             tls_align: crate::c5::layout::TLS_ALIGN_MIN,
             export_all_functions: opts.export_all_functions,
             default_visibility: opts.default_visibility,
             no_builtin: opts.no_builtin,
+            inline_stringops: opts.inline_stringops,
             lax_vectors: opts
                 .lax_vectors
                 .unwrap_or(if opts.msvc && target.is_windows() {
@@ -3514,6 +3659,13 @@ impl Compiler {
             preprocessed: opts.preprocessed,
             auto_var_init: opts.auto_var_init,
             wrapv: opts.wrapv,
+            sanitize: opts.sanitize,
+            ubsan_types: alloc::collections::BTreeMap::new(),
+            ubsan_files: alloc::collections::BTreeMap::new(),
+            bounds_subscript: None,
+            ubsan_handlers: alloc::collections::BTreeMap::new(),
+            operator_at: (0, 0),
+            lvalue_at: (0, 0),
             fp_contract: opts.fp_contract,
             no_builtin_fns: opts.no_builtin_fns.clone(),
             optimize: opts.optimize,
@@ -3551,6 +3703,8 @@ impl Compiler {
             pending_block_static_syms: Vec::new(),
             next_block_static_id: 0,
             retry_state: None,
+            unit_text: None,
+            written: core::cell::RefCell::default(),
             pp_reuse: None,
         }
     }
@@ -3990,8 +4144,9 @@ impl Compiler {
                 header: header.to_string(),
                 bound: false,
             });
-            result = Self::build_retry(&source, target, opts.clone(), pp_reuse.as_ref())
-                .compile_one_pass();
+            let mut pass = Self::build_retry(&source, target, opts.clone(), pp_reuse.as_ref());
+            pass.unit_text = Some(source.clone());
+            result = pass.compile_one_pass();
         }
     }
 
@@ -4062,6 +4217,7 @@ impl Compiler {
         let parse_start = std::time::Instant::now();
         self.run_compile().map_err(|e| self.failed(e))?;
         self.declare_atomic_libcalls();
+        self.declare_ubsan_handlers();
         #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_TIME_PASSES").is_ok() {
             eprintln!(
@@ -4227,7 +4383,7 @@ impl Compiler {
                 };
             }
             // An object alias keeps its declared type; its symbol takes
-            // the aliased object's size, as GNU as gives a `.set` alias.
+            // the aliased object's size.
             for &(alias, target) in &self.object_aliases {
                 self.symbols[alias].data_byte_size = self.symbols[target].data_byte_size;
             }
@@ -4281,6 +4437,7 @@ impl Compiler {
             .map_err(|e| self.failed(e))?;
         let (exports, exported_objects) = self.resolve_exports().map_err(|e| self.failed(e))?;
         self.lay_out_thread_locals();
+        let tls_zero_fill_len = self.place_thread_local_zero_region();
         let typedefs = self.typedef_layouts();
         let prototypes = if self.prototypes {
             self.function_prototypes()
@@ -4308,7 +4465,8 @@ impl Compiler {
                 addend,
             });
         }
-        Ok(Program {
+        let zero_region = self.zero_region;
+        let mut program = Program {
             target: self.target,
             data: self.data,
             file_asm: self.file_asm,
@@ -4334,6 +4492,7 @@ impl Compiler {
             notes: self.notes,
             tls_data: self.tls_data,
             tls_init_size: self.tls_init_size,
+            tls_zero_fill_len,
             tls_align: self.tls_align,
             exports,
             exported_objects,
@@ -4344,6 +4503,7 @@ impl Compiler {
             bind_trampoline_slots: false,
             weak_refs_by_name: false,
             interposable_refs: false,
+            no_plt_calls: false,
             fp_contract_fast: self.fp_contract == FpContract::Fast,
             tls_data_relocs: self.tls_data_relocs,
             tls_extern_data_relocs: self.tls_extern_data_relocs,
@@ -4399,7 +4559,9 @@ impl Compiler {
             extern_function_imports: extern_imports,
             init_funcs: self.init_funcs,
             function_aliases,
-        })
+        };
+        program.place_zero_region(zero_region);
+        Ok(program)
     }
 }
 

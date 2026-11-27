@@ -2,8 +2,7 @@
 //!
 //! Entries share storage two ways: equal strings resolve to one
 //! offset, and a string that is a suffix of another points into that
-//! string's tail and shares its terminator. gas and GNU ld build
-//! `.strtab` / `.shstrtab` the same way, so an object whose names
+//! string's tail and shares its terminator, so an object whose names
 //! overlap ("bump" inside "do_bump") pays for the overlap once.
 
 use alloc::vec::Vec;
@@ -11,8 +10,7 @@ use alloc::vec::Vec;
 /// Build a NUL-separated string blob from `names`. Returns the bytes
 /// and, per input position, that name's offset. `bytes[0]` is the
 /// leading NUL, so an empty name resolves to offset 0 per the ELF
-/// convention. Stored strings keep the order they appear in, which is
-/// the order gas writes its tables in.
+/// convention. Stored strings keep the order they appear in.
 pub(crate) fn build_string_table(names: &[&str]) -> (Vec<u8>, Vec<u32>) {
     // Ordering by reversed bytes places every string immediately
     // before the ones it is a suffix of, so a single comparison
@@ -102,8 +100,8 @@ mod tests {
         assert_eq!(offs[0], 1, "the first occurrence is the stored one");
     }
 
-    /// gas stores the containing strings in the order the names come
-    /// in, whatever position the suffixes it absorbed had.
+    /// The containing strings are stored in the order the names come in,
+    /// whatever position the suffixes they absorbed had.
     #[test]
     fn stored_strings_keep_their_input_order() {
         let (bytes, offs) = build_string_table(&["def", "abcdef", "zz", "q"]);

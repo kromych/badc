@@ -109,7 +109,10 @@ to get right:
 `tests/snapshots/` holds three files per fixture: the SSA dump
 (`ssa/<name>.ssa`) and the disassembly for linux-x64 and linux-aarch64
 (`asm/<name>.x64.asm`, `asm/<name>.aarch64.asm`). A code generation change
-shows up there as a diff to review.
+shows up there as a diff to review. The script writes each address, and each
+operand that follows the layout (a pc-relative displacement, a page offset),
+as a token, and leaves out the no-ops that align the next function's entry,
+so a diff shows only the instructions that changed.
 
 ```sh
 python3 scripts/snapshots.py                  # regenerate every snapshot

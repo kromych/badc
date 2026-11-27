@@ -3,7 +3,7 @@ slot_coalesce_disjoint_temps.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -34,12 +34,7 @@ Disassembly of section .text:
                	cmp	w2, #0x64
                	b.ge	<addr>
                	sub	x1, x2, #0x1
-               	sxtw	x6, w1
-               	lsr	x7, x6, #63
-               	add	x6, x6, x7
-               	and	x6, x6, #0x1
-               	sub	x6, x6, x7
-               	cbz	w6, <addr>
+               	tbz	w1, #0x0, <addr>
                	cmp	w1, #0x32
                	b.le	<addr>
                	lsl	x6, x1, #1
@@ -55,12 +50,7 @@ Disassembly of section .text:
                	cmp	w2, #0x64
                	b.ge	<addr>
                	sub	x1, x2, #0x1
-               	sxtw	x5, w1
-               	lsr	x6, x5, #63
-               	add	x5, x5, x6
-               	and	x5, x5, #0x1
-               	sub	x5, x5, x6
-               	cbz	w5, <addr>
+               	tbz	w1, #0x0, <addr>
                	cmp	w1, #0x32
                	b.le	<addr>
                	lsl	x5, x1, #1
@@ -73,8 +63,7 @@ Disassembly of section .text:
                	b	<addr>
                	add	x1, x2, #0x1
                	b	<addr>
-               	mov	x0, #0x0                // =0
-               	mov	x1, #0x1                // =1
                	cmp	w4, w3
-               	csel	x0, x0, x1, eq
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, eq
                	ret

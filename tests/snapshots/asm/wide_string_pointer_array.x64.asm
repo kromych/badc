@@ -3,7 +3,7 @@ wide_string_pointer_array.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -58,12 +58,11 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	retq
+               	movq	<rip>, %rdx # <addr>
                	movq	<rip>, %rcx # <addr>
-               	movq	<rip>, %rax # <addr>
-               	cmpq	%rax, %rcx
+               	cmpq	%rcx, %rdx
                	je	<addr>
-               	movq	<rip>, %rcx # <addr>
-               	cmpq	%rcx, %rax
+               	cmpq	%rax, %rcx
                	jne	<addr>
                	movl	$0x4, %eax
                	retq

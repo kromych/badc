@@ -3,7 +3,7 @@ small_fp_aggregate_arguments.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -17,29 +17,25 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x1, #0x4008000000000000 // =4613937818241073152
                	sub	x2, x29, #0x10
                	mov	x0, #0x0                // =0
-               	mov	x3, #0x41               // =65
-               	stur	x3, [x29, #-0x10]
+               	mov	x1, #0x41               // =65
+               	stur	x1, [x29, #-0x10]
                	fmov	s0, #2.50000000
                	stur	s0, [x29, #-0xc]
                	sub	x3, x29, #0x8
-               	mov	x4, #0x3f800000         // =1065353216
-               	movk	x4, #0x4000, lsl #48
-               	stur	x4, [x29, #-0x8]
-               	ldur	x4, [x29, #-0x8]
+               	mov	x1, #0x3f800000         // =1065353216
+               	movk	x1, #0x4000, lsl #48
+               	stur	x1, [x29, #-0x8]
+               	ldur	x1, [x29, #-0x8]
                	mov	x17, #0x3f800000        // =1065353216
                	movk	x17, #0x4000, lsl #48
-               	cmp	x4, x17
+               	cmp	x1, x17
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	stur	x1, [x29, #-0x8]
-               	mov	x1, #0x3fc00000         // =1069547520
-               	stur	w1, [x29, #-0x8]
                	ldr	x16, [x2]
                	str	x16, [x3]
                	ldur	x1, [x29, #-0x8]

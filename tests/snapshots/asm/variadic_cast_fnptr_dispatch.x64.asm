@@ -3,7 +3,7 @@ variadic_cast_fnptr_dispatch.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,13 +26,11 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	leaq	-0x20(%rbp), %rdi
-               	movb	$0x0, -0x20(%rbp)
+               	subq	$0x38, %rsp
+               	movb	$0x0, 0x10(%rsp)
                	movq	<rip>, %r10 # <addr>
                	movq	%r10, 0x8(%rsp)
+               	leaq	0x10(%rsp), %rdi
                	movl	$0x20, %esi
                	leaq	<rip>, %rdx
                	movl	$0x4, %ecx
@@ -44,17 +42,17 @@ Disassembly of section .text:
                	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq
-               	leaq	-0x20(%rbp), %rdi
+               	leaq	0x10(%rsp), %rdi
                	leaq	<rip>, %rsi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq

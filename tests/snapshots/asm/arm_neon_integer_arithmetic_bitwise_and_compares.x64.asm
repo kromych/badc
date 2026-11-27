@@ -3,7 +3,7 @@ arm_neon_integer_arithmetic_bitwise_and_compares.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi

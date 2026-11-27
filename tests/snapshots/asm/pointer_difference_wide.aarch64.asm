@@ -3,7 +3,7 @@ pointer_difference_wide.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -47,22 +47,22 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x8]
                	ldur	x20, [x29, #-0x8]
                	mov	x17, #0x600000000       // =25769803776
-               	add	x1, x20, x17
+               	add	x4, x20, x17
                	mov	x17, #0x800000000       // =34359738368
                	add	x21, x20, x17
                	mov	x17, #0x3ffffffffc      // =274877906940
                	add	x22, x20, x17
                	sub	x0, x29, #0x38
                	add	x2, x0, #0x24
-               	sub	x4, x2, x0
+               	sub	x1, x2, x0
                	mov	x3, #0xaaab             // =43691
                	movk	x3, #0xaaaa, lsl #16
                	movk	x3, #0xaaaa, lsl #32
                	movk	x3, #0x2aaa, lsl #48
-               	smulh	x4, x4, x3
-               	asr	x4, x4, #1
-               	add	x4, x4, x4, lsr #63
-               	cmp	x4, #0x3
+               	smulh	x1, x1, x3
+               	asr	x1, x1, #1
+               	add	x1, x1, x1, lsr #63
+               	cmp	x1, #0x3
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp, #0x70]
@@ -80,11 +80,11 @@ Disassembly of section .text:
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x80
                	ret
-               	str	x1, [sp, #0x28]
-               	mov	x0, x1
+               	str	x4, [sp, #0x28]
+               	mov	x0, x4
                	mov	x1, x20
                	bl	<addr>
-               	ldr	x1, [sp, #0x28]
+               	ldr	x4, [sp, #0x28]
                	mov	x17, #0x80000000        // =2147483648
                	cmp	x0, x17
                	b.eq	<addr>
@@ -94,6 +94,7 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x80
                	ret
                	mov	x0, x20
+               	mov	x1, x4
                	bl	<addr>
                	mov	x17, #-0x80000000       // =-2147483648
                	cmp	x0, x17

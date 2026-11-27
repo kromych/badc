@@ -45,7 +45,8 @@ A selector names one diagnostic or one group:
 | `-w` | report no warnings |
 | `-Wall`, `-Wextra`, `-Wpedantic` | turn on the group of that name |
 | `-pedantic`, `-pedantic-errors` | `-Wpedantic`, `-Werror=pedantic` |
-| `-fpermissive` | report `int-conversion`, `incompatible-pointer-types`, `implicit-int` and `return-mismatch` as warnings |
+| `-fpermissive` | report `int-conversion`, `incompatible-pointer-types`, `implicit-int` and `return-mismatch` as warnings; the default under `--msvc`, as cl reports each as a warning or not at all |
+| `-fno-permissive` | report them as errors, under `--msvc` too |
 
 Before C99, `implicit-int` is off unless `-Wall` or its own selector turns it
 on.
@@ -55,8 +56,8 @@ Turning one on reports B7012 and has no other effect. Any other unknown name is
 an error, except after `-Wno-`, which accepts any name.
 
 A warning at a line of a system header--one found through `-isystem` or a
-system directory, and the compiler's own headers--is not reported, as gcc
-and clang do not report it; a `#warning` there is, and an error always is.
+system directory, and the compiler's own headers--is not reported; a
+`#warning` there is, and an error always is.
 
 ## Pragmas
 
@@ -149,7 +150,7 @@ output of `badc --list-diagnostics`.
 | B3010 | `constant-conversion` | warning | controllable | default | an integer constant converted implicitly to an integer type or a bit-field whose width holds the value at neither signedness |
 | B3011 | `incompatible-pointer-types-discards-qualifiers` | warning | controllable | default | a pointer assigned, initialized, passed or returned as a pointer to a type that differs from the one it points to only in the qualifiers of a type further down: `T **` as `const T **` |
 | B3012 | `switch-bool` | warning | controllable | default | a `switch` on a boolean value with a case label outside 0 and 1, or with a `default` beside labels covering both |
-| B3013 | `excess-initializers` | warning | controllable | default | a string literal longer than the array, member or row it initializes, a terminator aside; the characters past the bound are dropped |
+| B3013 | `excess-initializers` | warning | controllable | default | an initializer element with no object to initialize -- past an array's, a row's, a structure's or a braced scalar's end, a union's second, one after a braced string -- or a string literal longer than the array, member or row it initializes, a terminator aside; the surplus is dropped unevaluated |
 | B3015 | `cast-function-type` | ignore | controllable | extra | a cast between pointers to function types whose returns or common leading parameters differ other than as pointers or as integers of one precision |
 | B3016 | `designated-init` | warning | controllable | default | an initializer element with no designator for a member of a struct declared `designated_init` |
 | B3017 | `enum-conversion` | ignore | controllable | extra | a value of one enumerated type, or a constant of one, assigned, initialized, passed or returned as another enumerated type |
@@ -177,8 +178,11 @@ output of `badc --list-diagnostics`.
 | B4006 | `general-regs-only` | error | hard | - | a floating-point value in a function compiled under `-mno-sse` or `-mgeneral-regs-only`, which withhold the floating-point and SIMD registers it needs |
 | B4007 | `attribute-error` | error | hard | - | a call left in the emitted code to a function declared with `__attribute__((error("message")))`, which the diagnostic quotes |
 | B4008 | `attribute-warning` | warning | controllable | default | a call left in the emitted code to a function declared with `__attribute__((warning("message")))`, which the diagnostic quotes |
+| B4009 | `stack-protector` | ignore | controllable | - | under `-fstack-protector*`, a function `-fstack-protector` leaves unprotected because its character arrays are all shorter than `--param ssp-buffer-size=`, or a variable-length array or `alloca` buffer, which lies below the other locals, so the canary catches an overflow of it only past them |
 | B5001 | `asm-syntax` | error | hard | - | an `asm` statement whose operand list, constraints or template does not parse |
 | B5002 | `assembler` | error | hard | - | an instruction or directive the assembler cannot parse or encode for the target |
+| B5003 | `asm-operand-size` | warning | controllable | default | an x86 instruction whose memory operand neither a suffix nor a register operand sizes, encoded at its default width, which the diagnostic names |
+| B5004 | `asm-warning` | warning | controllable | default | a `.warning` directive the assembler reaches, whose text the diagnostic quotes |
 | B6001 | `orphan-section` | warning | controllable | default | an input section no script rule names, placed by the linker's own rule |
 | B6002 | `missing-entry` | warning | controllable | default | no input defines the entry symbol, so the image enters at the first text address |
 | B6003 | `merged-section-access` | warning | controllable | default | a relocation reaches past the end of the merged section it names |

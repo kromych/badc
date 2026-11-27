@@ -3,7 +3,7 @@ member_qualifiers_stay_with_their_members.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -30,9 +30,6 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
                	pushq	%rbx
                	leaq	-<rip>, %rax # <addr>
                	movq	%rax, <rip> # <addr>
@@ -53,5 +50,4 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	subq	$0x2, %rax
                	popq	%rbx
-               	leave
                	retq

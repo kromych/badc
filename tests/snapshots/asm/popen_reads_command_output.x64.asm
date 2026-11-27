@@ -3,7 +3,7 @@ popen_reads_command_output.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,65 +26,64 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	subq	$0x50, %rsp
+               	pushq	%rbx
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rsi
                	callq	<addr>
-               	movq	%rax, %r8
-               	testq	%r8, %r8
+               	movq	%rax, %rbx
+               	testq	%rbx, %rbx
                	jne	<addr>
                	movl	$0x1, %eax
-               	leave
+               	popq	%rbx
+               	addq	$0x50, %rsp
                	retq
-               	leaq	-0x40(%rbp), %rdi
+               	movq	%rbx, %rdx
+               	leaq	0x10(%rsp), %rdi
                	movl	$0x40, %esi
-               	movq	%r8, 0x8(%rsp)
-               	movq	%r8, %rdx
                	callq	<addr>
-               	movq	0x8(%rsp), %r8
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x2, %eax
-               	leave
+               	popq	%rbx
+               	addq	$0x50, %rsp
                	retq
-               	leaq	-0x40(%rbp), %rdi
-               	movq	%r8, 0x8(%rsp)
+               	leaq	0x10(%rsp), %rdi
                	callq	<addr>
-               	movq	0x8(%rsp), %r8
                	jmp	<addr>
                	decq	%rax
-               	movb	$0x0, -0x40(%rbp,%rax)
+               	movb	$0x0, 0x10(%rsp,%rax)
                	testq	%rax, %rax
                	je	<addr>
                	leaq	-0x1(%rax), %rdx
-               	movsbq	-0x40(%rbp,%rdx), %rcx
+               	movsbq	0x10(%rsp,%rdx), %rcx
                	cmpl	$0xa, %ecx
                	je	<addr>
                	cmpl	$0xd, %ecx
                	je	<addr>
+               	nopw	(%rax,%rax)
                	cmpl	$0x20, %ecx
                	je	<addr>
-               	leaq	-0x40(%rbp), %rdi
+               	leaq	0x10(%rsp), %rdi
                	leaq	<rip>, %rsi
-               	movq	%r8, 0x8(%rsp)
                	callq	<addr>
                	movslq	%eax, %rax
-               	movq	0x8(%rsp), %r8
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	popq	%rbx
+               	addq	$0x50, %rsp
                	retq
-               	movq	%r8, %rdi
+               	movq	%rbx, %rdi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	popq	%rbx
+               	addq	$0x50, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	popq	%rbx
+               	addq	$0x50, %rsp
                	retq

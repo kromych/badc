@@ -3,7 +3,7 @@ int128_struct_fallback.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -56,10 +56,10 @@ Disassembly of section .text:
                	cmp	x22, x0
                	cset	x0, lo
                	ldr	x16, [sp, #0x28]
-               	sub	x0, x16, x0
+               	sub	x2, x16, x0
                	cmn	x1, #0x1
                	b.ne	<addr>
-               	cbz	x0, <addr>
+               	cbz	x2, <addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x22, [sp, #0x10]
@@ -92,7 +92,6 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x1                // =1
                	bl	<addr>
-               	mov	x1, #0x0                // =0
                	lsl	x0, x0, #36
                	mov	x17, #0x1000000000      // =68719476736
                	cmp	x0, x17
@@ -102,7 +101,7 @@ Disassembly of section .text:
                	ldr	x22, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	mov	x0, x1
+               	mov	x0, #0x0                // =0
                	bl	<addr>
                	mov	x0, #-0x8000000000000000 // =-9223372036854775808
                	bl	<addr>

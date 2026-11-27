@@ -268,6 +268,7 @@ impl Compiler {
         // that name's binding restores; the parameters record their own.
         let outer_prior = p.declarator_prior_shape.take();
         let outer_sizes = core::mem::take(&mut self.param_sizes);
+        let outer_nonnull = core::mem::take(&mut self.param_nonnull);
         let at = self.site();
         self.tag_scopes.push();
         self.open_param_list_scope();
@@ -307,6 +308,11 @@ impl Compiler {
         let p = &mut self.pending;
         p.declarator_prior_shape = outer_prior;
         p.attrs = outer_attrs;
+        // The parameters declared `nonnull` themselves, as the function's
+        // `nonnull` names them.
+        let nonnull = core::mem::replace(&mut self.param_nonnull, outer_nonnull);
+        self.pending.attrs.nonnull.extend(nonnull);
+        let p = &mut self.pending;
         (
             p.fn_ptr_indirection,
             p.fn_ptr_ret_indirection,
@@ -561,6 +567,9 @@ impl Compiler {
             // (`T *op __attribute__((unused))`).
             self.skip_attribute_specifiers()?;
             let param_maybe_unused = self.pending.attrs.maybe_unused;
+            if let Some(&(0, at)) = self.pending.attrs.nonnull.iter().find(|n| n.0 == 0) {
+                self.param_nonnull.push((types.len() as u32 + 1, at));
+            }
             // Per C99 6.7.5.3p7, a named array parameter is adjusted to a
             // pointer to its element type, the row of the inner bounds for
             // more than one. The same rule applies when the base type is a

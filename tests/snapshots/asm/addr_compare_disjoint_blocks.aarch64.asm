@@ -3,7 +3,7 @@ addr_compare_disjoint_blocks.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -27,7 +27,6 @@ Disassembly of section .text:
                	cset	x0, eq
                	add	x0, x0, x0, lsl #1
                	strb	w0, [x1, #0x24]
-               	sxtb	x0, w0
                	cbz	w0, <addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x20

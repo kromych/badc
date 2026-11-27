@@ -16,6 +16,9 @@ pub(crate) struct Frame {
     /// a System V callee that reads a register parameter from memory, 0
     /// otherwise (`param_home_off`).
     pub param_cells_bytes: u32,
+    /// The register-carried parameters, by their order among them, that
+    /// keep a cell ([`param_cells`]), each 16 bytes, packed in that order.
+    pub param_cells: u64,
     /// rbp-relative offset of the lowest parameter cell; 0 when the region
     /// is empty.
     pub param_cells_off: i32,
@@ -29,8 +32,10 @@ pub(crate) struct Frame {
     pub saved_fpr_bytes: u32,
     /// Win64: bytes of the callee-saved block directly below the saved
     /// rbp, the pushed GPRs, a pad to 16 and the xmm saves at its bottom,
-    /// which `UNWIND_INFO` describes; every region below shifts by it. 0 on
-    /// System V, whose saves sit at the frame bottom.
+    /// which `UNWIND_INFO` describes; every region below shifts by it. With
+    /// no frame pointer ([`Frame::saves_first`]) the first push takes the
+    /// saved rbp's place, so the block holds the pushes past it. 0 on System
+    /// V, whose saves sit at the frame bottom.
     pub saves_top: u32,
     /// rbp-relative base of the inline-asm scratch region (operand captures
     /// plus register saves); 0 when the function has no inline asm. Frame
@@ -82,6 +87,37 @@ pub(crate) struct Frame {
     pub wide_regs: bool,
     /// The regions `frame_bytes` sums.
     pub parts: super::ssa::emit_common::FrameStack,
+    /// The function keeps no frame pointer ([`frame_pointer_free`]): rbp is a
+    /// callee-saved register, and the frame is addressed from rsp
+    /// ([`Frame::fp_addr`]).
+    pub omit_fp: bool,
+    /// Code may store below rsp ([`super::Abi::red_zone`]).
+    pub red_zone: bool,
+    /// A frame with no pointer that holds the callee-saved pushes alone, in
+    /// a body that makes no call, which needs no 16-byte rsp: the prologue
+    /// allocates nothing ([`Frame::sp_alloc`]).
+    pub pushes_alone: bool,
+    /// The bytes the callee-saved pushes take, the area for them in
+    /// `frame_bytes` rounded up to 16.
+    pub pushed: u32,
+    /// The outgoing-argument area at the bottom of the frame, part of
+    /// `frame_bytes`: the largest stack-argument window of its calls, which
+    /// store their arguments there with rsp left in place. A frame with no
+    /// pointer has one below its pushes, and so does a framed Win64 frame
+    /// whose rsp no allocation moves.
+    pub out: u32,
+    /// The keep slots ([`super::keep`]) a frame with no pointer and no red
+    /// zone reserves, slot `k` at bit `k`: the ones its lowerings take,
+    /// packed in slot order above the outgoing area and the System V saves.
+    pub keep: u32,
+    /// The spill region holds the two slots a borrowed scratch register
+    /// keeps its value in (`reg_alloc::ScratchSites::borrow_slot`).
+    pub borrow_area: bool,
+    /// The callee-saved pushes come first and one allocation below them,
+    /// then the xmm saves into it, so that each exit is `add rsp`, the pops
+    /// and `ret` or `jmp`, the only epilogue the Win64 unwinder recognizes
+    /// (Microsoft, "x64 exception handling"): a Win64 frame with no pointer.
+    pub saves_first: bool,
 }
 
 impl Frame {
@@ -95,6 +131,152 @@ impl Frame {
     pub(super) fn canary_slot_off(&self) -> i32 {
         super::ssa::emit_common::CANARY_SLOT_OFF - self.saves_top as i32
     }
+
+    /// `(base, disp)` of the frame byte `off` from rbp: through rbp, or with
+    /// no frame pointer through rsp, [`Frame::sp_to_fp`] below rbp's place.
+    pub(crate) fn fp_addr(&self, off: i32) -> (Reg, i32) {
+        let (base, disp) = self.fp_addr64(i64::from(off));
+        (base, disp as i32)
+    }
+
+    /// [`Frame::fp_addr`] at 64 bits.
+    pub(crate) fn fp_addr64(&self, off: i64) -> (Reg, i64) {
+        if self.omit_fp {
+            (Reg::RSP, off + self.sp_to_fp())
+        } else {
+            (Reg::RBP, off)
+        }
+    }
+
+    /// In a frame with no pointer, how far above rsp rbp would stand.
+    fn sp_to_fp(&self) -> i64 {
+        match self.pushes_alone {
+            true => i64::from(self.pushed) - 8,
+            false => i64::from(self.frame_bytes),
+        }
+    }
+
+    /// What the prologue of a frame with no pointer subtracts from rsp
+    /// besides the `pushed` bytes of pushes: the frame below rbp's place and
+    /// the 8 bytes `push rbp` would take, less the pushes, and less the
+    /// outgoing area where it follows them; or nothing.
+    pub(crate) fn sp_alloc(&self, pushed: u32) -> u32 {
+        match (self.pushes_alone, self.saves_first) {
+            (true, _) => 0,
+            (false, true) => self.frame_bytes + 8 - pushed,
+            (false, false) => self.frame_bytes - self.out - pushed + 8,
+        }
+    }
+
+    /// rsp displacement of keep slot `k` in the keep area.
+    pub(crate) fn keep_disp(&self, k: i32) -> i32 {
+        let saves = match self.saves_first {
+            true => 0,
+            false => self.parts.saved_regs,
+        };
+        let below = self.keep & ((1u32 << k) - 1);
+        (self.out + saves + 8 * below.count_ones()) as i32
+    }
+}
+
+/// Whether `func` keeps no frame pointer under `-fomit-frame-pointer`,
+/// decided ahead of the allocation, which then gives rbp out as a
+/// callee-saved register: on System V ELF and on Win64, a body that keeps
+/// rsp where its prologue left it, so every frame region is addressed from
+/// rsp and the call-frame information and the unwind codes follow rsp
+/// through the prologue and the epilogues alone; a lowering keeps what it
+/// borrows in keep slots ([`super::keep`]), in the red zone where there is
+/// one and else in the frame, and a call places its stack arguments in the
+/// frame's outgoing area ([`Frame::out`]). Left with one: an rsp the
+/// body moves (`alloca`, a realigned region, the `va_arg` and `va_copy`
+/// lowerings), a frame read as such (the frame-address intrinsics, a
+/// variadic callee's save areas, `-pg`), any asm statement, which may name
+/// rbp, `setjmp`, a naked body, `__try`, a foreign convention, and locals
+/// or stack arguments past one unprobed allocation step.
+pub(crate) fn frame_pointer_free(
+    func: &FunctionSsa,
+    target: Target,
+    native: &super::NativeOptions,
+) -> bool {
+    use crate::c5::op::Intrinsic as I;
+    let abi = {
+        let mut a = target.abi_for(func.conv);
+        let entry = super::FunctionEntry::of(func, native);
+        a.mcount_frame = entry.profile.is_some_and(|call| call.after_prologue);
+        a
+    };
+    if !matches!(target, Target::LinuxX64 | Target::WindowsX64)
+        || !native.omits_frame_pointer()
+        || target.abi_row(func.conv) != target
+        || abi.mcount_frame
+        || super::ssa::emit_common::uses_dynamic_alloca(func)
+        || func.frame_align > 16
+        || super::ssa::emit_common::slots16(func.locals.max(0) as u32)
+            > super::ssa::emit_common::MAX_UNPROBED_STACK_STEP
+        || func.is_naked
+        || func.has_returns_twice_call
+        || func.has_seh()
+        || sysv_variadic_callee(func, abi)
+        || win64_variadic_callee(func, abi)
+    {
+        return false;
+    }
+    let out = func
+        .insts
+        .iter()
+        .filter_map(|i| call_stack_bytes(func, i, abi, target))
+        .max();
+    out.unwrap_or(0) <= super::ssa::emit_common::MAX_UNPROBED_STACK_STEP
+        && func.insts.iter().all(|inst| match inst {
+            Inst::InlineAsm { .. } => false,
+            Inst::Intrinsic { kind, .. } => {
+                I::from_i64(*kind).is_some_and(|i| !intrinsic_keeps_frame(i, abi) && i != I::VaArg)
+            }
+            _ => true,
+        })
+}
+
+/// The bytes of stack arguments `inst` passes, a call's; `None` for any
+/// other instruction. System V places a variadic call's arguments as a
+/// named one's.
+fn call_stack_bytes(
+    func: &FunctionSsa,
+    inst: &Inst,
+    abi: super::Abi,
+    target: Target,
+) -> Option<u32> {
+    let widths = crate::c5::ir::ArgWidths::default();
+    let (args, arg_aggs, fp_arg_mask, abi) = match inst {
+        Inst::Call {
+            args,
+            arg_aggs,
+            fp_arg_mask,
+            callee_conv,
+            ..
+        }
+        | Inst::CallIndirect {
+            args,
+            arg_aggs,
+            fp_arg_mask,
+            callee_conv,
+            ..
+        } => (
+            args,
+            arg_aggs,
+            fp_arg_mask,
+            super::call::callee_abi(abi, target, *callee_conv),
+        ),
+        Inst::CallExt {
+            args,
+            arg_aggs,
+            fp_arg_mask,
+            ..
+        } => (args, arg_aggs, fp_arg_mask, abi),
+        _ => return None,
+    };
+    let aggs = super::ssa::emit_common::build_call_aggs(func, args, arg_aggs, abi);
+    let n = args.len();
+    Some(super::plan_call_args_aggs(n, n, fp_arg_mask, abi, &aggs, false, widths).scratch_bytes)
 }
 
 pub(crate) fn compute_frame(
@@ -103,35 +285,52 @@ pub(crate) fn compute_frame(
     abi: super::Abi,
     target: Target,
 ) -> Frame {
-    compute_frame_with_tail_calls(func, alloc, abi, target, &[])
+    compute_frame_with_tail_calls(func, alloc, abi, target, &[], 0)
 }
 
-/// [`compute_frame`] for a body whose calls at `tail_calls` are tail calls.
+/// [`compute_frame`] for a body whose calls at `tail_calls` are tail calls,
+/// reserving the keep slots `keep` names where they take frame bytes.
 pub(crate) fn compute_frame_with_tail_calls(
     func: &FunctionSsa,
     alloc: &Allocation,
     abi: super::Abi,
     target: Target,
     tail_calls: &[usize],
+    keep: u32,
 ) -> Frame {
     let base = super::ssa::emit_common::compute_frame_base(func, alloc);
+    // A site that borrowed a scratch register asks for two more spill slots
+    // ([`super::keep::BORROW_AREA`]).
+    let borrow_area = keep >> super::keep::BORROW_AREA & 1 != 0;
+    let keep = keep & !(1 << super::keep::BORROW_AREA);
+    let spills = match borrow_area {
+        true => super::ssa::emit_common::slots16(alloc.spill_count + 2),
+        false => base.spills,
+    };
     let (declared_locals_bytes, alloc_spill_bytes, saved_gpr_bytes) =
-        (base.locals, base.spills, base.saved_gprs);
+        (base.locals, spills, base.saved_gprs);
     // The canary region joins the top of the locals region, so every offset
     // measured down from rbp shifts by it and no other region formula changes.
     let canary_bytes = super::ssa::emit_common::canary_bytes(func, &base, abi.stack_protect);
     // Win64 saves the callee-saved registers above every other region, where
-    // the unwind codes reach them (`emit_prologue`).
+    // the unwind codes reach them (`emit_prologue`). With no frame pointer
+    // the first push takes the place `push rbp` would.
     let saved_fpr_bytes = alloc.fp_used.len() as u32 * 16;
-    let saves_top = if target == Target::WindowsX64 {
-        saved_gpr_bytes + saved_fpr_bytes
-    } else {
-        0
+    let win64 = target == Target::WindowsX64;
+    let saves_first = win64 && func.frees_rbp;
+    let pushed = alloc.gpr_used.len() as u32 * 8;
+    let saves_top = match (win64, saves_first) {
+        (true, true) => {
+            super::ssa::emit_common::align16(pushed.saturating_sub(8)) + saved_fpr_bytes
+        }
+        (true, false) => saved_gpr_bytes + saved_fpr_bytes,
+        (false, _) => 0,
     };
     let locals_bytes = saves_top + declared_locals_bytes + canary_bytes;
     // The parameter cells sit below the locals, whose offsets they leave
     // alone; every region below them shifts by their size.
-    let param_cells_bytes = param_cells_bytes(func, alloc, abi);
+    let param_cells = param_cells(func, alloc, abi);
+    let param_cells_bytes = 16 * param_cells.count_ones();
     let upper_bytes = locals_bytes + param_cells_bytes;
     // A System V variadic callee's register save area (ABI 3.5.7) takes the
     // lowest bytes of the frame; the rbp-relative regions above it keep
@@ -165,7 +364,10 @@ pub(crate) fn compute_frame_with_tail_calls(
     // instead.
     let region_bytes = func.realign_region_bytes.max(0) as u32;
     let static_region_bytes = base.static_region;
-    let bottom_saves = saved_gpr_bytes + saved_fpr_bytes - saves_top;
+    let bottom_saves = match win64 {
+        true => 0,
+        false => saved_gpr_bytes + saved_fpr_bytes,
+    };
     let frame_bytes = upper_bytes
         + alloc_spill_bytes
         + bottom_saves
@@ -207,7 +409,7 @@ pub(crate) fn compute_frame_with_tail_calls(
             locals: declared_locals_bytes,
             param_cells: param_cells_bytes,
             spills: alloc_spill_bytes,
-            saved_regs: saved_gpr_bytes + saved_fpr_bytes,
+            saved_regs: saves_top + bottom_saves,
             va_save: va_save_bytes,
             asm_scratch: asm_bytes,
             canary: canary_bytes,
@@ -215,6 +417,7 @@ pub(crate) fn compute_frame_with_tail_calls(
             outgoing: 0,
         },
         param_cells_bytes,
+        param_cells,
         param_cells_off: if param_cells_bytes > 0 {
             -(upper_bytes as i32)
         } else {
@@ -229,6 +432,14 @@ pub(crate) fn compute_frame_with_tail_calls(
         realign_align,
         region_base,
         realign_region_bytes: if realign_align > 0 { region_bytes } else { 0 },
+        omit_fp: false,
+        red_zone: abi.red_zone,
+        pushes_alone: false,
+        pushed,
+        out: 0,
+        keep: 0,
+        borrow_area,
+        saves_first: false,
         align_region_off: if static_region_bytes > 0 {
             -((upper_bytes + alloc_spill_bytes + va_save_bytes + asm_bytes + static_region_bytes)
                 as i64)
@@ -239,6 +450,44 @@ pub(crate) fn compute_frame_with_tail_calls(
     // A full leaf or naked body has nothing to address, no rbp to restore rsp from.
     frame.dynamic_sp |=
         func.has_sp_moving_asm(target) && !func.is_naked && !is_full_leaf(func, frame, alloc, abi);
+    if func.frees_rbp && !is_full_leaf(func, frame, alloc, abi) {
+        debug_assert!(
+            !frame.dynamic_sp
+                && (saves_first || (alloc.fp_used.is_empty() && frame.saves_top == 0))
+        );
+        frame.omit_fp = true;
+        frame.saves_first = saves_first;
+        let windows = func
+            .insts
+            .iter()
+            .filter_map(|i| call_stack_bytes(func, i, abi, target));
+        frame.out = windows.max().unwrap_or(0);
+        frame.frame_bytes += frame.out;
+        frame.parts.outgoing += frame.out;
+        if !frame.red_zone {
+            let keep_bytes = super::ssa::emit_common::slots16(keep.count_ones());
+            frame.keep = keep;
+            frame.frame_bytes += keep_bytes;
+            frame.parts.spills += keep_bytes;
+        }
+        // The pushes alone keep rsp 16-byte aligned at a call when they
+        // take an odd number of eightbytes past the return address; xmm
+        // saves need an allocation to store to.
+        frame.pushes_alone = frame.parts.total() == frame.parts.saved_regs
+            && alloc.fp_used.is_empty()
+            && (!frame.keeps_record || frame.pushed % 16 == 8);
+    }
+    // Every Win64 call takes a window, its home area at least, so a framed
+    // Win64 frame keeps the largest at its bottom too, where no allocation
+    // moves rsp between the calls. A tail call takes none.
+    if win64 && !frame.omit_fp && !frame.dynamic_sp && !func.is_naked {
+        let windows = (func.insts.iter().enumerate())
+            .filter(|(pc, _)| !tail_calls.contains(pc))
+            .filter_map(|(_, i)| call_stack_bytes(func, i, abi, target));
+        frame.out = windows.max().unwrap_or(0);
+        frame.frame_bytes += frame.out;
+        frame.parts.outgoing += frame.out;
+    }
     frame
 }
 
@@ -943,7 +1192,32 @@ pub(super) fn is_full_leaf(
     if !alloc.fp_used.is_empty() {
         return false;
     }
+    // With no red zone an x87 conversion takes a slot in the frame
+    // ([`super::keep`]), or moves rsp, which only a frame pointer's
+    // call-frame rule survives.
+    if !abi.red_zone && converts_through_x87(func) {
+        return false;
+    }
     !frame.keeps_record
+}
+
+/// Whether `func` loads or stores an x87 extended value, which the lowering
+/// converts through eight bytes of memory below rsp.
+fn converts_through_x87(func: &FunctionSsa) -> bool {
+    use crate::c5::ir::{LoadKind as L, StoreKind as S};
+    func.insts.iter().any(|inst| {
+        matches!(
+            inst,
+            Inst::Load { kind: L::F80, .. }
+                | Inst::LoadLocal { kind: L::F80, .. }
+                | Inst::LoadIndexed { kind: L::F80, .. }
+                | Inst::SegLoad { kind: L::F80, .. }
+                | Inst::Store { kind: S::F80, .. }
+                | Inst::StoreLocal { kind: S::F80, .. }
+                | Inst::StoreIndexed { kind: S::F80, .. }
+                | Inst::SegStore { kind: S::F80, .. }
+        )
+    })
 }
 
 /// Each declared parameter's incoming placement from `plan_call_args`;
@@ -1002,13 +1276,26 @@ fn int_arg_position(r: u8, abi: super::Abi) -> i64 {
 /// A stack-passed parameter is read where the caller left it, at
 /// `[rbp + 16 + off]`, on every ABI.
 pub(super) fn param_home_off(i: usize, func: &FunctionSsa, frame: Frame, abi: super::Abi) -> i64 {
+    match param_home(i, func, frame, abi) {
+        Some(off) => off,
+        None => unreachable!("ICE: parameter {i} has no home"),
+    }
+}
+
+/// [`param_home_off`], `None` for a register parameter that keeps no cell.
+pub(super) fn param_home(
+    i: usize,
+    func: &FunctionSsa,
+    frame: Frame,
+    abi: super::Abi,
+) -> Option<i64> {
     use super::ArgPlacement as P;
     let placements = param_home_placements(func, abi);
     let Some(&p) = placements.get(i) else {
         unreachable!("ICE: parameter {i} has no placement");
     };
     let before = |pred: fn(&P) -> bool| placements[..i].iter().filter(|q| pred(q)).count() as i64;
-    match p {
+    Some(match p {
         P::Stack(off) | P::StructStack { off, .. } => 16 + off as i64,
         P::IntReg(r) if sysv_variadic_callee(func, abi) => {
             frame.va_reg_save_off as i64 + int_arg_position(r, abi) * 8
@@ -1021,30 +1308,42 @@ pub(super) fn param_home_off(i: usize, func: &FunctionSsa, frame: Frame, abi: su
         P::StructRegs { regs, .. } if home_area_callee(abi) => {
             16 + 8 * int_arg_position(regs[0].reg, abi)
         }
-        _ => frame.param_cells_off as i64 + 16 * before(register_carried),
-    }
+        _ => {
+            let k = before(register_carried);
+            if frame.param_cells >> k & 1 == 0 {
+                return None;
+            }
+            let cells_before = (frame.param_cells & ((1u64 << k) - 1)).count_ones();
+            frame.param_cells_off as i64 + 16 * i64::from(cells_before)
+        }
+    })
 }
 
-/// Bytes of the parameter cell region: a cell per register-carried
-/// parameter once a System V callee reads any register parameter from
-/// memory. A Win64 callee homes its register parameters in the caller's
-/// home area and a variadic callee in its register save area.
-fn param_cells_bytes(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> u32 {
+/// The register-carried parameters, by their order among them, that keep a
+/// cell in a System V callee: the scalars whose home the body reads
+/// ([`param_elidable_mask`] clear). A Win64 callee homes its register
+/// parameters in the caller's home area, a variadic callee in its register
+/// save area, and a register-passed aggregate lives in its body local.
+fn param_cells(func: &FunctionSsa, alloc: &Allocation, abi: super::Abi) -> u64 {
     if func.is_variadic || home_area_callee(abi) {
         return 0;
     }
-    let placements = param_placements(func, abi);
     let elidable = param_elidable_mask(func, alloc, abi);
-    let any_needed = placements.iter().enumerate().any(|(i, p)| {
-        matches!(
+    let placements = param_placements(func, abi);
+    let carried = placements
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| register_carried(p));
+    carried.enumerate().fold(0, |mask, (k, (i, p))| {
+        let scalar = matches!(
             p,
             super::ArgPlacement::IntReg(_) | super::ArgPlacement::FpReg(_)
-        ) && !elidable.get(i).copied().unwrap_or(false)
-    });
-    if !any_needed {
-        return 0;
-    }
-    16 * placements.iter().filter(|p| register_carried(p)).count() as u32
+        );
+        match scalar && !elidable.get(i).copied().unwrap_or(false) {
+            true => mask | 1 << k,
+            false => mask,
+        }
+    })
 }
 
 /// Whether any parameter is read from memory: a register scalar whose home

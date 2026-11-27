@@ -1,5 +1,5 @@
-//! The lazy procedure linkage table, as each psABI lays it out and GNU ld
-//! encodes it: a header (bfd's PLT0) that hands the loader its resolver
+//! The lazy procedure linkage table, as each psABI lays it out: a header
+//! (PLT0) that hands the loader its resolver
 //! slots, then one entry per called symbol jumping through a `.got.plt`
 //! slot that an `R_*_JUMP_SLOT` in `.rel(a).plt` names.
 

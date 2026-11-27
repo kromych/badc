@@ -3,7 +3,7 @@ builtin_library_functions_need_no_declaration.aarch64:	file format elf64-littlea
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -162,14 +162,14 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x10]
                	mov	x0, #0x3                // =3
                	stur	w0, [x29, #-0x8]
+               	ldur	x2, [x29, #-0x10]
                	sub	x0, x29, #0x58
                	mov	x1, #0x78               // =120
-               	ldur	x2, [x29, #-0x10]
                	bl	<addr>
+               	ldur	x2, [x29, #-0x10]
                	sub	x0, x29, #0x58
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldur	x2, [x29, #-0x10]
                	bl	<addr>
                	sub	x0, x29, #0x58
                	bl	<addr>
@@ -185,10 +185,10 @@ Disassembly of section .text:
                	add	sp, sp, #0xc0
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	ldur	w2, [x29, #-0x8]
                	sub	x0, x29, #0x58
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldur	w2, [x29, #-0x8]
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -203,19 +203,19 @@ Disassembly of section .text:
                	add	sp, sp, #0xc0
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	ldur	w2, [x29, #-0x8]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldur	w2, [x29, #-0x8]
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
+               	ldur	w2, [x29, #-0x8]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldur	w2, [x29, #-0x8]
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -223,6 +223,7 @@ Disassembly of section .text:
                	add	sp, sp, #0xc0
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	fmov	d0, #0.50000000
                	sub	x0, x29, #0x58
                	mov	x1, #0x20               // =32
                	adrp	x2, <page>
@@ -230,7 +231,6 @@ Disassembly of section .text:
                	mov	x3, #0x2a               // =42
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
-               	fmov	d0, #0.50000000
                	bl	<addr>
                	cmp	w0, #0x9
                	b.eq	<addr>
@@ -250,34 +250,33 @@ Disassembly of section .text:
                	ret
                	ldur	x0, [x29, #-0x10]
                	bl	<addr>
-               	mov	x3, x0
-               	cbnz	x3, <addr>
+               	mov	x1, x0
+               	cbnz	x1, <addr>
                	mov	x0, #0xb                // =11
                	add	sp, sp, #0xc0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x1, x29, #0x58
                	ldur	x2, [x29, #-0x10]
-               	str	x3, [sp, #0x50]
-               	mov	x0, x3
+               	str	x1, [sp, #0x50]
+               	mov	x0, x1
+               	sub	x1, x29, #0x58
                	bl	<addr>
-               	ldr	x3, [sp, #0x50]
+               	ldr	x1, [sp, #0x50]
+               	ldur	x2, [x29, #-0x10]
+               	str	x1, [sp, #0x50]
+               	mov	x0, x1
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldur	x2, [x29, #-0x10]
-               	str	x3, [sp, #0x50]
-               	mov	x0, x3
                	bl	<addr>
                	sxtw	x0, w0
                	str	x0, [sp, #0x58]
-               	ldr	x3, [sp, #0x50]
-               	mov	x0, x3
+               	ldr	x1, [sp, #0x50]
+               	mov	x0, x1
                	bl	<addr>
-               	mov	x0, #0x0                // =0
-               	mov	x1, #0xc                // =12
                	ldr	x16, [sp, #0x58]
                	cmp	x16, #0x0
-               	csel	x0, x1, x0, ne
+               	mov	x16, #0xc               // =12
+               	csel	x0, x16, xzr, ne
                	add	sp, sp, #0xc0
                	ldp	x29, x30, [sp], #0x10
                	ret

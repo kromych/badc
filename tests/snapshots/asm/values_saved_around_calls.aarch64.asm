@@ -3,7 +3,7 @@ values_saved_around_calls.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -60,6 +60,7 @@ Disassembly of section .text:
                	ldr	x22, [x6, #0x58]
                	ldr	x21, [x6, #0x60]
                	ldr	x6, [x6, #0x68]
+               	str	x1, [sp, #0x78]
                	b	<addr>
                	add	x20, x20, #0x1
                	cmp	w20, w1
@@ -80,7 +81,6 @@ Disassembly of section .text:
                	eor	x6, x6, x21
                	and	x7, x20, #0x7
                	cbnz	w7, <addr>
-               	str	x1, [sp, #0x78]
                	str	x5, [sp, #0x50]
                	str	x4, [sp, #0x58]
                	str	x3, [sp, #0x60]
@@ -448,12 +448,12 @@ Disassembly of section .text:
                	stur	d0, [x29, #-0x80]
                	mov	x0, #0x64               // =100
                	stur	w0, [x29, #-0x8]
-               	sub	x0, x29, #0x78
                	ldursw	x1, [x29, #-0x8]
+               	sub	x0, x29, #0x78
                	bl	<addr>
                	mov	x20, x0
-               	sub	x0, x29, #0x78
                	ldursw	x1, [x29, #-0x8]
+               	sub	x0, x29, #0x78
                	bl	<addr>
                	cmp	x20, x0
                	b.eq	<addr>
@@ -463,12 +463,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x130
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0xd8
                	ldursw	x1, [x29, #-0x8]
+               	sub	x0, x29, #0xd8
                	bl	<addr>
                	fmov	d8, d0
-               	sub	x0, x29, #0xd8
                	ldursw	x1, [x29, #-0x8]
+               	sub	x0, x29, #0xd8
                	bl	<addr>
                	fcmp	d8, d0
                	b.eq	<addr>

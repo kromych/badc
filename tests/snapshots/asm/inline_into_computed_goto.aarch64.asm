@@ -3,7 +3,7 @@ inline_into_computed_goto.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -27,25 +27,24 @@ Disassembly of section .text:
                	adr	x2, <addr>
                	stur	x2, [x29, #-0x8]
                	mov	x2, #0x1                // =1
-               	ldrsw	x5, [x4]
-               	ldr	x3, [x3, x5, lsl #3]
+               	ldrsw	x6, [x4]
+               	sub	x5, x29, #0x18
+               	ldr	x3, [x3, x6, lsl #3]
                	br	x3
                	add	x3, x2, #0x1
                	ldrsw	x2, [x4, x2, lsl #2]
                	ldr	x2, [x1, x2, lsl #3]
                	and	x2, x2, #0xfffffffffffffffc
                	add	x0, x0, x2
-               	sub	x5, x29, #0x18
                	add	x2, x3, #0x1
                	ldrsw	x3, [x4, x3, lsl #2]
                	ldr	x3, [x5, x3, lsl #3]
                	br	x3
                	add	x0, x0, x0
-               	sub	x3, x29, #0x18
-               	add	x5, x2, #0x1
+               	add	x6, x2, #0x1
                	ldrsw	x2, [x4, x2, lsl #2]
-               	ldr	x3, [x3, x2, lsl #3]
-               	mov	x2, x5
+               	ldr	x3, [x5, x2, lsl #3]
+               	mov	x2, x6
                	br	x3
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
@@ -55,7 +54,6 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40
-               	sub	x1, x29, #0x38
                	mov	x0, #0x67               // =103
                	stur	x0, [x29, #-0x38]
                	mov	x0, #0xc9               // =201
@@ -63,17 +61,17 @@ Disassembly of section .text:
                	mov	x0, #0x12c              // =300
                	stur	x0, [x29, #-0x28]
                	sub	x0, x29, #0x20
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	ldp	x16, x17, [x2]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
-               	ldp	x16, x17, [x2, #0x10]
+               	ldp	x16, x17, [x1, #0x10]
                	stp	x16, x17, [x0, #0x10]
+               	sub	x1, x29, #0x38
                	bl	<addr>
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x1                // =1
                	cmp	x0, #0x384
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, eq
                	add	sp, sp, #0x40
                	ldp	x29, x30, [sp], #0x10
                	ret

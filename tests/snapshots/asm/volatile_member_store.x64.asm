@@ -3,7 +3,7 @@ volatile_member_store.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -74,10 +74,10 @@ Disassembly of section .text:
                	movl	%ecx, <rip> # <addr>
                	movl	<rip>, %ecx # <addr>
                	andq	$0x1f, %rcx
-               	incq	%rcx
-               	andq	$0x1f, %rcx
-               	movl	<rip>, %edx # <addr>
-               	andq	$-0x20, %rdx
+               	leaq	0x1(%rcx), %rdx
+               	andq	$0x1f, %rdx
+               	movl	<rip>, %ecx # <addr>
+               	andq	$-0x20, %rcx
                	orq	%rdx, %rcx
                	movl	%ecx, <rip> # <addr>
                	movl	<rip>, %ecx # <addr>

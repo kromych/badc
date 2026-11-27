@@ -293,9 +293,11 @@ pub(crate) fn assemble_tu(
         }
         src_bytes
     };
-    badc::Compiler::assemble(&text, cfg.target, copts).map_err(|e| {
+    let program = badc::Compiler::assemble(&text, cfg.target, copts).map_err(|e| {
         log.error(cfg.stderr_is_tty, "", &e);
-    })
+    })?;
+    report_unit_diagnostics(log, cfg.stderr_is_tty, &program)?;
+    Ok(program)
 }
 
 /// Produce one translation unit's `Program` and write its dependency rule:
@@ -415,6 +417,10 @@ pub(crate) fn compile_object_tu(src_path: &str, cfg: &CompileCfg) -> (TuLog, Res
         Ok(emit) => {
             log_codegen_diagnostics(&emit, cfg, &mut log);
             eprint!("{}", emit.ssa_dump);
+            // `-S` writes the object's listing in its place.
+            if cfg.reloc_opts.listing {
+                return (log, Ok(emit.listing.into_bytes()));
+            }
             (log, Ok(emit.image))
         }
         Err(e) => {

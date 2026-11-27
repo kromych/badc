@@ -40,6 +40,11 @@ pub(crate) enum Attr {
     /// `error("message")` / `warning("message")`: a call to the function
     /// left in the emitted code is diagnosed with the message.
     CallDiagnostic,
+    /// `nonnull` / `nonnull(N, ...)`: pointer parameters a call must not
+    /// pass null to, which `-fsanitize=nonnull-attribute` checks.
+    Nonnull,
+    /// `returns_nonnull`, which `-fsanitize=returns-nonnull-attribute` checks.
+    ReturnsNonnull,
     /// Parsed with its operands and without effect on the code badc emits.
     Accepted,
 }
@@ -100,8 +105,8 @@ const TABLE: &[(&str, Attr, Spelling)] = &[
     ("format", Accepted, Gnu),
     ("format_arg", Accepted, Gnu),
     ("sentinel", Accepted, Gnu),
-    ("nonnull", Accepted, Gnu),
-    ("returns_nonnull", Accepted, Gnu),
+    ("nonnull", Nonnull, Gnu),
+    ("returns_nonnull", ReturnsNonnull, Gnu),
     ("warn_unused_result", Accepted, Gnu),
     ("alloc_size", Accepted, Gnu),
     ("alloc_align", Accepted, Gnu),

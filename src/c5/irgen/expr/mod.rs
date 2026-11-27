@@ -16,17 +16,27 @@ use super::types::{
 use super::*;
 use crate::c5::ast::expr_ty;
 use crate::c5::ir::{imm_safe_binop, is_comparison_op};
+use crate::c5::irgen::Yields;
 use postfix::MemberRef;
 
 impl<'a> Walker<'a> {
     /// Walk an expression in rvalue position. Returns the
     /// `ValueId` whose runtime value is the C99 6.5p1 evaluation
-    /// of the expression.
+    /// of the expression, after the check `-fsanitize=` attached to its
+    /// value.
     pub(super) fn walk_expr_rvalue(
         &mut self,
         b: &mut SsaBuilder,
         id: ExprId,
     ) -> Result<ValueId, WalkError> {
+        let value = self.walk_expr_value(b, id)?;
+        for &check in self.ast.value_checks.get(&id).into_iter().flatten() {
+            self.check_value(b, check, value);
+        }
+        Ok(value)
+    }
+
+    fn walk_expr_value(&mut self, b: &mut SsaBuilder, id: ExprId) -> Result<ValueId, WalkError> {
         if let Some(ty) = self.atomic_lvalue_ty(id) {
             let addr = self.atomic_lvalue_addr(b, id, ty)?;
             return self.atomic_object_load(b, addr, ty);
@@ -60,8 +70,19 @@ impl<'a> Walker<'a> {
                 *is_thread_local,
                 *array_size,
             ),
-            Expr::Unary { op, child, ty } => self.walk_unary(b, *op, *child, *ty),
-            Expr::Binary { op, lhs, rhs, ty } => self.walk_binary(b, *op, *lhs, *rhs, *ty),
+            Expr::Unary {
+                op: crate::c5::ast::UnOp::Neg,
+                child,
+                ty,
+            } if self.ast.checks.contains_key(&id) => {
+                let check = self.ast.checks[&id];
+                self.walk_checked_neg(b, check, *child, *ty)
+            }
+            Expr::Unary { op, child, ty } => self.walk_unary(b, id, *op, *child, *ty),
+            Expr::Binary { op, lhs, rhs, ty } => match self.ast.checks.get(&id) {
+                Some(&check) => self.walk_checked_binary(b, check, *op, (*lhs, *rhs), *ty),
+                None => self.walk_binary(b, *op, *lhs, *rhs, *ty),
+            },
             Expr::BitfieldAssign {
                 obj,
                 field_off,
@@ -108,19 +129,37 @@ impl<'a> Walker<'a> {
                 ty,
                 op_ty,
                 nsw,
-            } => self.walk_compound_assign(b, *op, *lhs, *rhs, *ty, *op_ty, *nsw),
+            } => {
+                let checks = (
+                    self.ast.checks.get(&id).copied(),
+                    self.ast.store_checks.get(&id).copied(),
+                );
+                self.walk_compound_assign(b, *op, (*lhs, *rhs), (*ty, *op_ty), *nsw, checks)
+            }
             Expr::PreInc {
                 lvalue,
                 by,
                 ty,
                 nsw,
-            } => self.walk_inc(b, *lvalue, *by, *ty, false, *nsw),
+            } => {
+                let checks = (
+                    self.ast.checks.get(&id).copied(),
+                    self.ast.store_checks.get(&id).copied(),
+                );
+                self.walk_inc(b, *lvalue, *by, *ty, (Yields::New, *nsw), checks)
+            }
             Expr::PostInc {
                 lvalue,
                 by,
                 ty,
                 nsw,
-            } => self.walk_inc(b, *lvalue, *by, *ty, true, *nsw),
+            } => {
+                let checks = (
+                    self.ast.checks.get(&id).copied(),
+                    self.ast.store_checks.get(&id).copied(),
+                );
+                self.walk_inc(b, *lvalue, *by, *ty, (Yields::Old, *nsw), checks)
+            }
             Expr::Sizeof(s) => Ok(b.imm(s.size_bytes)),
             // C99 6.3.2.1p3: a VLA lvalue decays to a pointer to its
             // first element -- the runtime base pointer the matching
@@ -147,6 +186,13 @@ impl<'a> Walker<'a> {
             } => {
                 let (block, value_item) = (*block, *value_item);
                 self.walk_stmt_expr(b, block, value_item)
+            }
+            // A string function `-finline-stringops` expands inline.
+            Expr::MemLoop {
+                op, a, b: c, len, ..
+            } => {
+                let (op, abc) = (*op, (*a, *c, *len));
+                self.walk_mem_loop(b, op, abc)
             }
             // `__builtin_mem*` with a constant byte count.
             Expr::MemTransfer {
@@ -184,7 +230,18 @@ impl<'a> Walker<'a> {
             // A short-circuit in value position: the result is used, so
             // normalize it to 0/1.
             Expr::ShortCircuit { .. } => self.walk_short_circuit(b, id, true),
-            Expr::Intrinsic { kind, args, .. } => self.walk_intrinsic(b, *kind, args),
+            // A `__builtin_unreachable()` under `-fsanitize=unreachable`.
+            Expr::Intrinsic { kind, args, .. } => match self.ast.checks.get(&id) {
+                Some(&check) => {
+                    let after = b.new_block();
+                    if self.fail_check(b, check, &[]) {
+                        b.jmp(after);
+                    }
+                    b.switch_to(after);
+                    Ok(b.imm(0))
+                }
+                None => self.walk_intrinsic(b, *kind, args),
+            },
             Expr::MsIntrinsic { .. } => self.walk_ms_intrinsic(b, id),
             Expr::InlineAsm(idx) => self.walk_inline_asm(b, *idx),
             Expr::LabelAddr(label) => {
@@ -219,6 +276,24 @@ impl<'a> Walker<'a> {
         b: &mut SsaBuilder,
         id: ExprId,
     ) -> Result<ValueId, WalkError> {
+        let addr = self.walk_lvalue_address(b, id)?;
+        self.check_access(b, id, addr);
+        Ok(addr)
+    }
+
+    /// Check the address `addr` the node `id` accesses, where
+    /// `-fsanitize=` checks it.
+    pub(super) fn check_access(&mut self, b: &mut SsaBuilder, id: ExprId, addr: ValueId) {
+        if let Some(&check) = self.ast.access_checks.get(&id) {
+            self.check_value(b, check, addr);
+        }
+    }
+
+    fn walk_lvalue_address(
+        &mut self,
+        b: &mut SsaBuilder,
+        id: ExprId,
+    ) -> Result<ValueId, WalkError> {
         match self.ast.expr(id) {
             Expr::Ident { .. } => self.ident_address(b, id),
             Expr::Unary {
@@ -234,14 +309,8 @@ impl<'a> Walker<'a> {
             // `arr[i] = v`: the address, without the load the rvalue
             // path would append.
             Expr::Index { array, idx, .. } => {
-                let (array_id, idx_id) = (*array, *idx);
-                let arr = self.walk_expr_rvalue(b, array_id)?;
-                let i = self.walk_expr_rvalue(b, idx_id)?;
-                // The constant-index fold of the rvalue path.
-                match b.peek_imm(i) {
-                    Some(k) => Ok(b.binop_imm(BinOp::Add, arr, k)),
-                    None => Ok(b.binop(BinOp::Add, arr, i)),
-                }
+                let (array, idx) = (*array, *idx);
+                self.index_address(b, id, array, idx)
             }
             // `s.f = v`: the object's address plus the field offset.
             Expr::Member { obj, field_off, .. } => {

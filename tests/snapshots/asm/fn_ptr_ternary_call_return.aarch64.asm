@@ -3,7 +3,7 @@ fn_ptr_ternary_call_return.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -39,9 +39,9 @@ Disassembly of section .text:
                	movk	x0, #0x1, lsl #32
                	cmp	x20, x0
                	b.eq	<addr>
+               	mov	x1, x20
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x1, x20
                	bl	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x10]
@@ -52,17 +52,17 @@ Disassembly of section .text:
                	movk	x17, #0x12, lsl #32
                	cmp	x2, x17
                	b.eq	<addr>
+               	mov	x1, x2
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x1, x2
                	bl	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
+               	mov	x1, x20
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x1, x20
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp, #0x10]

@@ -22,7 +22,7 @@ const VEC: &str = "typedef long long __m128i __attribute__((vector_size(16))); \
 /// Every emitted unit needs an entry point.
 const MAIN: &str = " int main(void) { return 0; }";
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn emitted(src: &str) -> Vec<u8> {
     use crate::{NativeOptions, Target};
     let program = super::compile_str_bare_for(&format!("{VEC}{src}{MAIN}"), Target::LinuxX64);
@@ -34,7 +34,7 @@ fn emitted(src: &str) -> Vec<u8> {
     .expect("emit_native for linux-x64")
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[track_caller]
 fn assert_emits(src: &str, expected: &[u8], what: &str) {
     let bytes = emitted(src);
@@ -47,7 +47,7 @@ fn assert_emits(src: &str, expected: &[u8], what: &str) {
 /// The 128-bit operands are memory-resident and 8-byte aligned, so every
 /// transfer is `movdqu`: `f3 44 0f 6f` (load into xmm14/xmm15) and
 /// `f3 44 0f 7f` (store).
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn transfers_use_unaligned_moves() {
     // movdqu (%rcx), %xmm15  f3 44 0f 6f 39
@@ -64,7 +64,7 @@ fn transfers_use_unaligned_moves() {
     );
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn sse2_packed_ops_emit_their_instruction() {
     // Every two-operand form is `<op> %xmm14, %xmm15`, so the encodings
@@ -130,7 +130,7 @@ fn sse2_packed_ops_emit_their_instruction() {
     }
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn shifts_take_the_immediate_form_for_a_constant_count() {
     // psllw  $0x3, %xmm15   66 41 0f 71 f7 03
@@ -172,7 +172,7 @@ fn shifts_take_the_immediate_form_for_a_constant_count() {
     );
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn a_runtime_shift_count_takes_the_register_form() {
     // movq %rcx, %xmm14 then psrlq %xmm14, %xmm15   66 45 0f d3 fe
@@ -189,7 +189,7 @@ fn a_runtime_shift_count_takes_the_register_form() {
     );
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn shuffles_carry_their_immediate() {
     // pshufd  $0x93, %xmm14, %xmm15   66 45 0f 70 fe 93
@@ -227,7 +227,7 @@ fn shuffles_carry_their_immediate() {
 /// A 128-bit row with no SSE encoding takes its VEX form at `-O0`, the
 /// first source loaded into the destination: `vpsllvd %xmm14, %xmm15,
 /// %xmm15` is `c4 42 01 47 fe`, `vpsrlvq` `c4 42 81 45 fe`.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn a_vex_only_row_takes_its_vex_form_in_memory() {
     let v4si = "typedef int __v4si_ __attribute__((vector_size(16))); ";
@@ -248,7 +248,7 @@ fn a_vex_only_row_takes_its_vex_form_in_memory() {
 
 /// The SSSE3 forms take the 0F38 map, `66 45 0f 38 <op> fe`; PALIGNR's
 /// builtin counts bits and the instruction bytes.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn ssse3_ops_emit_their_instruction() {
     for (builtin, opcode, unary) in [
@@ -284,7 +284,7 @@ fn ssse3_ops_emit_their_instruction() {
 }
 
 /// The SSE4.1 forms and PCMPGTQ take the 0F38 map, the immediate blends 0F3A.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn sse41_ops_emit_their_instruction() {
     for (builtin, opcode, unary) in [
@@ -340,7 +340,7 @@ fn sse41_ops_emit_their_instruction() {
     }
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn element_access_uses_the_extract_and_insert_instructions() {
     // Alone in this file, these encodings name a general register, which
@@ -413,7 +413,7 @@ fn element_access_uses_the_extract_and_insert_instructions() {
     );
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn aes_and_carryless_multiply_emit_their_instruction() {
     // aesenc     %xmm14, %xmm15   66 45 0f 38 dc fe
@@ -454,7 +454,7 @@ fn aes_and_carryless_multiply_emit_their_instruction() {
     );
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn rdrand_reports_its_carry_flag() {
     // rdrandl %r10d     41 0f c7 f2
@@ -475,7 +475,7 @@ fn rdrand_reports_its_carry_flag() {
 
 /// The bundled headers reach the same instructions through the `_mm_*`
 /// spellings, including the macro forms that carry an immediate.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_bundled_headers_reach_the_instructions() {
     use crate::{NativeOptions, Target};
@@ -598,6 +598,173 @@ fn the_variable_shifts_are_rows_the_interpreter_runs() {
     assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
 }
 
+/// On an x86-64 host whose processor has the AVX-512 subsets, VAES and
+/// VPCLMULQDQ the AVX-512 programs use, `src` also runs natively through the
+/// JIT, at -O0 and -O, each in a child process, to `want`, the status the
+/// interpreter gives; elsewhere the interpreter's run stands alone.
+fn natively_on_avx512(src: &str, want: i32) {
+    #[cfg(all(
+        target_arch = "x86_64",
+        any(target_os = "linux", target_os = "windows")
+    ))]
+    {
+        let host = std::arch::is_x86_feature_detected!("avx512f")
+            && std::arch::is_x86_feature_detected!("avx512bw")
+            && std::arch::is_x86_feature_detected!("avx512dq")
+            && std::arch::is_x86_feature_detected!("avx512vl")
+            && std::arch::is_x86_feature_detected!("avx512cd")
+            && std::arch::is_x86_feature_detected!("avx512vnni")
+            && std::arch::is_x86_feature_detected!("vaes")
+            && std::arch::is_x86_feature_detected!("vpclmulqdq");
+        if host {
+            for optimize in [false, true] {
+                let code = super::jit::jit_exit_bare_in_child(src, optimize);
+                assert_eq!(code, want, "native, optimize={optimize}");
+            }
+        }
+    }
+    let _ = (src, want);
+}
+
+/// `Imm(0)` stands for a zero vector too. One read as a 128-bit operand,
+/// spilled when the banks are cut to one register each (two general
+/// registers), keeps its whole width in its slot: `_mm_sad_epu8` against it
+/// sums the block natively at -O as at the full register file.
+#[cfg(all(
+    target_arch = "x86_64",
+    any(target_os = "linux", target_os = "windows")
+))]
+#[test]
+fn a_spilled_zero_vector_keeps_its_width() {
+    use crate::{CompileOptions, Compiler, NativeOptions, Target, jit_run_with_options};
+    let src = "#include <emmintrin.h>\n\
+        static unsigned char buf[640];\n\
+        static long long sum(const unsigned char *p, const unsigned char *q, int n, int step, int a, int b) {\n\
+            __m128i acc = _mm_setzero_si128(), acc2 = _mm_setzero_si128();\n\
+            for (int i = 0, j = 0, k = n; i < n; i += step, j += a, k -= b) {\n\
+                __m128i x = _mm_loadu_si128((const __m128i *)(p + i));\n\
+                __m128i y = _mm_loadu_si128((const __m128i *)(q + (k & 0x1f0)));\n\
+                acc = _mm_add_epi64(acc, _mm_sad_epu8(x, _mm_setzero_si128()));\n\
+                acc2 = _mm_add_epi64(acc2, _mm_add_epi64(_mm_sad_epu8(y, _mm_setzero_si128()), _mm_cvtsi32_si128(j)));\n\
+            }\n\
+            long long s[2], t[2];\n\
+            _mm_storeu_si128((__m128i *)s, acc);\n\
+            _mm_storeu_si128((__m128i *)t, acc2);\n\
+            return s[0] + s[1] + (t[0] + t[1] > 0 ? 0 : 1);\n\
+        }\n\
+        int main(void) {\n\
+            for (int i = 0; i < 640; i++) buf[i] = (unsigned char)(i * 131 + (i >> 3));\n\
+            long long ref = 0;\n\
+            for (int i = 0; i < 640; i++) ref += buf[i];\n\
+            return sum(buf, buf + 128, 640, 16, 3, 5) == ref ? 0 : 1;\n\
+        }\n";
+    let host = if cfg!(windows) {
+        Target::WindowsX64
+    } else {
+        Target::LinuxX64
+    };
+    for (gpr, fpr) in [(1, 1), (1, 2), (usize::MAX, usize::MAX)] {
+        let code = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(gpr, fpr, || {
+            let program = Compiler::with_options(src.into(), host, CompileOptions::default())
+                .compile()
+                .expect("compile");
+            let opts = NativeOptions::new().with_optimize();
+            jit_run_with_options(&program, &[String::from("p")], opts, &mut |_| {}).expect("run")
+        });
+        assert_eq!(code, 0, "registers per bank: {gpr} general, {fpr} vector");
+    }
+}
+
+/// Each extension's header, under the name gcc and clang give it, compiles
+/// behind `<immintrin.h>` as those compilers require and on its own, and
+/// gives the extension's intrinsics.
+#[test]
+fn each_extension_header_gives_its_intrinsics() {
+    for name in [
+        "avxintrin.h",
+        "avx2intrin.h",
+        "fmaintrin.h",
+        "f16cintrin.h",
+        "shaintrin.h",
+        "vaesintrin.h",
+        "vpclmulqdqintrin.h",
+        "rdseedintrin.h",
+        "bmiintrin.h",
+        "bmi2intrin.h",
+        "lzcntintrin.h",
+        "adxintrin.h",
+        "xsaveintrin.h",
+        "clflushoptintrin.h",
+        "clwbintrin.h",
+        "prfchwintrin.h",
+        "avx512fintrin.h",
+        "avx512bwintrin.h",
+        "avx512dqintrin.h",
+        "avx512vlintrin.h",
+        "avx512cdintrin.h",
+        "avx512vnniintrin.h",
+        "avx512vlbwintrin.h",
+        "avx512vldqintrin.h",
+        "x86gprintrin.h",
+        "ia32intrin.h",
+    ] {
+        for umbrella in ["#include <immintrin.h>\n", ""] {
+            let src =
+                alloc::format!("{umbrella}#include <{name}>\nint main(void) {{ return 0; }}\n");
+            super::compile_str_bare_for(&src, crate::Target::LinuxX64);
+        }
+    }
+    let src = "#include <immintrin.h>\n\
+        #include <lzcntintrin.h>\n\
+        #include <bmiintrin.h>\n\
+        #include <bmi2intrin.h>\n\
+        int main(void) {\n\
+            if (_mm_popcnt_u32(0xf0f0u) != 8) return 1;\n\
+            if (_lzcnt_u32(1) != 31) return 2;\n\
+            if (_blsr_u32(6) != 4) return 3;\n\
+            if (_pdep_u32(5, 0xf0) != 0x50) return 4;\n\
+            return 0;\n\
+        }\n";
+    let program = super::compile_str_bare_for(src, crate::Target::LinuxX64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+}
+
+/// The 512-bit AES rounds are the 128-bit round on each lane, the 32x8
+/// extract and insert move the same half as the 64x4 ones, and the 128- and
+/// 256-bit ternary logic computes the immediate's truth table on each bit.
+#[test]
+fn the_wide_aes_rounds_and_the_vl_ternary_logic_run() {
+    let src = "#include <immintrin.h>\n\
+        static int same(__m128i a, __m128i b) { return a[0] == b[0] && a[1] == b[1]; }\n\
+        int main(void) {\n\
+            __m512i s = _mm512_set_epi64(8, 7, 6, 5, 4, 3, 2, 1);\n\
+            __m512i k = _mm512_set_epi64(80, 70, 60, 50, 40, 30, 20, 10);\n\
+            __m512i e = _mm512_aesenc_epi128(s, k), l = _mm512_aesenclast_epi128(s, k);\n\
+            __m512i d = _mm512_aesdec_epi128(s, k), m = _mm512_aesdeclast_epi128(s, k);\n\
+            for (int i = 0; i < 4; i++) {\n\
+                __m128i x = {s[2 * i], s[2 * i + 1]}, y = {k[2 * i], k[2 * i + 1]};\n\
+                if (!same((__m128i){e[2 * i], e[2 * i + 1]}, _mm_aesenc_si128(x, y))) return 1;\n\
+                if (!same((__m128i){l[2 * i], l[2 * i + 1]}, _mm_aesenclast_si128(x, y))) return 2;\n\
+                if (!same((__m128i){d[2 * i], d[2 * i + 1]}, _mm_aesdec_si128(x, y))) return 3;\n\
+                if (!same((__m128i){m[2 * i], m[2 * i + 1]}, _mm_aesdeclast_si128(x, y))) return 4;\n\
+            }\n\
+            __m256i h = _mm512_extracti32x8_epi32(s, 1);\n\
+            if (h[0] != 5 || h[3] != 8) return 5;\n\
+            __m512i t = _mm512_inserti32x8(s, h, 0);\n\
+            if (t[0] != 5 || t[3] != 8 || t[4] != 5) return 6;\n\
+            __m128i a = {0x0f0f, 3}, b = {0x00ff, 5}, c = {0x3333, 6};\n\
+            __m128i x = _mm_ternarylogic_epi64(a, b, c, 0x96);\n\
+            if (x[0] != (0x0f0f ^ 0x00ff ^ 0x3333) || x[1] != (3 ^ 5 ^ 6)) return 7;\n\
+            __m256i p = {1, 2, 4, 8}, q = {3, 2, 6, 9}, r = {1, 6, 5, 8};\n\
+            __m256i j = _mm256_ternarylogic_epi64(p, q, r, 0xe8);\n\
+            if (j[0] != 1 || j[1] != 2 || j[2] != 4 || j[3] != 8) return 8;\n\
+            return 0;\n\
+        }\n";
+    let program = super::compile_str_bare_for(src, crate::Target::LinuxX64);
+    assert_eq!(super::Vm::new(program).run().expect("interpreted run"), 0);
+    natively_on_avx512(src, 0);
+}
+
 /// The blends by the sign of each mask lane are rows the interpreter
 /// runs: a lane of the second operand where the mask lane's top bit is
 /// set, at every lane width and at 16 and 32 bytes, and the AVX blend by
@@ -659,7 +826,7 @@ fn the_roundings_are_rows_the_interpreter_runs() {
 /// $0x19, %xmm14, %xmm15, %xmm15` is `c4 41 00 c2 fe 19`), and the
 /// interpreter gives each predicate's lanes and raises invalid for a
 /// signaling NaN under the quiet ones too, `_CMP_FALSE_OQ` included.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_avx_compares_are_rows_at_every_predicate() {
     assert_emits(
@@ -833,7 +1000,7 @@ fn m64_forms_of_sse_sse2_and_ssse3_follow_the_sdm() {
 /// instruction on both x86-64 targets, `__builtin_ia32_xgetbv` with its
 /// operand in ecx; on the AArch64 targets `__has_builtin` reports none of
 /// them and a call is to an unknown function.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_x86_system_builtins_emit_their_instruction() {
     use crate::{Compiler, NativeOptions, Target};
@@ -906,7 +1073,7 @@ fn the_x86_system_builtins_emit_their_instruction() {
 /// RFLAGS pair, with the builtins `rdtscp` and `writeeflags_u64`. `_xgetbv`
 /// is gcc's `long long` on Linux and MSVC's `unsigned __int64` intrinsic on
 /// Windows, where every name here is one.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_x86_system_wrappers_emit_their_instruction() {
     use crate::{Compiler, NativeOptions, Target};
@@ -960,7 +1127,7 @@ fn the_x86_system_wrappers_emit_their_instruction() {
 /// holds one call; its opcode, and the ModRM reg field naming the register
 /// or the opcode extension, appear in it, a REX prefix aside. No other
 /// target knows the names.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_msvc_system_intrinsics_emit_their_instruction() {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
@@ -1164,7 +1331,7 @@ fn the_msvc_system_intrinsics_emit_their_instruction() {
 /// `#pragma function(name)` makes the name a function, which calls reach,
 /// and `#pragma intrinsic(name)` takes that back. The name is free on a
 /// target where it is no intrinsic.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn a_definition_of_an_intrinsic_needs_pragma_function() {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
@@ -1208,7 +1375,7 @@ fn a_definition_of_an_intrinsic_needs_pragma_function() {
 
 /// MSVC's x64 string intrinsics lower to their `rep stos` and `rep movs`
 /// forms on windows-x64, whatever declares them; windows-arm64 has none.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_msvc_string_intrinsics_emit_rep_stos_and_rep_movs() {
     use crate::{Compiler, NativeOptions, Target};
@@ -1258,7 +1425,7 @@ fn the_msvc_string_intrinsics_emit_rep_stos_and_rep_movs() {
 /// folding to a constant. The interpreter runs CPUID as zero in every
 /// register, so there the maximum is 0 and `__get_cpuid` rejects the leaf,
 /// leaving its outputs as they were.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn cpuid_h_executes_the_instruction() {
     use crate::{Compiler, NativeOptions, Target};
@@ -1871,7 +2038,7 @@ fn the_table_is_well_formed() {
 /// The floating-point rows emit their instruction: `<op> %xmm14, %xmm15`
 /// under its prefix, a compare with its predicate byte, and a conversion to
 /// an integer into `%r11d` or `%r11`.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn floating_rows_emit_their_instruction() {
     const PS: &str = "typedef float __v4sf __attribute__((vector_size(16))); ";
@@ -2362,7 +2529,8 @@ int main(void) {\n\
             "optimize={optimize}"
         );
     }
-    #[cfg(feature = "full")]
+    natively_on_avx512(SRC, 0);
+    #[cfg(feature = "linker")]
     {
         let opts = CompileOptions::default().with_optimize(true);
         let program = Compiler::with_options(SRC.into(), Target::LinuxX64, opts)
@@ -2442,7 +2610,8 @@ int main(void) {\n\
             "optimize={optimize}"
         );
     }
-    #[cfg(feature = "full")]
+    natively_on_avx512(SRC, 0);
+    #[cfg(feature = "linker")]
     {
         let opts = CompileOptions::default().with_optimize(true);
         let program = Compiler::with_options(SRC.into(), Target::LinuxX64, opts)
@@ -2464,7 +2633,7 @@ int main(void) {\n\
 
 /// A 64-byte GNU vector operation is one zmm instruction under AVX-512F,
 /// a byte or word one under AVX512BW too: `vpaddd` with an EVEX prefix.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn a_64_byte_vector_add_is_one_zmm_instruction_under_avx512f() {
     use crate::{CompileOptions, Compiler, NativeOptions, Target, X86Features};
@@ -2543,7 +2712,7 @@ fn avx_halves_are_their_instructions() {
             "optimize={optimize}"
         );
     }
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     {
         use super::perf_codegen::x64_at;
         const PARTS: &str = "#include <immintrin.h>\n\
@@ -2618,7 +2787,8 @@ int main(void) {\n\
             "optimize={optimize}"
         );
     }
-    #[cfg(feature = "full")]
+    natively_on_avx512(SRC, 0);
+    #[cfg(feature = "linker")]
     {
         let opts = CompileOptions::default().with_optimize(true);
         let program = Compiler::with_options(SRC.into(), Target::LinuxX64, opts)
@@ -2697,7 +2867,8 @@ int main(void) {\n\
             "optimize={optimize}"
         );
     }
-    #[cfg(feature = "full")]
+    natively_on_avx512(SRC, 0);
+    #[cfg(feature = "linker")]
     {
         let opts = CompileOptions::default().with_optimize(true);
         let program = Compiler::with_options(SRC.into(), Target::LinuxX64, opts)
@@ -2715,7 +2886,7 @@ int main(void) {\n\
 /// A GNU vector comparison and a shift by a constant count are one
 /// instruction on the whole vector (`simd::find`): the comparison the VEX
 /// three-operand form into the result's register.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_vector_operators_take_the_rows() {
     use crate::{NativeOptions, Target};
@@ -2747,7 +2918,7 @@ fn the_vector_operators_take_the_rows() {
 
 /// A lane of an 8-byte vector is read and written in its xmm register, as
 /// a 16-byte vector's is.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn an_8_byte_vector_lane_stays_in_its_register() {
     use crate::{NativeOptions, Target};
@@ -2787,7 +2958,7 @@ fn a_narrowing_row_stores_its_result_width() {
 
 /// The bundled intrinsics are inlined at every optimization level on both
 /// x86-64 ABIs, so the object defines none of them.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_intrinsics_are_inlined_at_every_level() {
     use crate::Target;

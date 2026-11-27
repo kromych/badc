@@ -3,7 +3,7 @@ gettimeofday_usec_range.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -19,8 +19,8 @@ Disassembly of section .text:
                	add	x29, sp, #0x20
                	mov	x21, #0x0               // =0
                	mov	x20, x21
-               	sub	x0, x29, #0x10
                	mov	x1, x21
+               	sub	x0, x29, #0x10
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>

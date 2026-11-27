@@ -2,7 +2,7 @@ use super::*;
 
 /// `brk #0xf004`, which Windows on ARM64 reports as
 /// STATUS_INTEGER_DIVIDE_BY_ZERO.
-const BRK_DIVIDE_BY_ZERO: u32 = 0xD43E_0080;
+const BRK_DIVIDE_BY_ZERO: Insn = Insn::fixed(0xD43E_0080, "brk #0xf004");
 
 /// `Inst::Extend { value, kind }` -- sign-extend the low bytes of a
 /// GPR value to 64 bits via the `SXTB` / `SXTH` / `SXTW` aliases.
@@ -41,7 +41,7 @@ pub(super) fn emit_extend(
 
 /// `rd <- rn`, sign-extended from the width of an `I8` / `I16` / `I32`
 /// `kind` (`SXTB` / `SXTH` / `SXTW`); any other kind takes the whole register.
-pub(super) fn emit_sign_extend(code: &mut Vec<u8>, rd: Reg, rn: Reg, kind: LoadKind) {
+pub(super) fn emit_sign_extend(code: &mut CodeBuf, rd: Reg, rn: Reg, kind: LoadKind) {
     match kind {
         LoadKind::I8 => emit(code, super::encode::enc_sxtb(rd, rn)),
         LoadKind::I16 => emit(code, super::encode::enc_sxth(rd, rn)),
@@ -80,6 +80,7 @@ pub(super) fn emit_copy(
         }
         (Place::IntReg(r), Place::Spill(_)) if !is_fp => {
             store_spilled_int(code, frame, dst, Reg(r));
+            super::mem::store_spilled_int_rest(code, frame, alloc.width(value), dst, Reg(r));
             return Ok(());
         }
         _ => {}
@@ -134,6 +135,7 @@ pub(super) fn emit_copy(
         emit(code, super::encode::enc_mov_reg(rd, rn));
     }
     store_spilled_int(code, frame, dst, rd);
+    super::mem::store_spilled_int_rest(code, frame, alloc.width(value), dst, rd);
     Ok(())
 }
 
@@ -219,6 +221,16 @@ pub(super) fn emit_select(
         store_spilled_fp(code, frame, dst, dd);
         return Ok(());
     }
+    // A constant the select sets (`Allocation::select_set`): zero is
+    // `xzr`, another takes the scratch a spilled arm loads into.
+    let arm = |code: &mut CodeBuf, x: u32, into: Reg| match func.insts[x as usize] {
+        Inst::Imm(0) if alloc.select_set.contains(&x) => Some(Reg(31)),
+        Inst::Imm(k) if alloc.select_set.contains(&x) => {
+            load_imm64(code, into, k as u64);
+            Some(into)
+        }
+        _ => materialize_int(code, place_of(alloc, x), into, frame),
+    };
     if alloc.select_inc.get(v as usize).copied().unwrap_or(false) {
         use super::encode::enc_csinc;
         // `cinc`: the arm that is not the increment, plus one when the
@@ -226,7 +238,7 @@ pub(super) fn emit_select(
         let inc_is_a = matches!(func.insts[a as usize],
             Inst::BinopI { op: BinOp::Add, lhs, rhs_imm: 1 } if lhs == b);
         let (x, keep) = if inc_is_a { (b, cc.flip()) } else { (a, cc) };
-        let Some(rx) = materialize_int(code, place_of(alloc, x), scratch.primary, frame) else {
+        let Some(rx) = arm(code, x, scratch.primary) else {
             return fail("Select: arm not int reg / spill");
         };
         let Some(rd) = int_or_spill_scratch(dst, scratch) else {
@@ -236,10 +248,10 @@ pub(super) fn emit_select(
         store_spilled_int(code, frame, dst, rd);
         return Ok(());
     }
-    let Some(ra) = materialize_int(code, place_of(alloc, a), scratch.primary, frame) else {
+    let Some(ra) = arm(code, a, scratch.primary) else {
         return fail("Select: arm not int reg / spill");
     };
-    let Some(rb) = materialize_int(code, place_of(alloc, b), scratch.secondary, frame) else {
+    let Some(rb) = arm(code, b, scratch.secondary) else {
         return fail("Select: arm not int reg / spill");
     };
     let Some(rd) = int_or_spill_scratch(dst, scratch) else {
@@ -308,7 +320,7 @@ pub(super) fn emit_bit_count(
         return fail("BitCount: dst not int reg / spill");
     };
     let is64 = width == 8;
-    type Enc = fn(Reg, Reg) -> u32;
+    type Enc = fn(Reg, Reg) -> Insn;
     let (clz, rbit, cls): (Enc, Enc, Enc) = if is64 {
         (enc_clz, enc_rbit64, enc_cls)
     } else {
@@ -343,7 +355,7 @@ pub(super) fn emit_bit_count(
 /// Set bits of `rn` into `rd` in the general registers: pair, nibble and
 /// byte counts (Hacker's Delight 5-1), summed into the top byte by a
 /// multiply. `t` is distinct from both; `rd` may be `rn`.
-fn emit_popcount_gpr(code: &mut Vec<u8>, rd: Reg, rn: Reg, t: Reg, is64: bool) {
+fn emit_popcount_gpr(code: &mut CodeBuf, rd: Reg, rn: Reg, t: Reg, is64: bool) {
     use super::encode::{
         LogicalOp, enc_addsub_lsr, enc_logical_imm, enc_lsr_imm, enc_lsr32_imm, enc_mul32,
     };
@@ -599,8 +611,7 @@ pub(super) fn emit_binop(
         let word = match (is_f32, crate::c5::ir::fp_compare_signals(op)) {
             (true, false) => enc_fcmp_s(dn, dm),
             (false, false) => enc_fcmp_d(dn, dm),
-            (true, true) => enc_fcmp_s(dn, dm) | FCMPE,
-            (false, true) => enc_fcmp_d(dn, dm) | FCMPE,
+            (single, true) => super::encode::enc_fcmpe(dn, dm, single),
         };
         emit(code, word);
         // A fused branch consumes the flags; the value is dead.
@@ -762,7 +773,7 @@ pub(super) fn mod_takes_third_scratch(
 
 /// The register-form encoding of an integer binop; `None` for a
 /// comparison or a modulo.
-pub(super) fn int_binop_word(op: BinOp, rd: Reg, rn: Reg, rm: Reg) -> Option<u32> {
+pub(super) fn int_binop_word(op: BinOp, rd: Reg, rn: Reg, rm: Reg) -> Option<Insn> {
     Some(match op {
         BinOp::Add => enc_add_reg(rd, rn, rm),
         BinOp::Sub => enc_sub_reg(rd, rn, rm),
@@ -784,7 +795,7 @@ pub(super) fn int_binop_word(op: BinOp, rd: Reg, rn: Reg, rm: Reg) -> Option<u32
 }
 
 /// The d-register encoder of an FP arithmetic op, `None` otherwise.
-fn fp_arith_enc(op: BinOp) -> Option<fn(u8, u8, u8) -> u32> {
+fn fp_arith_enc(op: BinOp) -> Option<fn(u8, u8, u8) -> Insn> {
     Some(match op {
         BinOp::Fadd => enc_fadd_d,
         BinOp::Fsub => enc_fsub_d,
@@ -793,9 +804,6 @@ fn fp_arith_enc(op: BinOp) -> Option<fn(u8, u8, u8) -> u32> {
         _ => return None,
     })
 }
-
-/// The bit that turns `fcmp` into the signaling `fcmpe`.
-const FCMPE: u32 = 1 << 4;
 
 /// The condition of an FP comparison's `fcmp` + `cset`, `None`
 /// otherwise. `Fone` has none: `less or greater` spans two conditions.
@@ -875,7 +883,7 @@ pub(super) fn binop_imm_peephole(
     high_dead: bool,
     rd: Reg,
     rn: Reg,
-) -> Option<u32> {
+) -> Option<Insn> {
     let imm_u64 = imm as u64;
     let pow2_shift = if imm > 0 && imm_u64.is_power_of_two() {
         let s = imm_u64.trailing_zeros();
@@ -944,7 +952,7 @@ fn page_imm(imm: i64) -> Option<u32> {
 /// `and` / `orr` / `eor` with a bitmask immediate; the 32-bit form clears the
 /// high word, so it serves an `and` mask with a clear high word or `high_dead`,
 /// which the caller also sets when the operand and immediate high words are clear.
-fn logical_imm_word(op: BinOp, imm: u64, high_dead: bool, rd: Reg, rn: Reg) -> Option<u32> {
+fn logical_imm_word(op: BinOp, imm: u64, high_dead: bool, rd: Reg, rn: Reg) -> Option<Insn> {
     use super::encode::{LogicalOp, enc_logical_imm};
     let op = match op {
         BinOp::And => LogicalOp::And,
@@ -982,7 +990,7 @@ fn narrow_div(alloc: &Allocation, v: super::super::ir::ValueId) -> bool {
 
 /// Encoding for the `cmp` of comparison `v`, in the operand width the
 /// narrowing analysis settled.
-fn cmp_reg_word(alloc: &Allocation, v: super::super::ir::ValueId, rn: Reg, rm: Reg) -> u32 {
+fn cmp_reg_word(alloc: &Allocation, v: super::super::ir::ValueId, rn: Reg, rm: Reg) -> Insn {
     if narrow_cmp(alloc, v) {
         super::encode::enc_cmp_reg_w(rn, rm)
     } else {

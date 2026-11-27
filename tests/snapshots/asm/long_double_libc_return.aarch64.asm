@@ -3,7 +3,7 @@ long_double_libc_return.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -50,12 +50,12 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	fmov	d0, #1.00000000
-               	mov	x0, #0x35               // =53
                	sub	x7, x29, #0x10
                	add	x16, sp, #0x50
                	fmov	x17, d0
                	bl	<addr>
                	ldr	q0, [x7]
+               	mov	x0, #0x35               // =53
                	bl	<addr>
                	stur	q0, [x29, #-0x20]
                	add	x16, sp, #0x40

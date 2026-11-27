@@ -3,7 +3,7 @@ post_inline_import_survives_repack.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -16,35 +16,35 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	adrp	x0, <addr>
-               	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	ldr	x1, [x1, <lo12>]
+               	adrp	x0, <addr>
+               	add	x0, x0, <lo12>
                	blr	x1
                	cmp	x0, #0x4
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x0, <addr>
-               	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	ldr	x1, [x1, <lo12>]
+               	adrp	x0, <addr>
+               	add	x0, x0, <lo12>
                	blr	x1
                	cbz	x0, <addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x0, <addr>
-               	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	ldr	x1, [x1, <lo12>]
-               	blr	x1
-               	mov	x1, x0
-               	adrp	x2, <addr>
-               	add	x2, x2, <lo12>
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
+               	blr	x1
+               	mov	x1, x0
+               	adrp	x0, <addr>
+               	add	x0, x0, <lo12>
+               	adrp	x2, <addr>
+               	add	x2, x2, <lo12>
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10

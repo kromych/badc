@@ -3,7 +3,7 @@ tgmath_selects_by_argument_type.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -67,8 +67,8 @@ Disassembly of section .text:
                	ldursw	x0, [x29, #-0x8]
                	cmp	w0, #0x4
                	b.ne	<addr>
-               	mov	x0, #0x2                // =2
                	fmov	s0, #0.50000000
+               	mov	x0, #0x2                // =2
                	bl	<addr>
                	fmov	s1, #2.00000000
                	fcmp	s0, s1

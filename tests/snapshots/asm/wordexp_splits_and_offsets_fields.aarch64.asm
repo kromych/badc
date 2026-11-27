@@ -3,7 +3,7 @@ wordexp_splits_and_offsets_fields.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -63,20 +63,20 @@ Disassembly of section .text:
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
-               	sub	x0, x29, #0x18
-               	ldur	x1, [x29, #-0x10]
-               	ldr	x1, [x1, #0x20]
-               	cbz	x1, <addr>
+               	ldur	x0, [x29, #-0x10]
+               	ldr	x0, [x0, #0x20]
+               	cbz	x0, <addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	sub	x0, x29, #0x18
                	bl	<addr>
-               	sub	x1, x29, #0x18
                	mov	x0, #0x2                // =2
                	stur	x0, [x29, #-0x8]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
+               	sub	x1, x29, #0x18
                	mov	x2, #0x1                // =1
                	bl	<addr>
                	sxtw	x0, w0

@@ -3,7 +3,7 @@ vla_typedef_block_scope.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -95,11 +95,10 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	xorl	%eax, %eax
                	movl	$0x1, %edx
-               	movq	%rdx, %rcx
-               	shlq	$0x2, %rcx
+               	movq	%rdx, %r8
+               	shlq	$0x2, %r8
                	movq	%rsp, %r9
-               	shrq	$0x2, %rcx
-               	movq	%rcx, %r8
+               	shrq	$0x2, %r8
                	shlq	$0x2, %r8
                	movq	%r8, %r11
                	addq	$0xf, %r11
@@ -115,6 +114,7 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%rsi, %rsp
                	xorl	%ecx, %ecx
+               	nopl	(%rax)
                	cmpl	%edx, %ecx
                	jge	<addr>
                	movl	%ecx, (%rsi,%rcx,4)
@@ -134,9 +134,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	movl	$0x3, %edi
                	callq	<addr>
                	movq	%rax, %rcx
@@ -154,5 +152,5 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x64, %ecx
                	movq	%rcx, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq

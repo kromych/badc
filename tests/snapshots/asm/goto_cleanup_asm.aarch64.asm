@@ -3,7 +3,7 @@ goto_cleanup_asm.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -27,13 +27,13 @@ Disassembly of section .text:
                	str	w3, [x0, #0x30]
                	mov	x3, #0x2d               // =45
                	strb	w3, [x1, x2]
-               	ldrsw	x3, [x0, #0x30]
-               	strb	wzr, [x1, x3]
-               	ldrsw	x3, [x0, #0x30]
-               	add	x4, x3, #0x1
-               	str	w4, [x0, #0x30]
-               	mov	x4, #0x62               // =98
-               	strb	w4, [x1, x3]
+               	ldrsw	x2, [x0, #0x30]
+               	strb	wzr, [x1, x2]
+               	ldrsw	x2, [x0, #0x30]
+               	add	x3, x2, #0x1
+               	str	w3, [x0, #0x30]
+               	mov	x3, #0x62               // =98
+               	strb	w3, [x1, x2]
                	ldrsw	x0, [x0, #0x30]
                	strb	wzr, [x1, x0]
                	adrp	x1, <page>
@@ -44,13 +44,13 @@ Disassembly of section .text:
                	str	w3, [x0, #0x30]
                	mov	x3, #0x2e               // =46
                	strb	w3, [x1, x2]
-               	ldrsw	x3, [x0, #0x30]
-               	strb	wzr, [x1, x3]
-               	ldrsw	x3, [x0, #0x30]
-               	add	x4, x3, #0x1
-               	str	w4, [x0, #0x30]
-               	mov	x4, #0x61               // =97
-               	strb	w4, [x1, x3]
+               	ldrsw	x2, [x0, #0x30]
+               	strb	wzr, [x1, x2]
+               	ldrsw	x2, [x0, #0x30]
+               	add	x3, x2, #0x1
+               	str	w3, [x0, #0x30]
+               	mov	x3, #0x61               // =97
+               	strb	w3, [x1, x2]
                	ldrsw	x0, [x0, #0x30]
                	strb	wzr, [x1, x0]
                	adrp	x1, <page>
@@ -72,13 +72,13 @@ Disassembly of section .text:
                	str	w3, [x0, #0x30]
                	mov	x3, #0x62               // =98
                	strb	w3, [x1, x2]
-               	ldrsw	x3, [x0, #0x30]
-               	strb	wzr, [x1, x3]
-               	ldrsw	x3, [x0, #0x30]
-               	add	x4, x3, #0x1
-               	str	w4, [x0, #0x30]
-               	mov	x4, #0x61               // =97
-               	strb	w4, [x1, x3]
+               	ldrsw	x2, [x0, #0x30]
+               	strb	wzr, [x1, x2]
+               	ldrsw	x2, [x0, #0x30]
+               	add	x3, x2, #0x1
+               	str	w3, [x0, #0x30]
+               	mov	x3, #0x61               // =97
+               	strb	w3, [x1, x2]
                	ldrsw	x0, [x0, #0x30]
                	strb	wzr, [x1, x0]
                	b	<addr>
@@ -127,8 +127,8 @@ Disassembly of section .text:
                	ldrsw	x2, [x0, #0x38]
                	cbnz	w2, <addr>
                	str	w1, [x0, #0x38]
-               	adrp	x1, <page>
-               	str	wzr, [x1, #0x30]
+               	adrp	x0, <page>
+               	str	wzr, [x0, #0x30]
                	strb	wzr, [x20]
                	mov	x0, #0x1                // =1
                	bl	<addr>
@@ -157,8 +157,8 @@ Disassembly of section .text:
                	ldrsw	x2, [x0, #0x38]
                	cbnz	w2, <addr>
                	str	w1, [x0, #0x38]
-               	adrp	x1, <page>
-               	str	wzr, [x1, #0x30]
+               	adrp	x0, <page>
+               	str	wzr, [x0, #0x30]
                	strb	wzr, [x20]
                	mov	x0, #0x2                // =2
                	bl	<addr>
@@ -187,8 +187,8 @@ Disassembly of section .text:
                	ldrsw	x3, [x0, #0x38]
                	cbnz	w3, <addr>
                	str	w2, [x0, #0x38]
-               	adrp	x2, <page>
-               	str	wzr, [x2, #0x30]
+               	adrp	x0, <page>
+               	str	wzr, [x0, #0x30]
                	strb	wzr, [x1]
                	mov	x0, #0x1                // =1
                	mov	x16, #0x1               // =1

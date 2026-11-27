@@ -13,6 +13,12 @@
 #endif
 
 #ifdef __linux__
+// glibc's checking entry points, which an object built against glibc's headers
+// with _FORTIFY_SOURCE calls in place of the functions.
+#pragma binding(libc::__inet_ntop_chk, "__inet_ntop_chk")
+#pragma binding(libc::__inet_pton_chk, "__inet_pton_chk")
+const char *__inet_ntop_chk(int, const void *, char *, socklen_t, size_t);
+int __inet_pton_chk(int, const char *, void *, size_t);
 #pragma binding(libc::inet_ntoa, "inet_ntoa")
 #pragma binding(libc::inet_addr, "inet_addr")
 #pragma binding(libc::inet_ntop, "inet_ntop")

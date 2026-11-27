@@ -3,7 +3,7 @@ vsnprintf_prototype_va_list.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -99,13 +99,11 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rdi
+               	subq	$0x18, %rsp
                	movabsq	$0x7878787878787878, %rax # imm = 0x7878787878787878
-               	movq	%rax, -0x10(%rbp)
-               	movq	%rax, -0x8(%rbp)
+               	movq	%rax, (%rsp)
+               	movq	%rax, 0x8(%rsp)
+               	leaq	(%rsp), %rdi
                	movl	$0x10, %esi
                	leaq	<rip>, %rdx
                	movl	$0x2a, %ecx
@@ -116,21 +114,21 @@ Disassembly of section .text:
                	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	leaq	-0x10(%rbp), %rdi
+               	leaq	(%rsp), %rdi
                	leaq	<rip>, %rsi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	leaq	-0x10(%rbp), %rdi
                	movabsq	$0x7878787878787878, %rax # imm = 0x7878787878787878
-               	movq	%rax, -0x10(%rbp)
-               	movq	%rax, -0x8(%rbp)
+               	movq	%rax, (%rsp)
+               	movq	%rax, 0x8(%rsp)
+               	leaq	(%rsp), %rdi
                	movl	$0x4, %esi
                	leaq	<rip>, %rdx
                	movl	$0x2a, %ecx
@@ -141,24 +139,24 @@ Disassembly of section .text:
                	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	leaq	-0x10(%rbp), %rdi
+               	leaq	(%rsp), %rdi
                	leaq	<rip>, %rsi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	leaq	-0x10(%rbp), %rdi
-               	movsbq	-0xc(%rbp), %rax
+               	movsbq	0x4(%rsp), %rax
                	cmpl	$0x78, %eax
                	je	<addr>
                	movl	$0x5, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
+               	leaq	(%rsp), %rdi
                	xorl	%esi, %esi
                	leaq	<rip>, %rdx
                	movl	$0x1, %ecx
@@ -167,15 +165,15 @@ Disassembly of section .text:
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x6, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	leaq	-0x10(%rbp), %rdi
-               	movsbq	-0x10(%rbp), %rax
+               	movsbq	(%rsp), %rax
                	cmpl	$0x34, %eax
                	je	<addr>
                	movl	$0x7, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
+               	leaq	(%rsp), %rdi
                	leaq	<rip>, %rsi
                	leaq	<rip>, %rdx
                	movl	$0x7, %ecx
@@ -184,17 +182,17 @@ Disassembly of section .text:
                	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x8, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	leaq	-0x10(%rbp), %rdi
+               	leaq	(%rsp), %rdi
                	leaq	<rip>, %rsi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x9, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

@@ -41,6 +41,10 @@ typedef struct { unsigned long __val[1024 / (8 * sizeof(unsigned long))]; } sigs
 
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
+// glibc's checking entry points, which an object built against glibc's headers
+// with _FORTIFY_SOURCE calls in place of the functions.
+#pragma binding(libc::__fdelt_chk, "__fdelt_chk")
+long __fdelt_chk(long);
 #pragma binding(libc::select,  "select")
 #pragma binding(libc::pselect, "pselect")
 #endif

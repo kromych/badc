@@ -132,7 +132,7 @@ fn set_executable(path: &Path) {
 /// `write_native_image_from_merged`) and run the produced image.
 /// Exercises the merged stream layout -- the direct
 /// `emit_native` path above never produces a relro region.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn link_and_run_outcome(src: &str, stem: &str) -> RunOutcome {
     let program = match Compiler::with_target(src.to_string(), Target::LinuxAarch64).compile() {
         Ok(p) => p,
@@ -173,7 +173,7 @@ fn link_and_run_outcome(src: &str, stem: &str) -> RunOutcome {
 /// are re-protected (PT_GNU_RELRO), so a store faults while a
 /// writable global stays writable.
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn relro_const_store_faults() {
     let decls = "const unsigned char tab[2048] = {7, 7, 7, 7};\n\
                  const char *const cp = \"hello\";\n\
@@ -977,6 +977,20 @@ int check_other(void) {\n\
         "over-aligned thread-locals across units: failure mask {:?}",
         output.status.code()
     );
+}
+
+/// The zero-filled thread-local storage past the template is in the block
+/// variant I places above the thread pointer, through the direct image and
+/// through a relocatable object's `.tbss`.
+#[test]
+fn zero_filled_thread_local_storage_runs() {
+    let src = super::zero_filled_thread_local_source();
+    assert_eq!(build_and_run(src, "zero_filled_tls"), 0);
+    #[cfg(feature = "linker")]
+    match link_and_run_outcome(src, "zero_filled_tls_linked") {
+        RunOutcome::Exit(0) => {}
+        other => panic!("the linked image must exit 0, got {other:?}"),
+    }
 }
 
 /// C11 6.7.5: 8 and 16 KiB objects land on their boundary through the single

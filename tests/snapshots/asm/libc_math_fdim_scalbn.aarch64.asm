@@ -3,7 +3,7 @@ libc_math_fdim_scalbn.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -43,8 +43,8 @@ Disassembly of section .text:
                	mov	x0, #0x6                // =6
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x2                // =2
                	fmov	d0, #1.00000000
+               	mov	x0, #0x2                // =2
                	bl	<addr>
                	fcvt	s0, d0
                	fmov	s1, #4.00000000

@@ -3,7 +3,7 @@ param_home_single_store.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -73,6 +73,7 @@ Disassembly of section .text:
                	addq	%rdx, %rax
                	incq	%rcx
                	movl	-0xd0(%rbp), %edx
+               	nopl	(%rax)
                	cmpl	%edx, %ecx
                	jl	<addr>
                	leaq	-0x18(%rbp), %rcx
@@ -80,8 +81,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x3, %edi
                	movl	$0xa, %esi
                	movl	$0x14, %edx
@@ -91,8 +91,8 @@ Disassembly of section .text:
                	cmpq	$0x3f, %rax
                	je	<addr>
                	movl	$0x5, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x2a, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

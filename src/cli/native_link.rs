@@ -33,9 +33,8 @@ use super::stats::LinkStats;
 /// beside the inputs' `__eh_frame`,
 /// variadic libc imports, `#pragma` exports, and `_Thread_local`
 /// storage in each format's native shape: ELF PT_TLS, the PE TLS
-/// directory + `_tls_index`, the Mach-O TLV descriptors. Mach-O
-/// auto-codesigning lives in `post_write_native`. `--jit` / `--interp`
-/// and `-c` / `--ar` take their own paths.
+/// directory + `_tls_index`, the Mach-O TLV descriptors and code
+/// signature. `--jit` / `--interp` and `-c` / `--ar` take their own paths.
 pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
     let Inputs {
         sources,
@@ -141,6 +140,12 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
             .unwrap_or("__c5_entry")
             .to_string()
     });
+    // A named entry (`/ENTRY`, `-e`) is a link root as well: a WDK driver
+    // enters at `GsDriverEntry`, an archive member of
+    // BufferOverflowFastFailK.lib.
+    let entry_root = freestanding_entry
+        .clone()
+        .or_else(|| entry_override.clone());
     // Link order: the startup runtime where crt1.o stands, then the inputs.
     let mut slots = vec![Slot::Fixed(Vec::new())];
     let mut source_slots = vec![0; sources.len()];
@@ -268,7 +273,7 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
         slots,
         &mut shared_libs,
         &mut target_libc,
-        freestanding_entry.as_deref(),
+        entry_root.as_deref(),
         &mut stats,
     );
     stats.mark("select");
@@ -277,18 +282,23 @@ pub(crate) fn link_image(cli: &Cli, inputs: Inputs, stdin: &StdinSource) {
         std::process::exit(1);
     }
     // With every source, object, and pulled archive member now
-    // parsed, a freestanding image's entry must be defined.
-    if let Some(entry) = &freestanding_entry {
+    // parsed, a named or freestanding image's entry must be defined.
+    if let Some(entry) = &entry_root {
         let defined = native_objs.iter().any(|o| {
             o.symbols
                 .iter()
                 .any(|s| s.name == *entry && s.section == badc::NativeSymSection::Text)
         });
         if !defined {
-            eprint_diagnostic(format!(
-                "badc: error: --freestanding: image entry `{entry}` is not defined; \
-                 a freestanding image must provide its own entry point"
-            ));
+            eprint_diagnostic(match cli.freestanding {
+                true => format!(
+                    "badc: error: --freestanding: image entry `{entry}` is not defined; \
+                     a freestanding image must provide its own entry point"
+                ),
+                false => {
+                    format!("badc: error: the image entry `{entry}` is not defined in any input")
+                }
+            });
             std::process::exit(1);
         }
     }
@@ -638,8 +648,8 @@ fn read_object_input(obj_path: &str, target: badc::Target) -> badc::NativeObject
 }
 
 /// An `.a` / `.lib` input's members, and the DLLs its import members name.
-/// A member is read when the link pulls it, as GNU ld and link.exe read one
-/// through the archive's symbol index; without an index each is read now.
+/// A member is read when the link pulls it through the archive's symbol
+/// index; without an index each is read now.
 fn read_archive_members(
     a_path: &str,
     target: badc::Target,
@@ -1104,7 +1114,7 @@ impl Selection {
 /// Pull the archive members the link needs and materialize the target C
 /// library over whatever stays undefined; the included objects come back
 /// in link order, each archive's members at its place in pull order. An
-/// ELF link resolves as GNU ld does: an archive answers the references
+/// ELF link resolves in command-line order: an archive answers the references
 /// made before it, rescanning itself (a group, its archives together)
 /// until it pulls nothing, and a shared library the names it exports
 /// from its place on. Mach-O and PE links search every archive until
@@ -1114,16 +1124,29 @@ fn select_archive_members(
     mut slots: Vec<Slot>,
     shared_libs: &mut Vec<badc::SharedLibrary>,
     target_libc: &mut Option<badc::TargetCLibrary>,
-    freestanding_entry: Option<&str>,
+    entry_root: Option<&str>,
     stats: &mut LinkStats,
 ) -> (Vec<badc::NativeObject>, Vec<badc::ArchiveInclusion>) {
     let in_order = embedded.cli.target.binary_format() == badc::BinaryFormat::Elf;
     let mut sel = Selection::new(embedded.cli.target);
-    // A freestanding entry is a link root: seed it as undefined so an
-    // archive member that only defines the entry is pulled.
-    if let Some(entry) = freestanding_entry {
+    // The entry is a link root: seed it as undefined so an archive member
+    // that only defines the entry is pulled.
+    if let Some(entry) = entry_root {
         sel.undefined
             .insert(entry.to_string(), "<command line>".to_string());
+    }
+    // A PE image takes the runtime's load-config structure where a library
+    // defines it, as link.exe does whether or not anything names it: the
+    // kernel's loader seeds a driver's stack cookie through it.
+    const LOAD_CONFIG: &str = "_load_config_used";
+    let image_root = String::from("<image>");
+    if embedded.cli.target.binary_format() == badc::BinaryFormat::Pe {
+        (sel.undefined).insert(LOAD_CONFIG.to_string(), image_root.clone());
+    }
+    // So is a name `-u` lists.
+    for name in &embedded.cli.link.required {
+        sel.undefined
+            .insert(name.clone(), "<command line>".to_string());
     }
     let (mut depth, mut group) = (0usize, Vec::new());
     for k in 0..slots.len() {
@@ -1158,6 +1181,12 @@ fn select_archive_members(
         let span = all_lazy(&slots);
         sel.pull(&mut slots, &span);
         pull_default_libraries(embedded.cli, &mut sel, &mut slots, shared_libs);
+    }
+    // An image no library gives one goes without it, unless it claims
+    // Control Flow Guard: the loader reads the guard table through it, and
+    // the runtime's is offered with the on-demand sources.
+    if sel.undefined.get(LOAD_CONFIG) == Some(&image_root) && !embedded.cli.link.pe.guard_cf {
+        sel.undefined.remove(LOAD_CONFIG);
     }
     // The inputs stalled; offer the on-demand sources once, as the last
     // archive. A name a `-l` shared library or the target's C library
@@ -1528,6 +1557,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
         export_data: cli.link.export_data || cli.exports_definitions(),
         format: cli.target.binary_format(),
         delay_load: cli.link.delay_load.clone(),
+        guard_cf: cli.link.pe.guard_cf,
     };
     let mut merged = match badc::link_native_objects_with(image.objs, image.shared_libs, &opts) {
         Ok(m) => m,
@@ -1626,16 +1656,16 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
             std::process::exit(1);
         }
     };
-    let bytes = linked.image;
+    let bytes = &linked.image;
     stats.mark("image");
-    write_output(out, &bytes, cli.target, cli.quiet, true);
+    write_output(out, bytes, cli.target, cli.quiet, true);
     if let Some(path) = &cli.link.out_implib {
         // A forwarder's slot does not say what it forwards; `,DATA` does.
         let data: Vec<&str> = (merged.export_aliases.iter())
             .filter(|a| a.data)
             .map(|a| a.name.as_str())
             .collect();
-        write_import_library(path, &bytes, &data, &merged.export_forms, cli);
+        write_import_library(path, bytes, &data, &merged.export_forms, cli);
     }
     if let (Some(path), Some(pdb)) = (&pdb_path, &linked.pdb) {
         write_output(path, pdb, cli.target, cli.quiet, false);
@@ -1643,7 +1673,7 @@ fn emit_image(cli: &Cli, image: ImageInputs, stats: &mut LinkStats) {
     post_write_native(out, cli.target, &cli.front.diag, cli.quiet);
     if cli.link.map_path.is_some() || cli.link.print_map {
         let out_name = out.file_name().and_then(|n| n.to_str()).unwrap_or("a.out");
-        let map = match badc::render_link_map(&merged, &bytes, image.inclusions, out_name) {
+        let map = match badc::render_link_map(&merged, &linked, image.inclusions, out_name) {
             Ok(m) => m,
             Err(e) => {
                 eprint_diagnostic(format!("badc: {e}"));

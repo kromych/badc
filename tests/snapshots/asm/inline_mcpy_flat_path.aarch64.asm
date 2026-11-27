@@ -3,7 +3,7 @@ inline_mcpy_flat_path.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -54,11 +54,11 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	sturh	wzr, [x29, #-0x8]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	mov	x2, #-0x8000000000000000 // =-9223372036854775808
-               	str	x2, [x1]
-               	str	wzr, [x1, #0x8]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x1, #-0x8000000000000000 // =-9223372036854775808
+               	str	x1, [x0]
+               	str	wzr, [x0, #0x8]
                	sub	x0, x29, #0x8
                	bl	<addr>
                	cmp	w0, #0x1e

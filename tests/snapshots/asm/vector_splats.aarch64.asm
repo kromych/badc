@@ -3,7 +3,7 @@ vector_splats.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -787,7 +787,7 @@ Disassembly of section .text:
                	cmp	x7, x21
                	b.ne	<addr>
                	ldr	d16, [sp, #0x78]
-               	mov	x0, v16.d[0]
+               	fmov	x0, d16
                	mov	w1, w21
                	orr	x1, x1, x21, lsl #32
                	cmp	x0, x1
@@ -832,8 +832,8 @@ Disassembly of section .text:
                	sxtw	x1, w1
                	cmp	x0, x1
                	b.ne	<addr>
-               	mov	x1, #0x5                // =5
                	mov	x0, x20
+               	mov	x1, #0x5                // =5
                	bl	<addr>
                	lsl	x1, x20, #1
                	cmp	w0, w1

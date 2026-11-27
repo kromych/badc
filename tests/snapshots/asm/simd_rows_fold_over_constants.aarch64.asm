@@ -3,7 +3,7 @@ simd_rows_fold_over_constants.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -54,16 +54,16 @@ Disassembly of section .text:
                	mov	x0, #0x8                // =8
                	mov	v3.h[7], w0
                	sqadd	v4.8h, v0.8h, v1.8h
-               	sub	x0, x29, #0x60
                	stur	q4, [x29, #-0x60]
                	sqadd	v4.8h, v2.8h, v3.8h
-               	sub	x1, x29, #0x50
                	stur	q4, [x29, #-0x50]
-               	mov	x2, #0x10               // =16
                	str	q0, [sp, #0x30]
                	str	q1, [sp, #0x20]
                	str	q2, [sp, #0x50]
                	str	q3, [sp, #0x40]
+               	sub	x0, x29, #0x60
+               	sub	x1, x29, #0x50
+               	mov	x2, #0x10               // =16
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -94,13 +94,13 @@ Disassembly of section .text:
                	ldr	q16, [sp, #0x30]
                	ldr	q17, [sp, #0x20]
                	sqdmulh	v0.8h, v16.8h, v17.8h
-               	sub	x0, x29, #0x60
                	stur	q0, [x29, #-0x60]
                	ldr	q16, [sp, #0x50]
                	ldr	q17, [sp, #0x40]
                	sqdmulh	v0.8h, v16.8h, v17.8h
-               	sub	x1, x29, #0x50
                	stur	q0, [x29, #-0x50]
+               	sub	x0, x29, #0x60
+               	sub	x1, x29, #0x50
                	mov	x2, #0x10               // =16
                	bl	<addr>
                	sxtw	x0, w0
@@ -130,12 +130,12 @@ Disassembly of section .text:
                	ret
                	ldr	q16, [sp, #0x30]
                	shl	v0.4s, v16.4s, #0x9
-               	sub	x0, x29, #0x60
                	stur	q0, [x29, #-0x60]
                	ldr	q16, [sp, #0x50]
                	shl	v0.4s, v16.4s, #0x9
-               	sub	x1, x29, #0x50
                	stur	q0, [x29, #-0x50]
+               	sub	x0, x29, #0x60
+               	sub	x1, x29, #0x50
                	mov	x2, #0x10               // =16
                	bl	<addr>
                	sxtw	x0, w0
@@ -165,12 +165,12 @@ Disassembly of section .text:
                	ret
                	ldr	q16, [sp, #0x20]
                	abs	v0.8h, v16.8h
-               	sub	x0, x29, #0x60
                	stur	q0, [x29, #-0x60]
                	ldr	q16, [sp, #0x40]
                	abs	v0.8h, v16.8h
-               	sub	x1, x29, #0x50
                	stur	q0, [x29, #-0x50]
+               	sub	x0, x29, #0x60
+               	sub	x1, x29, #0x50
                	mov	x2, #0x10               // =16
                	bl	<addr>
                	sxtw	x0, w0
@@ -201,13 +201,13 @@ Disassembly of section .text:
                	ldr	q16, [sp, #0x30]
                	ldr	q17, [sp, #0x20]
                	zip1	v0.8h, v16.8h, v17.8h
-               	sub	x0, x29, #0x60
                	stur	q0, [x29, #-0x60]
                	ldr	q16, [sp, #0x50]
                	ldr	q17, [sp, #0x40]
                	zip1	v0.8h, v16.8h, v17.8h
-               	sub	x1, x29, #0x50
                	stur	q0, [x29, #-0x50]
+               	sub	x0, x29, #0x60
+               	sub	x1, x29, #0x50
                	mov	x2, #0x10               // =16
                	bl	<addr>
                	sxtw	x0, w0
@@ -240,13 +240,13 @@ Disassembly of section .text:
                	ldr	q16, [sp, #0x30]
                	ldr	q17, [sp, #0x20]
                	srhadd	v0.8h, v16.8h, v17.8h
-               	sub	x0, x29, #0x60
                	stur	q0, [x29, #-0x60]
                	ldr	q16, [sp, #0x50]
                	ldr	q17, [sp, #0x40]
                	srhadd	v0.8h, v16.8h, v17.8h
-               	sub	x1, x29, #0x50
                	stur	q0, [x29, #-0x50]
+               	sub	x0, x29, #0x60
+               	sub	x1, x29, #0x50
                	mov	x2, #0x10               // =16
                	bl	<addr>
                	sxtw	x0, w0
@@ -278,13 +278,13 @@ Disassembly of section .text:
                	ldr	q16, [sp, #0x30]
                	ldr	q17, [sp, #0x20]
                	cmgt	v0.8h, v16.8h, v17.8h
-               	sub	x0, x29, #0x60
                	stur	q0, [x29, #-0x60]
                	ldr	q16, [sp, #0x50]
                	ldr	q17, [sp, #0x40]
                	cmgt	v0.8h, v16.8h, v17.8h
-               	sub	x1, x29, #0x50
                	stur	q0, [x29, #-0x50]
+               	sub	x0, x29, #0x60
+               	sub	x1, x29, #0x50
                	mov	x2, #0x10               // =16
                	bl	<addr>
                	sxtw	x0, w0
@@ -311,13 +311,13 @@ Disassembly of section .text:
                	ldr	q16, [sp, #0x30]
                	ldr	q17, [sp, #0x20]
                	ext	v0.16b, v16.16b, v17.16b, #0x6
-               	sub	x0, x29, #0x60
                	stur	q0, [x29, #-0x60]
                	ldr	q16, [sp, #0x50]
                	ldr	q17, [sp, #0x40]
                	ext	v0.16b, v16.16b, v17.16b, #0x6
-               	sub	x1, x29, #0x50
                	stur	q0, [x29, #-0x50]
+               	sub	x0, x29, #0x60
+               	sub	x1, x29, #0x50
                	mov	x2, #0x10               // =16
                	bl	<addr>
                	sxtw	x0, w0

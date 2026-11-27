@@ -4,7 +4,7 @@
 //! old file is a running executable (ETXTBSY on Linux) or is mapped by
 //! another process (ERROR_USER_MAPPED_FILE on Windows); a rename leaves the
 //! old file to its users. Any other kind of file at the path -- a device, a
-//! FIFO, a symlink -- is written through, as GNU ld does: `-o /dev/null`.
+//! FIFO, a symlink -- is written through, so `-o /dev/null` works.
 
 use std::fs::{File, OpenOptions};
 use std::io::{self, Write};

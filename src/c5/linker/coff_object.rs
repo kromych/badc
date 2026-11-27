@@ -34,7 +34,7 @@ const IMAGE_FILE_MACHINE_ARM64: u16 = 0xAA64;
 const IMAGE_FILE_MACHINE_ARM64EC: u16 = 0xA641;
 const FILE_HEADER_SIZE: usize = 20;
 const BIGOBJ_HEADER_SIZE: usize = 56;
-/// `ANON_OBJECT_HEADER_BIGOBJ::ClassID`, the GUID MSVC and GNU as write.
+/// `ANON_OBJECT_HEADER_BIGOBJ::ClassID`, the bigobj format's GUID.
 const BIGOBJ_CLASS_ID: [u8; 16] = [
     0xC7, 0xA1, 0xBA, 0xD1, 0xEE, 0xBA, 0xA9, 0x4B, 0xAF, 0x20, 0xFA, 0xF6, 0x6A, 0xA4, 0xDC, 0xB8,
 ];
@@ -560,22 +560,61 @@ fn read_resources(
     Ok(out)
 }
 
+/// `@feat.00` bit 11: the object was compiled for Control Flow Guard.
+const FEAT_GUARD_CF: u32 = 0x800;
+
+/// The sections in which a Control Flow Guard object lists its
+/// address-taken functions, address-taken imports, `longjmp` targets and
+/// exception continuations, for the linker's tables; none is image content.
+fn is_guard_metadata(name: &str) -> bool {
+    matches!(name, ".gfids$y" | ".giats$y" | ".gljmp$y" | ".gehcont$y")
+}
+
+/// The functions a Control Flow Guard object takes the address of: each
+/// `.gfids$y` entry is a symbol-table index. `None` for an object compiled
+/// without it, whose relocations say instead.
+fn read_guard_fids(
+    bytes: &[u8],
+    sects: &[Sect],
+    raw: &[Option<RawSym>],
+) -> Result<Option<Vec<usize>>, C5Error> {
+    let feat = (raw.iter().flatten())
+        .find(|r| r.name == "@feat.00" && r.section == IMAGE_SYM_ABSOLUTE)
+        .map_or(0, |r| r.value);
+    if feat & FEAT_GUARD_CF == 0 {
+        return Ok(None);
+    }
+    let mut out = Vec::new();
+    for s in sects.iter().filter(|s| s.name == ".gfids$y") {
+        for entry in s.content(bytes)?.as_chunks::<4>().0 {
+            let k = u32::from_le_bytes(*entry) as usize;
+            if raw.get(k).is_none_or(Option::is_none) {
+                return Err(bad(&format!("`.gfids$y` entry {k} names no symbol")));
+            }
+            out.push(k + 1);
+        }
+    }
+    Ok(Some(out))
+}
+
 fn is_tls(name: &str) -> bool {
     name == ".tls" || name.starts_with(".tls$")
 }
 
 /// The merged stream a section joins. A relocated read-only section
 /// joins the relro stream, as the ELF reader places one. A section with
-/// no `CNT_*` flag takes its content from the name it groups under, as
-/// link.exe and GNU ld place it there: `.text` code, `.bss` zero fill,
+/// no `CNT_*` flag takes its content from the name it groups under:
+/// `.text` code, `.bss` zero fill,
 /// any other initialized data, which its `MEM_*` flags place.
 fn classify(s: &Sect) -> Result<SectionFamily, C5Error> {
     let f = s.flags;
-    // `.pdata` is read by `read_unwind`, `.rsrc$*` by `read_resources`. GNU
-    // as gives `.drectve` data flags, not LNK_INFO.
+    // `.pdata` is read by `read_unwind`, `.gfids$y` by `read_guard_fids`,
+    // `.rsrc$*` by `read_resources`. GNU as gives `.drectve` data flags, not
+    // LNK_INFO.
     if f & (IMAGE_SCN_LNK_REMOVE | IMAGE_SCN_LNK_INFO | IMAGE_SCN_MEM_DISCARDABLE) != 0
         || s.name == ".drectve"
         || s.name.starts_with(".debug")
+        || is_guard_metadata(&s.name)
         || is_pdata(&s.name)
         || is_rsrc(&s.name)
     {
@@ -1570,8 +1609,10 @@ pub struct ImportMember {
     pub ordinal: Option<u16>,
     /// A name import's hint: the name's index in the DLL's export name table.
     pub hint: u16,
-    /// `IMPORT_OBJECT_DATA` / `_CONST`: reached through `__imp_<symbol>` only.
+    /// `IMPORT_OBJECT_DATA` / `_CONST`: no code, so no thunk.
     pub data: bool,
+    /// `IMPORT_OBJECT_CONST`: the symbol names the slot, as `__imp_<symbol>` does.
+    pub slot: bool,
 }
 
 /// True when `bytes` is a short-format import member (`IMPORT_OBJECT_HEADER`).
@@ -1633,11 +1674,12 @@ pub fn parse_import_member(bytes: &[u8]) -> Result<Option<ImportMember>, C5Error
         ordinal,
         hint: ordinal_or_hint,
         data: kinds & 3 != 0,
+        slot: kinds & 3 == 2,
     }))
 }
 
 /// The DLLs an import library's members name, as shared libraries exporting each
-/// member's symbol and `__imp_` slot; a data import exports the slot only.
+/// member's symbol and `__imp_` slot; a CONST import's symbol names the slot.
 pub fn import_libraries(members: &[ImportMember]) -> Vec<super::object::SharedLibrary> {
     let mut libs: BTreeMap<&str, super::object::SharedLibrary> = BTreeMap::new();
     for m in members {
@@ -1647,6 +1689,7 @@ pub fn import_libraries(members: &[ImportMember]) -> Vec<super::object::SharedLi
                 soname: m.dll.clone(),
                 machine: m.machine,
                 exports: Default::default(),
+                slot_exports: Default::default(),
                 data_exports: Default::default(),
                 tls_exports: Default::default(),
                 object_sizes: Default::default(),
@@ -1663,6 +1706,9 @@ pub fn import_libraries(members: &[ImportMember]) -> Vec<super::object::SharedLi
         lib.exports.insert(format!("__imp_{}", m.symbol));
         if m.data {
             lib.data_exports.insert(m.symbol.clone());
+        }
+        if m.slot {
+            lib.slot_exports.insert(m.symbol.clone());
         }
         if let Some(ordinal) = m.ordinal {
             lib.export_ordinals.insert(m.symbol.clone(), ordinal);
@@ -1741,7 +1787,8 @@ impl Shallow<'_> {
     /// the descriptor, and the names it references: `__imp_<symbol>` is an
     /// 8-byte import address table slot in `.idata$5` holding the RVA of a
     /// hint/name entry or an ordinal with bit 63 set; a `<symbol>` defined
-    /// beside it is the call thunk of a code import.
+    /// beside it is the call thunk of a code import, or, in `.idata$5`, the
+    /// slot of a CONST one.
     fn traditional_import(&self) -> Option<(ImportMember, Vec<String>)> {
         let machine = match self.machine {
             IMAGE_FILE_MACHINE_AMD64 => NativeMachine::X86_64,
@@ -1769,6 +1816,7 @@ impl Shallow<'_> {
             .filter(|r| r.section == IMAGE_SYM_UNDEFINED)
             .map(|r| r.name.clone())
             .collect();
+        let defined = self.defined(symbol).map(|(_, s)| s.name == ".idata$5");
         let import = ImportMember {
             machine,
             symbol: symbol.to_string(),
@@ -1776,7 +1824,8 @@ impl Shallow<'_> {
             import_name,
             ordinal,
             hint,
-            data: self.defined(symbol).is_none(),
+            data: defined != Some(false),
+            slot: defined == Some(true),
         };
         Some((import, references))
     }
@@ -1868,7 +1917,7 @@ pub fn is_pe_dll(bytes: &[u8]) -> bool {
     pe_dll_header(bytes).is_some()
 }
 
-/// A DLL's exports as GNU ld reads a DLL input: each name and its `__imp_`
+/// A DLL input's exports: each name and its `__imp_`
 /// slot, as data where the address lies in a section that is not executable.
 pub fn parse_pe_dll(bytes: &[u8]) -> Result<super::object::SharedLibrary, C5Error> {
     let pe = pe_dll_header(bytes).ok_or_else(|| bad("not a PE DLL"))?;
@@ -1913,6 +1962,7 @@ pub fn parse_pe_dll(bytes: &[u8]) -> Result<super::object::SharedLibrary, C5Erro
         soname: String::new(),
         machine,
         exports: Default::default(),
+        slot_exports: Default::default(),
         data_exports: Default::default(),
         tls_exports: Default::default(),
         object_sizes: Default::default(),
@@ -2022,6 +2072,7 @@ pub fn parse_native_coff(
     )?;
     let relocs = translate_relocs(bytes, h.machine, &sects, &raw, &symbols)?;
     let pe_unwind = read_unwind(bytes, h.machine, &sects, &raw)?;
+    let guard_fids = read_guard_fids(bytes, &sects, &raw)?;
     let resources = read_resources(bytes, h.machine, &sects, &raw)?;
     // A forced reference archive selection resolves, as `ld -u` does.
     symbols.extend(directives.include_symbols());
@@ -2091,6 +2142,7 @@ pub fn parse_native_coff(
         compact_unwind: Vec::new(),
         eh_frame: None,
         pe_unwind,
+        guard_fids,
     })
 }
 
@@ -2522,6 +2574,12 @@ mod tests {
         assert!(libs[0].exports.contains("__imp_GetTickCount"));
         assert!(libs[1].data_exports.contains("_obj@4"));
         assert_eq!(libs[1].export_symbols["_obj@4"], "obj");
+        assert!(libs[1].slot_exports.is_empty());
+        // A CONST import's own name is its slot.
+        let k = parse_import_member(&member(2 | (1 << 2), b"KdDebuggerEnabled\0ntoskrnl.exe\0"));
+        let k = import_libraries(&[k.unwrap().unwrap()]);
+        assert!(k[0].data_exports.contains("KdDebuggerEnabled"));
+        assert!(k[0].slot_exports.contains("KdDebuggerEnabled"));
         let mut by_ordinal = member(0, b"f\0a.dll\0");
         by_ordinal[16] = 7;
         let o = parse_import_member(&by_ordinal).unwrap().unwrap();
@@ -3041,5 +3099,31 @@ mod tests {
             (o.symbols[1].name.as_str(), o.symbols[1].kind),
             ("f", STT_FUNC)
         );
+    }
+
+    /// A Control Flow Guard object (`@feat.00` bit 11) lists the functions
+    /// it takes the address of in `.gfids$y`, by symbol-table index, and no
+    /// guard section joins the image. Without the bit the object has no
+    /// list: its relocations say instead.
+    #[test]
+    fn a_guard_object_lists_its_address_taken_functions() {
+        let gfids = sec(".gfids$y", RDATA, &2u32.to_le_bytes());
+        let secs = [
+            sec(".text", TEXT, &[0xC3; 2]),
+            gfids,
+            sec(".gljmp$y", RDATA, &[]),
+        ];
+        for (feat, want) in [(FEAT_GUARD_CF, Some(alloc::vec![3])), (0, None)] {
+            let syms = [
+                sym("@feat.00", feat, -1, IMAGE_SYM_CLASS_STATIC),
+                sym("a", 0, 1, IMAGE_SYM_CLASS_EXTERNAL),
+                sym("b", 1, 1, IMAGE_SYM_CLASS_EXTERNAL),
+            ];
+            let o = parse(&secs, &syms).unwrap();
+            assert_eq!(o.guard_fids, want, "feat {feat:#x}");
+            assert_eq!(o.symbols[3].name, "b");
+            let dropped: Vec<_> = o.discarded.iter().map(|d| d.0.as_str()).collect();
+            assert_eq!(dropped, [".gfids$y", ".gljmp$y"]);
+        }
     }
 }

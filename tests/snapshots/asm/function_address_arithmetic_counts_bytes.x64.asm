@@ -3,7 +3,7 @@ function_address_arithmetic_counts_bytes.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -35,25 +35,25 @@ Disassembly of section .text:
 
 <main>:
                	leaq	-<rip>, %rax # <addr>
-               	leaq	0x1(%rax), %rcx
-               	movq	<rip>, %rdx # <addr>
-               	subq	%rax, %rdx
-               	cmpq	$0x1, %rdx
-               	jne	<addr>
-               	movq	<rip>, %rdx # <addr>
-               	subq	%rax, %rdx
-               	cmpq	$-0x2, %rdx
-               	jne	<addr>
-               	movq	<rip>, %rdx # <addr>
-               	subq	%rax, %rdx
-               	cmpq	$0x3, %rdx
-               	jne	<addr>
-               	movq	<rip>, %rdx # <addr>
-               	subq	%rax, %rdx
-               	cmpq	$0x1, %rdx
-               	jne	<addr>
+               	leaq	0x1(%rax), %rdx
+               	movq	<rip>, %rcx # <addr>
                	subq	%rax, %rcx
                	cmpq	$0x1, %rcx
+               	jne	<addr>
+               	movq	<rip>, %rcx # <addr>
+               	subq	%rax, %rcx
+               	cmpq	$-0x2, %rcx
+               	jne	<addr>
+               	movq	<rip>, %rcx # <addr>
+               	subq	%rax, %rcx
+               	cmpq	$0x3, %rcx
+               	jne	<addr>
+               	movq	<rip>, %rcx # <addr>
+               	subq	%rax, %rcx
+               	cmpq	$0x1, %rcx
+               	jne	<addr>
+               	subq	%rax, %rdx
+               	cmpq	$0x1, %rdx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
@@ -67,7 +67,6 @@ Disassembly of section .text:
                	cmpq	$0x3, %rcx
                	jne	<addr>
                	movq	<rip>, %rcx # <addr>
-               	leaq	-<rip>, %rax # <addr>
                	subq	%rax, %rcx
                	cmpq	$0x3, %rcx
                	je	<addr>
@@ -77,9 +76,10 @@ Disassembly of section .text:
                	subq	%rax, %rcx
                	cmpq	$-0x4, %rcx
                	jne	<addr>
-               	movq	<rip>, %rcx # <addr>
-               	subq	%rax, %rcx
-               	cmpq	$0x6, %rcx
+               	movq	<rip>, %rax # <addr>
+               	leaq	-<rip>, %rcx # <addr>
+               	subq	%rcx, %rax
+               	cmpq	$0x6, %rax
                	jne	<addr>
                	movq	<rip>, %rax # <addr>
                	movq	<rip>, %rcx # <addr>

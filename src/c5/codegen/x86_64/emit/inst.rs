@@ -278,6 +278,7 @@ pub(super) fn name_extern_data_ref(
             direct_pcrel: None,
             import_slot: false,
         });
+        (cx.code).name_at(popped.instr_offset, || t::Operand::Name(name.clone()));
     }
 }
 
@@ -326,7 +327,7 @@ pub(super) fn emit_inst(
         }
         // The language handler leaves the code in rax.
         Inst::ExceptionCode => {
-            let Some(rd) = int_or_spill_dst(dst) else {
+            let Some(rd) = int_or_spill_dst(code, dst) else {
                 return fail("ExceptionCode: dst not int reg / spill");
             };
             emit_mov_rr(code, rd, Reg::RAX);
@@ -335,15 +336,16 @@ pub(super) fn emit_inst(
         }
         Inst::Imm(_) if alloc.imm_held.get(v as usize).copied().unwrap_or(false) => Ok(()),
         Inst::Imm(value) => {
-            let Some(rd) = int_or_spill_dst(dst) else {
+            let Some(rd) = int_or_spill_dst(code, dst) else {
                 return fail("Imm: dst not int reg / spill");
             };
             emit_mov_r_imm64(code, rd, *value);
             spill_dst_to_slot(code, dst, rd, frame);
+            spill_wide_rest(code, alloc.width(v), dst, rd, frame);
             Ok(())
         }
         Inst::LocalAddr(off) => {
-            let Some(rd) = int_or_spill_dst(dst) else {
+            let Some(rd) = int_or_spill_dst(code, dst) else {
                 return fail("LocalAddr: dst not int reg / spill");
             };
             // `local_slot_base_disp` places parameter cells, locals, an over-aligned
@@ -362,7 +364,7 @@ pub(super) fn emit_inst(
             parent,
             index,
         } => {
-            let Some(rd) = int_or_spill_dst(dst) else {
+            let Some(rd) = int_or_spill_dst(code, dst) else {
                 return fail("ParentLocalAddr: dst not int reg / spill");
             };
             let Some(bytes) =
@@ -383,6 +385,8 @@ pub(super) fn emit_inst(
         Inst::LoadIndexed { abs_base: true, .. } | Inst::StoreIndexed { abs_base: true, .. } => {
             emit_abs_indexed(code, &mut *out.abs_addr_refs, inst, v, dst, fcx)
         }
+        // Read by the next instruction as its memory operand.
+        Inst::Load { pc_rel: true, .. } if alloc.fp_mem_operand.contains(&v) => Ok(()),
         Inst::Load { pc_rel: true, .. } | Inst::Store { pc_rel: true, .. } => {
             emit_pc_rel(code, data_fixups, inst, v, dst, fcx)
         }
@@ -394,6 +398,29 @@ pub(super) fn emit_inst(
         | Inst::StoreLocal { .. }
         | Inst::LoadIndexed { .. }
         | Inst::StoreIndexed { .. } => emit_mem_inst(code, inst, v, dst, fcx),
+        // A comparison reads a folded constant as its memory operand.
+        Inst::Binop { op, lhs, rhs }
+            if crate::c5::ir::is_fp_comparison_op(*op)
+                && (alloc.fp_mem_operand.contains(rhs) || alloc.fp_mem_operand.contains(lhs)) =>
+        {
+            let end =
+                super::arith::emit_fp_compare_folded(code, *op, v, dst, *lhs, *rhs, alloc, frame)?;
+            if let Some(end) = end {
+                let folded = if alloc.fp_mem_operand.contains(rhs) {
+                    *rhs
+                } else {
+                    *lhs
+                };
+                note_literal(
+                    &mut out.fp_literals,
+                    end,
+                    func,
+                    folded,
+                    alloc.is_f32(folded),
+                );
+            }
+            Ok(())
+        }
         // The allocator folds a commuting operation's first operand only.
         Inst::Binop { op, lhs, rhs }
             if alloc.fp_mem_operand.contains(rhs) || alloc.fp_mem_operand.contains(lhs) =>
@@ -409,7 +436,7 @@ pub(super) fn emit_inst(
             let held = place_of(alloc, held);
             let end =
                 super::arith::emit_fp_binop_mem(code, *op, alloc.is_f32(v), dst, held, mem, frame)?;
-            note_literal(&mut out.fp_literals, end, func, folded, alloc.is_f32(v));
+            note_folded(out, end, func, folded, alloc.is_f32(v));
             Ok(())
         }
         Inst::Binop { op, lhs, rhs } => emit_binop(code, *op, v, dst, *lhs, *rhs, alloc, frame),
@@ -502,6 +529,17 @@ pub(super) fn emit_inst(
             width,
             order,
         } => emit_atomic_store(code, *addr, *value, *width, *order, alloc, frame),
+        Inst::Intrinsic { kind, args }
+            if args.len() == 1
+                && matches!(
+                    crate::c5::op::Intrinsic::from_i64(*kind),
+                    Some(crate::c5::op::Intrinsic::Fabs | crate::c5::op::Intrinsic::Fabsf)
+                ) =>
+        {
+            let literal = super::arith::emit_fp_sign(code, dst, v, args[0], true, alloc, frame)?;
+            out.fp_literals.push(literal);
+            Ok(())
+        }
         Inst::Intrinsic { kind, args } => {
             emit_intrinsic(code, *kind, args, dst, v, func, alloc, frame, abi)
         }
@@ -543,12 +581,19 @@ pub(super) fn emit_inst(
         Inst::VecConst { imm, kind, bytes } => {
             emit_vec_const(code, (*imm, *kind, *bytes), dst, frame)
         }
+        Inst::InlineAsm { .. } if !cfg!(feature = "inline-asm") => {
+            Err(Unsupported::new(crate::c5::asm::NO_INLINE_ASM))
+        }
         Inst::InlineAsm { asm, args } => emit_inline_asm(out, asm, args, v, fcx, None),
         Inst::Neg(value) => emit_neg(code, dst, *value, alloc, frame),
         Inst::Select { cond, a, b, kind } => {
             super::arith::emit_select(code, dst, (v, *cond, *a, *b, *kind), func, alloc, frame)
         }
-        Inst::Fneg(value) => emit_fneg(code, dst, v, *value, alloc, frame),
+        Inst::Fneg(value) => {
+            let literal = super::arith::emit_fp_sign(code, dst, v, *value, false, alloc, frame)?;
+            out.fp_literals.push(literal);
+            Ok(())
+        }
         Inst::Fma {
             a,
             b,
@@ -569,7 +614,7 @@ pub(super) fn emit_inst(
             let negate = (*neg_product, *neg_addend);
             let end = emit_fma(code, dst, v, *a, *b, *c, negate, mem, alloc, frame)?;
             if let (Some(f), Some(end)) = (folded, end) {
-                note_literal(&mut out.fp_literals, end, func, f, alloc.is_f32(v));
+                note_folded(out, end, func, f, alloc.is_f32(v));
             }
             Ok(())
         }
@@ -803,7 +848,8 @@ pub(super) fn frame_object_base(
 
 /// The memory operand a reader takes in place of a register
 /// (`Allocation::fp_mem_operand`): a load's address, a spilled base or index
-/// loaded into a scratch register, or a constant's read-only literal.
+/// loaded into a scratch register, a `pc_rel` load's object, or a
+/// constant's read-only literal; the last two RIP-relative.
 fn folded_operand(
     code: &mut CodeBuf,
     load: super::super::ir::ValueId,
@@ -817,8 +863,15 @@ fn folded_operand(
         ..
     } = *fcx;
     match func.insts[load as usize] {
+        Inst::Load {
+            pc_rel: true, addr, ..
+        } => {
+            let data = super::mem::abs_base_data(func, addr)?;
+            matches!(func.insts[data as usize], Inst::ImmData(_))
+                .then_some(super::super::encode::Mem::Rip)
+        }
         Inst::Load { addr, disp, .. } => {
-            let base = materialize_int(code, place_of(alloc, addr), SCRATCH_R10, frame)?;
+            let base = materialize_int(code, place_of(alloc, addr), S0, frame)?;
             Some(super::super::encode::Mem::at(base, disp))
         }
         Inst::LoadIndexed {
@@ -844,14 +897,43 @@ fn folded_operand(
 /// Records the literal of a folded constant `folded` in the disp32 of its
 /// reader, which ends at `end` with no immediate after it.
 fn note_literal(
-    literals: &mut Vec<(usize, u64, bool)>,
+    literals: &mut Vec<(usize, u64, u8)>,
     end: usize,
     func: &FunctionSsa,
     folded: super::super::ir::ValueId,
     single: bool,
 ) {
     if let Inst::Imm(bits) = func.insts[folded as usize] {
-        literals.push((end - 4, bits as u64, single));
+        literals.push((end - 4, bits as u64, if single { 4 } else { 8 }));
+    }
+}
+
+/// [`note_literal`], or for a folded `pc_rel` load the data fixup of its
+/// object in the disp32 of its reader, which ends at `end`.
+fn note_folded(
+    out: &mut Out,
+    end: usize,
+    func: &FunctionSsa,
+    folded: super::super::ir::ValueId,
+    single: bool,
+) {
+    let Inst::Load {
+        pc_rel: true,
+        addr,
+        disp,
+        ..
+    } = func.insts[folded as usize]
+    else {
+        return note_literal(&mut out.fp_literals, end, func, folded, single);
+    };
+    let data = super::mem::abs_base_data(func, addr).map(|d| &func.insts[d as usize]);
+    if let Some(Inst::ImmData(off)) = data {
+        out.cx.data_fixups.push(DataFixup {
+            instr_offset: end - 4,
+            data_offset: *off as u64,
+            addend: i64::from(disp),
+            part: AddrPart::Disp32,
+        });
     }
 }
 
@@ -970,6 +1052,7 @@ fn emit_call_inst(
             *ret_slot_local,
             func,
             asm_extern_call_sites,
+            &mut *cx.user_extern_data_refs,
             ends_path,
         ),
         _ => unreachable!(),
@@ -1007,7 +1090,10 @@ fn emit_incoming(
     };
     let name = inst.variant_name();
     let from_home = home.is_some_and(|i| param_from_home.get(i).copied().unwrap_or(false));
-    let home_off = home.map_or(0, |i| param_home_off(i, func, frame, abi) as i32);
+    // Only a read from the home names it; a parameter read in its register
+    // may keep none.
+    let home_off =
+        (home.filter(|_| from_home)).map_or(0, |i| param_home_off(i, func, frame, abi) as i32);
     let incoming = super::ssa::reg_alloc::incoming_reg(param_plan, inst)
         .or_else(|| super::ssa::reg_alloc::ret_part_reg(target, inst));
     if kind == LoadKind::V256 {
@@ -1043,11 +1129,12 @@ fn emit_incoming(
         // A `float` occupies the low 32 bits of the xmm; the body re-narrows
         // it through the f32 store the walker seeded, so a scalar copy
         // serves either width.
+        let (hb, home_off) = frame.fp_addr(home_off);
         let load_home = |code: &mut CodeBuf, r: Reg| {
             if matches!(kind, LoadKind::F32) {
-                emit_movss_xmm_mem(code, r, Reg::RBP, home_off);
+                emit_movss_xmm_mem(code, r, hb, home_off);
             } else {
-                emit_movsd_xmm_mem(code, r, Reg::RBP, home_off);
+                emit_movsd_xmm_mem(code, r, hb, home_off);
             }
         };
         if from_home {
@@ -1088,19 +1175,14 @@ fn emit_incoming(
         }
     };
     let ext = param_entry_ext(kind, v, alloc);
+    let (hb, home_off) = frame.fp_addr(home_off);
     let materialize = |code: &mut CodeBuf, rd: Reg| {
         if from_home {
             match ext {
-                Some(LoadKind::I8) => {
-                    super::encode::emit_movsx_r_mem8(code, rd, Reg::RBP, home_off)
-                }
-                Some(LoadKind::I16) => {
-                    super::encode::emit_movsx_r_mem16(code, rd, Reg::RBP, home_off)
-                }
-                Some(LoadKind::I32) => {
-                    super::encode::emit_movsxd_r_mem(code, rd, Reg::RBP, home_off)
-                }
-                _ => emit_mov_r_mem(code, rd, Reg::RBP, home_off),
+                Some(LoadKind::I8) => super::encode::emit_movsx_r_mem8(code, rd, hb, home_off),
+                Some(LoadKind::I16) => super::encode::emit_movsx_r_mem16(code, rd, hb, home_off),
+                Some(LoadKind::I32) => super::encode::emit_movsxd_r_mem(code, rd, hb, home_off),
+                _ => emit_mov_r_mem(code, rd, hb, home_off),
             }
         } else {
             emit_sign_extend(code, rd, arg_reg, ext.unwrap_or(LoadKind::I64));
@@ -1109,8 +1191,9 @@ fn emit_incoming(
     match dst {
         Place::IntReg(r) => materialize(code, Reg(r)),
         Place::Spill(_) => {
-            materialize(code, SCRATCH_R10);
-            spill_dst_to_slot(code, dst, SCRATCH_R10, frame);
+            let s = scratch(code, S0);
+            materialize(code, s);
+            spill_dst_to_slot(code, dst, s, frame);
         }
         _ => return fail(alloc::format!("{name}: dst not int reg / spill")),
     }

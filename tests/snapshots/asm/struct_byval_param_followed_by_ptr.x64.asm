@@ -3,7 +3,7 @@ struct_byval_param_followed_by_ptr.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,41 +26,41 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	xorl	%esi, %esi
-               	movl	%esi, -0x8(%rbp)
-               	movl	<rip>, %eax # <addr>
-               	cmpl	$0x2a, %eax
-               	je	<addr>
-               	movl	$0x1e, %esi
-               	testl	%esi, %esi
-               	je	<addr>
-               	leaq	<rip>, %rdi
-               	movl	-0x8(%rbp), %edx
+               	subq	$0x18, %rsp
+               	xorl	%eax, %eax
                	movl	<rip>, %ecx # <addr>
-               	movq	%rsi, 0x8(%rsp)
+               	cmpl	$0x2a, %ecx
+               	je	<addr>
+               	movl	$0x1e, %edx
+               	testl	%edx, %edx
+               	je	<addr>
+               	movl	<rip>, %ecx # <addr>
+               	movq	%rdx, 0x8(%rsp)
+               	movq	%rdx, %rsi
+               	movq	%rax, %rdx
+               	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
-               	movq	0x8(%rsp), %rsi
-               	movq	%rsi, %rax
-               	leave
+               	movq	0x8(%rsp), %rdx
+               	movq	%rdx, %rax
+               	addq	$0x18, %rsp
                	retq
-               	movl	-0x8(%rbp), %esi
-               	cmpl	$0x1, %esi
+               	cmpl	$0x1, %eax
                	je	<addr>
+               	movq	%rax, %rsi
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movl	$0x1, -0x8(%rbp)
+               	movl	$0x1, %ecx
+               	movq	%rax, %rdx
+               	movq	%rcx, %rax
                	jmp	<addr>

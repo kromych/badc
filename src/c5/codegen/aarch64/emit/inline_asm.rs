@@ -26,7 +26,7 @@ pub(super) struct AsmGotoDirectBranch {
 /// sequence does not fall into it, and each local label's offset within
 /// them for the pushed-section fields that name it (`.word 663f - .`).
 pub(super) struct DeferredAsmRegion {
-    pub(super) bytes: alloc::vec::Vec<u8>,
+    pub(super) bytes: CodeBuf,
     pub(super) labels: alloc::vec::Vec<(u32, usize)>,
     pub(super) goto_branches: alloc::vec::Vec<DeferredGotoBranch>,
     pub(super) sym_branches: alloc::vec::Vec<DeferredSymBranch>,
@@ -79,7 +79,7 @@ pub(super) enum LabelBranch {
 pub(super) fn label_branch_word(
     kind: &LabelBranch,
     delta: i64,
-) -> Result<u32, alloc::string::String> {
+) -> Result<Insn, alloc::string::String> {
     use alloc::string::String;
     if delta % 4 != 0 {
         return Err(String::from(
@@ -108,39 +108,37 @@ pub(super) fn label_branch_word(
             }
             super::encode::enc_bl(words)
         }
-        // B.cond: 0101_0100 | imm19 << 5 | cond.
         LabelBranch::BCond(c) => {
             if !fits(19) {
                 return Err(String::from(
                     "aarch64 inline asm: branch target out of range",
                 ));
             }
-            0x5400_0000 | (((words as u32) & 0x7_FFFF) << 5) | c as u32
+            super::encode::enc_b_cond_code(c, words)
         }
-        // CBZ/CBNZ: sf | 0011_010z | imm19 << 5 | Rt.
         LabelBranch::Cb { nz, rt, is64 } => {
             if !fits(19) {
                 return Err(String::from(
                     "aarch64 inline asm: branch target out of range",
                 ));
             }
-            (if is64 { 1u32 << 31 } else { 0 })
-                | (if nz { 0x3500_0000 } else { 0x3400_0000 })
-                | (((words as u32) & 0x7_FFFF) << 5)
-                | rt as u32
+            match (nz, is64) {
+                (false, true) => super::encode::enc_cbz(Reg(rt), words),
+                (true, true) => super::encode::enc_cbnz(Reg(rt), words),
+                (false, false) => super::encode::enc_cbz_w(Reg(rt), words),
+                (true, false) => super::encode::enc_cbnz_w(Reg(rt), words),
+            }
         }
-        // TBZ/TBNZ: bit<5> | 0011_011z | bit<4:0> << 19 | imm14 << 5 | Rt.
         LabelBranch::Tb { nz, rt, bit } => {
             if !fits(14) {
                 return Err(String::from(
                     "aarch64 inline asm: branch target out of range",
                 ));
             }
-            ((bit as u32 >> 5) << 31)
-                | (if nz { 0x3700_0000 } else { 0x3600_0000 })
-                | ((bit as u32 & 31) << 19)
-                | (((words as u32) & 0x3FFF) << 5)
-                | rt as u32
+            match nz {
+                false => super::encode::enc_tbz(Reg(rt), bit, words),
+                true => super::encode::enc_tbnz(Reg(rt), bit, words),
+            }
         }
         LabelBranch::Adr { .. } => {
             return Err(String::from(
@@ -214,7 +212,7 @@ fn build_label_branch(
         },
         m => {
             // Both conditional spellings: `b.<cond>` and the bare `b<cond>`
-            // (`bne`, `beq`), which GNU as also accepts.
+            // (`bne`, `beq`).
             let cond = m
                 .strip_prefix("b.")
                 .and_then(super::asm::cond_code)
@@ -240,6 +238,7 @@ fn build_label_branch(
 /// label (`661b`) for the `.org` length expression.
 #[allow(clippy::type_complexity)]
 fn encode_deferred_asm_region(
+    mut bytes: CodeBuf,
     text: &str,
     conv: &dyn Fn(&super::asm::AsmOpndA64) -> Result<super::table::Opnd, alloc::string::String>,
     main_label: &dyn Fn(&str) -> Option<usize>,
@@ -247,9 +246,8 @@ fn encode_deferred_asm_region(
 ) -> Result<(DeferredAsmRegion, Vec<(usize, LabelBranch, u8)>), alloc::string::String> {
     use super::super::map_syms::MapClass;
     use super::asm::{AsmOpndA64, parse_template};
-    use super::table::{self, Opnd};
+    use super::table::Opnd;
     use alloc::string::String;
-    let mut bytes: Vec<u8> = Vec::new();
     // The replacement is appended to `.text`, so it follows the same mapping
     // rule the main stream does.
     let mut map_state: Option<MapClass> = None;
@@ -278,7 +276,7 @@ fn encode_deferred_asm_region(
             continue;
         }
         // `.org <expr>`: pad forward to the target; a backward move is the
-        // replacement-length assertion firing, an error as in GNU as.
+        // replacement-length assertion firing, an error.
         if let Some(rest) = stmt.strip_prefix(".org")
             && (rest.is_empty() || rest.starts_with(char::is_whitespace))
         {
@@ -328,6 +326,7 @@ fn encode_deferred_asm_region(
                 };
                 let resolved = crate::c5::asm::resolve_align_item(item, &resolve)?;
                 let item = resolved.as_ref().unwrap_or(item);
+                let at = bytes.len();
                 crate::c5::asm::push_a64_stream_layout(
                     item,
                     &mut bytes,
@@ -335,6 +334,7 @@ fn encode_deferred_asm_region(
                     &resolve,
                     &|_| None,
                 )?;
+                describe_fill(&mut bytes, at, &data_ranges);
                 map_state = crate::c5::asm::step_map_state(item, map_state, true);
                 continue;
             }
@@ -345,10 +345,13 @@ fn encode_deferred_asm_region(
             }
             map_state = Some(class);
             if !insn.bytes.is_empty() {
-                if class == MapClass::Data {
-                    data_ranges.push((bytes.len(), insn.bytes.len()));
-                }
-                bytes.extend_from_slice(&insn.bytes);
+                push_raw(
+                    &mut bytes,
+                    &mut data_ranges,
+                    class,
+                    &insn.bytes,
+                    &insn.mnemonic,
+                );
                 continue;
             }
             if let Some(name) = &insn.sym_target {
@@ -363,7 +366,7 @@ fn encode_deferred_asm_region(
                 } else {
                     super::encode::enc_b(0)
                 };
-                bytes.extend_from_slice(&word.to_le_bytes());
+                emit(&mut bytes, word);
                 continue;
             }
             match insn.operands.last() {
@@ -381,22 +384,22 @@ fn encode_deferred_asm_region(
                         }
                         _ => label_branch_word(&kind, off as i64)?,
                     };
-                    bytes.extend_from_slice(&word.to_le_bytes());
+                    emit(&mut bytes, word);
                 }
                 Some(&AsmOpndA64::Label { num, forward }) => {
                     label_fixups.push((bytes.len(), build_label_branch(insn, conv)?, num, forward));
-                    bytes.extend_from_slice(&0u32.to_le_bytes());
+                    emit(&mut bytes, super::encode::UDF);
                 }
                 Some(&AsmOpndA64::GotoLabel(k)) => {
                     goto_sites.push((bytes.len(), build_label_branch(insn, conv)?, k));
-                    bytes.extend_from_slice(&0u32.to_le_bytes());
+                    emit(&mut bytes, super::encode::UDF);
                 }
                 _ => {
                     let mut ops: Vec<Opnd> = Vec::with_capacity(insn.operands.len());
                     for o in &insn.operands {
                         ops.push(conv(o)?);
                     }
-                    bytes.extend_from_slice(&table::encode(&insn.mnemonic, &ops)?.to_le_bytes());
+                    super::encode::emit_table(&mut bytes, &insn.mnemonic, &ops)?;
                 }
             }
         }
@@ -405,7 +408,7 @@ fn encode_deferred_asm_region(
     // ending in data realigns here.
     a64_align_asm_stream(&mut bytes, &mut data_ranges, &mut map_state);
     // A forward reference binds the next definition after the branch, a
-    // backward one the most recent at or before it (GNU as `Nf` / `Nb`).
+    // backward one the most recent at or before it (`Nf` / `Nb`).
     for &(site, ref kind, num, forward) in &label_fixups {
         let target = if forward {
             labels.iter().find(|&&(n, off)| n == num && off > site)
@@ -429,7 +432,7 @@ fn encode_deferred_asm_region(
         } else {
             label_branch_word(kind, delta)?
         };
-        bytes[site..site + 4].copy_from_slice(&word.to_le_bytes());
+        patch(&mut bytes, site, word);
     }
     Ok((
         DeferredAsmRegion {
@@ -441,6 +444,61 @@ fn encode_deferred_asm_region(
         },
         goto_sites,
     ))
+}
+
+/// Raw bytes of a template: a data run, an instruction the parser encoded,
+/// which reads as `text`, or encoded words (`.inst`), which read as the
+/// directive that placed them.
+fn push_raw(
+    code: &mut CodeBuf,
+    data_ranges: &mut Vec<(usize, usize)>,
+    class: super::super::map_syms::MapClass,
+    bytes: &[u8],
+    text: &str,
+) {
+    let at = code.len();
+    code.extend_from_slice(bytes);
+    if class == super::super::map_syms::MapClass::Data {
+        data_ranges.push((at, bytes.len()));
+        return;
+    }
+    if !text.is_empty() && !text.starts_with('.') && bytes.len() == 4 {
+        code.describe(at, || alloc::string::String::from(text));
+        return;
+    }
+    for (k, w) in bytes.chunks(4).enumerate() {
+        let mut v = 0u32;
+        for (i, b) in w.iter().enumerate() {
+            v |= u32::from(*b) << (8 * i);
+        }
+        let at = at + 4 * k;
+        let end = at + w.len();
+        code.describe_range(at, end, || alloc::format!(".inst {v:#010x}"));
+    }
+}
+
+/// The bytes a layout directive placed from `at` past the data run it
+/// recorded there: the no-ops of an alignment fill read as `nop`, a run of
+/// one byte value as the `.zero` / `.fill` that places it.
+fn describe_fill(code: &mut CodeBuf, at: usize, data_ranges: &[(usize, usize)]) {
+    let mut k = match data_ranges.last() {
+        Some(&(start, len)) if start == at => at + len,
+        _ => at,
+    };
+    let (end, nop) = (code.len(), super::encode::NOP.word.to_le_bytes());
+    while k + 4 <= end && code[k..k + 4] == nop {
+        code.describe_range(k, k + 4, || alloc::string::String::from("nop"));
+        k += 4;
+    }
+    if k < end {
+        let (n, b) = (end - k, code[k]);
+        if code[k..end].iter().all(|&x| x == b) {
+            code.describe_range(k, end, || match b {
+                0 => alloc::format!(".zero {n}"),
+                b => alloc::format!(".fill {n}, 1, {b:#x}"),
+            });
+        }
+    }
 }
 
 /// The value of a template field's expression at stream offset `at`, over
@@ -457,11 +515,10 @@ fn template_expr_value(
 }
 
 /// Bring a stream to the instruction boundary out of the data mapping
-/// state, as GNU as does in an executable section, and leave `state` on
-/// instructions. The gap is under one instruction and is filled with
-/// zeros as part of the data run it follows.
+/// state and leave `state` on instructions. The gap is under one
+/// instruction and is filled with zeros as part of the data run it follows.
 pub(crate) fn a64_align_asm_stream(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     text_data_ranges: &mut Vec<(usize, usize)>,
     state: &mut Option<super::super::map_syms::MapClass>,
 ) {
@@ -489,6 +546,11 @@ struct AsmSink<'a> {
     text_align: &'a mut usize,
     asm_text_labels: &'a mut Vec<super::AsmTextLabel>,
     asm_section_text_refs: &'a mut Vec<super::AsmSectionTextRef>,
+    asm_warnings: &'a mut Vec<(
+        super::super::ir::ValueId,
+        crate::c5::diag::Code,
+        alloc::string::String,
+    )>,
 }
 
 /// The unit's symbol tables a statement resolves names against.
@@ -1259,7 +1321,7 @@ struct BoundOperands {
 
 /// The load (or store) of a `w` operand's `width` bytes in SIMD register `vt`
 /// at the address in x16: `b`, `h`, `s`, `d` or `q`.
-fn fp_access(load: bool, width: u8, vt: u8) -> u32 {
+fn fp_access(load: bool, width: u8, vt: u8) -> Insn {
     use super::encode::*;
     match (load, width) {
         (true, 1 | 2) => enc_ldr_bh_imm(u32::from(width), vt, Reg(16), 0),
@@ -1498,10 +1560,11 @@ fn emit_bound_loads(
     Ok(())
 }
 
-/// The template text after the passes that run before the arch parser
-/// sees it: comments stripped, `%=` expanded once so the code text and any
-/// `.pushsection` content share one instance number, `.if` conditionals
-/// reduced.
+/// The template text after the passes that run before the operands are
+/// substituted: comments stripped, and `%=` expanded once so the code text
+/// and any `.pushsection` content share one instance number. The `.if`
+/// conditionals are the GNU-as pass's, which values them once the operands
+/// are registers and the template's `.equ` symbols are defined.
 fn template_text(
     asm: &super::super::ir::AsmBlock,
 ) -> Result<alloc::string::String, alloc::string::String> {
@@ -1513,10 +1576,8 @@ fn template_text(
     let stripped = crate::c5::asm::strip_asm_comments(raw_text, crate::c5::asm::AsmComments::A64);
     let raw_text = stripped.as_deref().unwrap_or(raw_text);
     let expanded = crate::c5::asm::expand_template_uniq(raw_text);
-    let text = expanded.as_deref().unwrap_or(raw_text);
-    let reduced = crate::c5::asm::strip_asm_conditionals(text)?;
     Ok(alloc::string::String::from(
-        reduced.as_deref().unwrap_or(text),
+        expanded.as_deref().unwrap_or(raw_text),
     ))
 }
 
@@ -1630,11 +1691,13 @@ impl<'a> TemplateStream<'a> {
             }
             self.map_state = Some(class);
             if !insn.bytes.is_empty() {
-                if class == MapClass::Data {
-                    out.text_data_ranges
-                        .push((out.code.len(), insn.bytes.len()));
-                }
-                out.code.extend_from_slice(&insn.bytes);
+                push_raw(
+                    out.code,
+                    out.text_data_ranges,
+                    class,
+                    &insn.bytes,
+                    &insn.mnemonic,
+                );
                 continue;
             }
             if let Some(w) = crate::c5::asm::data_directive_width(&insn.mnemonic) {
@@ -1673,7 +1736,7 @@ impl<'a> TemplateStream<'a> {
     }
 
     /// A layout directive moves the location counter; the unit's whole text
-    /// stream is the section GNU as resolves it against.
+    /// stream is the section it resolves against.
     fn encode_layout(
         &mut self,
         item: &crate::c5::asm::AsmSectionItem,
@@ -1683,6 +1746,7 @@ impl<'a> TemplateStream<'a> {
         let resolve = |name: &str| -> Option<i64> { self.label_offset(name) };
         let resolved = crate::c5::asm::resolve_align_item(item, &resolve)?;
         let item = resolved.as_ref().unwrap_or(item);
+        let at = out.code.len();
         let n = crate::c5::asm::push_a64_stream_layout(
             item,
             out.code,
@@ -1690,6 +1754,7 @@ impl<'a> TemplateStream<'a> {
             &resolve,
             &|i| ops.const_of(i),
         )?;
+        describe_fill(out.code, at, out.text_data_ranges);
         *out.text_align = (*out.text_align).max(n as usize);
         self.map_state = crate::c5::asm::step_map_state(item, self.map_state, true);
         Ok(())
@@ -1784,7 +1849,7 @@ impl<'a> TemplateStream<'a> {
                 ));
             }
             self.goto_sites.push((out.code.len(), kind, k as usize));
-            emit(out.code, 0);
+            emit(out.code, super::encode::UDF);
             return Ok(());
         }
         if let Some(&AsmOpndA64::Here(off)) = insn.operands.last() {
@@ -1807,7 +1872,7 @@ impl<'a> TemplateStream<'a> {
             unreachable!("guard admits Label, Here or GotoLabel; the first two handled above");
         };
         self.label_fixups.push((out.code.len(), kind, num, forward));
-        emit(out.code, 0);
+        emit(out.code, super::encode::UDF);
         Ok(())
     }
 
@@ -1821,7 +1886,7 @@ impl<'a> TemplateStream<'a> {
         out: &mut AsmSink,
     ) -> Result<(), alloc::string::String> {
         use super::asm::AsmOpndA64;
-        use super::table::{self, Opnd};
+        use super::table::Opnd;
         let mut table_ops: Vec<Opnd> = Vec::new();
         let mut pending: Option<(usize, alloc::string::String)> = None;
         for o in &insn.operands {
@@ -1838,7 +1903,7 @@ impl<'a> TemplateStream<'a> {
             table_ops.push(ops.conv(o)?);
         }
         let site = out.code.len();
-        emit(out.code, table::encode(&insn.mnemonic, &table_ops)?);
+        super::encode::emit_table(out.code, &insn.mnemonic, &table_ops)?;
         if let Some((idx, expr)) = pending {
             self.insn_expr_fixups
                 .push((site, insn.mnemonic.clone(), table_ops, idx, expr));
@@ -1849,7 +1914,7 @@ impl<'a> TemplateStream<'a> {
     /// Settle the deferred expression fields and words: the layout is
     /// final, so a forward reference now has its definition.
     fn settle_expr_fixups(&self, out: &mut AsmSink) -> Result<(), alloc::string::String> {
-        use super::table::{self, Opnd};
+        use super::table::Opnd;
         for (site, at, width, expr) in &self.expr_fixups {
             let Some(v) = self.expr_value(expr, *site) else {
                 return Err(alloc::format!(
@@ -1866,8 +1931,7 @@ impl<'a> TemplateStream<'a> {
             };
             let mut ops = ops.clone();
             ops[*idx] = Opnd::Imm(v);
-            let word = table::encode(mnemonic, &ops)?;
-            out.code[*site..*site + 4].copy_from_slice(&word.to_le_bytes());
+            super::encode::patch_table(out.code, *site, mnemonic, &ops)?;
         }
         Ok(())
     }
@@ -1922,13 +1986,13 @@ impl<'a> TemplateStream<'a> {
             } else {
                 label_branch_word(kind, delta)?
             };
-            out.code[site..site + 4].copy_from_slice(&word.to_le_bytes());
+            patch(out.code, site, word);
         }
         Ok(pending_xsec)
     }
 
     /// A named label defined in the main stream is a definition of the
-    /// unit, as under GNU as: the writers emit a `.text` symbol for it. `.L`
+    /// unit: the writers emit a `.text` symbol for it. `.L`
     /// names are assembler-local.
     fn record_named_labels(
         &self,
@@ -1946,7 +2010,7 @@ impl<'a> TemplateStream<'a> {
                 continue;
             }
             let symbol = crate::c5::asm::asm_symbol_name(format, name).into_owned();
-            // One definition per name across the unit, as in GNU as.
+            // One definition per name across the unit.
             if out.asm_text_labels.iter().any(|l| l.name == symbol) {
                 return Err(alloc::format!(
                     "inline asm: symbol `{name}` is already defined"
@@ -2042,9 +2106,25 @@ fn encode_movw_abs(
     }
     let word =
         a64_movw_placeholder(rd, is64, movk, *group).map_err(|m| alloc::format!("aarch64 {m}"))?;
-    let word = super::patch::movw_const_word(word, *group, *signed, *check, v)
+    let word = super::patch::movw_const_word(word.word, *group, *signed, *check, v)
         .map_err(|m| alloc::format!("aarch64 inline asm: {m}"))?;
-    emit(out.code, word);
+    // The group of `v`, or of its complement where `movn` sets the rest.
+    let negate = *signed && v < 0;
+    let imm = (if negate { !v } else { v } >> (16 * u32::from(*group))) & 0xFFFF;
+    let mnem = match (movk, negate) {
+        (true, _) => "movk",
+        (false, true) => "movn",
+        (false, false) => "movz",
+    };
+    let shift = 16 * u32::from(*group);
+    emit(
+        out.code,
+        insn!(
+            word,
+            mnem,
+            [text::r(Reg(rd), is64), text::imm(imm), text::lsl(shift)]
+        ),
+    );
     Ok(true)
 }
 
@@ -2076,8 +2156,10 @@ fn encode_sym_operand(
     };
     let name = crate::c5::asm::asm_symbol_name(syms.format, &name).into_owned();
     let target = match syms.data_sym_offsets.get(name.as_str()) {
-        Some(&off) => crate::c5::asm::AsmSectionTarget::Data(off as u64),
-        None => crate::c5::asm::AsmSectionTarget::Symbol(name),
+        Some(&off) if !kind.names_own_symbol() => {
+            crate::c5::asm::AsmSectionTarget::Data(off as u64)
+        }
+        _ => crate::c5::asm::AsmSectionTarget::Symbol(name),
     };
     out.asm_sym_fixups.push(super::AsmSymFixup {
         instr_offset: out.code.len(),
@@ -2166,7 +2248,7 @@ fn materialize_sections(
             ));
         };
         let (word, rkind) = a64_label_branch_reloc(&kind)?;
-        out.code[site..site + 4].copy_from_slice(&word.to_le_bytes());
+        patch(out.code, site, word);
         out.asm_section_text_refs.push(super::AsmSectionTextRef {
             instr_offset: site,
             section_index: d.section_index,
@@ -2208,7 +2290,8 @@ fn emit_goto_exits(
     }
     if tramp_ks.iter().any(|&k| ctx.row[1 + k] != ctx.row[0]) {
         let skip_site = out.code.len();
-        emit(out.code, 0); // b over the trampolines, patched below
+        // A `b` over the trampolines, its displacement patched below.
+        emit(out.code, super::encode::enc_b(0));
         for &k in &tramp_ks {
             if ctx.row[1 + k] == ctx.row[0] || tramp_at[k].is_some() {
                 continue;
@@ -2224,8 +2307,7 @@ fn emit_goto_exits(
             emit(out.code, super::encode::enc_b(0));
         }
         let words = ((out.code.len() - skip_site) / 4) as i32;
-        let word = super::encode::enc_b(words);
-        out.code[skip_site..skip_site + 4].copy_from_slice(&word.to_le_bytes());
+        patch(out.code, skip_site, super::encode::enc_b(words));
     }
     for &(site, ref kind, k) in &stream.goto_sites {
         if size == 0 {
@@ -2238,7 +2320,7 @@ fn emit_goto_exits(
         }
         let target = tramp_at[k].unwrap_or(exit_start);
         let word = label_branch_word(kind, target as i64 - site as i64)?;
-        out.code[site..site + 4].copy_from_slice(&word.to_le_bytes());
+        patch(out.code, site, word);
     }
     // Each out-of-line replacement `%lK` branch is recorded for the
     // placement pass, where the region base is known.
@@ -2319,6 +2401,11 @@ pub(super) fn emit_inline_asm_aarch64(
     text_map_state: &mut Option<super::super::map_syms::MapClass>,
     asm_text_labels: &mut Vec<super::AsmTextLabel>,
     asm_section_text_refs: &mut Vec<super::AsmSectionTextRef>,
+    asm_warnings: &mut Vec<(
+        super::super::ir::ValueId,
+        crate::c5::diag::Code,
+        alloc::string::String,
+    )>,
     goto_ctx: Option<AsmGotoCtxA64<'_>>,
 ) -> Emit {
     // A statement that lowers to nothing needs no staging;
@@ -2343,6 +2430,7 @@ pub(super) fn emit_inline_asm_aarch64(
         text_align,
         asm_text_labels,
         asm_section_text_refs,
+        asm_warnings,
     };
     let syms = AsmSymbols {
         name2entpc,
@@ -2403,7 +2491,12 @@ fn lower_inline_asm(
         outs,
     };
     let gas = crate::c5::asm::expand_asm_gas_macros(&text, 4, &|tok| ops.gas_subst(tok))?;
-    let text = gas.as_deref().unwrap_or(&text);
+    (out.asm_warnings).extend(
+        gas.warnings
+            .into_iter()
+            .map(|w| (site, crate::c5::diag::Code::ASM_WARNING, w)),
+    );
+    let text = gas.text.as_deref().unwrap_or(&text);
     // The section blocks and the deferred region look a numeric label up by
     // number, so a label defined twice (two chained replacement sequences)
     // is numbered apart by position first.
@@ -2468,6 +2561,7 @@ fn lower_inline_asm(
         None
     } else {
         let (region, gotos) = encode_deferred_asm_region(
+            out.code.probe(),
             &deferred_text,
             &|o| ops.conv(o),
             &|name| stream.main_label_off(name),
@@ -2500,6 +2594,8 @@ fn lower_inline_asm(
             syms,
             &goto_block,
         )?;
+        let warnings = core::mem::take(&mut out.asm_sections.warnings);
+        (out.asm_warnings).extend(warnings.into_iter().map(|w| (site, w.code, w.text)));
     }
     // The fall-through exit: outputs are stored on every exit path (GCC 11
     // output semantics), so the sequence repeats on each goto trampoline.
@@ -2703,6 +2799,7 @@ pub(super) fn encode_a64_asm_section_code(
     a64_for_each_section_item_mut(blocks, &mut |key, site, line, item| {
         crate::c5::asm::encode_code_item(item, line, &mut errors, |text| {
             encode_a64_section_insn(text, key, site, measured.as_ref(), conv, goto_block)
+                .map(Into::into)
         });
     });
     crate::c5::asm::AsmErrors::check(errors)
@@ -2757,7 +2854,7 @@ fn encode_a64_section_insn(
                 target: crate::c5::asm::AsmSectionTarget::TextBlock(bid),
                 addend: 0,
             });
-            bytes.extend_from_slice(&word.to_le_bytes());
+            bytes.extend_from_slice(&word.word.to_le_bytes());
             continue;
         }
         if let Some((word, kind, expr)) = encode_a64_sym_insn(insn, conv)? {
@@ -2775,7 +2872,7 @@ fn encode_a64_section_insn(
                     addend: 0,
                 });
             }
-            bytes.extend_from_slice(&word.to_le_bytes());
+            bytes.extend_from_slice(&word.word.to_le_bytes());
             continue;
         }
         let mut ops: Vec<Opnd> = Vec::with_capacity(insn.operands.len());
@@ -2884,7 +2981,7 @@ fn a64_insn_placeholder_len(i: &super::asm::AsmInsnA64) -> usize {
 }
 
 /// Replace each operand the section layout values with its constant, so
-/// the encoder selects the form from the value as GNU as does; `here` is
+/// the encoder selects the form from the value; `here` is
 /// the instruction's section offset.
 fn fold_a64_layout_operands(
     insn: &mut super::asm::AsmInsnA64,
@@ -2911,24 +3008,34 @@ fn fold_a64_layout_operands(
 
 /// The `movz` / `movk` word an `:abs_gN:` operand relocates: zero
 /// immediate, the group's shift. A 32-bit destination admits only the
-/// two groups that fit it, as GNU as does.
+/// two groups that fit it.
 fn a64_movw_placeholder(
     rd: u8,
     is64: bool,
     movk: bool,
     group: u8,
-) -> Result<u32, alloc::string::String> {
+) -> Result<Insn, alloc::string::String> {
     if !is64 && group > 1 {
         return Err(alloc::format!(
             "inline asm: `:abs_g{group}` is not allowed for a 32-bit register"
         ));
     }
     let word = if movk {
-        super::encode::enc_movk(super::Reg(rd), 0, group)
+        super::encode::enc_movk(super::Reg(rd), 0, group).word
     } else {
-        super::encode::enc_movz(super::Reg(rd), 0, group)
+        super::encode::enc_movz(super::Reg(rd), 0, group).word
     };
-    Ok(if is64 { word } else { word & !(1 << 31) })
+    let word = if is64 { word } else { word & !(1 << 31) };
+    let field = text::Op::At(crate::c5::codegen::listing::A64Field::Imm16, 0);
+    Ok(insn!(
+        word,
+        if movk { "movk" } else { "movz" },
+        [
+            text::r(super::Reg(rd), is64),
+            field,
+            text::lsl(16 * u32::from(group)),
+        ]
+    ))
 }
 
 /// The register shape of `o` after operand-reference resolution, for
@@ -2958,8 +3065,10 @@ fn concrete_reg_shape(
 fn encode_a64_sym_insn(
     insn: &super::asm::AsmInsnA64,
     conv: &dyn Fn(&super::asm::AsmOpndA64) -> Result<super::table::Opnd, alloc::string::String>,
-) -> Result<Option<(u32, crate::c5::asm::AsmRelocKind, alloc::string::String)>, alloc::string::String>
-{
+) -> Result<
+    Option<(Insn, crate::c5::asm::AsmRelocKind, alloc::string::String)>,
+    alloc::string::String,
+> {
     use super::asm::AsmOpndA64;
     use super::table::Opnd;
     use crate::c5::asm::AsmRelocKind as K;
@@ -2980,9 +3089,15 @@ fn encode_a64_sym_insn(
     }
     // A load/store whose immediate is `:lo12:sym`: encode with a zero
     // offset; the access size names the LDST reloc width.
-    if let Some(AsmOpndA64::MemSymLo12 { base, expr }) = insn.operands.last() {
+    if let Some(AsmOpndA64::MemSymLo12 { base, expr, got }) = insn.operands.last() {
         let rt = insn.operands.first().map(|o| concrete_reg_shape(o, conv));
         let size = a64_access_size(&insn.mnemonic, rt.as_ref())?;
+        // A GOT slot holds a 64-bit address (LP64), which only `ldr Xt` reads.
+        if *got && (insn.mnemonic != "ldr" || size != 8 || insn.operands.len() != 2) {
+            return Err(alloc::string::String::from(
+                "inline asm: `:got_lo12:` operand outside `ldr Xt, [Xn, :got_lo12:sym]`",
+            ));
+        }
         let mut ops: Vec<Opnd> = Vec::with_capacity(insn.operands.len());
         for o in &insn.operands[..insn.operands.len() - 1] {
             ops.push(conv(o)?);
@@ -2993,7 +3108,28 @@ fn encode_a64_sym_insn(
             pre: false,
         })?);
         let word = super::table::encode(&insn.mnemonic, &ops)?;
-        return Ok(Some((word, K::A64LdstLo12(size), expr.clone())));
+        let kind = if *got {
+            K::A64GotLo12
+        } else {
+            K::A64LdstLo12(size)
+        };
+        // The offset field the relocation fills reads in the memory operand;
+        // `a64_access_size` admits the one-register forms alone.
+        let (rt, base, scale) = match ops[..] {
+            [rt, Opnd::Mem { base, .. }] => (rt, base, size.trailing_zeros() as u8),
+            _ => {
+                return Err(alloc::string::String::from(
+                    "inline asm: `:lo12:` load/store takes one register",
+                ));
+            }
+        };
+        let mnem = ldst_mnemonic(&insn.mnemonic);
+        let insn = insn!(
+            word,
+            mnem,
+            [text::Op::T(rt), text::mem_lo12(super::Reg(base), scale)]
+        );
+        return Ok(Some((insn, kind, expr.clone())));
     }
     // A numeric-label reference (`b 1b`) is carried as a symbol reference
     // and resolves at materialize time; `.`-relative branches encode
@@ -3017,6 +3153,12 @@ fn encode_a64_sym_insn(
     };
     match spec {
         super::asm::SymSpec::Addr => {}
+        super::asm::SymSpec::Got if insn.mnemonic == "adrp" => {}
+        super::asm::SymSpec::Got => {
+            return Err(alloc::string::String::from(
+                "inline asm: `:got:` operand outside `adrp`",
+            ));
+        }
         super::asm::SymSpec::Lo12 => {
             // `add Rd, Rn, :lo12:sym`.
             if insn.mnemonic != "add" || insn.operands.len() != 3 {
@@ -3088,9 +3230,14 @@ fn encode_a64_sym_insn(
                     ));
                 }
             };
+            let kind = if spec == super::asm::SymSpec::Got {
+                K::A64GotPage21
+            } else {
+                K::A64AdrpPage21
+            };
             Ok(Some((
                 super::encode::enc_adrp(super::Reg(rd), 0),
-                K::A64AdrpPage21,
+                kind,
                 name.clone(),
             )))
         }
@@ -3102,6 +3249,9 @@ fn encode_a64_sym_insn(
                     "inline asm: `ldr` literal needs a register destination",
                 )
             })?;
+            let rt = conv(&insn.operands[0])?;
+            let mnem = ldst_mnemonic(&insn.mnemonic);
+            let word = insn!(word, mnem, [text::Op::T(rt), text::target(5, 19)]);
             Ok(Some((word, K::A64LdrLit19, name.clone())))
         }
         _ => {
@@ -3118,7 +3268,7 @@ fn encode_a64_sym_insn(
 /// displacement field.
 fn a64_label_branch_reloc(
     kind: &LabelBranch,
-) -> Result<(u32, crate::c5::asm::AsmRelocKind), alloc::string::String> {
+) -> Result<(Insn, crate::c5::asm::AsmRelocKind), alloc::string::String> {
     use crate::c5::asm::AsmRelocKind as K;
     Ok(match *kind {
         LabelBranch::B => (label_branch_word(kind, 0)?, K::A64Branch26 { link: false }),
@@ -3135,7 +3285,7 @@ fn a64_label_branch_reloc(
 /// `ldr Rt, =value` takes an entry of its section and subsection's
 /// pending pool (shared with an earlier request of the same width and
 /// value) and becomes a literal load of the entry's label; `.ltorg` and
-/// the end of the subsection's content flush, as under GNU as.
+/// the end of the subsection's content flush.
 fn assign_a64_literal_pools(
     blocks: &mut [crate::c5::asm::AsmSectionBlock],
     errors: &mut Vec<crate::c5::asm::AsmError>,
@@ -3234,8 +3384,8 @@ fn a64_pool_request(
 }
 
 /// The value a `ldr Rt, =value` deposits: a constant truncated to the entry
-/// width, or a link-time address the entry relocates to. GNU as has no
-/// 16-byte relocation, so only the 4- and 8-byte entries take a symbol.
+/// width, or a link-time address the entry relocates to. AAELF64 has no
+/// 16-byte data relocation, so only the 4- and 8-byte entries take a symbol.
 fn a64_pool_value(
     expr: &str,
     size: u8,
@@ -3290,6 +3440,21 @@ fn a64_ldr_literal_word(mnem: &str, rt: &super::asm::AsmOpndA64) -> Option<(u32,
 
 /// The access size in bytes of a load/store mnemonic, from the mnemonic's
 /// width suffix or the register operand's class.
+/// The `'static` spelling of a single-register load or store mnemonic.
+fn ldst_mnemonic(mnem: &str) -> &'static str {
+    match mnem {
+        "ldrb" => "ldrb",
+        "strb" => "strb",
+        "ldrsb" => "ldrsb",
+        "ldrh" => "ldrh",
+        "strh" => "strh",
+        "ldrsh" => "ldrsh",
+        "ldrsw" => "ldrsw",
+        "str" => "str",
+        _ => "ldr",
+    }
+}
+
 fn a64_access_size(
     mnem: &str,
     rt: Option<&super::asm::AsmOpndA64>,

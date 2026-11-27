@@ -3,7 +3,7 @@ tentative_array_definition.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -23,10 +23,10 @@ Disassembly of section .text:
                	mov	x29, sp
                	mov	x0, #0x0                // =0
                	adrp	x1, <addr>
-               	mov	x2, #0x1                // =1
                	ldrb	w1, [x1]
                	cmp	w1, #0x0
-               	csel	x1, x2, x0, ne
+               	mov	x16, #0x1               // =1
+               	csel	x1, x16, x0, ne
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	ldrb	w3, [x2]

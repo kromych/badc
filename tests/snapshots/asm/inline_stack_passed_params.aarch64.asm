@@ -3,7 +3,7 @@ inline_stack_passed_params.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -18,19 +18,18 @@ Disassembly of section .text:
                	mov	x29, sp
                	sxth	x4, w4
                	sxtb	x6, w6
-               	and	x5, x5, #0xff
-               	ldrsw	x8, [x29, #0x10]
-               	ldr	x9, [x29, #0x18]
-               	ldr	x10, [x29, #0x20]
-               	adrp	x11, <page>
-               	ldrsw	x11, [x11, #0xc]
-               	cmp	w0, w11
+               	and	x8, x5, #0xff
+               	ldrsw	x9, [x29, #0x10]
+               	ldr	x10, [x29, #0x18]
+               	ldr	x11, [x29, #0x20]
+               	adrp	x5, <page>
+               	ldrsw	x5, [x5, #0xc]
+               	cmp	w0, w5
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	mov	x1, #0x0                // =0
-               	add	x2, x0, #0x14
+               	add	x1, x0, #0x14
                	cmp	w0, #0x0
-               	csel	x0, x2, x1, ne
+               	csel	x0, x1, xzr, ne
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
@@ -59,7 +58,7 @@ Disassembly of section .text:
                	b	<addr>
                	adrp	x0, <page>
                	ldrb	w0, [x0, #0x26]
-               	cmp	w5, w0
+               	cmp	w8, w0
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	b	<addr>
@@ -78,19 +77,19 @@ Disassembly of section .text:
                	b	<addr>
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x2c]
-               	cmp	w8, w0
+               	cmp	w9, w0
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	b	<addr>
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
-               	cmp	x9, x0
+               	cmp	x10, x0
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
                	b	<addr>
                	adrp	x0, <page>
                	ldr	w0, [x0, #0x38]
-               	cmp	w10, w0
+               	cmp	w11, w0
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
                	b	<addr>
@@ -110,6 +109,17 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	adrp	x0, <page>
+               	ldr	x9, [x0, #0x40]
+               	mov	x16, #0x9               // =9
+               	str	x16, [sp]
+               	mov	x16, #-0xa              // =-10
+               	str	x16, [sp, #0x8]
+               	mov	x16, #0xdef0            // =57072
+               	movk	x16, #0x9abc, lsl #16
+               	movk	x16, #0x5678, lsl #32
+               	movk	x16, #0x1234, lsl #48
+               	str	x16, [sp, #0x10]
                	mov	x0, #0x1                // =1
                	mov	x1, #-0x2               // =-2
                	mov	x2, #0x7788             // =30600
@@ -124,17 +134,6 @@ Disassembly of section .text:
                	mov	x7, #0xea60             // =60000
                	movk	x7, #0x1111, lsl #16
                	movk	x7, #0x1111, lsl #32
-               	adrp	x8, <page>
-               	ldr	x9, [x8, #0x40]
-               	mov	x16, #0x9               // =9
-               	str	x16, [sp]
-               	mov	x16, #-0xa              // =-10
-               	str	x16, [sp, #0x8]
-               	mov	x16, #0xdef0            // =57072
-               	movk	x16, #0x9abc, lsl #16
-               	movk	x16, #0x5678, lsl #32
-               	movk	x16, #0x1234, lsl #48
-               	str	x16, [sp, #0x10]
                	blr	x9
                	cbz	w0, <addr>
                	add	sp, sp, #0x20

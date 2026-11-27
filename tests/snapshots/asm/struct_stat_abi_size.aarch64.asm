@@ -3,7 +3,7 @@ struct_stat_abi_size.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -34,10 +34,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0xb0]
                	ldr	x20, [sp], #0xc0
                	ret
+               	mov	x0, x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x2, #0x10               // =16
-               	mov	x0, x20
                	bl	<addr>
                	cmp	x0, #0x10
                	b.eq	<addr>
@@ -47,7 +47,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0xb0]
                	ldr	x20, [sp], #0xc0
                	ret
-               	sub	x1, x29, #0x80
                	stur	xzr, [x29, #-0x80]
                	stur	xzr, [x29, #-0x78]
                	stur	xzr, [x29, #-0x70]
@@ -65,6 +64,7 @@ Disassembly of section .text:
                	stur	xzr, [x29, #-0x10]
                	stur	xzr, [x29, #-0x8]
                	mov	x0, x20
+               	sub	x1, x29, #0x80
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>

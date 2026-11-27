@@ -54,13 +54,8 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
         names: Vec<String>,
         read: Option<badc::LdsObject>,
     }
-    let defined_names = |o: &badc::LdsObject| -> Vec<String> {
-        o.symbols
-            .iter()
-            .filter(|s| (s.info >> 4) != 0 && s.shndx != 0 && !s.name.is_empty())
-            .map(|s| s.name.clone())
-            .collect()
-    };
+    let defined_names =
+        |o: &badc::LdsObject| -> Vec<String> { o.defined_globals().map(String::from).collect() };
     let mut slots: Vec<Slot> = Vec::new();
     let mut have_lazy = false;
     for input in &inputs {
@@ -133,21 +128,19 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
     }
     if have_lazy {
         let mut defined: std::collections::HashSet<String> = std::collections::HashSet::new();
-        let mut undefined: std::collections::HashSet<String> = std::collections::HashSet::new();
+        // `-u` names a reference ahead of every input.
+        let mut undefined: std::collections::HashSet<String> =
+            cli.link.required.iter().cloned().collect();
         let account = |o: &badc::LdsObject,
                        defined: &mut std::collections::HashSet<String>,
                        undefined: &mut std::collections::HashSet<String>| {
-            for s in &o.symbols {
-                if s.name.is_empty() || (s.info >> 4) == 0 {
-                    continue;
-                }
-                if s.shndx == 0 {
-                    if !defined.contains(&s.name) {
-                        undefined.insert(s.name.clone());
-                    }
-                } else {
-                    undefined.remove(&s.name);
-                    defined.insert(s.name.clone());
+            for name in o.defined_globals() {
+                undefined.remove(name);
+                defined.insert(name.to_string());
+            }
+            for name in o.strong_undefs() {
+                if !defined.contains(name) {
+                    undefined.insert(name.to_string());
                 }
             }
         };
@@ -211,7 +204,7 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
         },
         shared,
         entry_override: cli.link.entry.clone(),
-        // GNU ld defaults: 2 MiB on x86-64, 64 KiB on aarch64, 4 KiB
+        // The defaults: 2 MiB on x86-64, 64 KiB on aarch64, 4 KiB
         // on i386; `-z max-page-size=` replaces it below.
         max_page_size: match machine {
             183 => 0x10000,
@@ -237,6 +230,7 @@ pub(crate) fn run_script_link(cli: &Cli, script: &std::path::Path, inputs: Vec<L
         output_name: (out.file_name())
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_default(),
+        undefined: cli.link.required.clone(),
         ..Default::default()
     };
     // `refuse_link_options` asked the same table before the link began.

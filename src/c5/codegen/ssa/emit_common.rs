@@ -5,6 +5,7 @@
 //! (`x86_64/emit.rs`, `aarch64/emit.rs`) don't carry parallel
 //! copies. The assembler this file used to hold is `c5::asm`.
 
+use super::code_buf::CodeBuf;
 use super::sve_alloc::PredPlace;
 use crate::c5::diag::{Code, Diagnostic, Sink};
 
@@ -17,6 +18,42 @@ use crate::c5::diag::{Code, Diagnostic, Sink};
 /// `fn_unwind`, aarch64 `macho_tlv_*` -- stays a separate argument, so this
 /// type is non-generic. Holds `&mut` field references so a per-function caller
 /// constructs it from its own output vectors; grows as more helpers adopt it.
+impl EmitCtx<'_> {
+    /// The relocations of the addresses a lowering set from their encoding
+    /// ([`super::code_buf::CodeBuf::note_address`]): a data address against
+    /// the unit's data, or by name when it is another unit's object, as an
+    /// `Inst::ImmData` is; a code address against its function.
+    pub(crate) fn record_addresses(
+        &mut self,
+        names: &alloc::collections::BTreeMap<u32, alloc::string::String>,
+    ) {
+        use super::reg_alloc::ArgSet;
+        for (instr_offset, v, address) in self.code.take_addresses() {
+            match address {
+                ArgSet::Data(_) if let Some(name) = names.get(&v) => {
+                    self.user_extern_data_refs.push(super::UserExternDataRef {
+                        instr_offset,
+                        symbol_name: name.clone(),
+                        direct_pcrel: None,
+                        import_slot: false,
+                    });
+                    self.code.name_at(instr_offset, || {
+                        crate::c5::codegen::listing::Operand::Name(name.clone())
+                    });
+                }
+                ArgSet::Data(off) => self.data_fixups.push(super::DataFixup {
+                    instr_offset,
+                    data_offset: off as u64,
+                    addend: 0,
+                    part: super::AddrPart::Whole,
+                }),
+                ArgSet::Code(pc) => self.pending_func_fixups.push((instr_offset, pc)),
+                ArgSet::Imm(_) | ArgSet::Local(_) => {}
+            }
+        }
+    }
+}
+
 pub(crate) struct EmitCtx<'a> {
     pub(crate) code: &'a mut super::code_buf::CodeBuf,
     pub(crate) plt_call_fixups: &'a mut alloc::vec::Vec<super::PltCallFixup>,
@@ -58,10 +95,14 @@ pub(crate) struct EmitCtx<'a> {
     /// by `ent_pc`, region by region. What `-Wframe-larger-than=` is
     /// measured against.
     pub(crate) frame_stack: &'a mut alloc::collections::BTreeMap<usize, FrameStack>,
+    /// The warnings an inline-asm statement's assembly raised, by its
+    /// instruction index, for the function being lowered.
+    pub(crate) asm_warnings:
+        &'a mut alloc::vec::Vec<(super::super::ir::ValueId, Code, alloc::string::String)>,
     /// Frame-base-relative offset of each parameter's memory home, by
     /// `ent_pc`; the debug-info emitter places the formal parameters with it.
     pub(crate) param_frame_offsets:
-        &'a mut alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
+        &'a mut alloc::collections::BTreeMap<usize, alloc::vec::Vec<Option<i64>>>,
     /// Where each over-aligned region member's storage is, by `ent_pc`
     /// (`Build::region_frame_offsets`).
     pub(crate) region_frame_offsets:
@@ -349,6 +390,12 @@ pub(crate) fn compute_frame_base(
         }
         asm_locals(func, i, &mut note);
     }
+    // A local address the calls reading it set is reached at the calls.
+    for set in alloc.call_set.values() {
+        if let super::reg_alloc::ArgSet::Local(off) = *set {
+            note(off);
+        }
+    }
     FrameBase {
         locals: if local {
             slots16(func.locals.max(0) as u32)
@@ -599,22 +646,16 @@ pub(crate) trait EmitBackend {
     const ARCH: &'static str;
 
     /// Copy one FP/vector register to another (`dst <- src`).
-    fn fp_reg_mov(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8);
+    fn fp_reg_mov(&self, code: &mut CodeBuf, dst: u8, src: u8);
     /// Store FP register `src` to spill slot `slot`.
-    fn fp_spill_store(
-        &self,
-        code: &mut alloc::vec::Vec<u8>,
-        frame: Self::Frame,
-        slot: u32,
-        src: u8,
-    );
+    fn fp_spill_store(&self, code: &mut CodeBuf, frame: Self::Frame, slot: u32, src: u8);
     /// Load FP register `dst` from spill slot `slot`.
-    fn fp_spill_load(&self, code: &mut alloc::vec::Vec<u8>, frame: Self::Frame, slot: u32, dst: u8);
+    fn fp_spill_load(&self, code: &mut CodeBuf, frame: Self::Frame, slot: u32, dst: u8);
     /// The FP transfers and constant load above, of a 256- or 512-bit
     /// value; only x86-64 under AVX and AVX-512 has values that wide.
     fn wide_reg_mov(
         &self,
-        _code: &mut alloc::vec::Vec<u8>,
+        _code: &mut CodeBuf,
         _w: super::reg_alloc::VecWidth,
         _dst: u8,
         _src: u8,
@@ -623,7 +664,7 @@ pub(crate) trait EmitBackend {
     }
     fn wide_spill_store(
         &self,
-        _code: &mut alloc::vec::Vec<u8>,
+        _code: &mut CodeBuf,
         _frame: Self::Frame,
         _w: super::reg_alloc::VecWidth,
         _slot: u32,
@@ -633,7 +674,7 @@ pub(crate) trait EmitBackend {
     }
     fn wide_spill_load(
         &self,
-        _code: &mut alloc::vec::Vec<u8>,
+        _code: &mut CodeBuf,
         _frame: Self::Frame,
         _w: super::reg_alloc::VecWidth,
         _slot: u32,
@@ -641,14 +682,14 @@ pub(crate) trait EmitBackend {
     ) {
         unreachable!("{}: no 256-bit values", Self::ARCH)
     }
-    fn wide_load_const(&self, _code: &mut alloc::vec::Vec<u8>, _dst: u8, _scratch: u8, _bits: i64) {
+    fn wide_load_const(&self, _code: &mut CodeBuf, _dst: u8, _scratch: u8, _bits: i64) {
         unreachable!("{}: no 256-bit values", Self::ARCH)
     }
     /// Sequentialize the parallel SVE predicate moves of a phi edge; only
     /// AArch64 has the predicate file.
     fn pred_place_moves(
         &self,
-        _code: &mut alloc::vec::Vec<u8>,
+        _code: &mut CodeBuf,
         _frame: Self::Frame,
         moves: &mut alloc::vec::Vec<(PredPlace, PredPlace)>,
     ) -> Emit {
@@ -660,57 +701,26 @@ pub(crate) trait EmitBackend {
         Err(Unsupported::new(reason))
     }
     /// The three FP transfers above, of all 128 bits of a SIMD register.
-    fn v128_reg_mov(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8);
-    fn v128_spill_store(
-        &self,
-        code: &mut alloc::vec::Vec<u8>,
-        frame: Self::Frame,
-        slot: u32,
-        src: u8,
-    );
-    fn v128_spill_load(
-        &self,
-        code: &mut alloc::vec::Vec<u8>,
-        frame: Self::Frame,
-        slot: u32,
-        dst: u8,
-    );
+    fn v128_reg_mov(&self, code: &mut CodeBuf, dst: u8, src: u8);
+    fn v128_spill_store(&self, code: &mut CodeBuf, frame: Self::Frame, slot: u32, src: u8);
+    fn v128_spill_load(&self, code: &mut CodeBuf, frame: Self::Frame, slot: u32, dst: u8);
     /// Copy one integer register to another (`dst <- src`).
-    fn int_reg_mov(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8);
+    fn int_reg_mov(&self, code: &mut CodeBuf, dst: u8, src: u8);
     /// `dst <- src` sign-extended from the width of `kind` (`I8` / `I16` / `I32`).
-    fn int_reg_ext(
-        &self,
-        code: &mut alloc::vec::Vec<u8>,
-        dst: u8,
-        src: u8,
-        kind: super::super::ir::LoadKind,
-    );
+    fn int_reg_ext(&self, code: &mut CodeBuf, dst: u8, src: u8, kind: super::super::ir::LoadKind);
     /// Exchange two integer registers. `false`, with nothing emitted, where
     /// the target has no such instruction.
-    fn int_reg_xchg(&self, code: &mut alloc::vec::Vec<u8>, a: u8, b: u8) -> bool;
+    fn int_reg_xchg(&self, code: &mut CodeBuf, a: u8, b: u8) -> bool;
     /// Store integer register `src` to spill slot `slot`; `base` is a free
     /// scratch a backend may use to form an out-of-reach slot address.
-    fn int_spill_store(
-        &self,
-        code: &mut alloc::vec::Vec<u8>,
-        frame: Self::Frame,
-        slot: u32,
-        src: u8,
-        base: u8,
-    );
+    fn int_spill_store(&self, code: &mut CodeBuf, frame: Self::Frame, slot: u32, src: u8, base: u8);
     /// Load integer register `dst` from spill slot `slot`.
-    fn int_spill_load(
-        &self,
-        code: &mut alloc::vec::Vec<u8>,
-        frame: Self::Frame,
-        slot: u32,
-        dst: u8,
-    );
+    fn int_spill_load(&self, code: &mut CodeBuf, frame: Self::Frame, slot: u32, dst: u8);
     /// Store `stage` to spill slot `slot`; an out-of-reach slot address
     /// borrows `hold`, which may carry a cycle source, around the store.
     fn int_spill_store_staged(
         &self,
-        code: &mut alloc::vec::Vec<u8>,
+        code: &mut CodeBuf,
         frame: Self::Frame,
         slot: u32,
         stage: u8,
@@ -720,29 +730,16 @@ pub(crate) trait EmitBackend {
     /// out-of-reach slot address from a backend-internal scratch register
     /// (unlike [`int_spill_store`], the caller supplies no base). Used to write
     /// a computed result back to its spill home.
-    fn int_spill_store_auto(
-        &self,
-        code: &mut alloc::vec::Vec<u8>,
-        frame: Self::Frame,
-        slot: u32,
-        src: u8,
-    );
+    fn int_spill_store_auto(&self, code: &mut CodeBuf, frame: Self::Frame, slot: u32, src: u8);
     /// Load a raw integer immediate into integer register `dst`.
-    fn int_reg_load_imm(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, bits: i64);
+    fn int_reg_load_imm(&self, code: &mut CodeBuf, dst: u8, bits: i64);
     /// Reinterpret integer register `src`'s bits as a floating-point value in
     /// FP register `dst` (no numeric conversion): `fmov` / `movq`. `is_f64`
     /// selects the 8-byte vs 4-byte form.
-    fn fp_reg_from_int_reg(&self, code: &mut alloc::vec::Vec<u8>, dst: u8, src: u8, is_f64: bool);
+    fn fp_reg_from_int_reg(&self, code: &mut CodeBuf, dst: u8, src: u8, is_f64: bool);
     /// Write the pattern `bits` to FP register `dst`, `is_f64` as for
     /// [`Self::fp_reg_from_int_reg`]; integer register `stage` is free.
-    fn fp_reg_load_const(
-        &self,
-        code: &mut alloc::vec::Vec<u8>,
-        dst: u8,
-        stage: u8,
-        bits: i64,
-        is_f64: bool,
-    ) {
+    fn fp_reg_load_const(&self, code: &mut CodeBuf, dst: u8, stage: u8, bits: i64, is_f64: bool) {
         self.int_reg_load_imm(code, stage, bits);
         self.fp_reg_from_int_reg(code, dst, stage, is_f64);
     }
@@ -763,7 +760,7 @@ pub(crate) struct Aarch64Backend {
 /// transfers at the value's width. `stage` carries a spill-to-spill value.
 pub(crate) fn emit_fp_place_move<B: EmitBackend>(
     b: &B,
-    code: &mut alloc::vec::Vec<u8>,
+    code: &mut CodeBuf,
     src: super::reg_alloc::Place,
     dst: super::reg_alloc::Place,
     frame: B::Frame,
@@ -845,14 +842,14 @@ impl PlaceMove {
 /// value into a spill slot; `hold` backs an out-of-reach slot address.
 pub(crate) fn emit_place_move<B: EmitBackend>(
     b: &B,
-    code: &mut alloc::vec::Vec<u8>,
+    code: &mut CodeBuf,
     m: PlaceMove,
     frame: B::Frame,
     stage: u8,
     hold: u8,
 ) {
     use super::reg_alloc::Place;
-    let reg_move = |code: &mut alloc::vec::Vec<u8>, t: u8, s: u8| match m.ext {
+    let reg_move = |code: &mut CodeBuf, t: u8, s: u8| match m.ext {
         Some(kind) => b.int_reg_ext(code, t, s, kind),
         None => b.int_reg_mov(code, t, s),
     };
@@ -888,7 +885,7 @@ pub(crate) fn emit_place_move<B: EmitBackend>(
 /// [`emit_fp_place_move`] at its flag's width; `stage` backs a spill-to-spill move.
 pub(crate) fn schedule_fp_place_moves<B: EmitBackend>(
     b: &B,
-    code: &mut alloc::vec::Vec<u8>,
+    code: &mut CodeBuf,
     moves: &mut alloc::vec::Vec<(
         super::reg_alloc::Place,
         super::reg_alloc::Place,
@@ -940,7 +937,7 @@ pub(crate) fn schedule_fp_place_moves<B: EmitBackend>(
 /// copies out of its register. `hold` / `stage` lie outside the allocator's bank.
 pub(crate) fn schedule_place_moves<B: EmitBackend>(
     b: &B,
-    code: &mut alloc::vec::Vec<u8>,
+    code: &mut CodeBuf,
     moves: &mut alloc::vec::Vec<PlaceMove>,
     frame: B::Frame,
     hold: u8,
@@ -990,7 +987,7 @@ pub(crate) fn schedule_place_moves<B: EmitBackend>(
 /// the cycle applies its own conversion on the way.
 fn break_place_cycle<B: EmitBackend>(
     b: &B,
-    code: &mut alloc::vec::Vec<u8>,
+    code: &mut CodeBuf,
     moves: &mut alloc::vec::Vec<PlaceMove>,
     frame: B::Frame,
     hold: u8,
@@ -1035,7 +1032,7 @@ fn break_place_cycle<B: EmitBackend>(
 /// `dst`: a register copy (self-moves elide) or a spill-slot store.
 pub(crate) fn write_atomic_result<B: EmitBackend>(
     b: &B,
-    code: &mut alloc::vec::Vec<u8>,
+    code: &mut CodeBuf,
     dst: super::reg_alloc::Place,
     src: u8,
     frame: B::Frame,
@@ -1056,7 +1053,7 @@ pub(crate) fn write_atomic_result<B: EmitBackend>(
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
     b: &B,
-    code: &mut alloc::vec::Vec<u8>,
+    code: &mut CodeBuf,
     self_block: super::super::ir::BlockId,
     func: &super::super::ir::FunctionSsa,
     alloc: &super::reg_alloc::Allocation,
@@ -1321,10 +1318,10 @@ pub(crate) fn edge_moves(
 /// copy. Used by every move scheduler whose backend breaks cycles with a
 /// scratch register; the x86_64 integer scheduler uses `xchg` instead.
 pub(crate) fn schedule_reg_moves_via_scratch(
-    code: &mut alloc::vec::Vec<u8>,
+    code: &mut CodeBuf,
     moves: &mut alloc::vec::Vec<(u8, u8)>,
     scratch: u8,
-    mut emit_mov: impl FnMut(&mut alloc::vec::Vec<u8>, u8, u8),
+    mut emit_mov: impl FnMut(&mut CodeBuf, u8, u8),
 ) {
     moves.retain(|(s, t)| s != t);
     while !moves.is_empty() {
@@ -1489,6 +1486,35 @@ pub(crate) fn time_pass_arch<R>(_label: &str, _arch: &str, f: impl FnOnce() -> R
     f()
 }
 
+/// Under the `codegen_test` feature, print the SSA of every function after
+/// each pass whose label contains `BADC_DUMP_AFTER` (`all` matches every
+/// pass), optionally only the functions named in `BADC_DUMP_FN`.
+#[cfg(feature = "codegen_test")]
+fn dump_after_pass(funcs: &[super::super::ir::FunctionSsa], label: &str) {
+    let Ok(want) = std::env::var("BADC_DUMP_AFTER") else {
+        return;
+    };
+    if want != "all" && !label.contains(want.as_str()) {
+        return;
+    }
+    let only = std::env::var("BADC_DUMP_FN").ok();
+    for f in funcs {
+        if only
+            .as_deref()
+            .is_none_or(|n| n.split(',').any(|n| n == f.name))
+        {
+            eprintln!(
+                "; after {label}: {}\n{}",
+                f.name,
+                super::dump::dump_ssa(f, None)
+            );
+        }
+    }
+}
+
+#[cfg(not(feature = "codegen_test"))]
+fn dump_after_pass(_funcs: &[super::super::ir::FunctionSsa], _label: &str) {}
+
 /// How one lowering runs its passes: each under its timing label, and
 /// with `verify` set, followed by the SSA checks naming it.
 #[derive(Clone, Copy)]
@@ -1506,6 +1532,7 @@ impl Pipeline {
     ) -> R {
         let r = time_pass_arch(label, self.arch, || pass(funcs));
         self.check(funcs, label);
+        dump_after_pass(funcs, label);
         r
     }
 
@@ -1604,6 +1631,33 @@ pub(crate) fn protected(
     has_frame: bool,
 ) -> bool {
     !func.is_naked && !func.no_stack_protector && ssp.protects(func.ssp, has_frame)
+}
+
+/// gcc's `-Wstack-protector` note on `func` under `ssp`: a function
+/// `-fstack-protector` leaves unprotected because its character arrays are
+/// all shorter than the bound, or a variable-length buffer, which lies below
+/// the other locals and the canary.
+fn stack_protector_gap(
+    ssp: super::super::StackProtect,
+    func: &super::super::ir::FunctionSsa,
+) -> Option<alloc::string::String> {
+    use super::super::StackProtector;
+    if func.is_naked || func.no_stack_protector || ssp.mode == StackProtector::Off {
+        return None;
+    }
+    let facts = func.ssp;
+    if facts.dynamic_alloca {
+        return Some(
+            "stack protector not protecting local variables: variable length buffer".into(),
+        );
+    }
+    let short = facts.char_array_bytes > 0 && facts.char_array_bytes < ssp.buffer_size;
+    (ssp.mode == StackProtector::Basic && short).then(|| {
+        alloc::format!(
+            "stack protector not protecting function: all local arrays are less than {} bytes long",
+            ssp.buffer_size
+        )
+    })
 }
 
 /// Frame-base-relative byte offset of the canary slot: the topmost 8 bytes
@@ -2040,12 +2094,14 @@ pub(crate) fn extern_fn_targets(
             )
         })
         .collect();
+    let named_refs = crate::c5::irgen::NamedRefs::of(program);
     for (i, sym) in program.symbols.iter().enumerate() {
         if !sym.is_fun_entity() || sym.defined_here {
             continue;
         }
-        // A dllimport function is called through its import slot.
-        if sym.dllimport {
+        // A dllimport function is called through its import slot, and
+        // under `-fno-plt` one through its GOT entry.
+        if sym.dllimport || named_refs.calls_through_got(sym) {
             out.remove(&(sym.val as usize));
             continue;
         }
@@ -2109,7 +2165,7 @@ pub(crate) fn is_dead_pure(
     v: super::super::ir::ValueId,
     alloc: &super::reg_alloc::Allocation,
 ) -> bool {
-    is_dead_pure_counts(inst, v, &alloc.use_counts)
+    !(alloc.fenv_access && inst.touches_fenv()) && inst.is_pure() && read_none(v, &alloc.use_counts)
 }
 
 /// The parameter reads the entry parallel copy may place: the `ParamRef`s
@@ -2242,11 +2298,17 @@ pub(crate) fn inst_emits_nothing(
 /// it before the `Allocation` exists, when it collects the used-register
 /// sets; the two callers must agree on which values produce no code.
 pub(crate) fn is_dead_pure_counts(
+    func: &super::super::ir::FunctionSsa,
     inst: &super::super::ir::Inst,
     v: super::super::ir::ValueId,
     use_counts: &[u32],
 ) -> bool {
-    inst.is_pure() && use_counts.get(v as usize).copied().unwrap_or(0) == 0
+    func.is_pure(inst) && read_none(v, use_counts)
+}
+
+/// Nothing reads `v`.
+fn read_none(v: super::super::ir::ValueId, use_counts: &[u32]) -> bool {
+    use_counts.get(v as usize).copied().unwrap_or(0) == 0
 }
 
 /// Record the native byte offset of a block's first
@@ -2314,7 +2376,10 @@ pub(crate) struct LowerState {
     pub(crate) text_data_ranges: alloc::vec::Vec<(usize, usize)>,
     pub(crate) local_shift_bytes: alloc::collections::BTreeMap<usize, u32>,
     pub(crate) frame_stack: alloc::collections::BTreeMap<usize, FrameStack>,
-    pub(crate) param_frame_offsets: alloc::collections::BTreeMap<usize, alloc::vec::Vec<i64>>,
+    pub(crate) asm_warnings:
+        alloc::vec::Vec<(super::super::ir::ValueId, Code, alloc::string::String)>,
+    pub(crate) param_frame_offsets:
+        alloc::collections::BTreeMap<usize, alloc::vec::Vec<Option<i64>>>,
     pub(crate) region_frame_offsets:
         alloc::collections::BTreeMap<usize, alloc::collections::BTreeMap<i64, Option<i64>>>,
     /// Entry PC to code offset, `usize::MAX` for a PC with no instruction.
@@ -2323,9 +2388,9 @@ pub(crate) struct LowerState {
 }
 
 impl LowerState {
-    fn new() -> Self {
+    fn new(listing: bool) -> Self {
         Self {
-            code: super::code_buf::CodeBuf::default(),
+            code: super::code_buf::CodeBuf::listed(listing),
             func_ent_pcs: alloc::vec::Vec::new(),
             func_ends: alloc::vec::Vec::new(),
             patchable_entries: alloc::vec::Vec::new(),
@@ -2354,6 +2419,7 @@ impl LowerState {
             text_data_ranges: alloc::vec::Vec::new(),
             local_shift_bytes: alloc::collections::BTreeMap::new(),
             frame_stack: alloc::collections::BTreeMap::new(),
+            asm_warnings: alloc::vec::Vec::new(),
             param_frame_offsets: alloc::collections::BTreeMap::new(),
             region_frame_offsets: alloc::collections::BTreeMap::new(),
             pc_to_native: alloc::vec::Vec::new(),
@@ -2384,6 +2450,7 @@ impl LowerState {
                 text_data_ranges: &mut self.text_data_ranges,
                 local_shift_bytes: &mut self.local_shift_bytes,
                 frame_stack: &mut self.frame_stack,
+                asm_warnings: &mut self.asm_warnings,
                 param_frame_offsets: &mut self.param_frame_offsets,
                 region_frame_offsets: &mut self.region_frame_offsets,
                 mcount_sites: &mut self.mcount_sites,
@@ -2479,11 +2546,12 @@ pub(crate) trait LowerTarget {
     ) {
     }
 
-    /// Bring the code stream to the next function's entry alignment.
-    fn align_entry(&mut self, st: &mut LowerState, fn_align: usize);
+    /// Bring the code stream to where `lead` more bytes reach the next
+    /// function's entry alignment.
+    fn align_entry(&mut self, st: &mut LowerState, fn_align: usize, lead: usize);
 
     /// Emit `n` no-ops ahead of the function symbol.
-    fn entry_nops(&mut self, code: &mut alloc::vec::Vec<u8>, n: u32);
+    fn entry_nops(&mut self, code: &mut CodeBuf, n: u32);
 
     /// Lower one function's body.
     #[allow(clippy::too_many_arguments)]
@@ -2525,7 +2593,7 @@ pub(crate) trait LowerTarget {
 
     /// Append one PLT trampoline per import; returns their code offsets.
     fn emit_plt_trampolines(
-        code: &mut alloc::vec::Vec<u8>,
+        code: &mut CodeBuf,
         got_fixups: &mut alloc::vec::Vec<super::GotFixup>,
         n_imports: usize,
     ) -> alloc::vec::Vec<usize>;
@@ -2587,15 +2655,9 @@ fn report_call_diagnostics(
             true => (Code::ATTRIBUTE_ERROR, "error"),
             false => (Code::ATTRIBUTE_WARNING, "warning"),
         };
-        let call = (func.inst_src.get(at).copied())
-            .filter(|s| s.line > 0)
-            .and_then(|s| {
-                let file = program.source_files.get(s.file as usize)?.clone();
-                Some(crate::c5::diag::Loc::in_unit(file, s.line, s.offset))
-            });
         sink.emit(
             code,
-            call.or_else(|| function_loc(program, func.ent_pc)),
+            inst_loc(program, func, at).or_else(|| function_loc(program, func.ent_pc)),
             alloc::format!(
                 "call to `{}` declared with attribute {kind}: {message} (in `{}`)",
                 sym.name,
@@ -2603,6 +2665,17 @@ fn report_call_diagnostics(
             ),
         );
     }
+}
+
+/// The source position of `func`'s instruction `at`, when it has one.
+fn inst_loc(
+    program: &super::super::program::Program,
+    func: &crate::c5::ir::FunctionSsa,
+    at: usize,
+) -> Option<crate::c5::diag::Loc> {
+    let s = func.inst_src.get(at).copied().filter(|s| s.line > 0)?;
+    let file = program.source_files.get(s.file as usize)?.clone();
+    Some(crate::c5::diag::Loc::in_unit(file, s.line, s.offset))
 }
 
 /// Where the function entered at `ent_pc` is defined, for a report the
@@ -2658,15 +2731,25 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // Asm label numbering restarts per lowering; see
     // `crate::c5::asm::reset_asm_instance`.
     crate::c5::asm::reset_asm_instance();
-    let mut st = LowerState::new();
+    let mut st = LowerState::new(native.listing && mode == super::LowerMode::Full);
+    if !cfg!(feature = "assembler") && !program.file_asm.is_empty() {
+        return Err(C5Error::hard(
+            Code::UNSUPPORTED,
+            crate::c5::asm::NO_ASSEMBLER,
+        ));
+    }
     crate::c5::asm::materialize_file_asm(
         &program.file_asm,
         B::FILE_ASM_ALIGN_POW2,
         B::FILE_ASM_COMMENTS,
-        &|blocks| super::super::encode_file_asm_section_code(blocks, target, native.elf_class),
+        &|blocks| {
+            super::super::encode_file_asm_section_code(blocks, target, native.elf_class).map(|_| ())
+        },
         &mut st.asm_sections,
     )
     .map_err(|m| C5Error::hard(Code::ASSEMBLER, alloc::format!("<file-scope asm>: {m}")))?;
+    // The unit's validation reported the warnings this layout repeats.
+    st.asm_sections.warnings.clear();
 
     // Where the lowering reports. A codegen diagnostic has no position in
     // the translation unit, so the pragmas never apply to one and the
@@ -2697,7 +2780,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 super::shadow::produce_ssa_funcs_on(
                     graph(),
                     target,
-                    native.optimize,
+                    native.optimizes(),
                     native.jump_tables,
                 )
             })?,
@@ -2741,7 +2824,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // the retry runs it on the reported bodies.
     // An `always_inline` function inlines at every optimization level; at -O0
     // the inliner takes those calls alone.
-    if !native.optimize && walked && ssa_funcs.iter().any(|f| f.is_always_inline) {
+    if !native.optimizes() && walked && ssa_funcs.iter().any(|f| f.is_always_inline) {
         let code_syms = defined_fn_syms(program);
         let extern_fns = extern_fn_targets(program);
         pipeline.run("passes::inline::run mandatory", &mut ssa_funcs, |funcs| {
@@ -2760,7 +2843,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             );
         });
     }
-    if !native.optimize && mode != super::LowerMode::DataLivenessProbe {
+    if !native.optimizes() && mode != super::LowerMode::DataLivenessProbe {
         let coalesce_dwarf = pipeline.run("ssa::slot_coalesce::run", &mut ssa_funcs, |funcs| {
             super::slot_coalesce::run(funcs, false, native.stack_protect)
         });
@@ -2784,7 +2867,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // register allocation, dropping their frame load / store traffic.
     // Record the promoted slots per function so the debug-info emitter
     // can drop their now-stale frame location.
-    if native.optimize && walked {
+    if native.optimizes() && walked {
         // Every computed goto of a function through one dispatch block.
         pipeline.run("passes::factor_gotos::run", &mut ssa_funcs, |funcs| {
             super::super::passes::factor_gotos::run(funcs);
@@ -2860,9 +2943,11 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // candidate and the cloned call sites join the inliner's
         // worklist. The post-inline constant folder then collapses the
         // per-copy `Extend(Imm)` / `BinopI(Imm, k)` index chains.
-        pipeline.run("passes::unroll::run", &mut ssa_funcs, |funcs| {
-            super::super::passes::unroll::run(funcs);
-        });
+        if native.unroll_loops {
+            pipeline.run("passes::unroll::run", &mut ssa_funcs, |funcs| {
+                super::super::passes::unroll::run(funcs);
+            });
+        }
         // Merge byte-at-a-time memory idioms after the unroll, which
         // straight-lines the per-byte loops they are often written as,
         // and before the inliner: a helper that collapses to one wide
@@ -3093,6 +3178,11 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         pipeline.run("passes::rotate::run", &mut ssa_funcs, |funcs| {
             super::super::passes::rotate::run(funcs);
         });
+        // A byte reversal spelled with shifts and masks, the rotates it
+        // holds already folded.
+        pipeline.run("passes::bswap::run", &mut ssa_funcs, |funcs| {
+            super::super::passes::bswap::run(funcs);
+        });
         // Fused multiply-add contraction (C99 6.5p8). Runs after the
         // inliner: an inlined body keeps the products its expressions
         // contract, and under `-ffp-contract=fast` a product reaching an
@@ -3166,7 +3256,10 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     // compaction retry re-runs them and re-checks the report is empty.
     // A probe always reports: its caller compacts the program from this
     // set alone, so it needs the all-live one too.
-    if native.optimize || mode == super::LowerMode::DataLivenessProbe {
+    // The file-scope objects' spans, which the alias queries of the
+    // forwarding and of LICM compare data offsets within.
+    let objects = super::alias::data_objects(program);
+    if native.optimizes() || mode == super::LowerMode::DataLivenessProbe {
         let sets = pipeline.run(
             "ssa::shadow::drop_unreachable_statics",
             &mut ssa_funcs,
@@ -3272,10 +3365,16 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         // extension so it does not pin scattered re-reads in a
         // register-starved unrolled loop.
         pipeline.run("passes::store_forward::run", &mut ssa_funcs, |funcs| {
-            super::super::passes::store_forward::run(funcs);
+            super::super::passes::store_forward::run(funcs, &objects);
             for f in funcs.iter_mut() {
-                super::super::passes::store_forward::drop_overwritten_stores(f);
+                super::super::passes::store_forward::drop_overwritten_stores(f, false);
             }
+        });
+        // Again once the forwarding has made one value of a word the source
+        // reread for each shift.
+        pipeline.run("passes::rotate::run forwarded", &mut ssa_funcs, |funcs| {
+            super::super::passes::rotate::run(funcs);
+            super::super::passes::bswap::run(funcs);
         });
         // The stores the forwarding left to slots nothing reads go; the
         // slots lose their frame location.
@@ -3298,6 +3397,18 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 native.strict_align,
             );
         });
+        // A frame slot's store a later one overwrites goes once the merges
+        // have formed the wide stores, so a narrow write over part of one
+        // does not split it.
+        pipeline.run(
+            "passes::store_forward::drop_overwritten_stores slots",
+            &mut ssa_funcs,
+            |funcs| {
+                for f in funcs.iter_mut() {
+                    super::super::passes::store_forward::drop_overwritten_stores(f, true);
+                }
+            },
+        );
         // The merges above can leave an operation reading one value twice,
         // or a constant, and a branch it decides.
         pipeline.run(
@@ -3390,7 +3501,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     for f in ssa_funcs.iter_mut() {
         super::super::passes::constfold_branch::strip_zero_test_conds(f);
         super::super::passes::constfold_branch::low_word_xor_to_compare(f, target.is_x86_64());
-        if native.optimize {
+        if native.optimizes() {
             super::super::passes::constfold_branch::test_decrements(f);
         }
         crate::c5::asm::mark_static_operands(f);
@@ -3431,11 +3542,21 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 .map(|f| {
                     if target.is_x86_64() {
                         super::vector_slots::fp_lane_loads(f);
+                        f.frees_rbp =
+                            super::super::x86_64::emit::frame_pointer_free(f, target, &native);
                     }
                     super::mem2reg::zero_read_undefs(f);
-                    if native.optimize && !f.has_seh() {
+                    if native.optimizes() && !f.has_seh() {
+                        let capacity = super::reg_alloc::bank_capacity(target, native.fixed_regs);
+                        super::pressure_order::lower_peaks(f, capacity);
                         super::remat::split_across_calls(f, target);
-                        super::licm::allocate_hoisted(f, target, native.fixed_regs, data_len)
+                        super::licm::allocate_hoisted(
+                            f,
+                            target,
+                            native.fixed_regs,
+                            data_len,
+                            &objects,
+                        )
                     } else {
                         super::reg_alloc::allocate(f, target, native.fixed_regs)
                     }
@@ -3453,11 +3574,12 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         .map(|f| (f.name.clone(), f.ent_pc))
         .collect();
     let fn_align = native.min_function_alignment.max(1) as usize;
-    let fn_align = if native.branches_within_32b && target.is_x86_64() {
-        fn_align.max(32)
-    } else {
-        fn_align
-    };
+    let fn_align =
+        if native.branch_padding() != super::super::BranchPadding::Off && target.is_x86_64() {
+            fn_align.max(32)
+        } else {
+            fn_align
+        };
     st.text_align = st.text_align.max(fn_align);
     // `aligned(N)` on a function raises its own entry's boundary.
     let code_aligns: alloc::collections::BTreeMap<&str, usize> = (program.symbols.iter())
@@ -3478,7 +3600,16 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 .unwrap_or(1),
         );
         st.text_align = st.text_align.max(align);
-        b.align_entry(&mut st, align);
+        // Under `-fsanitize=function` the 8 bytes ahead of the symbol hold
+        // the signature and the type hash, unless no-ops take them.
+        let prefix = func_ssa.type_hash.filter(|_| entry.nops_before == 0);
+        b.align_entry(&mut st, align, if prefix.is_some() { 8 } else { 0 });
+        if let Some(hash) = prefix {
+            st.text_data_ranges.push((st.code.len(), 8));
+            let signature = crate::c5::op::FUNCTION_PREFIX_SIGNATURE;
+            st.code.extend_from_slice(&signature.to_le_bytes());
+            st.code.extend_from_slice(&hash.to_le_bytes());
+        }
         if entry.nops_before + entry.nops_after > 0 {
             st.patchable_entries.push(super::EntryArea {
                 func: st.func_ent_pcs.len(),
@@ -3553,7 +3684,24 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 ),
             );
         }
+        if let Some(note) = stack_protector_gap(native.stack_protect, func_ssa) {
+            sink.emit(
+                Code::STACK_PROTECTOR,
+                function_loc(program, func_ssa.ent_pc),
+                note,
+            );
+        }
         report_call_diagnostics(&mut sink, program, imports, func_ssa);
+        let mut asm_warnings = core::mem::take(&mut st.asm_warnings);
+        asm_warnings.dedup();
+        for (site, code, text) in asm_warnings {
+            let at = inst_loc(program, func_ssa, site as usize);
+            sink.emit(
+                code,
+                at.or_else(|| function_loc(program, func_ssa.ent_pc)),
+                text,
+            );
+        }
         st.func_ends.push(st.code.len());
     }
     b.after_functions(&mut st, &native);
@@ -3663,20 +3811,22 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             });
             continue;
         }
-        if let Some(name) = reloc_ctx.weak_target(target_ent_pc) {
-            st.user_extern_data_refs.push(super::UserExternDataRef {
-                instr_offset,
-                symbol_name: name.into(),
-                direct_pcrel: B::WEAK_ADDR_PCREL,
-                import_slot: false,
-            });
-            continue;
-        }
+        // A weak definition another component may preempt is reached as
+        // any interposable one is, through its GOT entry.
         if let Some(name) = reloc_ctx.interposable_target(target_ent_pc) {
             st.user_extern_data_refs.push(super::UserExternDataRef {
                 instr_offset,
                 symbol_name: name.into(),
                 direct_pcrel: None,
+                import_slot: false,
+            });
+            continue;
+        }
+        if let Some(name) = reloc_ctx.weak_target(target_ent_pc) {
+            st.user_extern_data_refs.push(super::UserExternDataRef {
+                instr_offset,
+                symbol_name: name.into(),
+                direct_pcrel: B::WEAK_ADDR_PCREL,
                 import_slot: false,
             });
             continue;
@@ -3779,6 +3929,8 @@ pub(crate) fn lower_unit<B: LowerTarget>(
     for r in &mut st.seh_rows {
         r.handler = r.handler.map(|pc| st.pc_to_native[pc as usize] as u32);
     }
+    #[cfg(feature = "listing")]
+    let listing = st.code.take_listing();
     let mut build = super::Build {
         diagnostics: reported(&mut sink)?,
         emitted_relocs: alloc::vec::Vec::new(),
@@ -3817,7 +3969,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
             .data_relro_len
             .clamp(program.data_ro_len, program.data.len()),
         data_align: program.data_align,
-        bss_size: 0,
+        bss_size: program.zero_fill_len as i64,
         init_fini_arrays: Default::default(),
         entry_offset,
         got_fixups: st.got_fixups,
@@ -3843,8 +3995,8 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         param_frame_offsets: st.param_frame_offsets,
         region_frame_offsets: st.region_frame_offsets,
         fn_unwind: alloc::vec::Vec::new(),
-        // The PE unwind tables are their only reader.
-        a64_unwind: if target == super::Target::WindowsAarch64 {
+        // The PE unwind tables and the frame descriptions read them.
+        a64_unwind: if target.is_aarch64() {
             st.a64_unwind
         } else {
             alloc::vec::Vec::new()
@@ -3861,11 +4013,13 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         abi: super::Abi::default(),
         tls_data: program.tls_data.clone(),
         tls_init_size: program.tls_init_size,
+        tls_zero_fill_len: program.tls_zero_fill_len,
         tls_align: program.tls_align,
         tls_index_fixups: st.tls_index_fixups,
         tls_index_slot: None,
         delay_import_table: None,
         pe_unwind: alloc::vec::Vec::new(),
+        guard_cf: None,
         tls_got: alloc::vec::Vec::new(),
         tls_got_fields: alloc::vec::Vec::new(),
         static_tls: false,
@@ -3899,10 +4053,11 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         elf_tpoff_fixups: st.elf_tpoff_fixups,
         // Overwritten by `lower_for` from `NativeOptions::debug_info`.
         debug_info: true,
+        unwind_tables: false,
         merged_dwarf: None,
         pdb_path: None,
         resources: alloc::vec::Vec::new(),
-        stack_size: None,
+        pe: Default::default(),
         mach_o: Default::default(),
         // Every import on this single-TU path gets a trampoline (data
         // imports ride `ResolvedImports::data_bindings`, not `imports`).
@@ -3910,6 +4065,8 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         data_liveness: None,
         stopped_at_data_liveness: false,
         ssa_dump,
+        #[cfg(feature = "listing")]
+        listing,
     };
     b.install(&mut build);
     Ok(build)
@@ -3995,7 +4152,9 @@ mod tests {
         let f = func(2);
         assert_eq!(super::entry_read_run(&f, &compute_use_counts(&f)), [1]);
     }
-    use super::{EmitBackend, PlaceMove, Unsupported, schedule_place_moves, unsupported_error};
+    use super::{
+        CodeBuf, EmitBackend, PlaceMove, Unsupported, schedule_place_moves, unsupported_error,
+    };
     use alloc::vec::Vec;
 
     const MOV: u8 = 1;
@@ -4026,46 +4185,46 @@ mod tests {
     impl EmitBackend for Rec {
         type Frame = ();
         const ARCH: &'static str = "test";
-        fn fp_reg_mov(&self, _: &mut Vec<u8>, _: u8, _: u8) {
+        fn fp_reg_mov(&self, _: &mut CodeBuf, _: u8, _: u8) {
             unreachable!()
         }
-        fn fp_spill_store(&self, _: &mut Vec<u8>, _: (), _: u32, _: u8) {
+        fn fp_spill_store(&self, _: &mut CodeBuf, _: (), _: u32, _: u8) {
             unreachable!()
         }
-        fn fp_spill_load(&self, _: &mut Vec<u8>, _: (), _: u32, _: u8) {
+        fn fp_spill_load(&self, _: &mut CodeBuf, _: (), _: u32, _: u8) {
             unreachable!()
         }
-        fn v128_reg_mov(&self, _: &mut Vec<u8>, _: u8, _: u8) {
+        fn v128_reg_mov(&self, _: &mut CodeBuf, _: u8, _: u8) {
             unreachable!()
         }
-        fn v128_spill_store(&self, _: &mut Vec<u8>, _: (), _: u32, _: u8) {
+        fn v128_spill_store(&self, _: &mut CodeBuf, _: (), _: u32, _: u8) {
             unreachable!()
         }
-        fn v128_spill_load(&self, _: &mut Vec<u8>, _: (), _: u32, _: u8) {
+        fn v128_spill_load(&self, _: &mut CodeBuf, _: (), _: u32, _: u8) {
             unreachable!()
         }
-        fn int_reg_mov(&self, code: &mut Vec<u8>, dst: u8, src: u8) {
+        fn int_reg_mov(&self, code: &mut CodeBuf, dst: u8, src: u8) {
             code.extend([MOV, dst, src, 0]);
         }
-        fn int_reg_ext(&self, code: &mut Vec<u8>, dst: u8, src: u8, kind: LoadKind) {
+        fn int_reg_ext(&self, code: &mut CodeBuf, dst: u8, src: u8, kind: LoadKind) {
             code.extend([EXT, dst, src, width(kind)]);
         }
-        fn int_reg_xchg(&self, code: &mut Vec<u8>, a: u8, b: u8) -> bool {
+        fn int_reg_xchg(&self, code: &mut CodeBuf, a: u8, b: u8) -> bool {
             if self.xchg {
                 code.extend([XCHG, a, b, 0]);
             }
             self.xchg
         }
-        fn int_spill_store(&self, code: &mut Vec<u8>, _: (), slot: u32, src: u8, base: u8) {
+        fn int_spill_store(&self, code: &mut CodeBuf, _: (), slot: u32, src: u8, base: u8) {
             assert_eq!(base, STAGE);
             code.extend([STORE, slot as u8, src, 0]);
         }
-        fn int_spill_load(&self, code: &mut Vec<u8>, _: (), slot: u32, dst: u8) {
+        fn int_spill_load(&self, code: &mut CodeBuf, _: (), slot: u32, dst: u8) {
             code.extend([LOAD, dst, slot as u8, 0]);
         }
         fn int_spill_store_staged(
             &self,
-            code: &mut Vec<u8>,
+            code: &mut CodeBuf,
             _: (),
             slot: u32,
             stage: u8,
@@ -4074,13 +4233,13 @@ mod tests {
             assert_eq!((stage, hold), (STAGE, HOLD));
             code.extend([STORE, slot as u8, stage, 0]);
         }
-        fn int_spill_store_auto(&self, _: &mut Vec<u8>, _: (), _: u32, _: u8) {
+        fn int_spill_store_auto(&self, _: &mut CodeBuf, _: (), _: u32, _: u8) {
             unreachable!()
         }
-        fn int_reg_load_imm(&self, _: &mut Vec<u8>, _: u8, _: i64) {
+        fn int_reg_load_imm(&self, _: &mut CodeBuf, _: u8, _: i64) {
             unreachable!()
         }
-        fn fp_reg_from_int_reg(&self, _: &mut Vec<u8>, _: u8, _: u8, _: bool) {
+        fn fp_reg_from_int_reg(&self, _: &mut CodeBuf, _: u8, _: u8, _: bool) {
             unreachable!()
         }
     }
@@ -4117,8 +4276,9 @@ mod tests {
     /// other place but the scratch keeps its value), and return the code.
     fn check(rec: &Rec, moves: &[PlaceMove]) -> Vec<u8> {
         let mut pending = moves.to_vec();
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         schedule_place_moves(rec, &mut code, &mut pending, (), HOLD, STAGE).unwrap();
+        let code = code.into_bytes();
         // Bytes 0, 1 and 3 have their sign bits set and byte 7 does not, so
         // each extension width gives a different value; `i` tells places apart.
         let init: Vec<u64> = (0..REGS as u64 + 8)

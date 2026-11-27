@@ -142,6 +142,11 @@ FORWARD_EXACT = {
     # dispatch is an indirect branch, which those configurations forbid
     # unthunked and require a landing pad at.
     "-fno-jump-tables", "-fjump-tables",
+    # The 64-bit vDSO units ask for unwind tables, which a userspace unwinder
+    # walking into them reads; every other unit passes the negative spelling,
+    # and badc, which emits `.eh_frame` by default as gcc does, then emits none.
+    "-fasynchronous-unwind-tables", "-funwind-tables",
+    "-fno-asynchronous-unwind-tables", "-fno-unwind-tables",
     # The top-level Makefile adds this: the inliner's stack-growth bounds
     # tighten to gcc's values under it.
     "-fconserve-stack",
@@ -194,10 +199,19 @@ FORWARD_EXACT = {
     "-fno-builtin", "-ffreestanding", "-fbuiltin", "-fhosted",
     # A unit's opt-out of the frame-size bound `-Wframe-larger-than=` sets.
     "-Wno-frame-larger-than",
+    # The frame pointer, and code that runs where an interrupt or exception
+    # pushes onto the current stack: under -mno-red-zone badc stores nothing
+    # below rsp, and a frame with no pointer keeps what its lowerings borrow
+    # in slots of its own.
+    "-fomit-frame-pointer", "-fno-omit-frame-pointer", "-mno-red-zone", "-mred-zone",
 }
 
 FORWARD_PREFIX = (
     "-D", "-U",
+    # The vDSO units ask for `memset` expanded inline whatever its length
+    # (CONFIG_CC_OPT_INLINE_MEMSET): a vDSO links no C library, so a call
+    # the compiler made to it would not resolve. badc validates the list.
+    "-finline-stringops", "-fno-inline-stringops",
     # The dialect selects which declarations the kernel's headers reach:
     # `<asm/xen/interface_64.h>` gates the anonymous union naming both `rip`
     # and `eip` on `__GNUC__ && !__STRICT_ANSI__`. badc keys `__STRICT_ANSI__`
@@ -262,15 +276,13 @@ FORWARD_PREFIX = (
 UNSUPPORTED_EXACT = {
     # Calls mcount/__fentry__ on entry; see -mfentry below.
     "-pg",
-    # badc emits no .eh_frame, so the 64-bit vDSO units that ask for unwind
-    # tables get none. The negative spelling is already what badc does.
-    "-fasynchronous-unwind-tables", "-funwind-tables",
 }
 
 UNSUPPORTED_PREFIX = (
-    # badc emits no sanitizer instrumentation, so the checks CONFIG_UBSAN
-    # asks for -- array bounds and shift-exponent among them -- are absent
-    # from a unit built here, and the handlers in lib/ubsan.c stay uncalled.
+    # A CONFIG_UBSAN check badc implements is forwarded (`sanitizer_option`,
+    # answered by `badc_accepts`) and calls the handlers in lib/ubsan.c; one
+    # it does not -- array bounds and `bool` among them -- is absent from a
+    # unit built here and reported.
     "-fsanitize=", "-fsanitize-trap=",
     # Clears the call-clobbered registers a function used before it returns
     # (CONFIG_ZERO_CALL_USED_REGS). badc emits no such epilogue.
@@ -295,12 +307,10 @@ IGNORE_EXACT = {
     # relaxations are already what it does.
     "-fno-strict-aliasing", "-fno-delete-null-pointer-checks",
     # What badc already emits: a tentative definition placed in .data rather
-    # than left common, no stack probe, no .eh_frame, one .text and one
-    # .data per object, and a frame pointer in every function.
+    # than left common, no stack probe, and one .text and one .data per
+    # object.
     "-fno-common", "-fno-stack-check", "-fno-stack-clash-protection",
-    "-fno-asynchronous-unwind-tables", "-fno-unwind-tables",
     "-fno-function-sections", "-fno-data-sections",
-    "-fno-omit-frame-pointer", "-fomit-frame-pointer",
     # Anonymous members of a named struct type are accepted unconditionally,
     # which is what the kernel asks -fms-extensions for.
     "-fms-extensions",
@@ -320,9 +330,8 @@ IGNORE_EXACT = {
     "-mno-80387", "-mno-fp-ret-in-387", "-mno-mmx", "-mno-3dnow",
     "-mno-sse2", "-mno-sse4a", "-mno-avx",
     # badc's System V variadic prologue is what the kernel skips setting `al`
-    # for, and it addresses nothing below the stack pointer: every function
-    # subtracts its frame before using it.
-    "-mskip-rax-setup", "-mno-red-zone",
+    # for.
+    "-mskip-rax-setup",
     # An inliner tuning hint. badc's inliner does not distinguish a callee
     # by its call count, so declining that heuristic asks for what it
     # already does; measured to leave the object unchanged.
@@ -381,12 +390,21 @@ def warning_option(a: str) -> bool:
     return a.startswith("-W") and not a.startswith(("-Wa,", "-Wl,", "-Wp,"))
 
 
+def sanitizer_option(a: str) -> bool:
+    """An option naming UndefinedBehaviorSanitizer checks, which badc takes
+    for the checks it implements and refuses for the others."""
+    return a == "-fsanitize-undefined-trap-on-error" or a.startswith((
+        "-fsanitize=", "-fsanitize-trap=", "-fno-sanitize=", "-fsanitize-recover=",
+        "-fno-sanitize-recover="))
+
+
 def badc_accepts(badc: str, flag: str, cache: str | None = None) -> bool:
-    """Whether badc takes the diagnostic option `flag`: kbuild's
-    `cc-option` question, an empty unit compiled under `-Werror`. badc
-    refuses a selector no diagnostic, alias or group answers, and reports
-    one naming a gcc or clang warning it does not implement (B7012),
-    which `-Werror` makes an error, so neither is forwarded. The answers
+    """Whether badc takes the diagnostic or sanitizer option `flag`:
+    kbuild's `cc-option` question, an empty unit compiled under `-Werror`.
+    badc refuses a selector no diagnostic, alias or group answers, and
+    reports one naming a gcc or clang warning it does not implement
+    (B7012), which `-Werror` makes an error, so neither is forwarded; it
+    refuses a sanitizer check it does not implement. The answers
     are kept in one file, `cache` or $BADC_WFLAGS_CACHE (which verify.py
     places in the build's work directory), so a build asks once per
     spelling; a file written for another badc binary is replaced."""
@@ -444,9 +462,6 @@ def rewrite(argv: list[str], accepts=lambda _flag: False) -> Rewritten:
     unknown: list[str] = []
     opt: str | None = None
     debug = False
-    # gcc takes the last of -mno-sse / -msse / -msse2: an FPU unit's
-    # CC_FLAGS_FPU after the global -mno-sse gives it the SSE registers.
-    sse_off = False
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -465,7 +480,10 @@ def rewrite(argv: list[str], accepts=lambda _flag: False) -> Rewritten:
             opt = a  # last one wins, as with gcc
             i += 1
         elif a in ("-mno-sse", "-msse", "-msse2"):
-            sse_off = a == "-mno-sse"
+            # badc reads them in order, as gcc does: an FPU unit's
+            # CC_FLAGS_FPU after the global -mno-sse gives it the SSE
+            # registers.
+            out.append(a)
             i += 1
         elif a == "-g0":
             debug = False
@@ -479,7 +497,7 @@ def rewrite(argv: list[str], accepts=lambda _flag: False) -> Rewritten:
             # configurations that ask for none are unaffected.
             debug = True
             i += 1
-        elif forwarded(a) or (warning_option(a) and accepts(a)):
+        elif forwarded(a) or ((warning_option(a) or sanitizer_option(a)) and accepts(a)):
             out.append(a)
             i += 1
         elif not a.startswith("-"):
@@ -492,8 +510,6 @@ def rewrite(argv: list[str], accepts=lambda _flag: False) -> Rewritten:
         else:
             unknown.append(a)
             i += 1
-    if sse_off:
-        out.append("-mno-sse")
     if opt is not None and opt != "-O0":
         out.append("-O")
     if debug:
@@ -707,10 +723,14 @@ def _self_test() -> int:
     # `unknown`, which fails the unit rather than compiling under a
     # configuration the build did not ask for; one badc has no equivalent
     # for is `dropped`, which is reported per unit.
-    # The last of -mno-sse / -msse / -msse2 decides, as with gcc.
+    # -mno-sse / -msse / -msse2 reach badc in order, which it reads as gcc does.
     assert rewrite(["-mno-sse", "-mno-sse2"]).argv == ["-mno-sse"]
-    assert rewrite(["-mno-sse", "-mno-sse2", "-msse", "-msse2", "-mhard-float"]).argv == []
-    assert rewrite(["-msse", "-mno-sse"]).argv == ["-mno-sse"]
+    assert rewrite(["-mno-sse", "-mno-sse2", "-msse", "-msse2", "-mhard-float"]).argv == [
+        "-mno-sse",
+        "-msse",
+        "-msse2",
+    ]
+    assert rewrite(["-msse", "-mno-sse"]).argv == ["-msse", "-mno-sse"]
     for flag in ("-fconserve-stack", "-fno-zero-initialized-in-bss"):
         assert rewrite([flag]).argv == [flag], flag
     assert rewrite(["-fno-such-flag"]).unknown == ["-fno-such-flag"]
@@ -730,7 +750,7 @@ def _self_test() -> int:
         assert rewrite([flag]) == Rewritten([flag], [], []), flag
     for flag in ("-fno-builtin", "-ffreestanding", "-fno-builtin-wcslen",
                  "-fno-strict-overflow", "-fstrict-overflow", "-fwrapv",
-                 "-fno-wrapv"):
+                 "-fno-wrapv", "-finline-stringops=memset", "-finline-stringops"):
         assert rewrite([flag]).argv == [flag], flag
     # The stack protector and its guard placement reach badc verbatim; the
     # canary the configuration states is the one the object carries.
@@ -750,13 +770,15 @@ def _self_test() -> int:
     for flag in ("-ftrivial-auto-var-init=zero",
                  "-ftrivial-auto-var-init=pattern"):
         assert rewrite([flag]).argv == [flag], flag
-    for flag in ("-fasynchronous-unwind-tables",):
-        r = rewrite([flag])
-        assert r.dropped == [flag] and r.unknown == [], (flag, r)
+    for flag in ("-fasynchronous-unwind-tables", "-fno-asynchronous-unwind-tables",
+                 "-funwind-tables", "-fno-unwind-tables"):
+        assert rewrite([flag]).argv == [flag], flag
     # The flexible-array level reaches badc, which implements it.
     assert rewrite(["-fstrict-flex-arrays=3"]).argv == ["-fstrict-flex-arrays=3"]
+    for flag in ("-fomit-frame-pointer", "-fno-omit-frame-pointer", "-mno-red-zone"):
+        assert rewrite([flag]) == Rewritten([flag], [], []), flag
     for flag in ("-Wall", "-Werror=return-type", "-Wno-sign-compare",
-                 "-fno-strict-aliasing", "-mno-red-zone", "-falign-loops=1",
+                 "-fno-strict-aliasing", "-falign-loops=1",
                  "-march=x86-64", "-mregparm=3", "-Wl,-r", "-mlittle-endian",
                  "-mabi=lp64", "-fno-optimize-sibling-calls",
                  "-fzero-init-padding-bits=all"):
@@ -783,6 +805,13 @@ def _self_test() -> int:
     assert rewrite(["-Wframe-larger-than"]) == Rewritten([], [], [])
     # A diagnostic option badc takes reaches it in the kernel's order; one it
     # does not take is dropped, and none is taken unasked.
+    # A sanitizer check badc implements is forwarded; one it refuses is
+    # dropped and reported.
+    takes = {"-fsanitize=shift", "-fsanitize-trap=undefined"}.__contains__
+    r = rewrite(["-fsanitize=shift", "-fsanitize=bounds-strict",
+                 "-fsanitize-trap=undefined"], takes)
+    assert r == Rewritten(["-fsanitize=shift", "-fsanitize-trap=undefined"],
+                          ["-fsanitize=bounds-strict"], []), r
     takes = {"-Wall", "-Wno-pointer-sign", "-Werror=return-type"}.__contains__
     r = rewrite(["-Wall", "-Wundef", "-Wno-pointer-sign", "-Wa,-x",
                  "-Werror=return-type", "-Wl,-r"], takes)

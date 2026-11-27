@@ -3,7 +3,7 @@ variadic_struct_arg_16b.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -84,28 +84,26 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
-               	leaq	-0x30(%rbp), %rsi
+               	subq	$0x38, %rsp
+               	subq	$0x10, %rsp
+               	leaq	0x10(%rsp), %rsi
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rsi)
-               	leaq	-0x20(%rbp), %rcx
+               	leaq	0x20(%rsp), %rcx
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
-               	leaq	-0x10(%rbp), %r9
+               	leaq	0x30(%rsp), %r9
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%r9)
-               	movl	$0x3, %edi
-               	subq	$0x10, %rsp
                	movq	%r9, %r10
                	movq	(%r10), %r11
                	movq	%r11, (%rsp)
                	movq	0x8(%r10), %r11
                	movq	%r11, 0x8(%rsp)
+               	movl	$0x3, %edi
                	movq	0x8(%rsi), %rdx
                	movq	(%rsi), %rsi
                	movq	0x8(%rcx), %r8
@@ -113,5 +111,5 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	addq	$0x10, %rsp
-               	leave
+               	addq	$0x38, %rsp
                	retq

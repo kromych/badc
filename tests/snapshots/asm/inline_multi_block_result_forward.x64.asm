@@ -3,7 +3,7 @@ inline_multi_block_result_forward.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -28,11 +28,11 @@ Disassembly of section .text:
 <test>:
                	movq	%rdi, %rax
                	shlq	%rax
-               	leaq	(%rdi,%rdi), %rcx
+               	leaq	(%rdi,%rdi), %rdx
                	cmpl	$0x3, %edi
                	jle	<addr>
                	retq
-               	addq	%rcx, %rax
+               	addq	%rdx, %rax
                	retq
 
 <main>:

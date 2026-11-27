@@ -3,7 +3,7 @@ shm_open_mode_arg.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -36,8 +36,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0xd0]
                	ldp	x20, x21, [sp], #0xe0
                	ret
-               	sub	x1, x29, #0x80
                	mov	x0, x20
+               	sub	x1, x29, #0x80
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -52,8 +52,7 @@ Disassembly of section .text:
                	ret
                	ldur	w0, [x29, #-0x70]
                	and	x0, x0, #0x1ff
-               	mov	x1, #0x3                // =3
-               	mov	x2, #0x0                // =0
                	cmp	w0, #0x180
-               	csel	x21, x1, x2, ne
+               	mov	x16, #0x3               // =3
+               	csel	x21, x16, xzr, ne
                	b	<addr>

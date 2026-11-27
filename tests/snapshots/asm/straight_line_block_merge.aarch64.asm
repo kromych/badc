@@ -3,7 +3,7 @@ straight_line_block_merge.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -53,15 +53,15 @@ Disassembly of section .text:
 
 <pick>:
                	cbz	w0, <addr>
-               	mov	x0, #0x1                // =1
-               	mov	x2, #0x2                // =2
                	cmp	w1, #0x0
-               	csel	x0, x0, x2, ne
+               	mov	x16, #0x1               // =1
+               	mov	x17, #0x2               // =2
+               	csel	x0, x16, x17, ne
                	ret
-               	mov	x0, #0x3                // =3
-               	mov	x1, #0x4                // =4
                	cmp	w2, #0x0
-               	csel	x0, x0, x1, ne
+               	mov	x16, #0x3               // =3
+               	mov	x17, #0x4               // =4
+               	csel	x0, x16, x17, ne
                	b	<addr>
 
 <carry>:
@@ -331,10 +331,10 @@ Disassembly of section .text:
                	cmp	w0, #0xa
                	b.eq	<addr>
                	mov	x20, #0x4               // =4
-               	mov	x25, #0x0               // =0
-               	and	x22, x25, #0x4
-               	and	x23, x25, #0x2
-               	and	x21, x25, #0x1
+               	mov	x24, #0x0               // =0
+               	and	x22, x24, #0x4
+               	and	x23, x24, #0x2
+               	and	x21, x24, #0x1
                	cbnz	w20, <addr>
                	mov	x0, x22
                	mov	x2, x21
@@ -382,7 +382,7 @@ Disassembly of section .text:
                	mvn	x0, x0
                	mov	x17, #0x13              // =19
                	and	x0, x0, x17
-               	orr	x24, x1, x0
+               	orr	x25, x1, x0
                	cbnz	w20, <addr>
                	mov	x0, x22
                	mov	x2, x21
@@ -396,14 +396,14 @@ Disassembly of section .text:
                	cmp	w1, #0x0
                	cset	x1, ne
                	neg	x1, x1
-               	and	x1, x1, x24
+               	and	x1, x1, x25
                	add	x1, x1, x22
                	cmp	w0, w1
                	b.eq	<addr>
                	mov	x20, #0x6               // =6
                	b	<addr>
-               	add	x25, x25, #0x1
-               	cmp	w25, #0x8
+               	add	x24, x24, #0x1
+               	cmp	w24, #0x8
                	b.lt	<addr>
                	cbnz	w20, <addr>
                	mov	x0, #0x0                // =0
@@ -566,7 +566,7 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	mov	x1, #0x7                // =7
                	mov	x2, #0x3                // =3
-               	mov	x3, x1
+               	mov	x3, #0x7                // =7
                	bl	<addr>
                	cmp	w0, #0xcb
                	b.eq	<addr>
@@ -587,8 +587,8 @@ Disassembly of section .text:
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	mov	x1, #0x0                // =0
+               	mov	x2, #0x0                // =0
                	mov	x3, #0x64               // =100
-               	mov	x2, x1
                	bl	<addr>
                	cbz	w0, <addr>
                	mov	x20, #0x11              // =17

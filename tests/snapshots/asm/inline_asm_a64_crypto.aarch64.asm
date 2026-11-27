@@ -3,7 +3,7 @@ inline_asm_a64_crypto.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -19,8 +19,7 @@ Disassembly of section .text:
                	aesmc	v0.16b, v0.16b
                	aesimc	v0.16b, v0.16b
                	mov	w0, v0.s[0]
-               	mov	x1, #0x2a               // =42
-               	mov	x2, #0x0                // =0
                	cmp	w0, #0x2a
-               	csel	x0, x1, x2, eq
+               	mov	x16, #0x2a              // =42
+               	csel	x0, x16, xzr, eq
                	ret

@@ -352,6 +352,8 @@ impl Compiler {
             records,
             at_end,
             element_of: None,
+            bound: None,
+            flexible: false,
         };
         if field.bit_width > 0 {
             // A bitfield has no address, and `offset` names its storage
@@ -362,7 +364,11 @@ impl Compiler {
         if field.array_size != 0 {
             // An array member's value is its address, whatever its bound.
             step.addr = true;
+            if field.array_size >= 0 || field.zero_len {
+                step.bound = Some(field.array_size.max(0) * self.size_of_type(field.ty) as i64);
+            }
             if base.via_pointer && self.member_is_unbounded(field, records, at_end) {
+                step.flexible = true;
                 return step;
             }
             if field.array_size < 0 && !field.zero_len {
@@ -432,6 +438,21 @@ impl Compiler {
         stride: i64,
         decays: bool,
     ) -> ObjectRef {
+        // An element that is a row is an array of the row's bound, whatever
+        // the index; a scalar element is none.
+        ObjectRef {
+            bound: decays.then_some(stride),
+            flexible: false,
+            ..Self::object_ref_element(base, index, stride, decays)
+        }
+    }
+
+    fn object_ref_element(
+        base: ObjectRef,
+        index: Option<i64>,
+        stride: i64,
+        decays: bool,
+    ) -> ObjectRef {
         let base = ObjectRef {
             at_end: false,
             ..base
@@ -473,10 +494,12 @@ impl Compiler {
 
     /// The subscript index as a parse-time constant, the lexer left
     /// where it was; `None` when it does not fold. Read only inside a
-    /// `__builtin_object_size` operand, where the offset it moves is
-    /// part of the answer, so no other translation pays for the fold.
+    /// `__builtin_object_size` operand and under `-fsanitize=object-size`,
+    /// where the offset it moves is part of the answer, so no other
+    /// translation pays for the fold.
     pub(super) fn peek_constant_index(&mut self) -> Option<i64> {
-        if self.pending.object_size_operands == 0 {
+        let object_size = self.sanitize.runs(super::sanitize::Check::ObjectSize);
+        if self.pending.object_size_operands == 0 && !object_size {
             return None;
         }
         let snap = self.lex.snapshot();
@@ -526,12 +549,12 @@ impl Compiler {
         }
     }
 
-    /// gcc's rule for an array member reached through a pointer: it has
-    /// no bound the object can be held to when its type is incomplete,
-    /// or when `-fstrict-flex-arrays` admits its bound and it is the last
-    /// member of every container on the way, at most one of which is a
-    /// struct (`records` and `at_end` as `member_nesting` counts them,
-    /// accumulated over the chain).
+    /// An array member reached through a pointer has no bound the object
+    /// can be held to when its type is incomplete, or when
+    /// `-fstrict-flex-arrays` admits its bound and it is the last member of
+    /// every container on the way, at most one of which is a struct
+    /// (`records` and `at_end` as `member_nesting` counts them, accumulated
+    /// over the chain).
     pub(super) fn member_is_unbounded(&self, f: &StructField, records: u32, at_end: bool) -> bool {
         if f.array_size < 0 && !f.zero_len {
             return true;
@@ -556,7 +579,7 @@ impl Compiler {
     /// evaluated. The condition must fold to an integer constant.
     pub(super) fn parse_choose_expr_builtin(&mut self) -> Result<(), C5Error> {
         // The call dispatch consumed `__builtin_choose_expr (`.
-        let cond = self.parse_constant_int()?;
+        let cond = self.parse_constant_truth()?;
         if self.lex.tk != ',' {
             return Err(self.compile_err(Code::SYNTAX, "`,` expected in `__builtin_choose_expr`"));
         }
@@ -595,12 +618,12 @@ impl Compiler {
             ) = saved_decay;
             Ok(())
         };
-        parse_arm(self, cond != 0)?;
+        parse_arm(self, cond)?;
         if self.lex.tk != ',' {
             return Err(self.compile_err(Code::SYNTAX, "`,` expected in `__builtin_choose_expr`"));
         }
         self.next()?;
-        parse_arm(self, cond == 0)?;
+        parse_arm(self, !cond)?;
         if self.lex.tk != ')' {
             return Err(self.compile_err(
                 Code::SYNTAX,

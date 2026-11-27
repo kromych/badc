@@ -3,7 +3,7 @@ message_catalog_round_trip.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -66,9 +66,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x170]
                	ldp	x20, x21, [sp], #0x180
                	ret
+               	mov	x1, x20
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x1, x20
                	bl	<addr>
                	mov	x0, x20
                	bl	<addr>
@@ -102,25 +102,24 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x20, #0x5               // =5
                	b	<addr>
+               	mov	x0, x21
                	mov	x1, #0x1                // =1
                	mov	x2, #0x2                // =2
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	mov	x0, x21
                	bl	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x1, #0x6                // =6
-               	mov	x2, #0x0                // =0
                	cmp	x0, #0x0
-               	csel	x20, x1, x2, ne
+               	mov	x16, #0x6               // =6
+               	csel	x20, x16, xzr, ne
+               	mov	x0, x21
                	mov	x1, #0x7                // =7
                	mov	x2, #0x3                // =3
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	mov	x0, x21
                	bl	<addr>
                	cbnz	w20, <addr>
                	adrp	x1, <page>
@@ -129,11 +128,11 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbz	x0, <addr>
                	mov	x20, #0x7               // =7
+               	mov	x0, x21
                	mov	x1, #0x1                // =1
                	mov	x2, #0x9                // =9
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	mov	x0, x21
                	bl	<addr>
                	cbnz	w20, <addr>
                	adrp	x1, <page>

@@ -3,7 +3,7 @@ local_field_displacement.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -43,11 +43,11 @@ Disassembly of section .text:
                	movq	$0x0, (%rsp)
                	subq	$0x20, %rsp
                	movb	$0x1, -0x1000(%rbp)
-               	leaq	-0x1020(%rbp), %rdi
                	movq	$0x1, -0x1020(%rbp)
                	movq	$0x2, -0x1018(%rbp)
                	movq	$0x3, -0x1010(%rbp)
                	movq	$0x4, -0x1008(%rbp)
+               	leaq	-0x1020(%rbp), %rdi
                	movl	$0xa, %esi
                	callq	<addr>
                	movq	-0x1020(%rbp), %rax
@@ -56,13 +56,13 @@ Disassembly of section .text:
                	movq	-0x1010(%rbp), %rcx
                	addq	%rcx, %rax
                	movq	-0x1008(%rbp), %rcx
-               	addq	%rcx, %rax
-               	movsbq	-0x1000(%rbp), %rcx
-               	cmpl	$0x1, %ecx
+               	addq	%rax, %rcx
+               	movsbq	-0x1000(%rbp), %rax
+               	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
-               	subq	$0x32, %rax
+               	leaq	-0x32(%rcx), %rax
                	leave
                	retq

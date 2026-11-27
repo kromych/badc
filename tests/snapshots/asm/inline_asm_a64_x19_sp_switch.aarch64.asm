@@ -3,7 +3,7 @@ inline_asm_a64_x19_sp_switch.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -81,9 +81,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	mov	x0, #0x5                // =5
                	bl	<addr>
-               	mov	x1, #0x2a               // =42
-               	mov	x2, #0x1                // =1
                	cmp	x0, #0x7e
-               	csel	x0, x1, x2, eq
+               	mov	x16, #0x2a              // =42
+               	mov	x17, #0x1               // =1
+               	csel	x0, x16, x17, eq
                	ldp	x29, x30, [sp], #0x10
                	ret

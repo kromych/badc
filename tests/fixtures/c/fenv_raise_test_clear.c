@@ -4,6 +4,7 @@
 // inexact (7.6.2.3), so each check asks only about the exceptions raised.
 
 #include <fenv.h>
+#pragma STDC FENV_ACCESS ON
 
 int main(void) {
     static const int each[] = {FE_INVALID, FE_DIVBYZERO, FE_OVERFLOW, FE_UNDERFLOW,

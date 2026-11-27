@@ -3,7 +3,7 @@ zero_test_of_memory.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -205,15 +205,15 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, #-0x80              // =-128
+               	sturb	w0, [x29, #-0x37]
+               	mov	x0, #-0x8000            // =-32768
+               	sturh	w0, [x29, #-0x32]
+               	mov	x0, #-0x80000000        // =-2147483648
+               	stur	w0, [x29, #-0x28]
+               	mov	x0, #-0x8000000000000000 // =-9223372036854775808
+               	stur	x0, [x29, #-0x10]
                	sub	x0, x29, #0x38
-               	mov	x1, #-0x80              // =-128
-               	sturb	w1, [x29, #-0x37]
-               	mov	x1, #-0x8000            // =-32768
-               	sturh	w1, [x29, #-0x32]
-               	mov	x1, #-0x80000000        // =-2147483648
-               	stur	w1, [x29, #-0x28]
-               	mov	x1, #-0x8000000000000000 // =-9223372036854775808
-               	stur	x1, [x29, #-0x10]
                	bl	<addr>
                	cbz	w0, <addr>
                	sub	x0, x29, #0x38
@@ -245,13 +245,13 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, #0x100              // =256
+               	sturh	w0, [x29, #-0x32]
+               	mov	x0, #0x10000            // =65536
+               	stur	w0, [x29, #-0x28]
+               	mov	x0, #0x100000000        // =4294967296
+               	stur	x0, [x29, #-0x10]
                	sub	x0, x29, #0x38
-               	mov	x1, #0x100              // =256
-               	sturh	w1, [x29, #-0x32]
-               	mov	x1, #0x10000            // =65536
-               	stur	w1, [x29, #-0x28]
-               	mov	x1, #0x100000000        // =4294967296
-               	stur	x1, [x29, #-0x10]
                	bl	<addr>
                	cbz	w0, <addr>
                	sub	x0, x29, #0x38
@@ -385,7 +385,7 @@ Disassembly of section .text:
                	mov	x0, #0x5                // =5
                	sturb	w0, [x29, #-0x60]
                	sub	x0, x29, #0x60
-               	mov	x1, x0
+               	sub	x1, x29, #0x60
                	bl	<addr>
                	cbz	w0, <addr>
                	ldurb	w0, [x29, #-0x60]
@@ -395,7 +395,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x60
-               	mov	x1, x0
+               	sub	x1, x29, #0x60
                	bl	<addr>
                	cbz	w0, <addr>
                	mov	x0, #0xc                // =12

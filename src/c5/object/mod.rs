@@ -19,6 +19,8 @@ pub const DWARF_FORMAT_BITS: u8 = 32;
 #[cfg(feature = "native-emit")]
 pub(crate) mod arm64_unwind;
 #[cfg(feature = "native-emit")]
+pub(crate) mod code_signature;
+#[cfg(feature = "native-emit")]
 pub(crate) mod codeview;
 #[cfg(feature = "native-emit")]
 pub(crate) mod debug_model;
@@ -52,8 +54,8 @@ pub(crate) mod pe_rsrc;
 #[cfg(feature = "native-emit")]
 pub(crate) mod relr;
 pub(crate) mod section_table;
-#[cfg(feature = "native-emit")]
 pub(crate) mod sha1;
+pub(crate) mod sha256;
 #[cfg(feature = "std")]
 pub(crate) mod so_versions;
 #[cfg(feature = "std")]
@@ -180,13 +182,34 @@ pub struct NativeEmit {
     /// The `--dump-ssa` text, for the caller to print once it knows the
     /// object is the one its link keeps.
     pub ssa_dump: alloc::string::String,
+    /// The assembly listing of a relocatable object under
+    /// [`NativeOptions::listing`], empty otherwise.
+    pub listing: alloc::string::String,
 }
 
 /// A linked image and the program database its debug directory names.
 #[cfg(feature = "native-emit")]
+#[derive(Debug)]
 pub struct NativeImage {
     pub image: Vec<u8>,
     pub pdb: Option<Vec<u8>>,
+    /// Where the writer placed the program's streams; the link map reads it.
+    pub(crate) placement: StreamPlacement,
+}
+
+/// Where an image writer placed the program's streams: the address of the
+/// text stream's first byte and the range of the entry stub ahead of it,
+/// the data stream's regions, and the first byte of the zero-fill and
+/// thread-local streams, with the BFD name of the image's format.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct StreamPlacement {
+    pub(crate) format: &'static str,
+    pub(crate) text: u64,
+    pub(crate) stub: Option<(u64, u64)>,
+    #[cfg(feature = "native-emit")]
+    pub(crate) data: Vec<DataRegion>,
+    pub(crate) bss: Option<u64>,
+    pub(crate) tls: Option<u64>,
 }
 
 #[cfg(feature = "native-emit")]
@@ -279,7 +302,13 @@ fn resolve_single_image_asm_sym_fixups(
             ),
         )
     };
-    for (r, loc) in resolved {
+    for (mut r, loc) in resolved {
+        // The image holds a GOT for its imports alone; any other GOT access
+        // takes its direct form.
+        if !matches!(loc, Loc::Import(_)) {
+            r.kind = crate::c5::asm::relax_a64_got(r.kind, &mut build.text, r.instr_offset)
+                .map_err(|m| err(Code::OBJECT_FORMAT, alloc::format!("inline asm: {m}")))?;
+        }
         let part = match r.kind {
             AsmRelocKind::A64AdrpPage21 => Some(AddrPart::Page),
             AsmRelocKind::A64AddLo12 | AsmRelocKind::A64LdstLo12(_) => Some(AddrPart::InPage),
@@ -524,7 +553,33 @@ pub fn emit_native_reporting(
         build.shared_lib_name = shared_lib_name.map(alloc::string::String::from);
     }
     let diagnostics = core::mem::take(&mut build.diagnostics);
-    let image = write_for(program, &build, target)?;
+    #[cfg(feature = "listing")]
+    let (image, listing) = match build.listing.take() {
+        Some(mut l) if output_kind == OutputKind::Relocatable => {
+            let machine = match target {
+                Target::LinuxX64 | Target::WindowsX64 => Machine::X86_64,
+                _ => Machine::Aarch64,
+            };
+            let image = elf_reloc::write_relocatable_listed(
+                program,
+                &build,
+                machine,
+                target,
+                Some(&mut l),
+            )?;
+            let text = crate::c5::codegen::listing::render(&l, program, &build);
+            (image, text)
+        }
+        _ => (
+            write_for(program, &build, target)?,
+            alloc::string::String::new(),
+        ),
+    };
+    #[cfg(not(feature = "listing"))]
+    let (image, listing) = (
+        write_for(program, &build, target)?,
+        alloc::string::String::new(),
+    );
     if freed_by_exit {
         core::mem::forget(build);
         core::mem::forget(compacted);
@@ -533,6 +588,7 @@ pub fn emit_native_reporting(
         image,
         diagnostics,
         ssa_dump,
+        listing,
     })
 }
 
@@ -597,6 +653,10 @@ fn compact_and_lower(
         && options.pic
         && !options.pie
         && target.binary_format() == crate::c5::codegen::BinaryFormat::Elf;
+    program.no_plt_calls = options.no_plt
+        && options.output_kind == OutputKind::Relocatable
+        && target.binary_format() == crate::c5::codegen::BinaryFormat::Elf
+        && (target.is_x86_64() || options.pic);
     let segregate = match options.bss_segregate && !bss_segregation_disabled() {
         false => shadow::ZeroFill::Off,
         true if options.zero_init_in_bss => shadow::ZeroFill::All,
@@ -726,7 +786,7 @@ pub(crate) fn single_tu_image_for_test(
     Ok((write_for(program, &build, target)?, regions))
 }
 
-#[cfg(all(feature = "full", feature = "std"))]
+#[cfg(all(feature = "linker", feature = "std"))]
 pub(crate) fn write_native_image(
     program: &Program,
     build: &Build,
@@ -736,7 +796,7 @@ pub(crate) fn write_native_image(
 }
 
 /// [`write_native_image`] with the PDB a PE build's `pdb_path` asks for.
-#[cfg(all(feature = "full", feature = "std"))]
+#[cfg(all(feature = "linker", feature = "std"))]
 pub(crate) fn write_native_image_and_pdb(
     program: &Program,
     build: &Build,
@@ -756,7 +816,11 @@ fn write_image_for(
     build: &Build,
     target: Target,
 ) -> Result<NativeImage, C5Error> {
-    let image = |image: Vec<u8>| NativeImage { image, pdb: None };
+    let image = |image: Vec<u8>| NativeImage {
+        image,
+        pdb: None,
+        placement: StreamPlacement::default(),
+    };
     #[cfg(feature = "std")]
     if build.output_kind == OutputKind::Relocatable {
         let machine = match target {
@@ -787,14 +851,12 @@ fn write_image_for(
             "an absolute address field reached an image writer",
         ));
     }
-    let pe = |machine| {
-        let (image, pdb) = pe::write_with_pdb(program, build, machine, target)?;
-        Ok(NativeImage { image, pdb })
-    };
+    let pe = |machine| pe::write_with_pdb(program, build, machine, target);
+
     match target {
-        Target::MacOSAarch64 => mach_o::write(program, build).map(image),
-        Target::LinuxAarch64 => elf::write(program, build, Machine::Aarch64).map(image),
-        Target::LinuxX64 => elf::write(program, build, Machine::X86_64).map(image),
+        Target::MacOSAarch64 => mach_o::write(program, build),
+        Target::LinuxAarch64 => elf::write(program, build, Machine::Aarch64),
+        Target::LinuxX64 => elf::write(program, build, Machine::X86_64),
         Target::WindowsX64 => pe(Machine::X86_64),
         Target::WindowsAarch64 => pe(Machine::Aarch64),
     }
@@ -835,6 +897,7 @@ pub(crate) mod test_support {
             notes: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
+            tls_zero_fill_len: 0,
             tls_align: 8,
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
@@ -843,6 +906,7 @@ pub(crate) mod test_support {
             bind_trampoline_slots: false,
             weak_refs_by_name: false,
             interposable_refs: false,
+            no_plt_calls: false,
             fp_contract_fast: false,
             tls_data_relocs: Vec::new(),
             tls_extern_data_relocs: Vec::new(),
@@ -906,6 +970,8 @@ pub(crate) mod test_support {
             data_liveness: None,
             stopped_at_data_liveness: false,
             ssa_dump: String::new(),
+            #[cfg(feature = "listing")]
+            listing: None,
             asm_sections: Vec::new(),
             asm_section_text_refs: Vec::new(),
             asm_text_abs_refs: Vec::new(),
@@ -958,11 +1024,13 @@ pub(crate) mod test_support {
             abi: Abi::default(),
             tls_data: Vec::new(),
             tls_init_size: 0,
+            tls_zero_fill_len: 0,
             tls_align: 8,
             tls_index_fixups: Vec::new(),
             tls_index_slot: None,
             delay_import_table: None,
             pe_unwind: Vec::new(),
+            guard_cf: None,
             tls_got: Vec::new(),
             tls_got_fields: Vec::new(),
             static_tls: false,
@@ -988,10 +1056,11 @@ pub(crate) mod test_support {
             macho_tlv_fixups: Vec::new(),
             macho_tlv_descriptors: Vec::new(),
             debug_info: false,
+            unwind_tables: false,
             merged_dwarf: None,
             pdb_path: None,
             resources: Vec::new(),
-            stack_size: None,
+            pe: Default::default(),
             mach_o: Default::default(),
             plt_trampoline_offsets: Vec::new(),
         }

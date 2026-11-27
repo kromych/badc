@@ -3,7 +3,7 @@ strtoul_64bit_return.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,28 +26,26 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	leaq	<rip>, %rdi
-               	leaq	-0x8(%rbp), %rsi
+               	leaq	0x8(%rsp), %rsi
                	movl	$0xa, %edx
                	callq	<addr>
                	movabsq	$0x100000000, %r11      # imm = 0x100000000
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	leaq	<rip>, %rdi
-               	leaq	-0x8(%rbp), %rsi
+               	leaq	0x8(%rsp), %rsi
                	movl	$0xa, %edx
                	callq	<addr>
                	movabsq	$0x100000000, %r11      # imm = 0x100000000
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	leaq	<rip>, %rdi
                	callq	<addr>
@@ -55,18 +53,18 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	leaq	<rip>, %rdi
-               	leaq	-0x8(%rbp), %rsi
+               	leaq	0x8(%rsp), %rsi
                	movl	$0xa, %edx
                	callq	<addr>
                	movabsq	$0x218711a00, %r11      # imm = 0x218711A00
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

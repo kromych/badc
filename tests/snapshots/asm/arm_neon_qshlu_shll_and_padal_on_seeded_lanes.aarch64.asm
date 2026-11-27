@@ -3,7 +3,7 @@ arm_neon_qshlu_shll_and_padal_on_seeded_lanes.aarch64:	file format elf64-littlea
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -123,32 +123,32 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x1, #0x0                // =0
+               	mov	x0, #0x0                // =0
                	adrp	x2, <page>
-               	b	<addr>
-               	strh	w0, [x3, x1, lsl #1]
-               	add	x1, x1, #0x1
-               	cmp	w1, #0x8
-               	b.ge	<addr>
                	sub	x3, x29, #0x10
-               	ldr	x0, [x2, #0x10]
-               	eor	x0, x0, x0, lsl #13
-               	eor	x0, x0, x0, lsr #7
-               	eor	x0, x0, x0, lsl #17
-               	str	x0, [x2, #0x10]
-               	and	x4, x0, #0x3
-               	cbz	x4, <addr>
-               	eor	x0, x0, x0, lsl #13
-               	eor	x0, x0, x0, lsr #7
-               	eor	x0, x0, x0, lsl #17
-               	str	x0, [x2, #0x10]
-               	sxth	x0, w0
                	b	<addr>
-               	eor	x0, x0, x0, lsl #13
-               	eor	x0, x0, x0, lsr #7
-               	eor	x0, x0, x0, lsl #17
-               	str	x0, [x2, #0x10]
-               	and	x0, x0, #0xff
+               	strh	w1, [x3, x0, lsl #1]
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x8
+               	b.ge	<addr>
+               	ldr	x1, [x2, #0x10]
+               	eor	x1, x1, x1, lsl #13
+               	eor	x1, x1, x1, lsr #7
+               	eor	x1, x1, x1, lsl #17
+               	str	x1, [x2, #0x10]
+               	and	x4, x1, #0x3
+               	cbz	x4, <addr>
+               	eor	x1, x1, x1, lsl #13
+               	eor	x1, x1, x1, lsr #7
+               	eor	x1, x1, x1, lsl #17
+               	str	x1, [x2, #0x10]
+               	sxth	x1, w1
+               	b	<addr>
+               	eor	x1, x1, x1, lsl #13
+               	eor	x1, x1, x1, lsr #7
+               	eor	x1, x1, x1, lsl #17
+               	str	x1, [x2, #0x10]
+               	and	x1, x1, #0xff
                	b	<addr>
                	ldur	q0, [x29, #-0x10]
                	add	sp, sp, #0x10
@@ -159,31 +159,31 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x1, #0x0                // =0
+               	mov	x0, #0x0                // =0
                	adrp	x2, <page>
-               	b	<addr>
-               	str	w0, [x3, x1, lsl #2]
-               	add	x1, x1, #0x1
-               	cmp	w1, #0x4
-               	b.ge	<addr>
                	sub	x3, x29, #0x10
-               	ldr	x0, [x2, #0x10]
-               	eor	x0, x0, x0, lsl #13
-               	eor	x0, x0, x0, lsr #7
-               	eor	x0, x0, x0, lsl #17
-               	str	x0, [x2, #0x10]
-               	and	x4, x0, #0x3
-               	cbz	x4, <addr>
-               	eor	x0, x0, x0, lsl #13
-               	eor	x0, x0, x0, lsr #7
-               	eor	x0, x0, x0, lsl #17
-               	str	x0, [x2, #0x10]
                	b	<addr>
-               	eor	x0, x0, x0, lsl #13
-               	eor	x0, x0, x0, lsr #7
-               	eor	x0, x0, x0, lsl #17
-               	str	x0, [x2, #0x10]
-               	and	x0, x0, #0xffff
+               	str	w1, [x3, x0, lsl #2]
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x4
+               	b.ge	<addr>
+               	ldr	x1, [x2, #0x10]
+               	eor	x1, x1, x1, lsl #13
+               	eor	x1, x1, x1, lsr #7
+               	eor	x1, x1, x1, lsl #17
+               	str	x1, [x2, #0x10]
+               	and	x4, x1, #0x3
+               	cbz	x4, <addr>
+               	eor	x1, x1, x1, lsl #13
+               	eor	x1, x1, x1, lsr #7
+               	eor	x1, x1, x1, lsl #17
+               	str	x1, [x2, #0x10]
+               	b	<addr>
+               	eor	x1, x1, x1, lsl #13
+               	eor	x1, x1, x1, lsr #7
+               	eor	x1, x1, x1, lsl #17
+               	str	x1, [x2, #0x10]
+               	and	x1, x1, #0xffff
                	b	<addr>
                	ldur	q0, [x29, #-0x10]
                	add	sp, sp, #0x10
@@ -194,31 +194,31 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	mov	x1, #0x0                // =0
+               	mov	x0, #0x0                // =0
                	adrp	x2, <page>
-               	b	<addr>
-               	str	x0, [x3, x1, lsl #3]
-               	add	x1, x1, #0x1
-               	cmp	w1, #0x2
-               	b.ge	<addr>
                	sub	x3, x29, #0x10
-               	ldr	x0, [x2, #0x10]
-               	eor	x0, x0, x0, lsl #13
-               	eor	x0, x0, x0, lsr #7
-               	eor	x0, x0, x0, lsl #17
-               	str	x0, [x2, #0x10]
-               	and	x4, x0, #0x3
-               	cbz	x4, <addr>
-               	eor	x0, x0, x0, lsl #13
-               	eor	x0, x0, x0, lsr #7
-               	eor	x0, x0, x0, lsl #17
-               	str	x0, [x2, #0x10]
                	b	<addr>
-               	eor	x0, x0, x0, lsl #13
-               	eor	x0, x0, x0, lsr #7
-               	eor	x0, x0, x0, lsl #17
-               	str	x0, [x2, #0x10]
-               	mov	w0, w0
+               	str	x1, [x3, x0, lsl #3]
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x2
+               	b.ge	<addr>
+               	ldr	x1, [x2, #0x10]
+               	eor	x1, x1, x1, lsl #13
+               	eor	x1, x1, x1, lsr #7
+               	eor	x1, x1, x1, lsl #17
+               	str	x1, [x2, #0x10]
+               	and	x4, x1, #0x3
+               	cbz	x4, <addr>
+               	eor	x1, x1, x1, lsl #13
+               	eor	x1, x1, x1, lsr #7
+               	eor	x1, x1, x1, lsl #17
+               	str	x1, [x2, #0x10]
+               	b	<addr>
+               	eor	x1, x1, x1, lsl #13
+               	eor	x1, x1, x1, lsr #7
+               	eor	x1, x1, x1, lsl #17
+               	str	x1, [x2, #0x10]
+               	mov	w1, w1
                	b	<addr>
                	ldur	q0, [x29, #-0x10]
                	add	sp, sp, #0x10
@@ -228,50 +228,49 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x7c0
-               	stp	x20, x21, [sp]
-               	str	x22, [sp, #0x10]
+               	sub	sp, sp, #0x7b0
+               	str	x20, [sp]
                	mov	x20, #0x0               // =0
                	bl	<addr>
                	mov	v3.16b, v0.16b
-               	str	q3, [sp, #0x6a0]
+               	str	q3, [sp, #0x690]
                	bl	<addr>
-               	ldr	q3, [sp, #0x6a0]
+               	ldr	q3, [sp, #0x690]
                	mov	v1.16b, v0.16b
-               	str	q3, [sp, #0x6a0]
-               	str	q1, [sp, #0x690]
+               	str	q3, [sp, #0x690]
+               	str	q1, [sp, #0x680]
                	bl	<addr>
-               	ldr	q3, [sp, #0x6a0]
-               	ldr	q1, [sp, #0x690]
+               	ldr	q3, [sp, #0x690]
+               	ldr	q1, [sp, #0x680]
                	mov	v2.16b, v0.16b
-               	str	q3, [sp, #0x6a0]
-               	str	q1, [sp, #0x690]
-               	str	q2, [sp, #0x680]
+               	str	q3, [sp, #0x690]
+               	str	q1, [sp, #0x680]
+               	str	q2, [sp, #0x670]
                	bl	<addr>
-               	ldr	q3, [sp, #0x6a0]
-               	ldr	q1, [sp, #0x690]
-               	ldr	q2, [sp, #0x680]
+               	ldr	q3, [sp, #0x690]
+               	ldr	q1, [sp, #0x680]
+               	ldr	q2, [sp, #0x670]
                	mov	d4, v3.d[0]
                	sqshlu	v4.8b, v4.8b, #0x0
                	sub	x2, x29, #0x110
-               	str	d4, [sp, #0x6b0]
+               	str	d4, [sp, #0x6a0]
                	sqshlu	v4.16b, v3.16b, #0x0
-               	str	q4, [sp, #0x20]
+               	str	q4, [sp, #0x10]
                	mov	d4, v1.d[0]
                	sqshlu	v4.4h, v4.4h, #0x0
-               	str	d4, [sp, #0x6b8]
+               	str	d4, [sp, #0x6a8]
                	sqshlu	v4.8h, v1.8h, #0x0
-               	str	q4, [sp, #0x30]
+               	str	q4, [sp, #0x20]
                	mov	d4, v2.d[0]
                	sqshlu	v4.2s, v4.2s, #0x0
                	stur	d4, [x29, #-0x100]
                	sqshlu	v4.4s, v2.4s, #0x0
-               	str	q4, [sp, #0x40]
+               	str	q4, [sp, #0x30]
                	mov	d4, v0.d[0]
                	sqshlu	d4, d4, #0x0
                	stur	d4, [x29, #-0xf8]
                	sqshlu	v4.2d, v0.2d, #0x0
-               	str	q4, [sp, #0x50]
+               	str	q4, [sp, #0x40]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -380,22 +379,22 @@ Disassembly of section .text:
                	sub	x2, x29, #0xf0
                	stur	d4, [x29, #-0xf0]
                	sqshlu	v4.16b, v3.16b, #0x1
-               	str	q4, [sp, #0x60]
+               	str	q4, [sp, #0x50]
                	mov	d4, v1.d[0]
                	sqshlu	v4.4h, v4.4h, #0x1
                	stur	d4, [x29, #-0xe8]
                	sqshlu	v4.8h, v1.8h, #0x1
-               	str	q4, [sp, #0x70]
+               	str	q4, [sp, #0x60]
                	mov	d4, v2.d[0]
                	sqshlu	v4.2s, v4.2s, #0x1
                	stur	d4, [x29, #-0xe0]
                	sqshlu	v4.4s, v2.4s, #0x1
-               	str	q4, [sp, #0x80]
+               	str	q4, [sp, #0x70]
                	mov	d4, v0.d[0]
                	sqshlu	d4, d4, #0x2
                	stur	d4, [x29, #-0xd8]
                	sqshlu	v4.2d, v0.2d, #0x2
-               	str	q4, [sp, #0x90]
+               	str	q4, [sp, #0x80]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -504,22 +503,22 @@ Disassembly of section .text:
                	sub	x2, x29, #0xd0
                	stur	d4, [x29, #-0xd0]
                	sqshlu	v4.16b, v3.16b, #0x3
-               	str	q4, [sp, #0xa0]
+               	str	q4, [sp, #0x90]
                	mov	d4, v1.d[0]
                	sqshlu	v4.4h, v4.4h, #0x3
                	stur	d4, [x29, #-0xc8]
                	sqshlu	v4.8h, v1.8h, #0x3
-               	str	q4, [sp, #0xb0]
+               	str	q4, [sp, #0xa0]
                	mov	d4, v2.d[0]
                	sqshlu	v4.2s, v4.2s, #0x3
                	stur	d4, [x29, #-0xc0]
                	sqshlu	v4.4s, v2.4s, #0x3
-               	str	q4, [sp, #0xc0]
+               	str	q4, [sp, #0xb0]
                	mov	d4, v0.d[0]
                	sqshlu	d4, d4, #0x6
                	stur	d4, [x29, #-0xb8]
                	sqshlu	v4.2d, v0.2d, #0x6
-               	str	q4, [sp, #0xd0]
+               	str	q4, [sp, #0xc0]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -628,22 +627,22 @@ Disassembly of section .text:
                	sub	x2, x29, #0xb0
                	stur	d4, [x29, #-0xb0]
                	sqshlu	v4.16b, v3.16b, #0x7
-               	str	q4, [sp, #0xe0]
+               	str	q4, [sp, #0xd0]
                	mov	d4, v1.d[0]
                	sqshlu	v4.4h, v4.4h, #0x7
                	stur	d4, [x29, #-0xa8]
                	sqshlu	v4.8h, v1.8h, #0x7
-               	str	q4, [sp, #0xf0]
+               	str	q4, [sp, #0xe0]
                	mov	d4, v2.d[0]
                	sqshlu	v4.2s, v4.2s, #0x7
                	stur	d4, [x29, #-0xa0]
                	sqshlu	v4.4s, v2.4s, #0x7
-               	str	q4, [sp, #0x100]
+               	str	q4, [sp, #0xf0]
                	mov	d4, v0.d[0]
                	sqshlu	d4, d4, #0xe
                	stur	d4, [x29, #-0x98]
                	sqshlu	v4.2d, v0.2d, #0xe
-               	str	q4, [sp, #0x110]
+               	str	q4, [sp, #0x100]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -752,22 +751,22 @@ Disassembly of section .text:
                	sub	x2, x29, #0x90
                	stur	d4, [x29, #-0x90]
                	sqshlu	v4.16b, v3.16b, #0x4
-               	str	q4, [sp, #0x120]
+               	str	q4, [sp, #0x110]
                	mov	d4, v1.d[0]
                	sqshlu	v4.4h, v4.4h, #0xc
                	stur	d4, [x29, #-0x88]
                	sqshlu	v4.8h, v1.8h, #0xc
-               	str	q4, [sp, #0x130]
+               	str	q4, [sp, #0x120]
                	mov	d4, v2.d[0]
                	sqshlu	v4.2s, v4.2s, #0xc
                	stur	d4, [x29, #-0x80]
                	sqshlu	v4.4s, v2.4s, #0xc
-               	str	q4, [sp, #0x140]
+               	str	q4, [sp, #0x130]
                	mov	d4, v0.d[0]
                	sqshlu	d4, d4, #0x18
                	stur	d4, [x29, #-0x78]
                	sqshlu	v4.2d, v0.2d, #0x18
-               	str	q4, [sp, #0x150]
+               	str	q4, [sp, #0x140]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -876,22 +875,22 @@ Disassembly of section .text:
                	sub	x2, x29, #0x70
                	stur	d4, [x29, #-0x70]
                	sqshlu	v4.16b, v3.16b, #0x7
-               	str	q4, [sp, #0x160]
+               	str	q4, [sp, #0x150]
                	mov	d4, v1.d[0]
                	sqshlu	v4.4h, v4.4h, #0xf
                	stur	d4, [x29, #-0x68]
                	sqshlu	v4.8h, v1.8h, #0xf
-               	str	q4, [sp, #0x170]
+               	str	q4, [sp, #0x160]
                	mov	d4, v2.d[0]
                	sqshlu	v4.2s, v4.2s, #0x1f
                	stur	d4, [x29, #-0x60]
                	sqshlu	v4.4s, v2.4s, #0x1f
-               	str	q4, [sp, #0x180]
+               	str	q4, [sp, #0x170]
                	mov	d4, v0.d[0]
                	sqshlu	d4, d4, #0x3e
                	stur	d4, [x29, #-0x58]
                	sqshlu	v4.2d, v0.2d, #0x3e
-               	str	q4, [sp, #0x190]
+               	str	q4, [sp, #0x180]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -998,34 +997,34 @@ Disassembly of section .text:
                	mov	d4, v3.d[0]
                	sshll	v4.8h, v4.8b, #0x0
                	sub	x2, x29, #0x620
-               	str	q4, [sp, #0x1a0]
+               	str	q4, [sp, #0x190]
                	mov	d4, v3.d[1]
                	ushll	v4.8h, v4.8b, #0x0
-               	str	q4, [sp, #0x1b0]
+               	str	q4, [sp, #0x1a0]
                	mov	d4, v1.d[0]
                	sshll	v4.4s, v4.4h, #0x0
-               	str	q4, [sp, #0x1c0]
+               	str	q4, [sp, #0x1b0]
                	ushll2	v4.4s, v1.8h, #0x0
-               	str	q4, [sp, #0x1d0]
+               	str	q4, [sp, #0x1c0]
                	sshll2	v4.2d, v2.4s, #0x0
-               	str	q4, [sp, #0x1e0]
+               	str	q4, [sp, #0x1d0]
                	mov	d4, v2.d[0]
                	ushll	v4.2d, v4.2s, #0x0
-               	str	q4, [sp, #0x1f0]
+               	str	q4, [sp, #0x1e0]
                	sshll2	v4.8h, v3.16b, #0x0
-               	str	q4, [sp, #0x200]
+               	str	q4, [sp, #0x1f0]
                	ushll2	v4.8h, v3.16b, #0x0
-               	str	q4, [sp, #0x210]
+               	str	q4, [sp, #0x200]
                	sshll2	v4.4s, v1.8h, #0x0
-               	str	q4, [sp, #0x220]
+               	str	q4, [sp, #0x210]
                	mov	d4, v1.d[0]
                	ushll	v4.4s, v4.4h, #0x0
-               	str	q4, [sp, #0x230]
+               	str	q4, [sp, #0x220]
                	mov	d4, v2.d[0]
                	sshll	v4.2d, v4.2s, #0x0
-               	str	q4, [sp, #0x240]
+               	str	q4, [sp, #0x230]
                	ushll2	v4.2d, v2.4s, #0x0
-               	str	q4, [sp, #0x250]
+               	str	q4, [sp, #0x240]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -1184,34 +1183,34 @@ Disassembly of section .text:
                	mov	d4, v3.d[0]
                	sshll	v4.8h, v4.8b, #0x1
                	sub	x2, x29, #0x560
-               	str	q4, [sp, #0x260]
+               	str	q4, [sp, #0x250]
                	mov	d4, v3.d[1]
                	ushll	v4.8h, v4.8b, #0x1
-               	str	q4, [sp, #0x270]
+               	str	q4, [sp, #0x260]
                	mov	d4, v1.d[0]
                	sshll	v4.4s, v4.4h, #0x1
-               	str	q4, [sp, #0x280]
+               	str	q4, [sp, #0x270]
                	ushll2	v4.4s, v1.8h, #0x1
-               	str	q4, [sp, #0x290]
+               	str	q4, [sp, #0x280]
                	sshll2	v4.2d, v2.4s, #0x1
-               	str	q4, [sp, #0x2a0]
+               	str	q4, [sp, #0x290]
                	mov	d4, v2.d[0]
                	ushll	v4.2d, v4.2s, #0x1
-               	str	q4, [sp, #0x2b0]
+               	str	q4, [sp, #0x2a0]
                	sshll2	v4.8h, v3.16b, #0x1
-               	str	q4, [sp, #0x2c0]
+               	str	q4, [sp, #0x2b0]
                	ushll2	v4.8h, v3.16b, #0x1
-               	str	q4, [sp, #0x2d0]
+               	str	q4, [sp, #0x2c0]
                	sshll2	v4.4s, v1.8h, #0x1
-               	str	q4, [sp, #0x2e0]
+               	str	q4, [sp, #0x2d0]
                	mov	d4, v1.d[0]
                	ushll	v4.4s, v4.4h, #0x1
-               	str	q4, [sp, #0x2f0]
+               	str	q4, [sp, #0x2e0]
                	mov	d4, v2.d[0]
                	sshll	v4.2d, v4.2s, #0x1
-               	str	q4, [sp, #0x300]
+               	str	q4, [sp, #0x2f0]
                	ushll2	v4.2d, v2.4s, #0x1
-               	str	q4, [sp, #0x310]
+               	str	q4, [sp, #0x300]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -1370,34 +1369,34 @@ Disassembly of section .text:
                	mov	d4, v3.d[0]
                	sshll	v4.8h, v4.8b, #0x5
                	sub	x2, x29, #0x4a0
-               	str	q4, [sp, #0x320]
+               	str	q4, [sp, #0x310]
                	mov	d4, v3.d[1]
                	ushll	v4.8h, v4.8b, #0x5
-               	str	q4, [sp, #0x330]
+               	str	q4, [sp, #0x320]
                	mov	d4, v1.d[0]
                	sshll	v4.4s, v4.4h, #0x5
-               	str	q4, [sp, #0x340]
+               	str	q4, [sp, #0x330]
                	ushll2	v4.4s, v1.8h, #0x5
-               	str	q4, [sp, #0x350]
+               	str	q4, [sp, #0x340]
                	sshll2	v4.2d, v2.4s, #0x5
-               	str	q4, [sp, #0x360]
+               	str	q4, [sp, #0x350]
                	mov	d4, v2.d[0]
                	ushll	v4.2d, v4.2s, #0x5
-               	str	q4, [sp, #0x370]
+               	str	q4, [sp, #0x360]
                	sshll2	v4.8h, v3.16b, #0x5
-               	str	q4, [sp, #0x380]
+               	str	q4, [sp, #0x370]
                	ushll2	v4.8h, v3.16b, #0x5
-               	str	q4, [sp, #0x390]
+               	str	q4, [sp, #0x380]
                	sshll2	v4.4s, v1.8h, #0x5
-               	str	q4, [sp, #0x3a0]
+               	str	q4, [sp, #0x390]
                	mov	d4, v1.d[0]
                	ushll	v4.4s, v4.4h, #0x5
-               	str	q4, [sp, #0x3b0]
+               	str	q4, [sp, #0x3a0]
                	mov	d4, v2.d[0]
                	sshll	v4.2d, v4.2s, #0x5
-               	str	q4, [sp, #0x3c0]
+               	str	q4, [sp, #0x3b0]
                	ushll2	v4.2d, v2.4s, #0x5
-               	str	q4, [sp, #0x3d0]
+               	str	q4, [sp, #0x3c0]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -1556,34 +1555,34 @@ Disassembly of section .text:
                	mov	d4, v3.d[0]
                	shll	v4.8h, v4.8b, #8
                	sub	x2, x29, #0x3e0
-               	str	q4, [sp, #0x3e0]
+               	str	q4, [sp, #0x3d0]
                	mov	d4, v3.d[1]
                	shll	v4.8h, v4.8b, #8
-               	str	q4, [sp, #0x3f0]
+               	str	q4, [sp, #0x3e0]
                	mov	d4, v1.d[0]
                	sshll	v4.4s, v4.4h, #0x8
-               	str	q4, [sp, #0x400]
+               	str	q4, [sp, #0x3f0]
                	ushll2	v4.4s, v1.8h, #0x8
-               	str	q4, [sp, #0x410]
+               	str	q4, [sp, #0x400]
                	sshll2	v4.2d, v2.4s, #0x8
-               	str	q4, [sp, #0x420]
+               	str	q4, [sp, #0x410]
                	mov	d4, v2.d[0]
                	ushll	v4.2d, v4.2s, #0x8
+               	str	q4, [sp, #0x420]
+               	shll2	v4.8h, v3.16b, #8
                	str	q4, [sp, #0x430]
                	shll2	v4.8h, v3.16b, #8
                	str	q4, [sp, #0x440]
-               	shll2	v4.8h, v3.16b, #8
-               	str	q4, [sp, #0x450]
                	sshll2	v4.4s, v1.8h, #0x8
-               	str	q4, [sp, #0x460]
+               	str	q4, [sp, #0x450]
                	mov	d4, v1.d[0]
                	ushll	v4.4s, v4.4h, #0x8
-               	str	q4, [sp, #0x470]
+               	str	q4, [sp, #0x460]
                	mov	d4, v2.d[0]
                	sshll	v4.2d, v4.2s, #0x8
-               	str	q4, [sp, #0x480]
+               	str	q4, [sp, #0x470]
                	ushll2	v4.2d, v2.4s, #0x8
-               	str	q4, [sp, #0x490]
+               	str	q4, [sp, #0x480]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -1742,34 +1741,34 @@ Disassembly of section .text:
                	mov	d4, v3.d[0]
                	sshll	v4.8h, v4.8b, #0x7
                	sub	x2, x29, #0x320
-               	str	q4, [sp, #0x4a0]
+               	str	q4, [sp, #0x490]
                	mov	d4, v3.d[1]
                	ushll	v4.8h, v4.8b, #0x7
-               	str	q4, [sp, #0x4b0]
+               	str	q4, [sp, #0x4a0]
                	mov	d4, v1.d[0]
                	shll	v4.4s, v4.4h, #16
-               	str	q4, [sp, #0x4c0]
+               	str	q4, [sp, #0x4b0]
                	shll2	v4.4s, v1.8h, #16
-               	str	q4, [sp, #0x4d0]
+               	str	q4, [sp, #0x4c0]
                	sshll2	v4.2d, v2.4s, #0x10
-               	str	q4, [sp, #0x4e0]
+               	str	q4, [sp, #0x4d0]
                	mov	d4, v2.d[0]
                	ushll	v4.2d, v4.2s, #0x10
-               	str	q4, [sp, #0x4f0]
+               	str	q4, [sp, #0x4e0]
                	sshll2	v4.8h, v3.16b, #0x7
-               	str	q4, [sp, #0x500]
+               	str	q4, [sp, #0x4f0]
                	ushll2	v4.8h, v3.16b, #0x7
-               	str	q4, [sp, #0x510]
+               	str	q4, [sp, #0x500]
                	shll2	v4.4s, v1.8h, #16
-               	str	q4, [sp, #0x520]
+               	str	q4, [sp, #0x510]
                	mov	d4, v1.d[0]
                	shll	v4.4s, v4.4h, #16
-               	str	q4, [sp, #0x530]
+               	str	q4, [sp, #0x520]
                	mov	d4, v2.d[0]
                	sshll	v4.2d, v4.2s, #0x10
-               	str	q4, [sp, #0x540]
+               	str	q4, [sp, #0x530]
                	ushll2	v4.2d, v2.4s, #0x10
-               	str	q4, [sp, #0x550]
+               	str	q4, [sp, #0x540]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -1928,34 +1927,34 @@ Disassembly of section .text:
                	mov	d4, v3.d[0]
                	sshll	v4.8h, v4.8b, #0x5
                	sub	x2, x29, #0x260
-               	str	q4, [sp, #0x560]
+               	str	q4, [sp, #0x550]
                	mov	d4, v3.d[1]
                	ushll	v4.8h, v4.8b, #0x5
-               	str	q4, [sp, #0x570]
+               	str	q4, [sp, #0x560]
                	mov	d4, v1.d[0]
                	sshll	v4.4s, v4.4h, #0xf
-               	str	q4, [sp, #0x580]
+               	str	q4, [sp, #0x570]
                	ushll2	v4.4s, v1.8h, #0xf
-               	str	q4, [sp, #0x590]
+               	str	q4, [sp, #0x580]
                	shll2	v4.2d, v2.4s, #32
-               	str	q4, [sp, #0x5a0]
+               	str	q4, [sp, #0x590]
                	mov	d4, v2.d[0]
                	shll	v4.2d, v4.2s, #32
-               	str	q4, [sp, #0x5b0]
+               	str	q4, [sp, #0x5a0]
                	sshll2	v4.8h, v3.16b, #0x5
-               	str	q4, [sp, #0x5c0]
+               	str	q4, [sp, #0x5b0]
                	ushll2	v4.8h, v3.16b, #0x5
-               	str	q4, [sp, #0x5d0]
+               	str	q4, [sp, #0x5c0]
                	sshll2	v4.4s, v1.8h, #0xf
-               	str	q4, [sp, #0x5e0]
+               	str	q4, [sp, #0x5d0]
                	mov	d4, v1.d[0]
                	ushll	v4.4s, v4.4h, #0xf
-               	str	q4, [sp, #0x5f0]
+               	str	q4, [sp, #0x5e0]
                	mov	d4, v2.d[0]
                	shll	v4.2d, v4.2s, #32
-               	str	q4, [sp, #0x600]
+               	str	q4, [sp, #0x5f0]
                	shll2	v4.2d, v2.4s, #32
-               	str	q4, [sp, #0x610]
+               	str	q4, [sp, #0x600]
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	ldr	x3, [x1, #0x18]
@@ -2117,7 +2116,7 @@ Disassembly of section .text:
                	stur	d4, [x29, #-0x50]
                	mov	v4.16b, v1.16b
                	sadalp	v4.8h, v3.16b
-               	str	q4, [sp, #0x620]
+               	str	q4, [sp, #0x610]
                	mov	d4, v1.d[1]
                	mov	d5, v3.d[1]
                	uadalp	v4.4h, v5.8b
@@ -2125,17 +2124,17 @@ Disassembly of section .text:
                	mov	v16.16b, v1.16b
                	uadalp	v16.8h, v3.16b
                	mov	v3.16b, v16.16b
-               	str	q3, [sp, #0x630]
+               	str	q3, [sp, #0x620]
                	mov	d3, v2.d[0]
                	mov	d4, v1.d[0]
                	sadalp	v3.2s, v4.4h
                	stur	d3, [x29, #-0x40]
                	mov	v3.16b, v2.16b
                	sadalp	v3.4s, v1.8h
-               	str	q3, [sp, #0x640]
+               	str	q3, [sp, #0x630]
                	mov	v3.16b, v2.16b
                	uadalp	v3.4s, v1.8h
-               	str	q3, [sp, #0x650]
+               	str	q3, [sp, #0x640]
                	mov	d3, v2.d[1]
                	mov	v16.16b, v3.16b
                	uadalp	v16.2s, v1.4h
@@ -2147,13 +2146,13 @@ Disassembly of section .text:
                	stur	d1, [x29, #-0x28]
                	mov	v1.16b, v0.16b
                	sadalp	v1.2d, v2.4s
-               	str	q1, [sp, #0x660]
+               	str	q1, [sp, #0x650]
                	mov	d1, v0.d[1]
                	mov	d3, v2.d[1]
                	uadalp	v1.1d, v3.2s
                	stur	d1, [x29, #-0x30]
                	uadalp	v0.2d, v2.4s
-               	str	q0, [sp, #0x670]
+               	str	q0, [sp, #0x660]
                	sub	x2, x29, #0x50
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
@@ -2259,34 +2258,30 @@ Disassembly of section .text:
                	cmp	w0, #0x8
                	b.lo	<addr>
                	sub	x0, x29, #0x28
-               	mov	x21, #0x8               // =8
-               	mov	x1, x21
+               	mov	x1, #0x8                // =8
                	bl	<addr>
                	sub	x0, x29, #0x160
-               	mov	x22, #0x10              // =16
-               	mov	x1, x22
+               	mov	x1, #0x10               // =16
                	bl	<addr>
                	sub	x0, x29, #0x30
-               	mov	x1, x21
+               	mov	x1, #0x8                // =8
                	bl	<addr>
                	sub	x0, x29, #0x150
-               	mov	x1, x22
+               	mov	x1, #0x10               // =16
                	bl	<addr>
                	add	x20, x20, #0x1
                	cmp	w20, #0x12c
                	b.lt	<addr>
                	adrp	x0, <page>
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x1                // =1
-               	ldr	x0, [x0, #0x18]
+               	ldr	x0, [x0, <lo12>]
                	mov	x17, #0x93d4            // =37844
                	movk	x17, #0x987d, lsl #16
                	movk	x17, #0xd56f, lsl #32
                	movk	x17, #0x7495, lsl #48
                	cmp	x0, x17
-               	csel	x0, x1, x2, eq
-               	ldr	x22, [sp, #0x10]
-               	ldp	x20, x21, [sp]
-               	add	sp, sp, #0x7c0
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, eq
+               	ldr	x20, [sp]
+               	add	sp, sp, #0x7b0
                	ldp	x29, x30, [sp], #0x10
                	ret

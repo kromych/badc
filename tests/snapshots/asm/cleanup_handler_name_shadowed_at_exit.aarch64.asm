@@ -3,7 +3,7 @@ cleanup_handler_name_shadowed_at_exit.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -72,8 +72,8 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x20]!
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
-               	adrp	x1, <page>
-               	str	wzr, [x1, #0x20]
+               	adrp	x0, <page>
+               	str	wzr, [x0, #0x20]
                	mov	x0, #0x1                // =1
                	bl	<addr>
                	cmp	w0, #0xc

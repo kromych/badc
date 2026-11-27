@@ -3,7 +3,7 @@ libc_data_globals.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -21,19 +21,19 @@ Disassembly of section .text:
                	ldr	x0, [x0]
                	adrp	x1, <page>
                	ldr	x1, [x1, <lo12>]
+               	ldr	x2, [x1]
+               	adrp	x1, <page>
+               	ldr	x1, [x1, <lo12>]
                	ldr	x1, [x1]
-               	adrp	x2, <page>
-               	ldr	x2, [x2, <lo12>]
-               	ldr	x2, [x2]
                	cbnz	x0, <addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cbnz	x1, <addr>
+               	cbnz	x2, <addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cbnz	x2, <addr>
+               	cbnz	x1, <addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -47,10 +47,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	adrp	x0, <page>
+               	ldr	x0, [x0, <lo12>]
+               	ldr	x1, [x0]
+               	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	adrp	x1, <page>
-               	ldr	x1, [x1, <lo12>]
-               	ldr	x1, [x1]
                	bl	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0x0

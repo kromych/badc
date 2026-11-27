@@ -101,6 +101,36 @@ int mergesort(void *base, size_t nel, size_t width,
 
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
+// glibc's checking entry points, which an object built against glibc's headers
+// with _FORTIFY_SOURCE calls in place of the functions.
+#pragma binding(libc::__realpath_chk,  "__realpath_chk")
+#pragma binding(libc::__ptsname_r_chk, "__ptsname_r_chk")
+#pragma binding(libc::__wctomb_chk,    "__wctomb_chk")
+#pragma binding(libc::__mbstowcs_chk,  "__mbstowcs_chk")
+#pragma binding(libc::__wcstombs_chk,  "__wcstombs_chk")
+char *__realpath_chk(const char *, char *, size_t);
+int __ptsname_r_chk(int, char *, size_t, size_t);
+int __wctomb_chk(char *, wchar_t, size_t);
+size_t __mbstowcs_chk(wchar_t *, const char *, size_t, size_t);
+size_t __wcstombs_chk(char *, const wchar_t *, size_t, size_t);
+// glibc 2.38's C23 entry points, which an object built against its headers in
+// C23 mode calls: there strtol and the scanners' %i take a 0b prefix.
+#pragma binding(libc::__isoc23_strtol,     "__isoc23_strtol")
+#pragma binding(libc::__isoc23_strtoll,    "__isoc23_strtoll")
+#pragma binding(libc::__isoc23_strtoul,    "__isoc23_strtoul")
+#pragma binding(libc::__isoc23_strtoull,   "__isoc23_strtoull")
+#pragma binding(libc::__isoc23_strtol_l,   "__isoc23_strtol_l")
+#pragma binding(libc::__isoc23_strtoll_l,  "__isoc23_strtoll_l")
+#pragma binding(libc::__isoc23_strtoul_l,  "__isoc23_strtoul_l")
+#pragma binding(libc::__isoc23_strtoull_l, "__isoc23_strtoull_l")
+long __isoc23_strtol(const char *, char **, int);
+long long __isoc23_strtoll(const char *, char **, int);
+unsigned long __isoc23_strtoul(const char *, char **, int);
+unsigned long long __isoc23_strtoull(const char *, char **, int);
+long __isoc23_strtol_l(const char *, char **, int, struct __locale_struct *);
+long long __isoc23_strtoll_l(const char *, char **, int, struct __locale_struct *);
+unsigned long __isoc23_strtoul_l(const char *, char **, int, struct __locale_struct *);
+unsigned long long __isoc23_strtoull_l(const char *, char **, int, struct __locale_struct *);
 #pragma binding(libc::malloc,  "malloc")
 #pragma binding(libc::calloc,  "calloc")
 #pragma binding(libc::realloc, "realloc")

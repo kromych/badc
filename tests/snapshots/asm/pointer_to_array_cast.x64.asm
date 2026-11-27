@@ -3,7 +3,7 @@ pointer_to_array_cast.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,35 +26,33 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x38, %rsp
                	xorl	%eax, %eax
                	leaq	(%rax,%rax,2), %rdx
-               	movw	%dx, -0x30(%rbp,%rax,2)
+               	movw	%dx, (%rsp,%rax,2)
                	incq	%rax
                	cmpl	$0x18, %eax
                	jl	<addr>
-               	leaq	-0x30(%rbp), %rax
+               	leaq	(%rsp), %rax
                	leaq	0x10(%rax), %rcx
                	subq	%rax, %rcx
                	cmpq	$0x10, %rcx
                	je	<addr>
                	movl	$0x5, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq
-               	movswq	-0x1c(%rbp), %rax
+               	movswq	0x14(%rsp), %rax
                	cmpl	$0x1e, %eax
                	je	<addr>
                	movl	$0x6, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq
-               	movswq	-0x24(%rbp), %rax
+               	movswq	0xc(%rsp), %rax
                	cmpl	$0x12, %eax
                	je	<addr>
                	movl	$0x9, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq

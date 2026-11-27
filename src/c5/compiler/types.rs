@@ -474,10 +474,28 @@ pub(crate) const QUAL_PTR_LVL_MASK: i64 = (CONST_LVL_MASK & !(1 << CONST_LVL_SHI
 /// The qualifiers of the pointer derivations `ty` adds over an array
 /// element of `elem_depth` levels, numbered from level 1 as the
 /// aggregate-backed pointer-to-array tag counts them; the element's own
-/// levels stay in the aggregate.
+/// levels stay in the aggregate. A named address space moves with the
+/// pointer it qualifies: a segment on a pointer object above the
+/// element, a `__ptr32` on the pointer to the array or above. One at
+/// the element's own level rides in the element type.
 pub(crate) fn ptr_quals_over_array(ty: i64, elem_depth: i64) -> i64 {
     let rebase = |mask: i64, shift: i64| ((((ty & mask) >> shift) >> elem_depth) << shift) & mask;
+    let space = ty & SEG_MASK;
+    let level = (ty & SEG_LVL_MASK) >> SEG_LVL_SHIFT;
+    let first = if space == PTR32_SPACE {
+        elem_depth
+    } else {
+        elem_depth + 1
+    };
+    let segment = match level {
+        _ if space == 0 => 0,
+        // A misplaced or conflicting `__ptr32` keeps its marker for the report.
+        PTR32_CONFLICT.. => ty & (SEG_MASK | SEG_LVL_MASK),
+        _ if level < first => 0,
+        _ => space | ((level - elem_depth) << SEG_LVL_SHIFT),
+    };
     (ty & VOLATILE_BIT)
+        | segment
         | (rebase(CONST_LVL_MASK, CONST_LVL_SHIFT)
             | rebase(VOL_LVL_MASK, VOL_LVL_SHIFT)
             | rebase(ATOMIC_LVL_MASK, ATOMIC_LVL_SHIFT))
@@ -1143,12 +1161,11 @@ pub(crate) fn is_char_value_ty(ty: i64) -> bool {
 /// elements when that is non-zero, `multi_dim` when the declaration had
 /// more than one dimension -- contributes to the function's stack-protector
 /// classification. `elem_size` gives the byte size of `ty`; the caller owns
-/// the target-dependent sizing. Mirrors gcc's `stack_protect_classify_type`:
-/// an array whose element type is a character type counts by its byte
-/// extent, an array of anything else counts as an array, and an aggregate
-/// contributes whatever its members do. A multidimensional array's element
-/// type is the inner array, not the character type, so it counts as an
-/// array only.
+/// the target-dependent sizing. An array whose element type is a character
+/// type counts by its byte extent, an array of anything else counts as an
+/// array, and an aggregate contributes whatever its members do. A
+/// multidimensional array's element type is the inner array, not the
+/// character type, so it counts as an array only.
 pub(crate) fn ssp_classify(
     structs: &[super::StructDef],
     ty: i64,

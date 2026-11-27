@@ -3,7 +3,7 @@ inline_asm_high_byte_clobber.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -57,12 +57,12 @@ Disassembly of section .text:
                	movb	$0x7f, %ch
                	movb	$0x7f, %dh
                	callq	<addr>
-               	shlq	%r13
-               	xorq	%r13, %r12
+               	movq	%r13, %rax
+               	shlq	%rax
+               	xorq	%r12, %rax
                	shlq	$0x2, %r14
-               	xorq	%r14, %r12
+               	xorq	%r14, %rax
                	shlq	$0x3, %r15
-               	movq	%r12, %rax
                	xorq	%r15, %rax
                	movq	0x38(%rsp), %rcx
                	shlq	$0x4, %rcx
@@ -83,15 +83,14 @@ Disassembly of section .text:
                	pushq	%r13
                	pushq	%r12
                	leaq	(%rdi,%rdi,2), %rax
-               	addq	%rsi, %rax
-               	leaq	(%rdi,%rdi,4), %rcx
-               	subq	%rsi, %rcx
-               	movq	%rsi, %rdx
-               	shlq	$0x4, %rdx
-               	movq	%rdi, %r8
-               	xorq	%rdx, %r8
+               	leaq	(%rax,%rsi), %r9
+               	leaq	(%rdi,%rdi,4), %rax
+               	subq	%rsi, %rax
+               	movq	%rsi, %rcx
+               	shlq	$0x4, %rcx
+               	xorq	%rdi, %rcx
                	imulq	$0x7, %rsi, %rdx
-               	leaq	(%rdi,%rdx), %r9
+               	leaq	(%rdi,%rdx), %r8
                	movq	%rdi, %rdx
                	imulq	%rsi, %rdx
                	leaq	0x1(%rdx), %r12
@@ -102,12 +101,12 @@ Disassembly of section .text:
                	xorl	%edx, %edx
                	xorl	%ebx, %ebx
                	xorl	%esi, %esi
-               	shlq	%rcx
-               	addq	%rcx, %rax
-               	leaq	(%r8,%r8,2), %rcx
-               	addq	%rcx, %rax
-               	shlq	$0x2, %r9
+               	shlq	%rax
                	addq	%r9, %rax
+               	leaq	(%rcx,%rcx,2), %rcx
+               	addq	%rcx, %rax
+               	shlq	$0x2, %r8
+               	addq	%r8, %rax
                	leaq	(%r12,%r12,4), %rcx
                	addq	%rcx, %rax
                	imulq	$0x6, %rdi, %rcx
@@ -121,34 +120,39 @@ Disassembly of section .text:
                	retq
 
 <vectors>:
+               	pushq	%rbp
+               	movq	%rsp, %rbp
+               	subq	$0x10, %rsp
                	vmulsd	<rip>, %xmm0, %xmm6
                	vmulsd	<rip>, %xmm1, %xmm7
                	vaddsd	%xmm1, %xmm0, %xmm8
                	vsubsd	%xmm1, %xmm0, %xmm9
-               	vmulsd	%xmm1, %xmm0, %xmm10
-               	vdivsd	%xmm1, %xmm0, %xmm11
-               	vmulsd	<rip>, %xmm0, %xmm12
-               	vmulsd	<rip>, %xmm1, %xmm13
+               	vmulsd	%xmm1, %xmm0, %xmm12
+               	vdivsd	%xmm1, %xmm0, %xmm13
+               	vmulsd	<rip>, %xmm0, %xmm14
+               	movsd	%xmm14, 0x8(%rsp)
+               	vmulsd	<rip>, %xmm1, %xmm14
+               	movsd	%xmm14, (%rsp)
                	xorps	%xmm0, %xmm0
                	xorps	%xmm1, %xmm1
                	xorps	%xmm2, %xmm2
                	xorps	%xmm3, %xmm3
                	xorps	%xmm4, %xmm4
                	xorps	%xmm5, %xmm5
-               	vfmadd231sd	<rip>, %xmm7, %xmm6 # xmm6 = (xmm7 * mem) + xmm6
-               	vfmadd231sd	<rip>, %xmm8, %xmm6 # xmm6 = (xmm8 * mem) + xmm6
-               	vfmadd231sd	<rip>, %xmm9, %xmm6 # xmm6 = (xmm9 * mem) + xmm6
-               	vfmadd231sd	<rip>, %xmm10, %xmm6 # xmm6 = (xmm10 * mem) + xmm6
-               	vfmadd231sd	<rip>, %xmm11, %xmm6 # xmm6 = (xmm11 * mem) + xmm6
-               	movapd	%xmm12, %xmm0
+               	movapd	%xmm7, %xmm0
                	vfmadd132sd	<rip>, %xmm6, %xmm0 # xmm0 = (xmm0 * mem) + xmm6
+               	vfmadd231sd	<rip>, %xmm8, %xmm0 # xmm0 = (xmm8 * mem) + xmm0
+               	vfmadd231sd	<rip>, %xmm9, %xmm0 # xmm0 = (xmm9 * mem) + xmm0
+               	vfmadd231sd	<rip>, %xmm12, %xmm0 # xmm0 = (xmm12 * mem) + xmm0
                	vfmadd231sd	<rip>, %xmm13, %xmm0 # xmm0 = (xmm13 * mem) + xmm0
+               	movsd	0x8(%rsp), %xmm14
+               	vfmadd231sd	<rip>, %xmm14, %xmm0 # xmm0 = (xmm14 * mem) + xmm0
+               	movsd	(%rsp), %xmm14
+               	vfmadd231sd	<rip>, %xmm14, %xmm0 # xmm0 = (xmm14 * mem) + xmm0
+               	leave
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
                	pushq	%rbx
                	movq	<rip>, %rbx # <addr>
                	movq	%rbx, %rsi
@@ -166,7 +170,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	cmoveq	%rcx, %rax
                	popq	%rbx
-               	leave
                	retq
                	movq	%rbx, %rsi
                	shlq	%rsi
@@ -181,8 +184,7 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm1 # <addr>
                	vmulsd	<rip>, %xmm1, %xmm1
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax

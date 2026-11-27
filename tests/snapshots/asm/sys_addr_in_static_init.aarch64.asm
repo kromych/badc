@@ -3,7 +3,7 @@ sys_addr_in_static_init.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -31,11 +31,11 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x1, #0x0                // =0
                	ldr	x3, [x0, #0x8]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x2, x1
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x0                // =0
                	blr	x3
                	cmp	w0, #0x0
                	b.ge	<addr>
@@ -46,9 +46,9 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldr	x3, [x1, #0x68]
+               	str	x0, [sp]
                	sub	x1, x29, #0x8
                	mov	x2, #0x4                // =4
-               	str	x0, [sp]
                	blr	x3
                	str	x0, [sp, #0x8]
                	ldr	x0, [sp]

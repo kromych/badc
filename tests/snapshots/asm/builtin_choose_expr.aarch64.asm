@@ -3,7 +3,7 @@ builtin_choose_expr.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -12,11 +12,6 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
                	brk	#0x1
-
-<is_ready>:
-               	add	x0, x0, #0x38
-               	ldaprb	w0, [x0]
-               	ret
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
@@ -28,16 +23,17 @@ Disassembly of section .text:
                	stp	xzr, xzr, [x0, #0x20]
                	str	xzr, [x0, #0x30]
                	strb	wzr, [x0, #0x38]
-               	mov	x0, #0x0                // =0
                	sub	x1, x29, #0x80
-               	add	x1, x1, x0, lsl #3
-               	mov	x2, #-0x1               // =-1
-               	str	x2, [x1]
+               	mov	x0, #0x0                // =0
+               	add	x2, x1, x0, lsl #3
+               	mov	x3, #-0x1               // =-1
+               	str	x3, [x2]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
                	sub	x0, x29, #0xc0
-               	bl	<addr>
+               	add	x0, x0, #0x38
+               	ldaprb	w0, [x0]
                	cbz	w0, <addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0xc0
@@ -46,7 +42,8 @@ Disassembly of section .text:
                	sub	x0, x29, #0xc0
                	mov	x1, #0x1                // =1
                	sturb	w1, [x29, #-0x88]
-               	bl	<addr>
+               	add	x0, x0, #0x38
+               	ldaprb	w0, [x0]
                	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x8                // =8

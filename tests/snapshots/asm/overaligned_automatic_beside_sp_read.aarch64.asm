@@ -3,7 +3,7 @@ overaligned_automatic_beside_sp_read.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -67,13 +67,13 @@ Disassembly of section .text:
                	cmp	w3, #0x3
                	cset	x3, ne
                	orr	x2, x2, x3, lsl #1
-               	mov	x3, #0x1                // =1
-               	sub	x4, x0, x1
+               	sub	x3, x0, x1
                	mov	x17, #0x1000            // =4096
-               	cmp	x4, x17
-               	cset	x4, hi
+               	cmp	x3, x17
+               	cset	x3, hi
                	cmp	x0, x1
-               	csel	x0, x3, x4, lo
+               	mov	x16, #0x1               // =1
+               	csel	x0, x16, x3, lo
                	orr	x0, x2, x0, lsl #2
                	sub	sp, x29, #0x80
                	ldr	x28, [sp, #0x40]
@@ -130,13 +130,13 @@ Disassembly of section .text:
                	cmp	w2, #0x3
                	cset	x2, ne
                	orr	x1, x1, x2, lsl #1
-               	mov	x2, #0x1                // =1
-               	sub	x3, x0, x20
+               	sub	x2, x0, x20
                	mov	x17, #0x1000            // =4096
-               	cmp	x3, x17
-               	cset	x3, hi
+               	cmp	x2, x17
+               	cset	x2, hi
                	cmp	x0, x20
-               	csel	x0, x2, x3, lo
+               	mov	x16, #0x1               // =1
+               	csel	x0, x16, x2, lo
                	orr	x0, x1, x0, lsl #2
                	sub	sp, x29, #0x80
                	ldr	x28, [sp, #0x40]

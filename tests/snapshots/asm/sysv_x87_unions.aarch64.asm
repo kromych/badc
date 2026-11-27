@@ -3,7 +3,7 @@ sysv_x87_unions.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -672,8 +672,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x7, x29, #0x50
-               	mov	x0, #0x3                // =3
                	ldr	q0, [x7]
+               	mov	x0, #0x3                // =3
                	bl	<addr>
                	stur	q0, [x29, #-0x20]
                	add	x16, sp, #0x70
@@ -686,10 +686,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x7                // =7
                	sub	x7, x29, #0x40
-               	mov	x1, #0x3                // =3
                	ldr	q0, [x7]
+               	mov	x0, #0x7                // =7
+               	mov	x1, #0x3                // =3
                	bl	<addr>
                	stur	q0, [x29, #-0x20]
                	add	x16, sp, #0x70

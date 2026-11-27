@@ -3,7 +3,7 @@ address_constant_array_strides.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,22 +26,22 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	movq	<rip>, %rax # <addr>
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	0x10(%rcx), %rdx
-               	cmpq	%rdx, %rax
+               	movq	<rip>, %rcx # <addr>
+               	leaq	<rip>, %rax # <addr>
+               	leaq	0x10(%rax), %rdx
+               	cmpq	%rdx, %rcx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	movq	<rip>, %rdx # <addr>
-               	leaq	<rip>, %rax # <addr>
-               	leaq	0x20(%rax), %rsi
+               	leaq	<rip>, %rcx # <addr>
+               	leaq	0x20(%rcx), %rsi
                	cmpq	%rsi, %rdx
                	je	<addr>
                	movl	$0x2, %eax
                	retq
                	movq	<rip>, %rdx # <addr>
-               	leaq	0x30(%rax), %rsi
+               	leaq	0x30(%rcx), %rsi
                	cmpq	%rsi, %rdx
                	je	<addr>
                	movl	$0x3, %eax
@@ -85,12 +85,12 @@ Disassembly of section .text:
                	movl	$0x8, %eax
                	retq
                	movq	<rip>, %rdx # <addr>
-               	addq	$0xc, %rcx
-               	cmpq	%rcx, %rdx
+               	addq	$0xc, %rax
+               	cmpq	%rax, %rdx
                	jne	<addr>
-               	movq	<rip>, %rcx # <addr>
-               	addq	$0x10, %rax
-               	cmpq	%rax, %rcx
+               	movq	<rip>, %rax # <addr>
+               	addq	$0x10, %rcx
+               	cmpq	%rcx, %rax
                	je	<addr>
                	movl	$0x9, %eax
                	retq

@@ -580,28 +580,6 @@ impl BlockLiveness {
         }
     }
 
-    /// Every value live on entry to `b`, in ascending value order.
-    pub(crate) fn for_each_live_in(&self, b: BlockId, mut f: impl FnMut(ValueId)) {
-        match &self.live {
-            LiveSets::Dense { words, live_in, .. } => {
-                let base = b as usize * words;
-                for w in 0..*words {
-                    let mut bits = live_in[base + w];
-                    while bits != 0 {
-                        let r = w * 64 + bits.trailing_zeros() as usize;
-                        f(self.universe[r]);
-                        bits &= bits - 1;
-                    }
-                }
-            }
-            LiveSets::Sparse(s) => {
-                for &r in s.in_row(b) {
-                    f(self.universe[r as usize]);
-                }
-            }
-        }
-    }
-
     /// Every value live on exit from `b`, in ascending value order.
     pub(crate) fn for_each_live_out(&self, b: BlockId, mut f: impl FnMut(ValueId)) {
         match &self.live {
@@ -879,7 +857,7 @@ impl Liveness {
         let n = func.insts.len();
         // Edges packed (low << 32) | high: one-word sort + dedup.
         let mut pairs: Vec<u64> = Vec::new();
-        let mut live = LiveNodeSet::new(n, track_occupancy(func));
+        let mut live = LiveNodeSet::new(n, track_occupancy(func, func.blocks.len()));
         for (b, blk) in func.blocks.iter().enumerate() {
             live.clear();
             self.blocks
@@ -901,9 +879,11 @@ impl Liveness {
                 let inst = &func.insts[idx as usize];
                 if super::reg_alloc::produces_value(inst) {
                     let di = node_of[idx as usize];
-                    for &nd in &live.nodes {
-                        if nd != di {
-                            pairs.push(((di.min(nd) as u64) << 32) | di.max(nd) as u64);
+                    if di != NO_VALUE {
+                        for &nd in &live.nodes {
+                            if nd != di {
+                                pairs.push(((di.min(nd) as u64) << 32) | di.max(nd) as u64);
+                            }
                         }
                     }
                     live.remove(idx, node_of);
@@ -925,6 +905,9 @@ impl Liveness {
             }
             for idx in blk.inst_range.start..phi_end {
                 let di = node_of[idx as usize];
+                if di == NO_VALUE {
+                    continue;
+                }
                 for &nd in &live.nodes {
                     if nd != di {
                         pairs.push(((di.min(nd) as u64) << 32) | di.max(nd) as u64);
@@ -933,6 +916,42 @@ impl Liveness {
             }
         }
         Interference::from_pairs(n, pairs)
+    }
+
+    /// The values to take out of a graph of `bound` values live at once:
+    /// wherever more than `bound` values are live, those `eligible` admits
+    /// that were defined first, until no point has more. One backward sweep
+    /// per block, the live values eligible in an ordered set.
+    pub(crate) fn crowded(
+        &self,
+        func: &FunctionSsa,
+        bound: usize,
+        eligible: &dyn Fn(ValueId) -> bool,
+    ) -> Vec<bool> {
+        let n = func.insts.len();
+        let mut sweep = Crowding {
+            out: alloc::vec![false; n],
+            live: alloc::vec![false; n],
+            members: Vec::new(),
+            candidates: Default::default(),
+            count: 0,
+            eligible,
+        };
+        for (b, blk) in func.blocks.iter().enumerate() {
+            sweep.clear();
+            self.blocks
+                .for_each_live_out(b as BlockId, |v| sweep.enter(v));
+            blk.terminator.for_each_operand(|v| sweep.enter(v));
+            for idx in blk.inst_range.clone().rev() {
+                let inst = &func.insts[idx as usize];
+                sweep.leave(idx);
+                if !matches!(inst, Inst::Phi { .. }) && self.reads(idx) {
+                    for_each_read_operand(inst, &self.reads, |op| sweep.enter(op));
+                }
+                sweep.relieve(bound);
+            }
+        }
+        sweep.out
     }
 
     /// Per-value flag: true when the value's live range spans a call,
@@ -960,7 +979,10 @@ impl Liveness {
     ) -> Vec<bool> {
         // Monomorphised on the occupancy mode so the ordinary function
         // pays no test for bookkeeping it does not do.
-        if track_occupancy(func) {
+        let calls = (func.insts.iter())
+            .filter(|inst| super::reg_alloc::is_call_site(inst, tls_addr_is_call))
+            .count();
+        if track_occupancy(func, func.blocks.len() + calls) {
             self.sweep_calls::<true>(func, tls_addr_is_call)
         } else {
             self.sweep_calls::<false>(func, tls_addr_is_call)
@@ -989,7 +1011,7 @@ impl Liveness {
                 let inst = &func.insts[idx as usize];
                 let is_call = super::reg_alloc::is_call_site(inst, tls_addr_is_call);
                 if super::reg_alloc::produces_value(inst) {
-                    live.unset(idx);
+                    live.unset::<TRACK>(idx);
                 }
                 // After removing the call's own result (its definition
                 // point), `live` holds exactly the values live at the
@@ -1010,6 +1032,68 @@ impl Liveness {
         out
     }
 
+    /// The registers `reg` gives the values at each point of `func`
+    /// ([`RegisterMasks`]), by the backward sweep of
+    /// [`Self::values_live_after`].
+    pub(crate) fn register_masks(
+        &self,
+        func: &FunctionSsa,
+        reg: &dyn Fn(ValueId) -> Option<u8>,
+    ) -> RegisterMasks {
+        let n = func.insts.len();
+        let mut masks = RegisterMasks {
+            through: vec![0; n],
+            touched: vec![0; n],
+            block_end: vec![0; func.blocks.len()],
+        };
+        let bit = |v: ValueId| reg(v).map_or(0u16, |r| 1 << r);
+        let mut live = SparseValueSet::new(n, track_occupancy(func, func.blocks.len()));
+        let mut held: [u32; 16];
+        let add = |live: &mut SparseValueSet, held: &mut [u32; 16], v: ValueId| {
+            if live.insert(v)
+                && let Some(r) = reg(v)
+            {
+                held[usize::from(r)] += 1;
+            }
+        };
+        let mask = |held: &[u32; 16]| (0..16).filter(|&r| held[r] != 0).fold(0, |m, r| m | 1 << r);
+        for (b, blk) in func.blocks.iter().enumerate() {
+            live.clear();
+            held = [0; 16];
+            self.blocks
+                .for_each_live_out(b as BlockId, |v| add(&mut live, &mut held, v));
+            blk.terminator.for_each_operand(|v| {
+                if v != NO_VALUE && (v as usize) < n {
+                    add(&mut live, &mut held, v);
+                }
+            });
+            masks.block_end[b] = mask(&held);
+            for idx in (blk.inst_range.start..blk.inst_range.end).rev() {
+                let inst = &func.insts[idx as usize];
+                let mut touched = 0u16;
+                if super::reg_alloc::produces_value(inst) {
+                    if live.remove(idx)
+                        && let Some(r) = reg(idx)
+                    {
+                        held[usize::from(r)] -= 1;
+                    }
+                    touched |= bit(idx);
+                }
+                masks.through[idx as usize] = mask(&held);
+                if !matches!(inst, Inst::Phi { .. }) && self.reads(idx) {
+                    for_each_read_operand(inst, &self.reads, |op| {
+                        if op != NO_VALUE && (op as usize) < n {
+                            add(&mut live, &mut held, op);
+                            touched |= bit(op);
+                        }
+                    });
+                }
+                masks.touched[idx as usize] = touched;
+            }
+        }
+        masks
+    }
+
     /// Values live at the program point immediately after each
     /// instruction `is_site` selects, as `(site, values)` pairs ordered
     /// by site. Same per-block backward sweep as
@@ -1024,7 +1108,9 @@ impl Liveness {
     ) -> Vec<(ValueId, Vec<ValueId>)> {
         let n = func.insts.len();
         let mut out: Vec<(ValueId, Vec<ValueId>)> = Vec::new();
-        let mut live = SparseValueSet::new(n, track_occupancy(func));
+        let sites = func.insts.iter().filter(|inst| is_site(inst)).count();
+        let track = track_occupancy(func, func.blocks.len() + sites);
+        let mut live = SparseValueSet::new(n, track);
         for (b, blk) in func.blocks.iter().enumerate() {
             if !blk
                 .inst_range
@@ -1045,7 +1131,11 @@ impl Liveness {
             for idx in (blk.inst_range.start..blk.inst_range.end).rev() {
                 let inst = &func.insts[idx as usize];
                 if super::reg_alloc::produces_value(inst) {
-                    live.unset(idx);
+                    if track {
+                        live.unset::<true>(idx);
+                    } else {
+                        live.unset::<false>(idx);
+                    }
                 }
                 if is_site(inst) {
                     let mut vals: Vec<ValueId> = Vec::new();
@@ -1067,33 +1157,42 @@ impl Liveness {
     }
 }
 
-/// Whether a per-block live-set sweep over `func` should track which
-/// words of its bit vector hold members. The sweep clears the set once
-/// per block and scans it at each call, so the full-width form costs
-/// `blocks * values / 64` -- the area term that grows faster than the
-/// function. Tracking removes it, at a per-insertion cost that only
-/// pays once the area is large.
-fn track_occupancy(func: &FunctionSsa) -> bool {
-    func.blocks
-        .len()
-        .saturating_mul(func.insts.len().div_ceil(64))
-        > DENSE_WORD_BUDGET
+/// Registers of the values at each point of a function, one bit per
+/// general register.
+#[derive(Debug, Clone)]
+pub(crate) struct RegisterMasks {
+    /// Per instruction, the values live across it: live after it, itself
+    /// excepted.
+    pub(crate) through: Vec<u16>,
+    /// Per instruction, the values it reads and the value it defines.
+    pub(crate) touched: Vec<u16>,
+    /// Per block, the values live out of it and those its terminator reads.
+    pub(crate) block_end: Vec<u16>,
+}
+
+/// Whether a live-set sweep over `func` that clears or enumerates its
+/// set `scans` times -- once per block, and once per site it reports --
+/// should track which words of the bit vector hold members. The
+/// full-width form costs `scans * values / 64`, the area term that grows
+/// faster than the function; tracking removes it, at a per-update cost
+/// that only pays once the area is large.
+fn track_occupancy(func: &FunctionSsa, scans: usize) -> bool {
+    scans.saturating_mul(func.insts.len().div_ceil(64)) > DENSE_WORD_BUDGET
 }
 
 /// Set of value ids as a bit vector that also tracks which of its words
 /// hold a member, so enumerating and clearing cost the occupied words
 /// rather than the vector's width -- the term that made a per-call scan
 /// of the whole set grow with the function. Insertion stays a load, a
-/// test and a store; only the first member of a word appends to the
-/// occupancy list.
+/// test and a store; only a word's first member appends to the
+/// occupancy list, and its last one leaving takes the word out.
 struct SparseValueSet {
     bits: Vec<u64>,
-    /// Words that have held a member since the last clear, each listed
-    /// once -- a word that empties and refills must not be listed
-    /// again, or the list grows with the instruction count rather than
-    /// with the set's width. Empty when `track` is false.
+    /// The words holding a member, each once. Empty when `track` is
+    /// false.
     touched: Vec<u32>,
-    listed: Vec<bool>,
+    /// Per word, its position in `touched`, `u32::MAX` when empty.
+    listed: Vec<u32>,
     track: bool,
 }
 
@@ -1108,7 +1207,7 @@ impl SparseValueSet {
         SparseValueSet {
             bits: alloc::vec![0; words],
             touched: Vec::new(),
-            listed: alloc::vec![false; if track { words } else { 0 }],
+            listed: alloc::vec![u32::MAX; if track { words } else { 0 }],
             track,
         }
     }
@@ -1117,16 +1216,34 @@ impl SparseValueSet {
     /// `TRACK` must match the mode the set was built with.
     fn set<const TRACK: bool>(&mut self, v: ValueId) {
         let w = v as usize / 64;
-        self.bits[w] |= 1u64 << (v % 64);
-        if TRACK && !self.listed[w] {
-            self.listed[w] = true;
+        if TRACK && self.bits[w] == 0 {
+            self.listed[w] = self.touched.len() as u32;
             self.touched.push(w as u32);
+        }
+        self.bits[w] |= 1u64 << (v % 64);
+    }
+
+    /// Drop `v` if present. `TRACK` must match the mode the set was
+    /// built with.
+    fn unset<const TRACK: bool>(&mut self, v: ValueId) {
+        let w = v as usize / 64;
+        self.bits[w] &= !(1u64 << (v % 64));
+        if TRACK && self.bits[w] == 0 {
+            self.unlist(w);
         }
     }
 
-    /// Drop `v` if present.
-    fn unset(&mut self, v: ValueId) {
-        self.bits[v as usize / 64] &= !(1u64 << (v % 64));
+    /// Take the emptied word `w` out of the occupancy list, if listed.
+    fn unlist(&mut self, w: usize) {
+        let at = core::mem::replace(&mut self.listed[w], u32::MAX);
+        if at == u32::MAX {
+            return;
+        }
+        let last = self.touched.pop().unwrap();
+        if (at as usize) < self.touched.len() {
+            self.touched[at as usize] = last;
+            self.listed[last as usize] = at;
+        }
     }
 
     /// Whether `v` was absent and is now a member.
@@ -1150,6 +1267,9 @@ impl SparseValueSet {
             return false;
         }
         self.bits[w] &= !m;
+        if self.track && self.bits[w] == 0 {
+            self.unlist(w);
+        }
         true
     }
 
@@ -1179,9 +1299,63 @@ impl SparseValueSet {
         }
         for &w in &self.touched {
             self.bits[w as usize] = 0;
-            self.listed[w as usize] = false;
+            self.listed[w as usize] = u32::MAX;
         }
         self.touched.clear();
+    }
+}
+
+/// The state of [`Liveness::crowded`]'s sweep through a block: the values
+/// live, those taken out so far, and the live ones that may be.
+struct Crowding<'a> {
+    out: Vec<bool>,
+    live: Vec<bool>,
+    members: Vec<ValueId>,
+    candidates: alloc::collections::BTreeSet<ValueId>,
+    count: usize,
+    eligible: &'a dyn Fn(ValueId) -> bool,
+}
+
+impl Crowding<'_> {
+    fn clear(&mut self) {
+        for &v in &self.members {
+            self.live[v as usize] = false;
+        }
+        self.members.clear();
+        self.candidates.clear();
+        self.count = 0;
+    }
+
+    fn enter(&mut self, v: ValueId) {
+        let i = v as usize;
+        if i < self.live.len() && !self.out[i] && !self.live[i] {
+            self.live[i] = true;
+            self.members.push(v);
+            self.count += 1;
+            if (self.eligible)(v) {
+                self.candidates.insert(v);
+            }
+        }
+    }
+
+    fn leave(&mut self, v: ValueId) {
+        if self.live[v as usize] {
+            self.live[v as usize] = false;
+            self.count -= 1;
+            self.candidates.remove(&v);
+        }
+    }
+
+    /// Take out the first-defined candidates while more than `bound` live.
+    fn relieve(&mut self, bound: usize) {
+        while self.count > bound {
+            let Some(v) = self.candidates.pop_first() else {
+                break;
+            };
+            self.out[v as usize] = true;
+            self.live[v as usize] = false;
+            self.count -= 1;
+        }
     }
 }
 
@@ -1229,8 +1403,9 @@ impl LiveNodeSet {
         *c += 1;
     }
 
+    /// Add `v`; a value without a node (`NO_VALUE`) takes part in nothing.
     fn insert(&mut self, v: ValueId, node_of: &[ValueId]) {
-        if !self.vals.insert(v) {
+        if node_of[v as usize] == NO_VALUE || !self.vals.insert(v) {
             return;
         }
         self.enter(node_of[v as usize]);
@@ -1373,6 +1548,7 @@ mod tests {
             tls_dynamic: false,
             section: None,
             patchable_entry: None,
+            type_hash: None,
             no_instrument: false,
             no_stack_protector: false,
             is_weak: false,
@@ -1407,6 +1583,9 @@ mod tests {
             has_returns_twice_call: false,
             did_unroll: false,
             did_inline: false,
+            frees_rbp: false,
+            fenv_access: false,
+            ret_low_word: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),
@@ -1781,6 +1960,7 @@ mod tests {
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
+            parts: Vec::new(),
         }
     }
 

@@ -3,7 +3,7 @@ const_through_a_pointer_typedef.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -62,15 +62,15 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
+               	adrp	x0, <page>
+               	ldr	x1, [x0, #0x48]
                	mov	x0, #0x1                // =1
-               	adrp	x1, <page>
-               	ldr	x1, [x1, <lo12>]
                	blr	x1
                	cmp	w0, #0x3
                	b.ne	<addr>
+               	adrp	x0, <page>
+               	ldr	x1, [x0, #0x58]
                	mov	x0, #0x2                // =2
-               	adrp	x1, <page>
-               	ldr	x1, [x1, <lo12>]
                	blr	x1
                	cmp	w0, #0x4
                	b.ne	<addr>

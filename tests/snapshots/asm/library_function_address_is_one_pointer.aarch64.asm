@@ -3,7 +3,7 @@ library_function_address_is_one_pointer.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -35,25 +35,24 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	blr	x1
                	str	x0, [sp, #0x8]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	ldr	x1, [x1, <lo12>]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	blr	x1
                	ldr	x16, [sp, #0x8]
                	add	x16, x16, x0
                	str	x16, [sp, #0x8]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	ldr	x1, [x1, <lo12>]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	blr	x1
                	ldr	x16, [sp, #0x8]
                	add	x0, x16, x0
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x2                // =2
                	cmp	x0, #0x6
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x2               // =2
+               	csel	x0, xzr, x17, eq
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

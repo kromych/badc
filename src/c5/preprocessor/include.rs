@@ -119,8 +119,9 @@ impl IncludeFrame {
 
 /// Where a header search begins.
 enum SearchStart<'a> {
-    /// `#include "name"` in a file in this directory.
-    Quoted(String),
+    /// `#include "name"`: the including file's directory, then, under cl's
+    /// rule, those of the files including it.
+    Quoted(Vec<String>),
     Angle,
     /// `#include_next` in the file this frame describes.
     After(&'a IncludeFrame),
@@ -281,7 +282,15 @@ impl Preprocessor {
                 SearchStart::After(frame)
             }
             _ if form.quoted => {
-                SearchStart::Quoted(include_parent_dir(filename).unwrap_or_default())
+                let mut dirs = alloc::vec![include_parent_dir(filename).unwrap_or_default()];
+                if self.msvc_include_search {
+                    // cl searches the directories of the open files, from the
+                    // includer's parent out to the primary source's.
+                    let outer = self.open_files.iter().rev().skip(1);
+                    dirs.extend(outer.filter_map(|f| include_parent_dir(f)));
+                    dirs.dedup();
+                }
+                SearchStart::Quoted(dirs)
             }
             _ => SearchStart::Angle,
         };
@@ -479,13 +488,29 @@ impl Preprocessor {
         for root in self.own_header_roots.iter() {
             let candidate = join_include_path(root, name);
             if let Ok(body) = std::fs::read_to_string(&candidate) {
+                let body = self.after_features(name, body);
                 let mut found = Resolved::own(body, name, Some(candidate), SearchStep::Own);
                 found.dir = Some(root.clone());
                 return Some(found);
             }
         }
-        embedded_header(name, self.target, from_own)
-            .map(|b| Resolved::own(b.to_string(), name, None, SearchStep::Own))
+        embedded_header(name, self.target, from_own).map(|b| {
+            let body = self.after_features(name, b.to_string());
+            Resolved::own(body, name, None, SearchStep::Own)
+        })
+    }
+
+    /// On Linux a C library header is entered after `<features.h>`, which
+    /// derives the feature-test macros from the program's request as the GNU
+    /// C library's headers do by including it first; `#line` keeps the
+    /// header's own line numbers.
+    fn after_features(&self, name: &str, body: String) -> String {
+        let linux = matches!(self.target, Target::LinuxX64 | Target::LinuxAarch64);
+        if linux && crate::c5::headers::follows_features(name) {
+            alloc::format!("#include <features.h>\n#line 1\n{body}")
+        } else {
+            body
+        }
     }
 
     /// Look `name` up from `start`, visiting the [`SearchStep`]s in order:
@@ -523,8 +548,10 @@ impl Preprocessor {
             if std::path::Path::new(name).is_absolute() {
                 return probe_dir(name, "", SearchStep::Absolute);
             }
-            if let SearchStart::Quoted(dir) = &start
-                && let Some(found) = probe(SearchStep::SourceDir, dir)
+            if let SearchStart::Quoted(dirs) = &start
+                && let Some(found) = dirs
+                    .iter()
+                    .find_map(|dir| probe(SearchStep::SourceDir, dir))
             {
                 return Some(found);
             }

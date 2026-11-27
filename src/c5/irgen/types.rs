@@ -352,6 +352,7 @@ pub(super) fn lvalue_shape_label(expr: &Expr) -> &'static str {
         Expr::ShuffleVector { .. } => "ShuffleVector",
         Expr::MsIntrinsic { .. } => "MsIntrinsic",
         Expr::MemTransfer { .. } => "MemTransfer",
+        Expr::MemLoop { .. } => "MemLoop",
         Expr::InlineAsm(_) => "InlineAsm",
     }
 }

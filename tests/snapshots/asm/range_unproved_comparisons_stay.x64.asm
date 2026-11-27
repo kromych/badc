@@ -3,7 +3,7 @@ range_unproved_comparisons_stay.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,9 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	movq	$0x100, <rip> # imm = 0x100
                                                 # <addr>
                	movq	$0x100, <rip> # imm = 0x100
@@ -45,7 +43,7 @@ Disassembly of section .text:
                	testq	%rcx, %rcx
                	je	<addr>
                	movq	%rcx, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movq	<rip>, %rcx # <addr>
                	cmpl	$0x2, %ecx
@@ -55,56 +53,54 @@ Disassembly of section .text:
                	movl	$0x2, %eax
                	testl	%eax, %eax
                	je	<addr>
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movl	$0x5, %eax
-               	movq	%rax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rcx
-               	movq	%rcx, <rip> # <addr>
-               	movq	-0x8(%rbp), %rcx
-               	cmpq	$0x64, %rcx
+               	movl	$0x5, %ecx
+               	movq	%rcx, 0x8(%rsp)
+               	leaq	0x8(%rsp), %rax
+               	movq	%rax, <rip> # <addr>
+               	movq	0x8(%rsp), %rdx
+               	cmpq	$0x64, %rdx
                	jge	<addr>
-               	movq	<rip>, %rcx # <addr>
-               	movq	$0x100, (%rcx)          # imm = 0x100
-               	movq	-0x8(%rbp), %rcx
-               	cmpq	$0x64, %rcx
+               	movq	$0x100, (%rax)          # imm = 0x100
+               	movq	0x8(%rsp), %rax
+               	cmpq	$0x64, %rax
                	jge	<addr>
-               	movl	$0x3, %ecx
-               	testl	%ecx, %ecx
-               	je	<addr>
-               	movq	%rcx, %rax
-               	leave
-               	retq
-               	movq	<rip>, %rcx # <addr>
-               	testq	%rcx, %rcx
-               	jbe	<addr>
-               	addq	$-0x11, %rcx
-               	cmpq	$-0x11, %rcx
-               	jbe	<addr>
-               	movl	$0x4, %ecx
-               	testl	%ecx, %ecx
-               	je	<addr>
-               	movq	%rcx, %rax
-               	leave
-               	retq
-               	movq	<rip>, %rcx # <addr>
-               	testq	%rcx, %rcx
-               	je	<addr>
-               	shlq	$0x37, %rcx
-               	testq	%rcx, %rcx
-               	jl	<addr>
+               	movl	$0x3, %eax
                	testl	%eax, %eax
                	je	<addr>
-               	leave
+               	addq	$0x18, %rsp
+               	retq
+               	movq	<rip>, %rax # <addr>
+               	testq	%rax, %rax
+               	jbe	<addr>
+               	addq	$-0x11, %rax
+               	cmpq	$-0x11, %rax
+               	jbe	<addr>
+               	movl	$0x4, %eax
+               	testl	%eax, %eax
+               	je	<addr>
+               	addq	$0x18, %rsp
+               	retq
+               	movq	<rip>, %rax # <addr>
+               	testq	%rax, %rax
+               	je	<addr>
+               	shlq	$0x37, %rax
+               	testq	%rax, %rax
+               	jl	<addr>
+               	testl	%ecx, %ecx
+               	je	<addr>
+               	movq	%rcx, %rax
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
+               	xorl	%ecx, %ecx
+               	jmp	<addr>
                	xorl	%eax, %eax
                	jmp	<addr>
-               	xorl	%ecx, %ecx
-               	jmp	<addr>
-               	xorl	%ecx, %ecx
+               	xorl	%eax, %eax
                	jmp	<addr>
                	movq	%rax, %rcx
                	jmp	<addr>

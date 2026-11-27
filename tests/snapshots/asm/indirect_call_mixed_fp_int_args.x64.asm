@@ -3,7 +3,7 @@ indirect_call_mixed_fp_int_args.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -35,15 +35,10 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	addq	$0x19, %rax
                	addq	$0x3, %rax
-               	leaq	0x7(%rax), %rcx
-               	cmpl	$0x40, %ecx
+               	addq	$0x7, %rax
+               	cmpl	$0x40, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	retq
-               	addq	$0x7, %rax
-               	cmpl	%eax, %ecx
-               	je	<addr>
-               	movl	$0x2, %eax
                	retq
                	xorl	%eax, %eax
                	retq

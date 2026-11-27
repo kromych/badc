@@ -3,7 +3,7 @@ return_cleanup_shared.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -43,10 +43,10 @@ Disassembly of section .text:
                	strb	w0, [x2, x1]
                	mov	x0, #0xa                // =10
                	ret
-               	mov	x1, #0x3                // =3
-               	mov	x2, #0x14               // =20
                	cmp	w0, #0x1
-               	csel	x0, x1, x2, eq
+               	mov	x16, #0x3               // =3
+               	mov	x17, #0x14              // =20
+               	csel	x0, x16, x17, eq
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x1, <page>
@@ -92,10 +92,10 @@ Disassembly of section .text:
                	str	w4, [x1, #0x60]
                	mov	x4, #0x63               // =99
                	strb	w4, [x2, x3]
-               	mov	x3, #0x1e               // =30
-               	mov	x4, #0x28               // =40
                	cmp	w0, #0x2
-               	csel	x0, x3, x4, eq
+               	mov	x16, #0x1e              // =30
+               	mov	x17, #0x28              // =40
+               	csel	x0, x16, x17, eq
                	ldrsw	x3, [x1, #0x60]
                	add	x4, x3, #0x1
                	str	w4, [x1, #0x60]
@@ -137,16 +137,15 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x30
-               	stur	x8, [x29, #-0x20]
-               	mov	x1, #0x4                // =4
-               	stur	w1, [x29, #-0x28]
+               	stur	x8, [x29, #-0x28]
+               	mov	x3, #0x4                // =4
                	mov	x4, #0x1                // =1
-               	mov	x3, #0x2                // =2
-               	mov	x2, #0x3                // =3
+               	mov	x2, #0x2                // =2
+               	mov	x1, #0x3                // =3
                	cbnz	w0, <addr>
                	stur	x4, [x29, #-0x18]
-               	stur	x3, [x29, #-0x10]
-               	stur	x2, [x29, #-0x8]
+               	stur	x2, [x29, #-0x10]
+               	stur	x1, [x29, #-0x8]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x0, <page>
@@ -155,11 +154,9 @@ Disassembly of section .text:
                	str	w3, [x0, #0x60]
                	mov	x0, #0x61               // =97
                	strb	w0, [x2, x1]
-               	mov	x0, #-0x1               // =-1
-               	stur	w0, [x29, #-0x28]
                	sub	x0, x29, #0x18
                	mov	x16, x0
-               	ldur	x17, [x29, #-0x20]
+               	ldur	x17, [x29, #-0x28]
                	ldp	x0, x1, [x16]
                	stp	x0, x1, [x17]
                	ldr	x0, [x16, #0x10]
@@ -170,14 +167,14 @@ Disassembly of section .text:
                	ret
                	cmp	w0, #0x1
                	b.ne	<addr>
-               	stur	x1, [x29, #-0x18]
-               	stur	x3, [x29, #-0x10]
-               	stur	x2, [x29, #-0x8]
+               	stur	x3, [x29, #-0x18]
+               	stur	x2, [x29, #-0x10]
+               	stur	x1, [x29, #-0x8]
                	b	<addr>
                	mov	x0, #0x8                // =8
-               	stur	x1, [x29, #-0x18]
+               	stur	x3, [x29, #-0x18]
                	stur	x0, [x29, #-0x10]
-               	stur	x2, [x29, #-0x8]
+               	stur	x1, [x29, #-0x8]
                	b	<addr>
 
 <looped>:

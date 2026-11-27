@@ -3,7 +3,7 @@ pattern_match_posix.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -14,11 +14,10 @@ Disassembly of section .text:
                	brk	#0x1
 
 <main>:
-               	stp	x20, x21, [sp, #-0x90]!
+               	stp	x20, x21, [sp, #-0x80]!
                	stp	x22, x23, [sp, #0x10]
-               	str	x24, [sp, #0x20]
-               	stp	x29, x30, [sp, #0x80]
-               	add	x29, sp, #0x80
+               	stp	x29, x30, [sp, #0x70]
+               	add	x29, sp, #0x70
                	mov	x20, #0x0               // =0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
@@ -45,33 +44,31 @@ Disassembly of section .text:
                	add	x20, x20, #0x1
                	cmp	w20, #0x2f
                	b.ge	<addr>
-               	sub	x22, x29, #0x40
-               	adrp	x23, <page>
-               	add	x23, x23, <lo12>
+               	adrp	x22, <page>
+               	add	x22, x22, <lo12>
                	mov	x17, #0x30              // =48
-               	mul	x24, x20, x17
-               	add	x21, x23, x24
+               	mul	x23, x20, x17
+               	add	x21, x22, x23
                	ldr	x1, [x21]
                	ldrsw	x2, [x21, #0x8]
-               	mov	x0, x22
+               	sub	x0, x29, #0x40
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
-               	sub	x3, x29, #0x50
                	mov	x0, #-0x100000002       // =-4294967298
                	stur	x0, [x29, #-0x50]
                	stur	x0, [x29, #-0x48]
                	ldr	x1, [x21, #0x10]
-               	mov	x2, #0x2                // =2
-               	add	x0, x23, x24
+               	add	x0, x22, x23
                	ldrsw	x4, [x0, #0x18]
-               	mov	x0, x22
+               	sub	x0, x29, #0x40
+               	mov	x2, #0x2                // =2
+               	sub	x3, x29, #0x50
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x1                // =1
                	cmp	x0, #0x0
-               	csel	x1, x2, x1, ne
+               	mov	x16, #0x1               // =1
+               	csel	x1, x16, xzr, ne
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x17, #0x30              // =48
@@ -100,34 +97,29 @@ Disassembly of section .text:
                	sub	x0, x29, #0x40
                	bl	<addr>
                	add	x0, x20, #0x38
-               	ldp	x29, x30, [sp, #0x80]
-               	ldr	x24, [sp, #0x20]
+               	ldp	x29, x30, [sp, #0x70]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x90
+               	ldp	x20, x21, [sp], #0x80
                	ret
                	sub	x0, x29, #0x40
                	bl	<addr>
                	add	x0, x20, #0x38
-               	ldp	x29, x30, [sp, #0x80]
-               	ldr	x24, [sp, #0x20]
+               	ldp	x29, x30, [sp, #0x70]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x90
+               	ldp	x20, x21, [sp], #0x80
                	ret
                	add	x0, x20, #0x38
-               	ldp	x29, x30, [sp, #0x80]
-               	ldr	x24, [sp, #0x20]
+               	ldp	x29, x30, [sp, #0x70]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x90
+               	ldp	x20, x21, [sp], #0x80
                	ret
                	mov	x0, #0x0                // =0
-               	ldp	x29, x30, [sp, #0x80]
-               	ldr	x24, [sp, #0x20]
+               	ldp	x29, x30, [sp, #0x70]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x90
+               	ldp	x20, x21, [sp], #0x80
                	ret
                	add	x0, x20, #0x1
-               	ldp	x29, x30, [sp, #0x80]
-               	ldr	x24, [sp, #0x20]
+               	ldp	x29, x30, [sp, #0x70]
                	ldp	x22, x23, [sp, #0x10]
-               	ldp	x20, x21, [sp], #0x90
+               	ldp	x20, x21, [sp], #0x80
                	ret

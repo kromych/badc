@@ -3,7 +3,7 @@ arm_neon_aes_pmull.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -85,9 +85,9 @@ Disassembly of section .text:
                	tst	x4, #0x1
                	csel	x1, x7, x1, ne
                	lsr	x4, x4, #1
-               	mov	x7, #0x1b               // =27
                	tst	x0, #0x80
-               	csel	x7, x7, x2, ne
+               	mov	x16, #0x1b              // =27
+               	csel	x7, x16, x2, ne
                	eor	x0, x7, x0, lsl #1
                	and	x0, x0, #0xff
                	add	x3, x3, #0x1
@@ -268,11 +268,11 @@ Disassembly of section .text:
                	bl	<addr>
                	and	x0, x0, #0xff
                	sturb	w0, [x29, #-0x41]
-               	sub	x0, x29, #0x60
                	ldur	q0, [x29, #-0x70]
                	ldr	q17, [sp, #0xb0]
                	aese	v0.16b, v17.16b
                	stur	q0, [x29, #-0x60]
+               	sub	x0, x29, #0x60
                	sub	x1, x29, #0x50
                	mov	x2, #0x10               // =16
                	bl	<addr>
@@ -287,14 +287,14 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0xd0
                	ret
                	movi	v0.2d, #0000000000000000
-               	sub	x0, x29, #0x60
-               	sub	x1, x29, #0x70
                	ldur	q1, [x29, #-0x70]
                	aese	v1.16b, v0.16b
                	mov	v16.16b, v1.16b
                	aesd	v16.16b, v0.16b
                	mov	v0.16b, v16.16b
                	stur	q0, [x29, #-0x60]
+               	sub	x0, x29, #0x60
+               	sub	x1, x29, #0x70
                	mov	x2, #0x10               // =16
                	bl	<addr>
                	sxtw	x0, w0
@@ -307,12 +307,12 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0xd0
                	ret
-               	sub	x0, x29, #0x60
-               	sub	x1, x29, #0x70
                	ldur	q0, [x29, #-0x70]
                	aesmc	v0.16b, v0.16b
                	aesimc	v0.16b, v0.16b
                	stur	q0, [x29, #-0x60]
+               	sub	x0, x29, #0x60
+               	sub	x1, x29, #0x70
                	mov	x2, #0x10               // =16
                	bl	<addr>
                	sxtw	x0, w0
@@ -337,9 +337,9 @@ Disassembly of section .text:
                	tst	x1, #0x1
                	csel	x2, x5, x2, ne
                	lsr	x1, x1, #1
-               	mov	x5, #0x1b               // =27
                	tst	x0, #0x80
-               	csel	x5, x5, x3, ne
+               	mov	x16, #0x1b              // =27
+               	csel	x5, x16, x3, ne
                	eor	x0, x5, x0, lsl #1
                	and	x0, x0, #0xff
                	add	x4, x4, #0x1
@@ -354,9 +354,9 @@ Disassembly of section .text:
                	tst	x1, #0x1
                	csel	x3, x6, x3, ne
                	lsr	x1, x1, #1
-               	mov	x6, #0x1b               // =27
                	tst	x0, #0x80
-               	csel	x6, x6, x4, ne
+               	mov	x16, #0x1b              // =27
+               	csel	x6, x16, x4, ne
                	eor	x0, x6, x0, lsl #1
                	and	x0, x0, #0xff
                	add	x5, x5, #0x1
@@ -387,9 +387,9 @@ Disassembly of section .text:
                	tst	x1, #0x1
                	csel	x2, x5, x2, ne
                	lsr	x1, x1, #1
-               	mov	x5, #0x1b               // =27
                	tst	x0, #0x80
-               	csel	x5, x5, x3, ne
+               	mov	x16, #0x1b              // =27
+               	csel	x5, x16, x3, ne
                	eor	x0, x5, x0, lsl #1
                	and	x0, x0, #0xff
                	add	x4, x4, #0x1
@@ -404,9 +404,9 @@ Disassembly of section .text:
                	tst	x1, #0x1
                	csel	x3, x6, x3, ne
                	lsr	x1, x1, #1
-               	mov	x6, #0x1b               // =27
                	tst	x0, #0x80
-               	csel	x6, x6, x4, ne
+               	mov	x16, #0x1b              // =27
+               	csel	x6, x16, x4, ne
                	eor	x0, x6, x0, lsl #1
                	and	x0, x0, #0xff
                	add	x5, x5, #0x1
@@ -429,9 +429,9 @@ Disassembly of section .text:
                	tst	x1, #0x1
                	csel	x2, x5, x2, ne
                	lsr	x1, x1, #1
-               	mov	x5, #0x1b               // =27
                	tst	x0, #0x80
-               	csel	x5, x5, x3, ne
+               	mov	x16, #0x1b              // =27
+               	csel	x5, x16, x3, ne
                	eor	x0, x5, x0, lsl #1
                	and	x0, x0, #0xff
                	add	x4, x4, #0x1
@@ -446,9 +446,9 @@ Disassembly of section .text:
                	tst	x1, #0x1
                	csel	x3, x6, x3, ne
                	lsr	x1, x1, #1
-               	mov	x6, #0x1b               // =27
                	tst	x0, #0x80
-               	csel	x6, x6, x4, ne
+               	mov	x16, #0x1b              // =27
+               	csel	x6, x16, x4, ne
                	eor	x0, x6, x0, lsl #1
                	and	x0, x0, #0xff
                	add	x5, x5, #0x1
@@ -471,9 +471,9 @@ Disassembly of section .text:
                	tst	x1, #0x1
                	csel	x2, x5, x2, ne
                	lsr	x1, x1, #1
-               	mov	x5, #0x1b               // =27
                	tst	x0, #0x80
-               	csel	x5, x5, x3, ne
+               	mov	x16, #0x1b              // =27
+               	csel	x5, x16, x3, ne
                	eor	x0, x5, x0, lsl #1
                	and	x0, x0, #0xff
                	add	x4, x4, #0x1
@@ -488,9 +488,9 @@ Disassembly of section .text:
                	tst	x1, #0x1
                	csel	x3, x6, x3, ne
                	lsr	x1, x1, #1
-               	mov	x6, #0x1b               // =27
                	tst	x0, #0x80
-               	csel	x6, x6, x4, ne
+               	mov	x16, #0x1b              // =27
+               	csel	x6, x16, x4, ne
                	eor	x0, x6, x0, lsl #1
                	and	x0, x0, #0xff
                	add	x5, x5, #0x1

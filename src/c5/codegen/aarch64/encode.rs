@@ -2,7 +2,8 @@
 //!
 //! All AArch64 instructions are 32 bits wide and little-endian on every
 //! supported OS, which makes the encoder a flat catalog of
-//! `fn enc_xxx(...) -> u32`. Per-function code generation routes
+//! `fn enc_xxx(...) -> Insn`, the word and its assembly text. Per-function
+//! code generation routes
 //! through [`super::ssa::shadow::produce_ssa_funcs`] +
 //! [`super::ssa::reg_alloc::allocate`] + `super::emit`; this
 //! module's `lower()` is the shell that drives the SSA pipeline and
@@ -41,7 +42,9 @@ use alloc::vec::Vec;
 use super::super::error::C5Error;
 use super::super::ir::IndexExt;
 use super::super::program::Program;
+use super::text::{self as t, Op};
 use super::{AddrPart, Build, GotFixup, NativeOptions, Target};
+use crate::c5::codegen::ssa::code_buf::CodeBuf;
 
 /// AArch64 register name. Wraps the 5-bit register field that nearly
 /// every instruction needs in some position; using a newtype prevents
@@ -88,10 +91,102 @@ impl Reg {
     pub const SP: Reg = Reg(31);
 }
 
+/// An instruction word and, under the `listing` feature, how its assembly
+/// text is formed: fixed, or by a closure over the encoder's operands that
+/// the sink calls only when a listing is open.
+#[derive(Clone, Copy)]
+pub(crate) struct Insn {
+    pub(crate) word: u32,
+    #[cfg(feature = "listing")]
+    text: TextOf,
+}
+
+#[cfg(feature = "listing")]
+#[derive(Clone, Copy)]
+enum TextOf {
+    Fixed(&'static str),
+    Lazy(t::Lazy),
+}
+
+impl Insn {
+    /// `word`, reading as `text` whatever its operands.
+    pub(crate) const fn fixed(word: u32, text: &'static str) -> Self {
+        #[cfg(not(feature = "listing"))]
+        let _ = text;
+        Insn {
+            word,
+            #[cfg(feature = "listing")]
+            text: TextOf::Fixed(text),
+        }
+    }
+
+    /// `word`, reading as `text` forms it; [`insn!`] builds the closure.
+    #[cfg(feature = "listing")]
+    #[inline(always)]
+    pub(crate) fn lazy<F: Fn() -> super::listing::Text + Copy + 'static>(
+        word: u32,
+        text: F,
+    ) -> Self {
+        Insn {
+            word,
+            text: TextOf::Lazy(t::Lazy::new(text)),
+        }
+    }
+
+    /// `word` alone, the listing compiled out.
+    #[cfg(not(feature = "listing"))]
+    #[inline(always)]
+    pub(crate) const fn bare(word: u32) -> Self {
+        Insn { word }
+    }
+
+    #[cfg(feature = "listing")]
+    pub(crate) fn text(&self) -> super::listing::Text {
+        match self.text {
+            TextOf::Fixed(s) => super::listing::Text::from(alloc::string::String::from(s)),
+            TextOf::Lazy(l) => l.text(),
+        }
+    }
+}
+
+impl core::fmt::Debug for Insn {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "Insn({:#010x})", self.word)
+    }
+}
+
+/// [`Insn`] of `word` reading as `mnem` over the operands: with the
+/// `listing` feature a closure over what the operands read forms the text
+/// when a listing is open; without it the operands are not evaluated.
+#[cfg(feature = "listing")]
+macro_rules! insn {
+    ($word:expr, $mnem:expr, [$($op:expr),* $(,)?]) => {
+        $crate::c5::codegen::aarch64::encode::Insn::lazy($word, move || {
+            $crate::c5::codegen::aarch64::text::text($mnem, &[$($op),*])
+        })
+    };
+}
+
+#[cfg(not(feature = "listing"))]
+macro_rules! insn {
+    ($word:expr, $mnem:expr, [$($op:expr),* $(,)?]) => {{
+        let _ = || ($mnem, $($op,)*);
+        $crate::c5::codegen::aarch64::encode::Insn::bare($word)
+    }};
+}
+
+pub(crate) use insn;
+
+impl PartialEq<u32> for Insn {
+    fn eq(&self, word: &u32) -> bool {
+        self.word == *word
+    }
+}
+
 // ---------------------------------------------------------------
-// Encoders. Each `enc_*` returns the 32-bit instruction word; the
-// caller funnels it through `emit` to land in the code buffer in
-// the right byte order. They're unit-tested standalone; `lower`
+// Encoders. Each `enc_*` returns the 32-bit instruction word with its
+// text; the caller funnels it through `emit` to land in the code buffer
+// in the right byte order. They're unit-tested standalone; `lower`
 // composes them into the per-op sequences.
 // ---------------------------------------------------------------
 
@@ -100,32 +195,44 @@ impl Reg {
 ///
 /// `hw` selects which 16-bit lane: 0 = bits[15:0], 1 = bits[31:16],
 /// 2 = bits[47:32], 3 = bits[63:48].
-pub(crate) fn enc_movz(rd: Reg, imm16: u16, hw: u8) -> u32 {
+pub(crate) fn enc_movz(rd: Reg, imm16: u16, hw: u8) -> Insn {
     debug_assert!(hw < 4, "movz: hw must be 0..=3");
-    0xD280_0000 | ((hw as u32) << 21) | ((imm16 as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0xD280_0000 | ((hw as u32) << 21) | ((imm16 as u32) << 5) | (rd.0 as u32),
+        "movz",
+        [t::x(rd), t::imm(imm16.into()), t::lsl(16 * u32::from(hw))]
+    )
 }
 
 /// `MOVK <Xd>, #imm16, LSL #(hw*16)` -- overwrite one 16-bit lane of
 /// `Xd` with `imm16`, leaving the other lanes intact. Combined with
 /// `movz` it builds an arbitrary 64-bit constant in 1-4 instructions
 /// (see [`load_imm64`]).
-pub(crate) fn enc_movk(rd: Reg, imm16: u16, hw: u8) -> u32 {
+pub(crate) fn enc_movk(rd: Reg, imm16: u16, hw: u8) -> Insn {
     debug_assert!(hw < 4, "movk: hw must be 0..=3");
-    0xF280_0000 | ((hw as u32) << 21) | ((imm16 as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0xF280_0000 | ((hw as u32) << 21) | ((imm16 as u32) << 5) | (rd.0 as u32),
+        "movk",
+        [t::x(rd), t::imm(imm16.into()), t::lsl(16 * u32::from(hw))]
+    )
 }
 
 /// `MOVN <Xd>, #imm16, LSL #(hw*16)` -- load the complement of `imm16` in
 /// lane `hw`, which sets every other lane.
-pub(crate) fn enc_movn(rd: Reg, imm16: u16, hw: u8) -> u32 {
+pub(crate) fn enc_movn(rd: Reg, imm16: u16, hw: u8) -> Insn {
     debug_assert!(hw < 4, "movn: hw must be 0..=3");
-    0x9280_0000 | ((hw as u32) << 21) | ((imm16 as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0x9280_0000 | ((hw as u32) << 21) | ((imm16 as u32) << 5) | (rd.0 as u32),
+        "movn",
+        [t::x(rd), t::imm(imm16.into()), t::lsl(16 * u32::from(hw))]
+    )
 }
 
 /// `RET <Xn>` -- branch to the address in `Xn` (default `x30`/`lr`).
 /// AAPCS64 puts the return address in `x30` on entry, so the bare form
 /// `ret` (= `ret x30`) is the usual one.
-pub(crate) fn enc_ret(rn: Reg) -> u32 {
-    0xD65F_0000 | ((rn.0 as u32) << 5)
+pub(crate) fn enc_ret(rn: Reg) -> Insn {
+    insn!(0xD65F_0000 | ((rn.0 as u32) << 5), "ret", [t::x(rn)])
 }
 
 /// `BL <label>` -- branch with link to a PC-relative label.
@@ -134,12 +241,16 @@ pub(crate) fn enc_ret(rn: Reg) -> u32 {
 /// bytes/4); ARM ARM allows the range +/-128 MiB. We sign-mask down
 /// to 26 bits so a negative offset (calling backwards) emits the
 /// right two's-complement bits.
-pub(crate) fn enc_bl(imm26: i32) -> u32 {
+pub(crate) fn enc_bl(imm26: i32) -> Insn {
     debug_assert!(
         (-(1 << 25)..(1 << 25)).contains(&imm26),
         "bl: offset {imm26} out of range (must fit in signed 26 bits)"
     );
-    0x9400_0000 | ((imm26 as u32) & 0x03FF_FFFF)
+    insn!(
+        0x9400_0000 | ((imm26 as u32) & 0x03FF_FFFF),
+        "bl",
+        [t::target(0, 26)]
+    )
 }
 
 /// The addressing forms of the general-register `LDP` / `STP`.
@@ -178,52 +289,106 @@ fn enc_pair(load: bool, form: PairForm, width: u32, rt: Reg, rt2: Reg, rn: Reg, 
 ///
 /// Used in function prologues: `stp x29, x30, [sp, #-16]!` saves the
 /// caller's frame pointer + link register and bumps sp in one go.
-pub(crate) fn enc_stp_pre(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    enc_pair(false, PairForm::Pre, 8, rt, rt2, rn, imm)
+pub(crate) fn enc_stp_pre(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> Insn {
+    insn!(
+        enc_pair(false, PairForm::Pre, 8, rt, rt2, rn, imm),
+        "stp",
+        [t::x(rt), t::x(rt2), t::pre(rn, imm.into())]
+    )
 }
 
 /// `LDP <Xt1>, <Xt2>, [<Xn|SP>], #imm` -- load-pair, post-indexed.
 /// Mirror of [`enc_stp_pre`] for function epilogues:
 /// `ldp x29, x30, [sp], #16` restores fp/lr and bumps sp back.
-pub(crate) fn enc_ldp_post(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    enc_pair(true, PairForm::Post, 8, rt, rt2, rn, imm)
+pub(crate) fn enc_ldp_post(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> Insn {
+    insn!(
+        enc_pair(true, PairForm::Post, 8, rt, rt2, rn, imm),
+        "ldp",
+        [t::x(rt), t::x(rt2), t::mem(rn, 0), t::imm(imm.into())]
+    )
 }
 
 /// `STP <Xt1>, <Xt2>, [<Xn|SP>], #imm` -- store-pair, post-indexed.
-pub(crate) fn enc_stp_post(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    enc_pair(false, PairForm::Post, 8, rt, rt2, rn, imm)
+pub(crate) fn enc_stp_post(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> Insn {
+    insn!(
+        enc_pair(false, PairForm::Post, 8, rt, rt2, rn, imm),
+        "stp",
+        [t::x(rt), t::x(rt2), t::mem(rn, 0), t::imm(imm.into())]
+    )
 }
 
 /// `STP <Xt1>, <Xt2>, [<Xn|SP>, #imm]` -- store-pair, signed offset
 /// (no writeback).
-pub(crate) fn enc_stp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    enc_pair(false, PairForm::Offset, 8, rt, rt2, rn, imm)
+pub(crate) fn enc_stp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> Insn {
+    insn!(
+        enc_pair(false, PairForm::Offset, 8, rt, rt2, rn, imm),
+        "stp",
+        [t::x(rt), t::x(rt2), t::mem(rn, imm.into())]
+    )
 }
 
 /// `LDP <Xt1>, <Xt2>, [<Xn|SP>, #imm]` -- load-pair, signed offset
 /// (no writeback). Mirror of [`enc_stp_off`].
-pub(crate) fn enc_ldp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    enc_pair(true, PairForm::Offset, 8, rt, rt2, rn, imm)
+pub(crate) fn enc_ldp_off(rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> Insn {
+    insn!(
+        enc_pair(true, PairForm::Offset, 8, rt, rt2, rn, imm),
+        "ldp",
+        [t::x(rt), t::x(rt2), t::mem(rn, imm.into())]
+    )
 }
 
 /// `LDP` of two `width`-byte (8 or 4) registers at `[rn, #imm]`.
-pub(crate) fn enc_ldp_unit_off(width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    enc_pair(true, PairForm::Offset, width, rt, rt2, rn, imm)
+pub(crate) fn enc_ldp_unit_off(width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> Insn {
+    insn!(
+        enc_pair(true, PairForm::Offset, width, rt, rt2, rn, imm),
+        "ldp",
+        [
+            t::r(rt, width == 8),
+            t::r(rt2, width == 8),
+            t::mem(rn, imm.into()),
+        ]
+    )
 }
 
 /// `STP` of two `width`-byte (8 or 4) registers at `[rn, #imm]`.
-pub(crate) fn enc_stp_unit_off(width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    enc_pair(false, PairForm::Offset, width, rt, rt2, rn, imm)
+pub(crate) fn enc_stp_unit_off(width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> Insn {
+    insn!(
+        enc_pair(false, PairForm::Offset, width, rt, rt2, rn, imm),
+        "stp",
+        [
+            t::r(rt, width == 8),
+            t::r(rt2, width == 8),
+            t::mem(rn, imm.into()),
+        ]
+    )
 }
 
 /// `LDP` of two `width`-byte (8 or 4) registers at `[rn], #imm`, post-indexed.
-pub(crate) fn enc_ldp_unit_post(width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    enc_pair(true, PairForm::Post, width, rt, rt2, rn, imm)
+pub(crate) fn enc_ldp_unit_post(width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> Insn {
+    insn!(
+        enc_pair(true, PairForm::Post, width, rt, rt2, rn, imm),
+        "ldp",
+        [
+            t::r(rt, width == 8),
+            t::r(rt2, width == 8),
+            t::mem(rn, 0),
+            t::imm(imm.into()),
+        ]
+    )
 }
 
 /// `STP` of two `width`-byte (8 or 4) registers at `[rn], #imm`, post-indexed.
-pub(crate) fn enc_stp_unit_post(width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> u32 {
-    enc_pair(false, PairForm::Post, width, rt, rt2, rn, imm)
+pub(crate) fn enc_stp_unit_post(width: u32, rt: Reg, rt2: Reg, rn: Reg, imm: i32) -> Insn {
+    insn!(
+        enc_pair(false, PairForm::Post, width, rt, rt2, rn, imm),
+        "stp",
+        [
+            t::r(rt, width == 8),
+            t::r(rt2, width == 8),
+            t::mem(rn, 0),
+            t::imm(imm.into()),
+        ]
+    )
 }
 
 /// Shared field packer for the LDP / STP (SIMD&FP, 64-bit) forms below.
@@ -243,47 +408,71 @@ fn enc_ldst_pair_d(base: u32, dt: u8, dt2: u8, rn: Reg, imm: i32) -> u32 {
 }
 
 /// `STP <Dt1>, <Dt2>, [<Xn|SP>, #imm]` -- store-pair, signed offset.
-pub(crate) fn enc_stp_d_off(dt: u8, dt2: u8, rn: Reg, imm: i32) -> u32 {
-    enc_ldst_pair_d(0x6D00_0000, dt, dt2, rn, imm)
+pub(crate) fn enc_stp_d_off(dt: u8, dt2: u8, rn: Reg, imm: i32) -> Insn {
+    insn!(
+        enc_ldst_pair_d(0x6D00_0000, dt, dt2, rn, imm),
+        "stp",
+        [t::d(dt), t::d(dt2), t::mem(rn, imm.into())]
+    )
 }
 
 /// `LDP <Dt1>, <Dt2>, [<Xn|SP>, #imm]` -- load-pair, signed offset.
-pub(crate) fn enc_ldp_d_off(dt: u8, dt2: u8, rn: Reg, imm: i32) -> u32 {
-    enc_ldst_pair_d(0x6D40_0000, dt, dt2, rn, imm)
+pub(crate) fn enc_ldp_d_off(dt: u8, dt2: u8, rn: Reg, imm: i32) -> Insn {
+    insn!(
+        enc_ldst_pair_d(0x6D40_0000, dt, dt2, rn, imm),
+        "ldp",
+        [t::d(dt), t::d(dt2), t::mem(rn, imm.into())]
+    )
 }
 
 /// `STP <Dt1>, <Dt2>, [<Xn|SP>, #imm]!` -- store-pair, pre-indexed.
-pub(crate) fn enc_stp_d_pre(dt: u8, dt2: u8, rn: Reg, imm: i32) -> u32 {
-    enc_ldst_pair_d(0x6D80_0000, dt, dt2, rn, imm)
+pub(crate) fn enc_stp_d_pre(dt: u8, dt2: u8, rn: Reg, imm: i32) -> Insn {
+    insn!(
+        enc_ldst_pair_d(0x6D80_0000, dt, dt2, rn, imm),
+        "stp",
+        [t::d(dt), t::d(dt2), t::pre(rn, imm.into())]
+    )
 }
 
 /// `LDP <Dt1>, <Dt2>, [<Xn|SP>], #imm` -- load-pair, post-indexed.
-pub(crate) fn enc_ldp_d_post(dt: u8, dt2: u8, rn: Reg, imm: i32) -> u32 {
-    enc_ldst_pair_d(0x6CC0_0000, dt, dt2, rn, imm)
+pub(crate) fn enc_ldp_d_post(dt: u8, dt2: u8, rn: Reg, imm: i32) -> Insn {
+    insn!(
+        enc_ldst_pair_d(0x6CC0_0000, dt, dt2, rn, imm),
+        "ldp",
+        [t::d(dt), t::d(dt2), t::mem(rn, 0), t::imm(imm.into())]
+    )
 }
 
 /// `STR <Dt>, [<Xn|SP>, #imm]!` -- pre-indexed store with writeback
 /// (unscaled imm9). D-register mirror of [`enc_str_pre`].
-pub(crate) fn enc_str_d_pre(dt: u8, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_str_d_pre(dt: u8, rn: Reg, imm: i32) -> Insn {
     debug_assert!(dt < 32);
     assert!(
         (-256..256).contains(&imm),
         "str-d-pre imm: {imm} out of range"
     );
     let imm9 = (imm as u32) & 0x1FF;
-    0xFC00_0C00 | (imm9 << 12) | ((rn.0 as u32) << 5) | (dt as u32)
+    insn!(
+        0xFC00_0C00 | (imm9 << 12) | ((rn.0 as u32) << 5) | (dt as u32),
+        "str",
+        [t::d(dt), t::pre(rn, imm.into())]
+    )
 }
 
 /// `LDR <Dt>, [<Xn|SP>], #imm` -- post-indexed load with writeback
 /// (unscaled imm9). D-register mirror of [`enc_ldr_post`].
-pub(crate) fn enc_ldr_d_post(dt: u8, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_ldr_d_post(dt: u8, rn: Reg, imm: i32) -> Insn {
     debug_assert!(dt < 32);
     assert!(
         (-256..256).contains(&imm),
         "ldr-d-post imm: {imm} out of range"
     );
     let imm9 = (imm as u32) & 0x1FF;
-    0xFC40_0400 | (imm9 << 12) | ((rn.0 as u32) << 5) | (dt as u32)
+    insn!(
+        0xFC40_0400 | (imm9 << 12) | ((rn.0 as u32) << 5) | (dt as u32),
+        "ldr",
+        [t::d(dt), t::mem(rn, 0), t::imm(imm.into())]
+    )
 }
 
 /// `MOV <Xd>, <Xn>` -- alias for `ORR <Xd>, XZR, <Xn>`. Note that ARM
@@ -291,78 +480,121 @@ pub(crate) fn enc_ldr_d_post(dt: u8, rn: Reg, imm: i32) -> u32 {
 /// `Rn` field 31 means XZR) and `add xd, sp, #0` (which is what you
 /// need when the source is SP itself, because in `add` field 31 means
 /// SP). Use [`enc_add_imm`] with `imm=0` for the `mov xd, sp` case.
-pub(crate) fn enc_mov_reg(rd: Reg, rn: Reg) -> u32 {
-    0xAA00_0000 | ((rn.0 as u32) << 16) | ((Reg::SP.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_mov_reg(rd: Reg, rn: Reg) -> Insn {
+    insn!(
+        0xAA00_0000 | ((rn.0 as u32) << 16) | ((Reg::SP.0 as u32) << 5) | (rd.0 as u32),
+        "orr",
+        [t::x(rd), t::x(Reg::SP), t::x(rn)]
+    )
 }
 
 /// `ADD <Xd>, <Xn|SP>, #imm12` -- 12-bit unsigned immediate, no shift.
 /// Larger immediates need either the `lsl #12` shift form or the
 /// load-into-register-and-add long form; we don't need either yet.
-pub(crate) fn enc_add_imm(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+pub(crate) fn enc_add_imm(rd: Reg, rn: Reg, imm12: u32) -> Insn {
     debug_assert!(imm12 < 4096, "add imm: {imm12} > 12-bit max");
-    0x9100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0x9100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "add",
+        [t::xsp(rd), t::xsp(rn), t::lo12(imm12)]
+    )
 }
 
 /// `SUB <Xd>, <Xn|SP>, #imm12` -- 12-bit unsigned immediate, no shift.
 /// Used to allocate stack space in function prologues.
-pub(crate) fn enc_sub_imm(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+pub(crate) fn enc_sub_imm(rd: Reg, rn: Reg, imm12: u32) -> Insn {
     debug_assert!(imm12 < 4096, "sub imm: {imm12} > 12-bit max");
-    0xD100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0xD100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "sub",
+        [t::xsp(rd), t::xsp(rn), t::imm(imm12.into())]
+    )
 }
 
 /// `SUBS <Xd>, <Xn|SP>, #imm12` -- like `SUB` but sets NZCV.
 /// Used by the stack-probe loop's counter decrement so the
 /// trailing `b.ne` can read the flags. Top 8 bits flip from
 /// `1101_0001` (SUB) to `1111_0001` (SUBS).
-pub(crate) fn enc_subs_imm(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+pub(crate) fn enc_subs_imm(rd: Reg, rn: Reg, imm12: u32) -> Insn {
     debug_assert!(imm12 < 4096, "subs imm: {imm12} > 12-bit max");
-    0xF100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0xF100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "subs",
+        [t::x(rd), t::xsp(rn), t::imm(imm12.into())]
+    )
 }
 
 /// `SUB <Xd>, <Xn|SP>, #imm12, LSL #12`. The shifted-12 form
 /// extends the reach of the immediate to multiples of 4096 up
 /// to ~16 MiB, used together with the unshifted form to cover
 /// any 24-bit byte count in two instructions.
-pub(crate) fn enc_sub_imm_lsl12(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+pub(crate) fn enc_sub_imm_lsl12(rd: Reg, rn: Reg, imm12: u32) -> Insn {
     debug_assert!(imm12 < 4096, "sub imm lsl12: {imm12} > 12-bit max");
-    0xD140_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0xD140_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "sub",
+        [t::xsp(rd), t::xsp(rn), t::imm(imm12.into()), t::lsl(12)]
+    )
 }
 
 /// `ADD <Xd>, <Xn|SP>, #imm12, LSL #12`. Mirror of
 /// [`enc_sub_imm_lsl12`] -- used to fold large
 /// stack-restoration adjustments into two instructions.
-pub(crate) fn enc_add_imm_lsl12(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+pub(crate) fn enc_add_imm_lsl12(rd: Reg, rn: Reg, imm12: u32) -> Insn {
     debug_assert!(imm12 < 4096, "add imm lsl12: {imm12} > 12-bit max");
-    0x9140_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0x9140_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "add",
+        [t::xsp(rd), t::xsp(rn), t::lo12(imm12), t::lsl(12)]
+    )
 }
 
 /// `ADD <Xd|SP>, <Xn|SP>, <Xm>, UXTX #0` -- the extended-register
 /// form, the only register add whose Rn / Rd may be SP (the
 /// shifted-register form reads register 31 as XZR).
-pub(crate) fn enc_add_ext_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0x8B20_6000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_add_ext_reg(rd: Reg, rn: Reg, rm: Reg) -> Insn {
+    insn!(
+        0x8B20_6000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "add",
+        [t::xsp(rd), t::xsp(rn), t::x(rm), t::ext(3, 0)]
+    )
 }
 
 /// The address `base + index * 2^shift` of an indexed access:
 /// `ADD Xd, Xn, Xm, LSL #shift` for a full-width index, else
 /// `ADD Xd, Xn, Wm, <ext> #shift` with `shift` at most 4.
-pub(crate) fn enc_add_index(rd: Reg, rn: Reg, rm: Reg, ext: IndexExt, shift: u32) -> u32 {
+pub(crate) fn enc_add_index(rd: Reg, rn: Reg, rm: Reg, ext: IndexExt, shift: u32) -> Insn {
     if ext == IndexExt::None {
         return enc_add_reg_lsl(rd, rn, rm, shift);
     }
     debug_assert!(shift <= 4, "add (extended register): shift {shift} > 4");
-    0x8B20_0000
+    let option = index_option(ext);
+    let word = 0x8B20_0000
         | ((rm.0 as u32) << 16)
-        | (index_option(ext) << 13)
+        | (option << 13)
         | (shift << 10)
         | ((rn.0 as u32) << 5)
-        | (rd.0 as u32)
+        | (rd.0 as u32);
+    insn!(
+        word,
+        "add",
+        [
+            t::xsp(rd),
+            t::xsp(rn),
+            t::w(rm),
+            t::ext(option as u8, shift as u8),
+        ]
+    )
 }
 
 /// `SUB <Xd|SP>, <Xn|SP>, <Xm>, UXTX #0`. Mirror of
 /// [`enc_add_ext_reg`].
-pub(crate) fn enc_sub_ext_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    0xCB20_6000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_sub_ext_reg(rd: Reg, rn: Reg, rm: Reg) -> Insn {
+    insn!(
+        0xCB20_6000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "sub",
+        [t::xsp(rd), t::xsp(rn), t::x(rm), t::ext(3, 0)]
+    )
 }
 
 /// True when `bytes` fits the two-instruction split of `ADD` / `SUB`
@@ -380,7 +612,7 @@ pub(crate) fn add_sub_imm24_in_range(bytes: u32) -> bool {
 /// [`MAX_UNPROBED_STACK_STEP`] without a probe can step over a guard
 /// region. Callers route larger amounts through the backend's
 /// `emit_stack_alloc`, which descends in probed steps.
-pub(crate) fn emit_sub_sp_imm(code: &mut Vec<u8>, bytes: u32) {
+pub(crate) fn emit_sub_sp_imm(code: &mut CodeBuf, bytes: u32) {
     if bytes == 0 {
         return;
     }
@@ -399,7 +631,7 @@ pub(crate) fn emit_sub_sp_imm(code: &mut Vec<u8>, bytes: u32) {
 /// [`emit_sub_sp_imm`]. Used for stack-arg cleanup after a call
 /// and by anything else that needs to grow the stack pointer
 /// back by more than 4 KiB in one go.
-pub(crate) fn emit_add_sp_imm(code: &mut Vec<u8>, bytes: u32) {
+pub(crate) fn emit_add_sp_imm(code: &mut CodeBuf, bytes: u32) {
     if bytes == 0 {
         return;
     }
@@ -423,7 +655,7 @@ pub(crate) fn emit_add_sp_imm(code: &mut Vec<u8>, bytes: u32) {
 /// frame-offset width rather than by the immediate encoding. Growing sp
 /// needs no probe: it moves back over bytes the frame already reached.
 /// `scratch` must be dead across the adjustment.
-pub(crate) fn emit_add_sp_imm_scratch(code: &mut Vec<u8>, bytes: u32, scratch: Reg) {
+pub(crate) fn emit_add_sp_imm_scratch(code: &mut CodeBuf, bytes: u32, scratch: Reg) {
     if add_sub_imm24_in_range(bytes) {
         emit_add_sp_imm(code, bytes);
         return;
@@ -437,6 +669,38 @@ pub(crate) fn emit_add_sp_imm_scratch(code: &mut Vec<u8>, bytes: u32, scratch: R
 
 /// 3-register data-processing word: `base | Rm<<16 | Rn<<5 | Rd`. Any baked
 /// field (e.g. MUL's `Ra = XZR`) is part of `base`.
+/// The mnemonic of a shifted-register operation by its base word.
+fn rrr_name(base: u32) -> &'static str {
+    match base {
+        ADD_REG => "add",
+        SUB_REG => "sub",
+        AND_REG => "and",
+        ORR_REG => "orr",
+        EOR_REG => "eor",
+        _ => "bic",
+    }
+}
+
+/// log2 of a `bytes`-wide vector lane.
+fn lane_log2(bytes: u32) -> u8 {
+    bytes.trailing_zeros() as u8
+}
+
+/// `[rn, rm{, <ext> #shift}]` of a register-offset access.
+fn index(rn: Reg, rm: Reg, ext: IndexExt, shift: Option<u8>) -> Op {
+    t::mem_reg(rn, rm, index_option(ext) as u8, shift)
+}
+
+/// The fused multiply-add of `(+/-)(n * m) (+/-) a`.
+fn fma_name(neg_product: bool, neg_addend: bool) -> &'static str {
+    match (neg_product, neg_addend) {
+        (false, false) => "fmadd",
+        (true, false) => "fmsub",
+        (true, true) => "fnmadd",
+        (false, true) => "fnmsub",
+    }
+}
+
 fn enc_rrr(base: u32, rd: Reg, rn: Reg, rm: Reg) -> u32 {
     base | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (rd.0 as u32)
 }
@@ -467,42 +731,71 @@ pub(crate) fn enc_rrr_shifted(
     rm: Reg,
     shift: RegShift,
     amount: u32,
-) -> u32 {
-    enc_rrr(base, rd, rn, rm) | ((shift as u32) << 22) | ((amount & 0x3f) << 10)
+) -> Insn {
+    insn!(
+        enc_rrr(base, rd, rn, rm) | ((shift as u32) << 22) | ((amount & 0x3f) << 10),
+        rrr_name(base),
+        [
+            t::x(rd),
+            t::x(rn),
+            t::x(rm),
+            t::shift(shift as u8, amount as u8),
+        ]
+    )
 }
 
 /// `ADD <Xd>, <Xn>, <Xm>` -- 64-bit register add, no shift.
-pub(crate) fn enc_add_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(ADD_REG, rd, rn, rm)
+pub(crate) fn enc_add_reg(rd: Reg, rn: Reg, rm: Reg) -> Insn {
+    insn!(
+        enc_rrr(ADD_REG, rd, rn, rm),
+        "add",
+        [t::x(rd), t::x(rn), t::x(rm)]
+    )
 }
 
 /// `ADD <Xd>, <Xn>, <Xm>, LSL #<shift>` -- 64-bit add of a left-shifted
 /// register. `shift` is a 6-bit amount.
-pub(crate) fn enc_add_reg_lsl(rd: Reg, rn: Reg, rm: Reg, shift: u32) -> u32 {
+pub(crate) fn enc_add_reg_lsl(rd: Reg, rn: Reg, rm: Reg, shift: u32) -> Insn {
     enc_rrr_shifted(ADD_REG, rd, rn, rm, RegShift::Lsl, shift)
 }
 
 /// `SUB <Xd>, <Xn>, <Xm>` -- 64-bit register subtract.
-pub(crate) fn enc_sub_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(SUB_REG, rd, rn, rm)
+pub(crate) fn enc_sub_reg(rd: Reg, rn: Reg, rm: Reg) -> Insn {
+    insn!(
+        enc_rrr(SUB_REG, rd, rn, rm),
+        "sub",
+        [t::x(rd), t::x(rn), t::x(rm)]
+    )
 }
 
 /// `NEG <Xd>, <Xm>` (`SUB Xd, XZR, Xm`) -- two's-complement negate.
 /// `Rn` is baked to XZR (31); the shifted-register SUB reads 31 as the
 /// zero register, not SP.
-pub(crate) fn enc_neg(rd: Reg, rm: Reg) -> u32 {
-    enc_rrr(SUB_REG, rd, Reg::SP, rm)
+pub(crate) fn enc_neg(rd: Reg, rm: Reg) -> Insn {
+    insn!(
+        enc_rrr(SUB_REG, rd, Reg::SP, rm),
+        "sub",
+        [t::x(rd), t::x(Reg::SP), t::x(rm)]
+    )
 }
 
 /// `AND <Xd>, <Xn>, <Xm>` -- bitwise and.
-pub(crate) fn enc_and_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(AND_REG, rd, rn, rm)
+pub(crate) fn enc_and_reg(rd: Reg, rn: Reg, rm: Reg) -> Insn {
+    insn!(
+        enc_rrr(AND_REG, rd, rn, rm),
+        "and",
+        [t::x(rd), t::x(rn), t::x(rm)]
+    )
 }
 
 /// `BIC <Xd>, <Xn>, <Xm>` -- bit clear: `Xn & ~Xm`. The logical
 /// shifted-register `AND` form with `N=1` (bit 21) complements `Xm`.
-pub(crate) fn enc_bic_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(BIC_REG, rd, rn, rm)
+pub(crate) fn enc_bic_reg(rd: Reg, rn: Reg, rm: Reg) -> Insn {
+    insn!(
+        enc_rrr(BIC_REG, rd, rn, rm),
+        "bic",
+        [t::x(rd), t::x(rn), t::x(rm)]
+    )
 }
 
 /// The logical-immediate field `N<<12 | immr<<6 | imms` (bits [22:10]) of
@@ -589,84 +882,135 @@ pub(crate) fn enc_logical_imm(
     rd: Reg,
     rn: Reg,
     value: u64,
-) -> Option<u32> {
+) -> Option<Insn> {
     let field = encode_logical_imm(value, is64)?;
-    Some(
-        ((is64 as u32) << 31)
-            | ((op as u32) << 29)
-            | 0x1200_0000
-            | (field << 10)
-            | ((rn.0 as u32) << 5)
-            | (rd.0 as u32),
-    )
+    let word = ((is64 as u32) << 31)
+        | ((op as u32) << 29)
+        | 0x1200_0000
+        | (field << 10)
+        | ((rn.0 as u32) << 5)
+        | (rd.0 as u32);
+    let value = if is64 { value } else { value & 0xFFFF_FFFF };
+    let mnem = ["and", "orr", "eor", "ands"][op as usize];
+    // Rd = 31 is SP except where the flags are set.
+    let sp = op != LogicalOp::Ands;
+    Some(insn!(
+        word,
+        mnem,
+        [t::gp(rd.0, is64, sp), t::r(rn, is64), t::uimm(value)]
+    ))
 }
 
 /// `AND <Xd|SP>, <Xn>, #-(1 << log2_align)`: round a GPR down to a power of two.
-pub(crate) fn enc_and_align_down(rd: Reg, rn: Reg, log2_align: u32) -> u32 {
+pub(crate) fn enc_and_align_down(rd: Reg, rn: Reg, log2_align: u32) -> Insn {
     enc_logical_imm(LogicalOp::And, true, rd, rn, u64::MAX << log2_align)
         .expect("a run of high ones is a bitmask immediate")
 }
 
 /// `ORR <Xd>, <Xn>, <Xm>` -- bitwise or.
-pub(crate) fn enc_orr_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(ORR_REG, rd, rn, rm)
+pub(crate) fn enc_orr_reg(rd: Reg, rn: Reg, rm: Reg) -> Insn {
+    insn!(
+        enc_rrr(ORR_REG, rd, rn, rm),
+        "orr",
+        [t::x(rd), t::x(rn), t::x(rm)]
+    )
 }
 
 /// `MOV <Wd>, <Wn>` (`ORR Wd, WZR, Wn`) -- 32-bit register move. A write
 /// to a W register clears the upper 32 bits of the X register, so this is
 /// also the one-instruction zero-extension of the low word (`x & 0xffffffff`).
-pub(crate) fn enc_mov_w_w(rd: Reg, rn: Reg) -> u32 {
-    0x2A00_03E0 | ((rn.0 as u32) << 16) | (rd.0 as u32)
+pub(crate) fn enc_mov_w_w(rd: Reg, rn: Reg) -> Insn {
+    insn!(
+        0x2A00_03E0 | ((rn.0 as u32) << 16) | (rd.0 as u32),
+        "orr",
+        [t::w(rd), t::w(Reg::SP), t::w(rn)]
+    )
 }
 
 /// `EOR <Xd>, <Xn>, <Xm>` -- bitwise xor.
-pub(crate) fn enc_eor_reg(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(EOR_REG, rd, rn, rm)
+pub(crate) fn enc_eor_reg(rd: Reg, rn: Reg, rm: Reg) -> Insn {
+    insn!(
+        enc_rrr(EOR_REG, rd, rn, rm),
+        "eor",
+        [t::x(rd), t::x(rn), t::x(rm)]
+    )
 }
 
 /// `MVN <Xd>, <Xm>` (`ORN Xd, XZR, Xm`) -- bitwise NOT. `Rn` is baked
 /// to XZR (31); ORN is ORR with the N bit set.
-pub(crate) fn enc_mvn(rd: Reg, rm: Reg) -> u32 {
-    0xAA20_03E0 | ((rm.0 as u32) << 16) | (rd.0 as u32)
+pub(crate) fn enc_mvn(rd: Reg, rm: Reg) -> Insn {
+    insn!(
+        0xAA20_03E0 | ((rm.0 as u32) << 16) | (rd.0 as u32),
+        "orn",
+        [t::x(rd), t::x(Reg::SP), t::x(rm)]
+    )
 }
 
 /// `MUL <Xd>, <Xn>, <Xm>` -- alias for `MADD Xd, Xn, Xm, XZR`.
 /// We bake in `Ra = XZR (31)` so this stays a 3-register helper.
-pub(crate) fn enc_mul(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0x9B00_7C00, rd, rn, rm)
+pub(crate) fn enc_mul(rd: Reg, rn: Reg, rm: Reg) -> Insn {
+    insn!(
+        enc_rrr(0x9B00_7C00, rd, rn, rm),
+        "madd",
+        [t::x(rd), t::x(rn), t::x(rm), t::x(Reg::SP)]
+    )
 }
 
 /// `SMULH <Xd>, <Xn>, <Xm>` -- high 64 bits of the signed 64x64
 /// product.
-pub(crate) fn enc_smulh(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0x9B40_7C00, rd, rn, rm)
+pub(crate) fn enc_smulh(rd: Reg, rn: Reg, rm: Reg) -> Insn {
+    insn!(
+        enc_rrr(0x9B40_7C00, rd, rn, rm),
+        "smulh",
+        [t::x(rd), t::x(rn), t::x(rm)]
+    )
 }
 
 /// `UMULH <Xd>, <Xn>, <Xm>` -- high 64 bits of the unsigned 64x64
 /// product.
-pub(crate) fn enc_umulh(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0x9BC0_7C00, rd, rn, rm)
+pub(crate) fn enc_umulh(rd: Reg, rn: Reg, rm: Reg) -> Insn {
+    insn!(
+        enc_rrr(0x9BC0_7C00, rd, rn, rm),
+        "umulh",
+        [t::x(rd), t::x(rn), t::x(rm)]
+    )
 }
 
 /// `SDIV <Xd>, <Xn>, <Xm>` -- signed integer division. Pairs with
 /// [`enc_msub`] when computing modulo.
-pub(crate) fn enc_sdiv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0x9AC0_0C00, rd, rn, rm)
+pub(crate) fn enc_sdiv(rd: Reg, rn: Reg, rm: Reg) -> Insn {
+    insn!(
+        enc_rrr(0x9AC0_0C00, rd, rn, rm),
+        "sdiv",
+        [t::x(rd), t::x(rn), t::x(rm)]
+    )
 }
 
-pub(crate) fn enc_sdiv_w(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0x1AC0_0C00, rd, rn, rm)
+pub(crate) fn enc_sdiv_w(rd: Reg, rn: Reg, rm: Reg) -> Insn {
+    insn!(
+        enc_rrr(0x1AC0_0C00, rd, rn, rm),
+        "sdiv",
+        [t::w(rd), t::w(rn), t::w(rm)]
+    )
 }
 
 /// `UDIV <Xd>, <Xn>, <Xm>` -- unsigned integer division. Differs from
 /// SDIV only in the opcode2 field (bit 10 cleared). Pairs with
 /// [`enc_msub`] when computing unsigned modulo.
-pub(crate) fn enc_udiv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0x9AC0_0800, rd, rn, rm)
+pub(crate) fn enc_udiv(rd: Reg, rn: Reg, rm: Reg) -> Insn {
+    insn!(
+        enc_rrr(0x9AC0_0800, rd, rn, rm),
+        "udiv",
+        [t::x(rd), t::x(rn), t::x(rm)]
+    )
 }
 
-pub(crate) fn enc_udiv_w(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0x1AC0_0800, rd, rn, rm)
+pub(crate) fn enc_udiv_w(rd: Reg, rn: Reg, rm: Reg) -> Insn {
+    insn!(
+        enc_rrr(0x1AC0_0800, rd, rn, rm),
+        "udiv",
+        [t::w(rd), t::w(rn), t::w(rm)]
+    )
 }
 
 /// Four-register multiply-accumulate encoding shared by MADD / MSUB.
@@ -677,127 +1021,212 @@ fn enc_mul_acc(base: u32, rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> u32 {
 /// `MSUB <Xd>, <Xn>, <Xm>, <Xa>` -- `Xd = Xa - (Xn * Xm)`. The
 /// AArch64 idiom for `mod` is `sdiv q, a, b ; msub r, q, b, a`,
 /// which yields `r = a - (a/b)*b`.
-pub(crate) fn enc_msub(rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> u32 {
-    enc_mul_acc(0x9B00_8000, rd, rn, rm, ra)
+pub(crate) fn enc_msub(rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> Insn {
+    insn!(
+        enc_mul_acc(0x9B00_8000, rd, rn, rm, ra),
+        "msub",
+        [t::x(rd), t::x(rn), t::x(rm), t::x(ra)]
+    )
 }
 
-pub(crate) fn enc_msub_w(rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> u32 {
-    enc_mul_acc(0x1B00_8000, rd, rn, rm, ra)
+pub(crate) fn enc_msub_w(rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> Insn {
+    insn!(
+        enc_mul_acc(0x1B00_8000, rd, rn, rm, ra),
+        "msub",
+        [t::w(rd), t::w(rn), t::w(rm), t::w(ra)]
+    )
 }
 
 /// `MADD <Xd>, <Xn>, <Xm>, <Xa>` -- `Xd = Xa + (Xn * Xm)`.
-pub(crate) fn enc_madd(rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> u32 {
-    enc_mul_acc(0x9B00_0000, rd, rn, rm, ra)
+pub(crate) fn enc_madd(rd: Reg, rn: Reg, rm: Reg, ra: Reg) -> Insn {
+    insn!(
+        enc_mul_acc(0x9B00_0000, rd, rn, rm, ra),
+        "madd",
+        [t::x(rd), t::x(rn), t::x(rm), t::x(ra)]
+    )
 }
 
 /// `LSLV <Xd>, <Xn>, <Xm>` -- variable left shift, masking the shift
 /// amount to 6 bits (i.e., shifting by `Xm % 64`).
-pub(crate) fn enc_lslv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0x9AC0_2000, rd, rn, rm)
+pub(crate) fn enc_lslv(rd: Reg, rn: Reg, rm: Reg) -> Insn {
+    insn!(
+        enc_rrr(0x9AC0_2000, rd, rn, rm),
+        "lslv",
+        [t::x(rd), t::x(rn), t::x(rm)]
+    )
 }
 
 /// `LSRV <Xd>, <Xn>, <Xm>` -- variable logical right shift.
-pub(crate) fn enc_lsrv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0x9AC0_2400, rd, rn, rm)
+pub(crate) fn enc_lsrv(rd: Reg, rn: Reg, rm: Reg) -> Insn {
+    insn!(
+        enc_rrr(0x9AC0_2400, rd, rn, rm),
+        "lsrv",
+        [t::x(rd), t::x(rn), t::x(rm)]
+    )
 }
 
 /// `ASRV <Xd>, <Xn>, <Xm>` -- variable arithmetic right shift. The
 /// signed counterpart to `LSRV`
-pub(crate) fn enc_asrv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0x9AC0_2800, rd, rn, rm)
+pub(crate) fn enc_asrv(rd: Reg, rn: Reg, rm: Reg) -> Insn {
+    insn!(
+        enc_rrr(0x9AC0_2800, rd, rn, rm),
+        "asrv",
+        [t::x(rd), t::x(rn), t::x(rm)]
+    )
 }
 
 /// `RORV <Xd>, <Xn>, <Xm>` -- variable rotate right.
-pub(crate) fn enc_rorv(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0x9AC0_2C00, rd, rn, rm)
+pub(crate) fn enc_rorv(rd: Reg, rn: Reg, rm: Reg) -> Insn {
+    insn!(
+        enc_rrr(0x9AC0_2C00, rd, rn, rm),
+        "rorv",
+        [t::x(rd), t::x(rn), t::x(rm)]
+    )
 }
 
 /// `RORV <Wd>, <Wn>, <Wm>` -- the 32-bit rotate, the result zero-extended.
-pub(crate) fn enc_rorv_w(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0x1AC0_2C00, rd, rn, rm)
+pub(crate) fn enc_rorv_w(rd: Reg, rn: Reg, rm: Reg) -> Insn {
+    insn!(
+        enc_rrr(0x1AC0_2C00, rd, rn, rm),
+        "rorv",
+        [t::w(rd), t::w(rn), t::w(rm)]
+    )
 }
 
 /// `CLZ <Xd>, <Xn>` -- count leading zero bits; 64 for a zero source.
-pub(crate) fn enc_clz(rd: Reg, rn: Reg) -> u32 {
-    0xDAC0_1000 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_clz(rd: Reg, rn: Reg) -> Insn {
+    insn!(
+        0xDAC0_1000 | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "clz",
+        [t::x(rd), t::x(rn)]
+    )
 }
 
 /// `CLZ <Wd>, <Wn>` -- count leading zero bits of the low word; 32 for a
 /// zero source. The 32-bit write zero-extends into `Xd`.
-pub(crate) fn enc_clz32(rd: Reg, rn: Reg) -> u32 {
-    0x5AC0_1000 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_clz32(rd: Reg, rn: Reg) -> Insn {
+    insn!(
+        0x5AC0_1000 | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "clz",
+        [t::w(rd), t::w(rn)]
+    )
 }
 
 /// `CLS <Xd>, <Xn>` -- count leading sign bits: the bits below the sign
 /// bit that repeat it, 63 for 0 and -1.
-pub(crate) fn enc_cls(rd: Reg, rn: Reg) -> u32 {
-    0xDAC0_1400 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_cls(rd: Reg, rn: Reg) -> Insn {
+    insn!(
+        0xDAC0_1400 | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "cls",
+        [t::x(rd), t::x(rn)]
+    )
 }
 
 /// `CLS <Wd>, <Wn>` -- the low word's leading sign bits; the 32-bit write
 /// zero-extends into `Xd`.
-pub(crate) fn enc_cls32(rd: Reg, rn: Reg) -> u32 {
-    0x5AC0_1400 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_cls32(rd: Reg, rn: Reg) -> Insn {
+    insn!(
+        0x5AC0_1400 | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "cls",
+        [t::w(rd), t::w(rn)]
+    )
 }
 
 /// `RBIT <Xd>, <Xn>` -- reverse the bit order.
-pub(crate) fn enc_rbit64(rd: Reg, rn: Reg) -> u32 {
-    0xDAC0_0000 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_rbit64(rd: Reg, rn: Reg) -> Insn {
+    insn!(
+        0xDAC0_0000 | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "rbit",
+        [t::x(rd), t::x(rn)]
+    )
 }
 
 /// `RBIT <Wd>, <Wn>` -- reverse the bit order of the low word; the 32-bit
 /// write zero-extends into `Xd`.
-pub(crate) fn enc_rbit32(rd: Reg, rn: Reg) -> u32 {
-    0x5AC0_0000 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_rbit32(rd: Reg, rn: Reg) -> Insn {
+    insn!(
+        0x5AC0_0000 | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "rbit",
+        [t::w(rd), t::w(rn)]
+    )
 }
 
 /// `CNT <Vd>.8B, <Vn>.8B` -- the set bits of each of the low eight bytes.
-pub(crate) fn enc_cnt_8b(vd: u8, vn: u8) -> u32 {
+pub(crate) fn enc_cnt_8b(vd: u8, vn: u8) -> Insn {
     debug_assert!(vd < 32 && vn < 32);
-    0x0E20_5800 | ((vn as u32) << 5) | (vd as u32)
+    insn!(
+        0x0E20_5800 | ((vn as u32) << 5) | (vd as u32),
+        "cnt",
+        [t::v(vd, 0, false), t::v(vn, 0, false)]
+    )
 }
 
 /// `ADDV <Bd>, <Vn>.8B` -- the sum of the low eight bytes, written to byte 0
 /// with the rest of `Vd` cleared.
-pub(crate) fn enc_addv_8b(vd: u8, vn: u8) -> u32 {
+pub(crate) fn enc_addv_8b(vd: u8, vn: u8) -> Insn {
     debug_assert!(vd < 32 && vn < 32);
-    0x0E31_B800 | ((vn as u32) << 5) | (vd as u32)
+    insn!(
+        0x0E31_B800 | ((vn as u32) << 5) | (vd as u32),
+        "addv",
+        [t::fp(vd, 0), t::v(vn, 0, false)]
+    )
 }
 
 /// `ADD` / `SUB <Xd>, <Xn>, <Xm>, LSR #<shift>`, or the `W` forms when
 /// `!is64`.
-pub(crate) fn enc_addsub_lsr(sub: bool, rd: Reg, rn: Reg, rm: Reg, shift: u32, is64: bool) -> u32 {
-    ((is64 as u32) << 31)
-        | ((sub as u32) << 30)
-        | 0x0B40_0000
-        | ((rm.0 as u32) << 16)
-        | ((shift & 0x3f) << 10)
-        | ((rn.0 as u32) << 5)
-        | (rd.0 as u32)
+pub(crate) fn enc_addsub_lsr(sub: bool, rd: Reg, rn: Reg, rm: Reg, shift: u32, is64: bool) -> Insn {
+    insn!(
+        ((is64 as u32) << 31)
+            | ((sub as u32) << 30)
+            | 0x0B40_0000
+            | ((rm.0 as u32) << 16)
+            | ((shift & 0x3f) << 10)
+            | ((rn.0 as u32) << 5)
+            | (rd.0 as u32),
+        if sub { "sub" } else { "add" },
+        [
+            t::r(rd, is64),
+            t::r(rn, is64),
+            t::r(rm, is64),
+            t::shift(1, shift as u8),
+        ]
+    )
 }
 
 /// `MUL <Wd>, <Wn>, <Wm>` -- `MADD Wd, Wn, Wm, WZR`.
-pub(crate) fn enc_mul32(rd: Reg, rn: Reg, rm: Reg) -> u32 {
-    enc_rrr(0x1B00_7C00, rd, rn, rm)
+pub(crate) fn enc_mul32(rd: Reg, rn: Reg, rm: Reg) -> Insn {
+    insn!(
+        enc_rrr(0x1B00_7C00, rd, rn, rm),
+        "madd",
+        [t::w(rd), t::w(rn), t::w(rm), t::w(Reg::SP)]
+    )
 }
 
 /// `ROR <Xd>, <Xs>, #<shift>` -- bit-rotate-right by constant. Encoded
 /// as the EXTR alias `EXTR Xd, Xs, Xs, #shift`.
-pub(crate) fn enc_ror_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
-    0x93C0_0000
-        | ((rn.0 as u32) << 16)
-        | (((shift as u32) & 63) << 10)
-        | ((rn.0 as u32) << 5)
-        | (rd.0 as u32)
+pub(crate) fn enc_ror_imm(rd: Reg, rn: Reg, shift: u8) -> Insn {
+    insn!(
+        0x93C0_0000
+            | ((rn.0 as u32) << 16)
+            | (((shift as u32) & 63) << 10)
+            | ((rn.0 as u32) << 5)
+            | (rd.0 as u32),
+        "extr",
+        [t::x(rd), t::x(rn), t::x(rn), t::imm((shift & 63).into())]
+    )
 }
 
 /// `ROR <Wd>, <Wn>, #shift` (`EXTR Wd, Wn, Wn, #shift`) -- the 32-bit form.
-pub(crate) fn enc_ror_imm_w(rd: Reg, rn: Reg, shift: u8) -> u32 {
-    0x1380_0000
-        | ((rn.0 as u32) << 16)
-        | (((shift as u32) & 31) << 10)
-        | ((rn.0 as u32) << 5)
-        | (rd.0 as u32)
+pub(crate) fn enc_ror_imm_w(rd: Reg, rn: Reg, shift: u8) -> Insn {
+    insn!(
+        0x1380_0000
+            | ((rn.0 as u32) << 16)
+            | (((shift as u32) & 31) << 10)
+            | ((rn.0 as u32) << 5)
+            | (rd.0 as u32),
+        "extr",
+        [t::w(rd), t::w(rn), t::w(rn), t::imm((shift & 31).into())]
+    )
 }
 
 // ---- Floating-point (double-precision). ----
@@ -814,22 +1243,30 @@ pub(crate) fn enc_ror_imm_w(rd: Reg, rn: Reg, shift: u8) -> u32 {
 /// `FMOV <Dd>, <Xn>` -- copy the 64 low bits of `Xn` into `Dd`. Used
 /// to stage a c5-stack slot (raw `f64::to_bits()`) into an FP register
 /// before arithmetic.
-pub(crate) fn enc_fmov_x_to_d(dd: u8, xn: Reg) -> u32 {
+pub(crate) fn enc_fmov_x_to_d(dd: u8, xn: Reg) -> Insn {
     debug_assert!(dd < 32);
-    0x9E67_0000 | ((xn.0 as u32) << 5) | (dd as u32)
+    insn!(
+        0x9E67_0000 | ((xn.0 as u32) << 5) | (dd as u32),
+        "fmov",
+        [t::d(dd), t::x(xn)]
+    )
 }
 
 /// `FMOV <Xd>, <Dn>` -- copy the 64 low bits of `Dn` back into `Xd`.
-pub(crate) fn enc_fmov_d_to_x(rd: Reg, dn: u8) -> u32 {
+pub(crate) fn enc_fmov_d_to_x(rd: Reg, dn: u8) -> Insn {
     debug_assert!(dn < 32);
-    0x9E66_0000 | ((dn as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0x9E66_0000 | ((dn as u32) << 5) | (rd.0 as u32),
+        "fmov",
+        [t::x(rd), t::d(dn)]
+    )
 }
 
 /// `FMOV <Dd>, <Dn>` -- copy a double-precision register. Used to
 /// move a `double` value into the allocator's chosen d-register
 /// when the producer wrote a different one.
-pub(crate) fn enc_fmov_d_d(dd: u8, dn: u8) -> u32 {
-    enc_fp1(0x1E60_4000, dd, dn)
+pub(crate) fn enc_fmov_d_d(dd: u8, dn: u8) -> Insn {
+    insn!(enc_fp1(0x1E60_4000, dd, dn), "fmov", [t::d(dd), t::d(dn)])
 }
 
 /// VFPExpandImm: the pattern `FMOV <Dd>|<Sd>, #imm8` writes, zero-extended.
@@ -846,21 +1283,29 @@ pub(crate) fn fp_imm8(bits: u64, single: bool) -> Option<u8> {
 }
 
 /// `FMOV <Dd>, #imm` / `FMOV <Sd>, #imm` -- the pattern [`vfp_expand_imm`] names.
-pub(crate) fn enc_fmov_imm(dd: u8, imm8: u8, single: bool) -> u32 {
+pub(crate) fn enc_fmov_imm(dd: u8, imm8: u8, single: bool) -> Insn {
     debug_assert!(dd < 32);
     let base = if single { 0x1E20_1000 } else { 0x1E60_1000 };
-    base | ((imm8 as u32) << 13) | (dd as u32)
+    insn!(
+        base | ((imm8 as u32) << 13) | (dd as u32),
+        "fmov",
+        [t::sd(dd, single), t::fp_imm(imm8)]
+    )
 }
 
 /// `MOVI <Dd>, #0` -- zero the whole vector register, +0.0 in either view.
-pub(crate) fn enc_movi_d_zero(dd: u8) -> u32 {
+pub(crate) fn enc_movi_d_zero(dd: u8) -> Insn {
     debug_assert!(dd < 32);
-    0x2F00_E400 | (dd as u32)
+    insn!(
+        0x2F00_E400 | (dd as u32),
+        "movi",
+        [t::d(dd), t::lit("#0000000000000000")]
+    )
 }
 
 /// Write the pattern `bits` (`single`: a float's) to `dd`: `movi` for +0.0,
 /// `fmov #imm8` where it has one, else the build in `stage` and `fmov`.
-pub(crate) fn load_fp_imm(code: &mut Vec<u8>, dd: u8, bits: u64, single: bool, stage: Reg) {
+pub(crate) fn load_fp_imm(code: &mut CodeBuf, dd: u8, bits: u64, single: bool, stage: Reg) {
     let bits = if single { bits & 0xFFFF_FFFF } else { bits };
     if bits == 0 {
         emit(code, enc_movi_d_zero(dd));
@@ -893,77 +1338,93 @@ fn enc_fp1(base: u32, d: u8, n: u8) -> u32 {
 }
 
 /// `FADD <Dd>, <Dn>, <Dm>` -- double-precision add. `Dd = Dn + Dm`.
-pub(crate) fn enc_fadd_d(dd: u8, dn: u8, dm: u8) -> u32 {
-    enc_fp2(0x1E60_2800, dd, dn, dm)
+pub(crate) fn enc_fadd_d(dd: u8, dn: u8, dm: u8) -> Insn {
+    insn!(
+        enc_fp2(0x1E60_2800, dd, dn, dm),
+        "fadd",
+        [t::d(dd), t::d(dn), t::d(dm)]
+    )
 }
 
 /// `FSUB <Dd>, <Dn>, <Dm>`. `Dd = Dn - Dm`.
-pub(crate) fn enc_fsub_d(dd: u8, dn: u8, dm: u8) -> u32 {
-    enc_fp2(0x1E60_3800, dd, dn, dm)
+pub(crate) fn enc_fsub_d(dd: u8, dn: u8, dm: u8) -> Insn {
+    insn!(
+        enc_fp2(0x1E60_3800, dd, dn, dm),
+        "fsub",
+        [t::d(dd), t::d(dn), t::d(dm)]
+    )
 }
 
 /// `FMUL <Dd>, <Dn>, <Dm>`. `Dd = Dn * Dm`.
-pub(crate) fn enc_fmul_d(dd: u8, dn: u8, dm: u8) -> u32 {
-    enc_fp2(0x1E60_0800, dd, dn, dm)
+pub(crate) fn enc_fmul_d(dd: u8, dn: u8, dm: u8) -> Insn {
+    insn!(
+        enc_fp2(0x1E60_0800, dd, dn, dm),
+        "fmul",
+        [t::d(dd), t::d(dn), t::d(dm)]
+    )
 }
 
 /// `FDIV <Dd>, <Dn>, <Dm>`. `Dd = Dn / Dm`.
-pub(crate) fn enc_fdiv_d(dd: u8, dn: u8, dm: u8) -> u32 {
-    enc_fp2(0x1E60_1800, dd, dn, dm)
+pub(crate) fn enc_fdiv_d(dd: u8, dn: u8, dm: u8) -> Insn {
+    insn!(
+        enc_fp2(0x1E60_1800, dd, dn, dm),
+        "fdiv",
+        [t::d(dd), t::d(dn), t::d(dm)]
+    )
 }
 
 /// `FNEG <Dd>, <Dn>`. `Dd = -Dn`.
-pub(crate) fn enc_fneg_d(dd: u8, dn: u8) -> u32 {
-    enc_fp1(0x1E61_4000, dd, dn)
+pub(crate) fn enc_fneg_d(dd: u8, dn: u8) -> Insn {
+    insn!(enc_fp1(0x1E61_4000, dd, dn), "fneg", [t::d(dd), t::d(dn)])
 }
 
 /// `FSQRT <Dd>, <Dn>` -- scalar double square root. FP data-processing
 /// (1 source), ptype=01, opcode=000011.
-pub(crate) fn enc_fsqrt_d(dd: u8, dn: u8) -> u32 {
-    enc_fp1(0x1E61_C000, dd, dn)
+pub(crate) fn enc_fsqrt_d(dd: u8, dn: u8) -> Insn {
+    insn!(enc_fp1(0x1E61_C000, dd, dn), "fsqrt", [t::d(dd), t::d(dn)])
 }
 
 /// `FSQRT <Sd>, <Sn>` -- scalar single square root. ptype=00.
-pub(crate) fn enc_fsqrt_s(sd: u8, sn: u8) -> u32 {
-    enc_fp1(0x1E21_C000, sd, sn)
+pub(crate) fn enc_fsqrt_s(sd: u8, sn: u8) -> Insn {
+    insn!(enc_fp1(0x1E21_C000, sd, sn), "fsqrt", [t::s(sd), t::s(sn)])
 }
 
 /// `FABS <Dd>, <Dn>` -- scalar double absolute value. opcode=000001.
-pub(crate) fn enc_fabs_d(dd: u8, dn: u8) -> u32 {
-    enc_fp1(0x1E60_C000, dd, dn)
+pub(crate) fn enc_fabs_d(dd: u8, dn: u8) -> Insn {
+    insn!(enc_fp1(0x1E60_C000, dd, dn), "fabs", [t::d(dd), t::d(dn)])
 }
 
 /// `FABS <Sd>, <Sn>` -- scalar single absolute value.
-pub(crate) fn enc_fabs_s(sd: u8, sn: u8) -> u32 {
-    enc_fp1(0x1E20_C000, sd, sn)
+pub(crate) fn enc_fabs_s(sd: u8, sn: u8) -> Insn {
+    insn!(enc_fp1(0x1E20_C000, sd, sn), "fabs", [t::s(sd), t::s(sn)])
 }
 
 /// `FRINTM <Dd>, <Dn>` -- round to integral toward -inf (floor).
 /// FP-1-source opcode 001010.
-pub(crate) fn enc_frintm_d(dd: u8, dn: u8) -> u32 {
-    enc_fp1(0x1E65_4000, dd, dn)
+pub(crate) fn enc_frintm_d(dd: u8, dn: u8) -> Insn {
+    insn!(enc_fp1(0x1E65_4000, dd, dn), "frintm", [t::d(dd), t::d(dn)])
 }
 /// `FRINTM <Sd>, <Sn>`.
-pub(crate) fn enc_frintm_s(sd: u8, sn: u8) -> u32 {
-    enc_fp1(0x1E25_4000, sd, sn)
+pub(crate) fn enc_frintm_s(sd: u8, sn: u8) -> Insn {
+    insn!(enc_fp1(0x1E25_4000, sd, sn), "frintm", [t::s(sd), t::s(sn)])
 }
 /// `FRINTP <Dd>, <Dn>` -- round to integral toward +inf (ceil).
 /// FP-1-source opcode 001001.
-pub(crate) fn enc_frintp_d(dd: u8, dn: u8) -> u32 {
-    enc_fp1(0x1E64_C000, dd, dn)
+pub(crate) fn enc_frintp_d(dd: u8, dn: u8) -> Insn {
+    insn!(enc_fp1(0x1E64_C000, dd, dn), "frintp", [t::d(dd), t::d(dn)])
 }
 /// `FRINTP <Sd>, <Sn>`.
-pub(crate) fn enc_frintp_s(sd: u8, sn: u8) -> u32 {
-    enc_fp1(0x1E24_C000, sd, sn)
+pub(crate) fn enc_frintp_s(sd: u8, sn: u8) -> Insn {
+    insn!(enc_fp1(0x1E24_C000, sd, sn), "frintp", [t::s(sd), t::s(sn)])
 }
 /// `FRINTZ <Dd>, <Dn>` -- round to integral toward zero (trunc).
 /// FP-1-source opcode 001011.
-pub(crate) fn enc_frintz_d(dd: u8, dn: u8) -> u32 {
-    enc_fp1(0x1E65_C000, dd, dn)
+pub(crate) fn enc_frintz_d(dd: u8, dn: u8) -> Insn {
+    insn!(enc_fp1(0x1E65_C000, dd, dn), "frintz", [t::d(dd), t::d(dn)])
 }
 /// `FRINTZ <Sd>, <Sn>`.
-pub(crate) fn enc_frintz_s(sd: u8, sn: u8) -> u32 {
-    enc_fp1(0x1E25_C000, sd, sn)
+pub(crate) fn enc_frintz_s(sd: u8, sn: u8) -> Insn {
+    insn!(enc_fp1(0x1E25_C000, sd, sn), "frintz", [t::s(sd), t::s(sn)])
 }
 
 /// `FCMP <Dn>, <Dm>` -- set NZCV per the IEEE comparison of `Dn`
@@ -971,25 +1432,44 @@ pub(crate) fn enc_frintz_s(sd: u8, sn: u8) -> u32 {
 /// unordered (NaN) operand sets N=0, Z=0, C=1, V=1; the condition
 /// codes `fp_compare_cond` selects yield the C99 result for that
 /// state (`==` false, `!=` true, every relational form false).
-pub(crate) fn enc_fcmp_d(dn: u8, dm: u8) -> u32 {
+pub(crate) fn enc_fcmp_d(dn: u8, dm: u8) -> Insn {
     debug_assert!(dn < 32 && dm < 32);
-    0x1E60_2000 | ((dm as u32) << 16) | ((dn as u32) << 5)
+    insn!(
+        0x1E60_2000 | ((dm as u32) << 16) | ((dn as u32) << 5),
+        "fcmp",
+        [t::d(dn), t::d(dm)]
+    )
 }
 
 /// `FMOV <Sd>, <Wn>` -- copy the low 32 bits of `Wn` into the
 /// single-precision view `Sd`. Used to stage an f32 constant (one the
 /// allocator parks in a GPR as the int-encoded f32 bit pattern)
 /// into an FP register before single-precision arithmetic.
-pub(crate) fn enc_fmov_w_to_s(sd: u8, wn: Reg) -> u32 {
+/// `FCMPE <Sn|Dn>, <Sm|Dm>`: [`enc_fcmp_d`] that signals on a quiet NaN.
+pub(crate) fn enc_fcmpe(dn: u8, dm: u8, single: bool) -> Insn {
+    let base = if single { 0x1E20_2010 } else { 0x1E60_2010 };
+    let word = base | ((dm as u32) << 16) | ((dn as u32) << 5);
+    insn!(word, "fcmpe", [t::sd(dn, single), t::sd(dm, single)])
+}
+
+pub(crate) fn enc_fmov_w_to_s(sd: u8, wn: Reg) -> Insn {
     debug_assert!(sd < 32);
-    0x1E27_0000 | ((wn.0 as u32) << 5) | (sd as u32)
+    insn!(
+        0x1E27_0000 | ((wn.0 as u32) << 5) | (sd as u32),
+        "fmov",
+        [t::s(sd), t::w(wn)]
+    )
 }
 
 /// `FMOV <Wd>, <Sn>` -- copy the low 32 bits of `Sn` into `Wd`; the 32-bit
 /// write zero-extends into `Xd`.
-pub(crate) fn enc_fmov_s_to_w(rd: Reg, sn: u8) -> u32 {
+pub(crate) fn enc_fmov_s_to_w(rd: Reg, sn: u8) -> Insn {
     debug_assert!(sn < 32);
-    0x1E26_0000 | ((sn as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0x1E26_0000 | ((sn as u32) << 5) | (rd.0 as u32),
+        "fmov",
+        [t::w(rd), t::s(sn)]
+    )
 }
 
 /// `INS <Vd>.<T>[index], <Wn>` -- insert the low `esize` bytes of a
@@ -997,56 +1477,81 @@ pub(crate) fn enc_fmov_s_to_w(rd: Reg, sn: u8) -> u32 {
 /// other elements alone. `esize` is 1, 2, 4 or 8. Composes a vector
 /// value from narrower loads when the source address does not satisfy
 /// the full width.
-pub(crate) fn enc_ins_gen(vd: u8, esize: u32, index: u32, wn: Reg) -> u32 {
+pub(crate) fn enc_ins_gen(vd: u8, esize: u32, index: u32, wn: Reg) -> Insn {
     debug_assert!(vd < 32);
     debug_assert!(esize.is_power_of_two() && esize <= 8);
     debug_assert!(index * esize < 16);
     let imm5 = (index << (esize.trailing_zeros() + 1)) | esize;
-    0x4E00_1C00 | (imm5 << 16) | ((wn.0 as u32) << 5) | (vd as u32)
+    insn!(
+        0x4E00_1C00 | (imm5 << 16) | ((wn.0 as u32) << 5) | (vd as u32),
+        "ins",
+        [
+            t::elem(vd, lane_log2(esize), index as u8),
+            t::r(wn, esize == 8),
+        ]
+    )
 }
 
 /// `UMOV <Wd|Xd>, <Vn>.<T>[index]` -- zero-extend one element of a
 /// vector register into a general register. The inverse of
 /// [`enc_ins_gen`]; decomposes a vector value into narrower stores when
 /// the destination address does not satisfy the full width.
-pub(crate) fn enc_umov_gen(rd: Reg, vn: u8, esize: u32, index: u32) -> u32 {
+pub(crate) fn enc_umov_gen(rd: Reg, vn: u8, esize: u32, index: u32) -> Insn {
     debug_assert!(vn < 32);
     debug_assert!(esize.is_power_of_two() && esize <= 8);
     debug_assert!(index * esize < 16);
     let imm5 = (index << (esize.trailing_zeros() + 1)) | esize;
     let q = u32::from(esize == 8) << 30;
-    0x0E00_3C00 | q | (imm5 << 16) | ((vn as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0x0E00_3C00 | q | (imm5 << 16) | ((vn as u32) << 5) | (rd.0 as u32),
+        "umov",
+        [
+            t::r(rd, esize == 8),
+            t::elem(vn, lane_log2(esize), index as u8),
+        ]
+    )
 }
 
 /// `SMOV <Xd>, <Vn>.<T>[index]` -- sign-extend one byte, halfword or word
 /// element of a vector register into a 64-bit general register.
-pub(crate) fn enc_smov_gen(rd: Reg, vn: u8, esize: u32, index: u32) -> u32 {
+pub(crate) fn enc_smov_gen(rd: Reg, vn: u8, esize: u32, index: u32) -> Insn {
     debug_assert!(vn < 32);
     debug_assert!(esize.is_power_of_two() && esize <= 4);
     debug_assert!(index * esize < 16);
     let imm5 = (index << (esize.trailing_zeros() + 1)) | esize;
-    0x4E00_2C00 | (imm5 << 16) | ((vn as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0x4E00_2C00 | (imm5 << 16) | ((vn as u32) << 5) | (rd.0 as u32),
+        "smov",
+        [t::x(rd), t::elem(vn, lane_log2(esize), index as u8)]
+    )
 }
 
 /// `INS <Vd>.<T>[index], <Vn>.<T>[0]` -- copy the low element of `vn` into
 /// one element of `vd`, the others unchanged.
-pub(crate) fn enc_ins_elem(vd: u8, esize: u32, index: u32, vn: u8) -> u32 {
+pub(crate) fn enc_ins_elem(vd: u8, esize: u32, index: u32, vn: u8) -> Insn {
     enc_ins_elem_from(vd, esize, index, vn, 0)
 }
 
 /// `INS <Vd>.<T>[index], <Vn>.<T>[from]`.
-pub(crate) fn enc_ins_elem_from(vd: u8, esize: u32, index: u32, vn: u8, from: u32) -> u32 {
+pub(crate) fn enc_ins_elem_from(vd: u8, esize: u32, index: u32, vn: u8, from: u32) -> Insn {
     debug_assert!(vd < 32 && vn < 32);
     debug_assert!(esize.is_power_of_two() && esize <= 8);
     debug_assert!(index * esize < 16 && from * esize < 16);
     let imm5 = (index << (esize.trailing_zeros() + 1)) | esize;
     let imm4 = from << esize.trailing_zeros();
-    0x6E00_0400 | (imm5 << 16) | (imm4 << 11) | ((vn as u32) << 5) | (vd as u32)
+    insn!(
+        0x6E00_0400 | (imm5 << 16) | (imm4 << 11) | ((vn as u32) << 5) | (vd as u32),
+        "ins",
+        [
+            t::elem(vd, lane_log2(esize), index as u8),
+            t::elem(vn, lane_log2(esize), from as u8),
+        ]
+    )
 }
 
 /// `LD1 {<Vt>.<T>}[index], [<Xn|SP>]` when `load`, else `ST1`: one
 /// `esize`-byte lane between `vt` and memory.
-pub(crate) fn enc_ld1_st1_lane(load: bool, vt: u8, esize: u32, index: u32, rn: Reg) -> u32 {
+pub(crate) fn enc_ld1_st1_lane(load: bool, vt: u8, esize: u32, index: u32, rn: Reg) -> Insn {
     debug_assert!(vt < 32 && index * esize < 16);
     // Q:S:size spell the lane index, `size` the low bits for bytes.
     let (opcode, qss) = match esize {
@@ -1055,78 +1560,123 @@ pub(crate) fn enc_ld1_st1_lane(load: bool, vt: u8, esize: u32, index: u32, rn: R
         4 => (4, index << 2),
         _ => (4, (index << 3) | 1),
     };
-    0x0D00_0000
-        | ((qss >> 3) << 30)
-        | (u32::from(load) << 22)
-        | (opcode << 13)
-        | (((qss >> 2) & 1) << 12)
-        | ((qss & 3) << 10)
-        | ((rn.0 as u32) << 5)
-        | (vt as u32)
+    insn!(
+        0x0D00_0000
+            | ((qss >> 3) << 30)
+            | (u32::from(load) << 22)
+            | (opcode << 13)
+            | (((qss >> 2) & 1) << 12)
+            | ((qss & 3) << 10)
+            | ((rn.0 as u32) << 5)
+            | (vt as u32),
+        if load { "ld1" } else { "st1" },
+        [
+            t::lane_list(vt, lane_log2(esize), index as u8),
+            t::mem(rn, 0),
+        ]
+    )
 }
 
 /// `ZIP1 <Vd>.2D, <Vn>.2D, <Vm>.2D` -- the low element of `vn`, then the
 /// low element of `vm`.
-pub(crate) fn enc_zip1_2d(vd: u8, vn: u8, vm: u8) -> u32 {
+pub(crate) fn enc_zip1_2d(vd: u8, vn: u8, vm: u8) -> Insn {
     debug_assert!(vd < 32 && vn < 32 && vm < 32);
-    0x4EC0_3800 | ((vm as u32) << 16) | ((vn as u32) << 5) | (vd as u32)
+    insn!(
+        0x4EC0_3800 | ((vm as u32) << 16) | ((vn as u32) << 5) | (vd as u32),
+        "zip1",
+        [t::v(vd, 3, true), t::v(vn, 3, true), t::v(vm, 3, true)]
+    )
 }
 
 /// `DUP <Vd>.<T>, <R>n` -- every `esize`-byte lane of `vd`, all 16 bytes
 /// when `q`, from general register `rn` (`X` for 8-byte lanes).
-pub(crate) fn enc_dup_gen(vd: u8, esize: u32, q: bool, rn: Reg) -> u32 {
+pub(crate) fn enc_dup_gen(vd: u8, esize: u32, q: bool, rn: Reg) -> Insn {
     debug_assert!(vd < 32 && esize.is_power_of_two() && esize <= 8);
-    0x0E00_0C00 | (u32::from(q) << 30) | (esize << 16) | ((rn.0 as u32) << 5) | (vd as u32)
+    insn!(
+        0x0E00_0C00 | (u32::from(q) << 30) | (esize << 16) | ((rn.0 as u32) << 5) | (vd as u32),
+        "dup",
+        [t::v(vd, lane_log2(esize), q), t::r(rn, esize == 8)]
+    )
 }
 
 /// `DUP <Vd>.<T>, <Vn>.<Ts>[0]` -- every `esize`-byte lane of `vd`, all 16
 /// bytes when `q`, from lane 0 of `vn`.
-pub(crate) fn enc_dup_elem(vd: u8, esize: u32, q: bool, vn: u8) -> u32 {
+pub(crate) fn enc_dup_elem(vd: u8, esize: u32, q: bool, vn: u8) -> Insn {
     debug_assert!(vd < 32 && vn < 32 && esize.is_power_of_two() && esize <= 8);
-    0x0E00_0400 | (u32::from(q) << 30) | (esize << 16) | ((vn as u32) << 5) | (vd as u32)
+    insn!(
+        0x0E00_0400 | (u32::from(q) << 30) | (esize << 16) | ((vn as u32) << 5) | (vd as u32),
+        "dup",
+        [
+            t::v(vd, lane_log2(esize), q),
+            t::elem(vn, lane_log2(esize), 0),
+        ]
+    )
 }
 
 /// `DUP <V>d, <Vn>.<T>[index]` -- one element of `vn` into scalar
 /// register `vd` (`mov <V>d, <Vn>.<T>[index]`).
-pub(crate) fn enc_dup_elem_scalar(vd: u8, vn: u8, esize: u32, index: u32) -> u32 {
+pub(crate) fn enc_dup_elem_scalar(vd: u8, vn: u8, esize: u32, index: u32) -> Insn {
     debug_assert!(vd < 32 && vn < 32);
     debug_assert!(esize.is_power_of_two() && esize <= 8);
     debug_assert!(index * esize < 16);
     let imm5 = (index << (esize.trailing_zeros() + 1)) | esize;
-    0x5E00_0400 | (imm5 << 16) | ((vn as u32) << 5) | (vd as u32)
+    insn!(
+        0x5E00_0400 | (imm5 << 16) | ((vn as u32) << 5) | (vd as u32),
+        "dup",
+        [
+            t::fp(vd, lane_log2(esize)),
+            t::elem(vn, lane_log2(esize), index as u8),
+        ]
+    )
 }
 
 /// `FMOV <Sd>, <Sn>` -- copy a single-precision register. Used to
 /// move an `float` value into the allocator's chosen register when
 /// the producer wrote a different one.
-pub(crate) fn enc_fmov_s_s(sd: u8, sn: u8) -> u32 {
-    enc_fp1(0x1E20_4000, sd, sn)
+pub(crate) fn enc_fmov_s_s(sd: u8, sn: u8) -> Insn {
+    insn!(enc_fp1(0x1E20_4000, sd, sn), "fmov", [t::s(sd), t::s(sn)])
 }
 
 /// `FADD <Sd>, <Sn>, <Sm>` -- single-precision add. `Sd = Sn + Sm`
 /// (C99 6.3.1.8: `float op float` has type `float`).
-pub(crate) fn enc_fadd_s(sd: u8, sn: u8, sm: u8) -> u32 {
-    enc_fp2(0x1E20_2800, sd, sn, sm)
+pub(crate) fn enc_fadd_s(sd: u8, sn: u8, sm: u8) -> Insn {
+    insn!(
+        enc_fp2(0x1E20_2800, sd, sn, sm),
+        "fadd",
+        [t::s(sd), t::s(sn), t::s(sm)]
+    )
 }
 
 /// `FSUB <Sd>, <Sn>, <Sm>`. `Sd = Sn - Sm`.
-pub(crate) fn enc_fsub_s(sd: u8, sn: u8, sm: u8) -> u32 {
-    enc_fp2(0x1E20_3800, sd, sn, sm)
+pub(crate) fn enc_fsub_s(sd: u8, sn: u8, sm: u8) -> Insn {
+    insn!(
+        enc_fp2(0x1E20_3800, sd, sn, sm),
+        "fsub",
+        [t::s(sd), t::s(sn), t::s(sm)]
+    )
 }
 
 /// `FMUL <Sd>, <Sn>, <Sm>`. `Sd = Sn * Sm`.
-pub(crate) fn enc_fmul_s(sd: u8, sn: u8, sm: u8) -> u32 {
-    enc_fp2(0x1E20_0800, sd, sn, sm)
+pub(crate) fn enc_fmul_s(sd: u8, sn: u8, sm: u8) -> Insn {
+    insn!(
+        enc_fp2(0x1E20_0800, sd, sn, sm),
+        "fmul",
+        [t::s(sd), t::s(sn), t::s(sm)]
+    )
 }
 
 /// `FDIV <Sd>, <Sn>, <Sm>`. `Sd = Sn / Sm`.
-pub(crate) fn enc_fdiv_s(sd: u8, sn: u8, sm: u8) -> u32 {
-    enc_fp2(0x1E20_1800, sd, sn, sm)
+pub(crate) fn enc_fdiv_s(sd: u8, sn: u8, sm: u8) -> Insn {
+    insn!(
+        enc_fp2(0x1E20_1800, sd, sn, sm),
+        "fdiv",
+        [t::s(sd), t::s(sn), t::s(sm)]
+    )
 }
 
 /// `FNEG <Sd>, <Sn>`. `Sd = -Sn`.
-pub(crate) fn enc_fneg_s(sd: u8, sn: u8) -> u32 {
-    enc_fp1(0x1E21_4000, sd, sn)
+pub(crate) fn enc_fneg_s(sd: u8, sn: u8) -> Insn {
+    insn!(enc_fp1(0x1E21_4000, sd, sn), "fneg", [t::s(sd), t::s(sn)])
 }
 
 /// Floating-point fused multiply-add (3 source). `Dd = (neg_product ?
@@ -1143,7 +1693,7 @@ pub(crate) fn enc_fma(
     is_f32: bool,
     neg_product: bool,
     neg_addend: bool,
-) -> u32 {
+) -> Insn {
     debug_assert!(dd < 32 && dn < 32 && dm < 32 && da < 32);
     let base: u32 = if is_f32 { 0x1F00_0000 } else { 0x1F40_0000 };
     // (neg_product, neg_addend) -> (o0 bit15, neg bit21):
@@ -1157,82 +1707,127 @@ pub(crate) fn enc_fma(
         (true, false) => (1, 0),
         (true, true) => (0, 1),
     };
-    base | (neg << 21)
-        | ((dm as u32) << 16)
-        | (o0 << 15)
-        | ((da as u32) << 10)
-        | ((dn as u32) << 5)
-        | (dd as u32)
+    insn!(
+        base | (neg << 21)
+            | ((dm as u32) << 16)
+            | (o0 << 15)
+            | ((da as u32) << 10)
+            | ((dn as u32) << 5)
+            | (dd as u32),
+        fma_name(neg_product, neg_addend),
+        [
+            t::sd(dd, is_f32),
+            t::sd(dn, is_f32),
+            t::sd(dm, is_f32),
+            t::sd(da, is_f32),
+        ]
+    )
 }
 
 /// `FCMP <Sn>, <Sm>` -- single-precision compare, setting NZCV.
 /// Same NaN caveat as [`enc_fcmp_d`].
-pub(crate) fn enc_fcmp_s(sn: u8, sm: u8) -> u32 {
+pub(crate) fn enc_fcmp_s(sn: u8, sm: u8) -> Insn {
     debug_assert!(sn < 32 && sm < 32);
-    0x1E20_2000 | ((sm as u32) << 16) | ((sn as u32) << 5)
+    insn!(
+        0x1E20_2000 | ((sm as u32) << 16) | ((sn as u32) << 5),
+        "fcmp",
+        [t::s(sn), t::s(sm)]
+    )
 }
 
 /// `FCVTZS <Xd>, <Dn>` -- truncating signed FP-to-int. Matches the
 /// C `(int)f` semantics: discard the fractional part; out-of-range
 /// values saturate.
-pub(crate) fn enc_fcvtzs_x_d(rd: Reg, dn: u8) -> u32 {
+pub(crate) fn enc_fcvtzs_x_d(rd: Reg, dn: u8) -> Insn {
     debug_assert!(dn < 32);
-    0x9E78_0000 | ((dn as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0x9E78_0000 | ((dn as u32) << 5) | (rd.0 as u32),
+        "fcvtzs",
+        [t::x(rd), t::d(dn)]
+    )
 }
 
 /// `FCVTZU <Xd>, <Dn>` -- truncating unsigned FP-to-int. The
 /// `FCVTZS` encoding with the opcode low bit set, so a double in
 /// [2^63, 2^64) converts to the correct u64 rather than saturating.
-pub(crate) fn enc_fcvtzu_x_d(rd: Reg, dn: u8) -> u32 {
+pub(crate) fn enc_fcvtzu_x_d(rd: Reg, dn: u8) -> Insn {
     debug_assert!(dn < 32);
-    0x9E79_0000 | ((dn as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0x9E79_0000 | ((dn as u32) << 5) | (rd.0 as u32),
+        "fcvtzu",
+        [t::x(rd), t::d(dn)]
+    )
 }
 
 /// `SCVTF <Dd>, <Xn>` -- signed int-to-FP. Emits the round-to-
 /// nearest-ties-to-even mantissa.
-pub(crate) fn enc_scvtf_d_x(dd: u8, xn: Reg) -> u32 {
+pub(crate) fn enc_scvtf_d_x(dd: u8, xn: Reg) -> Insn {
     debug_assert!(dd < 32);
-    0x9E62_0000 | ((xn.0 as u32) << 5) | (dd as u32)
+    insn!(
+        0x9E62_0000 | ((xn.0 as u32) << 5) | (dd as u32),
+        "scvtf",
+        [t::d(dd), t::x(xn)]
+    )
 }
 
 /// `UCVTF <Dd>, <Xn>` -- unsigned int-to-FP. The `SCVTF` encoding
 /// with the opcode low bit set, so a u64 with bit 63 set converts
 /// to a positive double rather than a negative one.
-pub(crate) fn enc_ucvtf_d_x(dd: u8, xn: Reg) -> u32 {
+pub(crate) fn enc_ucvtf_d_x(dd: u8, xn: Reg) -> Insn {
     debug_assert!(dd < 32);
-    0x9E63_0000 | ((xn.0 as u32) << 5) | (dd as u32)
+    insn!(
+        0x9E63_0000 | ((xn.0 as u32) << 5) | (dd as u32),
+        "ucvtf",
+        [t::d(dd), t::x(xn)]
+    )
 }
 
 /// `SCVTF <Sd>, <Xn>` -- signed int-to-single. The `enc_scvtf_d_x`
 /// encoding with the ptype field cleared to `00` (single). Converts
 /// a 64-bit integer to `float` in one rounding (C99 6.3.1.4), the
 /// direct form for `(float)n` that avoids the double-then-narrow pair.
-pub(crate) fn enc_scvtf_s_x(sd: u8, xn: Reg) -> u32 {
+pub(crate) fn enc_scvtf_s_x(sd: u8, xn: Reg) -> Insn {
     debug_assert!(sd < 32);
-    0x9E22_0000 | ((xn.0 as u32) << 5) | (sd as u32)
+    insn!(
+        0x9E22_0000 | ((xn.0 as u32) << 5) | (sd as u32),
+        "scvtf",
+        [t::s(sd), t::x(xn)]
+    )
 }
 
 /// `UCVTF <Sd>, <Xn>` -- unsigned int-to-single. `enc_ucvtf_d_x`
 /// with ptype `00`.
-pub(crate) fn enc_ucvtf_s_x(sd: u8, xn: Reg) -> u32 {
+pub(crate) fn enc_ucvtf_s_x(sd: u8, xn: Reg) -> Insn {
     debug_assert!(sd < 32);
-    0x9E23_0000 | ((xn.0 as u32) << 5) | (sd as u32)
+    insn!(
+        0x9E23_0000 | ((xn.0 as u32) << 5) | (sd as u32),
+        "ucvtf",
+        [t::s(sd), t::x(xn)]
+    )
 }
 
 /// `FCVTZS <Xd>, <Sn>` -- truncating signed single-to-int.
 /// `enc_fcvtzs_x_d` with the ptype field cleared to `00` (single
 /// source). The direct form for `(int)f` that avoids widening the
 /// `float` to double first.
-pub(crate) fn enc_fcvtzs_x_s(rd: Reg, sn: u8) -> u32 {
+pub(crate) fn enc_fcvtzs_x_s(rd: Reg, sn: u8) -> Insn {
     debug_assert!(sn < 32);
-    0x9E38_0000 | ((sn as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0x9E38_0000 | ((sn as u32) << 5) | (rd.0 as u32),
+        "fcvtzs",
+        [t::x(rd), t::s(sn)]
+    )
 }
 
 /// `FCVTZU <Xd>, <Sn>` -- truncating unsigned single-to-int.
 /// `enc_fcvtzu_x_d` with ptype `00`.
-pub(crate) fn enc_fcvtzu_x_s(rd: Reg, sn: u8) -> u32 {
+pub(crate) fn enc_fcvtzu_x_s(rd: Reg, sn: u8) -> Insn {
     debug_assert!(sn < 32);
-    0x9E39_0000 | ((sn as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0x9E39_0000 | ((sn as u32) << 5) | (rd.0 as u32),
+        "fcvtzu",
+        [t::x(rd), t::s(sn)]
+    )
 }
 
 /// `MRS <Xt>, TPIDR_EL0` -- read the per-thread pointer system
@@ -1240,83 +1835,105 @@ pub(crate) fn enc_fcvtzu_x_s(rd: Reg, sn: u8) -> u32 {
 /// with the address of `struct pthread`, and the TLS image (our
 /// `.tdata` / `.tbss`) follows immediately after the TCB header.
 /// `var_addr = TPIDR_EL0 + TLS_TCB_HEAD (16) + offset_in_block`.
-pub(crate) fn enc_mrs_tpidr_el0(rt: Reg) -> u32 {
-    // 1101_0101_0011_0011_1101_0000_0100_0000 + Rt
-    // (op0=11, op1=011, CRn=1101, CRm=0000, op2=010)
-    0xD53B_D040 | (rt.0 as u32)
+pub(crate) fn enc_mrs_tpidr_el0(rt: Reg) -> Insn {
+    insn!(
+        // 1101_0101_0011_0011_1101_0000_0100_0000 + Rt
+        // (op0=11, op1=011, CRn=1101, CRm=0000, op2=010)
+        0xD53B_D040 | (rt.0 as u32),
+        "mrs",
+        [t::x(rt), t::sys_reg(0xDE82)]
+    )
 }
 
 /// `MRS <Xt>, <systemreg>`, where `field` is the register's `mrs`/`msr`
 /// selector packed as `op0<<14 | op1<<11 | CRn<<7 | CRm<<3 | op2` (the
 /// form [`crate::c5::codegen::stack_guard_sysreg`] returns). The
 /// instruction carries the low 15 bits of the field at bits 19..5.
-pub(crate) fn enc_mrs(rt: Reg, field: u16) -> u32 {
-    0xD530_0000 | ((u32::from(field) & 0x7FFF) << 5) | (rt.0 as u32)
+pub(crate) fn enc_mrs(rt: Reg, field: u16) -> Insn {
+    insn!(
+        0xD530_0000 | ((u32::from(field) & 0x7FFF) << 5) | (rt.0 as u32),
+        "mrs",
+        [t::x(rt), t::sys_reg(field)]
+    )
 }
 
 /// `LDR <Dt>, [<Xn|SP>, #imm]` -- 64-bit unsigned-offset FP/SIMD
 /// load. The offset is byte-addressed but encoded as `imm/8`; the
 /// caller passes raw bytes (a multiple of 8, up to 32760).
-pub(crate) fn enc_ldr_d_imm(dt: u8, rn: Reg, imm: u32) -> u32 {
+pub(crate) fn enc_ldr_d_imm(dt: u8, rn: Reg, imm: u32) -> Insn {
     enc_mem(LDR_D, dt, rn, LDR_D.scaled(imm))
 }
 
 /// `LDR <St>, [<Xn|SP>, #imm]` -- 32-bit unsigned-offset FP/SIMD
 /// load. The offset is byte-addressed but encoded as `imm/4`; the
 /// caller passes raw bytes (a multiple of 4, up to 16380).
-pub(crate) fn enc_ldr_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
+pub(crate) fn enc_ldr_s_imm(st: u8, rn: Reg, imm: u32) -> Insn {
     enc_mem(LDR_S, st, rn, LDR_S.scaled(imm))
 }
 
 /// `STR <St>, [<Xn|SP>, #imm]` -- 32-bit unsigned-offset FP/SIMD
 /// store. Same encoding family as [`enc_ldr_s_imm`]; companion
 /// to the `StoreKind::F32` lowering.
-pub(crate) fn enc_str_s_imm(st: u8, rn: Reg, imm: u32) -> u32 {
+pub(crate) fn enc_str_s_imm(st: u8, rn: Reg, imm: u32) -> Insn {
     enc_mem(STR_S, st, rn, STR_S.scaled(imm))
 }
 
 /// `STR <Dt>, [<Xn|SP>, #imm]` -- 64-bit unsigned-offset FP/SIMD
 /// store, the partner of [`enc_ldr_d_imm`].
-pub(crate) fn enc_str_d_imm(dt: u8, rn: Reg, imm: u32) -> u32 {
+pub(crate) fn enc_str_d_imm(dt: u8, rn: Reg, imm: u32) -> Insn {
     enc_mem(STR_D, dt, rn, STR_D.scaled(imm))
 }
 
 /// `LDR <Bt|Ht>, [<Xn|SP>, #imm]` -- the 1- or 2-byte unsigned-offset
 /// FP/SIMD load, by `width`.
-pub(crate) fn enc_ldr_bh_imm(width: u32, vt: u8, rn: Reg, imm: u32) -> u32 {
+pub(crate) fn enc_ldr_bh_imm(width: u32, vt: u8, rn: Reg, imm: u32) -> Insn {
     let op = if width == 1 { LDR_B } else { LDR_H };
     enc_mem(op, vt, rn, op.scaled(imm))
 }
 
 /// `STR <Bt|Ht>, [<Xn|SP>, #imm]`, the partner of [`enc_ldr_bh_imm`].
-pub(crate) fn enc_str_bh_imm(width: u32, vt: u8, rn: Reg, imm: u32) -> u32 {
+pub(crate) fn enc_str_bh_imm(width: u32, vt: u8, rn: Reg, imm: u32) -> Insn {
     let op = if width == 1 { STR_B } else { STR_H };
     enc_mem(op, vt, rn, op.scaled(imm))
 }
 
 /// `USHLL Vd.<2E>, Vn.<E>, #0` (UXTL) on the low 64 bits: each `elem`-byte
 /// lane (1 or 2) of `vn` zero-extended to twice its width in `vd`.
-pub(crate) fn enc_uxtl(vd: u8, vn: u8, elem: u32) -> u32 {
+pub(crate) fn enc_uxtl(vd: u8, vn: u8, elem: u32) -> Insn {
     debug_assert!(matches!(elem, 1 | 2) && vd < 32 && vn < 32);
-    0x2F00_A400 | (elem << 19) | (u32::from(vn) << 5) | u32::from(vd)
+    insn!(
+        0x2F00_A400 | (elem << 19) | (u32::from(vn) << 5) | u32::from(vd),
+        "uxtl",
+        [
+            t::v(vd, lane_log2(elem) + 1, true),
+            t::v(vn, lane_log2(elem), false),
+        ]
+    )
 }
 
 /// `XTN Vd.<E>, Vn.<2E>`: each lane of `vn` narrowed to its low half, an
 /// `elem`-byte lane (1 or 2) of `vd`'s low 64 bits.
-pub(crate) fn enc_xtn(vd: u8, vn: u8, elem: u32) -> u32 {
+pub(crate) fn enc_xtn(vd: u8, vn: u8, elem: u32) -> Insn {
     debug_assert!(matches!(elem, 1 | 2) && vd < 32 && vn < 32);
-    0x0E21_2800 | ((elem - 1) << 22) | (u32::from(vn) << 5) | u32::from(vd)
+    insn!(
+        0x0E21_2800 | ((elem - 1) << 22) | (u32::from(vn) << 5) | u32::from(vd),
+        "xtn",
+        [
+            t::v(vd, lane_log2(elem), false),
+            t::v(vn, lane_log2(elem) + 1, true),
+        ]
+    )
 }
 
 /// `LDR <Qt>, [<Xn|SP>, #imm]` -- 128-bit unsigned-offset FP/SIMD
 /// load. The offset is byte-addressed but encoded as `imm/16`.
-pub(crate) fn enc_ldr_q_imm(qt: u8, rn: Reg, imm: u32) -> u32 {
+pub(crate) fn enc_ldr_q_imm(qt: u8, rn: Reg, imm: u32) -> Insn {
     enc_mem(LDR_Q, qt, rn, LDR_Q.scaled(imm))
 }
 
 /// `STR <Qt>, [<Xn|SP>, #imm]` -- 128-bit unsigned-offset FP/SIMD
 /// store, the partner of [`enc_ldr_q_imm`].
-pub(crate) fn enc_str_q_imm(qt: u8, rn: Reg, imm: u32) -> u32 {
+pub(crate) fn enc_str_q_imm(qt: u8, rn: Reg, imm: u32) -> Insn {
     enc_mem(STR_Q, qt, rn, STR_Q.scaled(imm))
 }
 
@@ -1330,7 +1947,8 @@ pub(crate) fn enc_vec_binop(
     vd: u8,
     vn: u8,
     vm: u32,
-) -> Option<u32> {
+    q: bool,
+) -> Option<Insn> {
     use crate::c5::ir::{BinOp, VecLane};
     let size: u32 = match lane {
         VecLane::I8 | VecLane::F32 => 0,
@@ -1351,24 +1969,59 @@ pub(crate) fn enc_vec_binop(
         (BinOp::Fdiv, true) => 0x6E20_FC00 | size << 22,
         _ => return None,
     };
-    Some(base | (vm & 31) << 16 | u32::from(vn & 31) << 5 | u32::from(vd & 31))
+    let mnem = match op {
+        BinOp::Add => "add",
+        BinOp::Sub => "sub",
+        BinOp::Mul => "mul",
+        BinOp::And => "and",
+        BinOp::Or => "orr",
+        BinOp::Xor => "eor",
+        BinOp::Fadd => "fadd",
+        BinOp::Fsub => "fsub",
+        BinOp::Fmul => "fmul",
+        _ => "fdiv",
+    };
+    // The bitwise operations read the register as bytes.
+    let lane = match (op, lane) {
+        (BinOp::And | BinOp::Or | BinOp::Xor, _) => 0,
+        (_, VecLane::F32) => 2,
+        (_, VecLane::F64) => 3,
+        _ => size as u8,
+    };
+    let (vm, vn, vd) = (vm as u8 & 31, vn & 31, vd & 31);
+    // Q (bit 30) selects the 128-bit form.
+    let base = if q { base } else { base & !0x4000_0000 };
+    let word = base | u32::from(vm) << 16 | u32::from(vn) << 5 | u32::from(vd);
+    Some(insn!(
+        word,
+        mnem,
+        [t::v(vd, lane, q), t::v(vn, lane, q), t::v(vm, lane, q)]
+    ))
 }
 
-pub(crate) fn enc_mov_v16b(vd: u8, vn: u8) -> u32 {
+pub(crate) fn enc_mov_v16b(vd: u8, vn: u8) -> Insn {
     debug_assert!(vd < 32 && vn < 32);
-    0x4EA0_1C00 | ((vn as u32) << 16) | ((vn as u32) << 5) | vd as u32
+    insn!(
+        0x4EA0_1C00 | ((vn as u32) << 16) | ((vn as u32) << 5) | vd as u32,
+        "orr",
+        [t::v(vd, 0, true), t::v(vn, 0, true), t::v(vn, 0, true)]
+    )
 }
 
 /// `ADR <Xd>, label` -- compute a PC-relative byte address (signed
 /// 21-bit offset) into `Xd`. Used by the AArch64 setjmp intrinsic
 /// to capture the resume address that a later longjmp branches to.
 /// Offset is in bytes from the ADR's own PC.
-pub(crate) fn enc_adr(rd: Reg, off_bytes: i32) -> u32 {
+pub(crate) fn enc_adr(rd: Reg, off_bytes: i32) -> Insn {
     debug_assert!((-(1 << 20)..(1 << 20)).contains(&off_bytes), "adr off");
     let off = (off_bytes as u32) & 0x001F_FFFF;
     let immlo = off & 0x3;
     let immhi = (off >> 2) & 0x0007_FFFF;
-    0x1000_0000 | (immlo << 29) | (immhi << 5) | (rd.0 as u32)
+    insn!(
+        0x1000_0000 | (immlo << 29) | (immhi << 5) | (rd.0 as u32),
+        "adr",
+        [t::x(rd), t::adr()]
+    )
 }
 
 /// `CINC <Xd>, <Xn>, <cond>` -- conditional increment. Alias for
@@ -1376,59 +2029,91 @@ pub(crate) fn enc_adr(rd: Reg, off_bytes: i32) -> u32 {
 /// `Xn + 1`; otherwise write `Xn`. Used by the longjmp intrinsic to
 /// turn a 0 value into 1 per C99 7.13.2.1 ("if the function returns
 /// 0 it is as if longjmp had been called with the value 1").
-pub(crate) fn enc_cinc(rd: Reg, rn: Reg, cond: Cond) -> u32 {
+pub(crate) fn enc_cinc(rd: Reg, rn: Reg, cond: Cond) -> Insn {
     let inv = (cond as u32) ^ 1;
-    0x9A80_0400 | ((rn.0 as u32) << 16) | (inv << 12) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0x9A80_0400 | ((rn.0 as u32) << 16) | (inv << 12) | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "csinc",
+        [t::x(rd), t::x(rn), t::x(rn), t::cond(cond.flip())]
+    )
 }
 
 /// `FCVT <Dd>, <Sn>` -- widen single-precision to double-precision
 /// (bit-exact for any finite single value, matching the IEEE
 /// short-to-long conversion). Used by [`LoadKind::F32`] after the
 /// single-precision load.
-pub(crate) fn enc_fcvt_d_s(dd: u8, sn: u8) -> u32 {
+pub(crate) fn enc_fcvt_d_s(dd: u8, sn: u8) -> Insn {
     debug_assert!(dd < 32 && sn < 32);
-    0x1E22_C000 | ((sn as u32) << 5) | (dd as u32)
+    insn!(
+        0x1E22_C000 | ((sn as u32) << 5) | (dd as u32),
+        "fcvt",
+        [t::d(dd), t::s(sn)]
+    )
 }
 
 /// `FCVT <Sd>, <Dn>` -- narrow double-precision to single-precision
 /// with round-to-nearest-ties-to-even (matching IEEE 754 and the
 /// VM's `f64 as f32` semantics). Used by the `StoreKind::F32`
 /// lowering before the single-precision store.
-pub(crate) fn enc_fcvt_s_d(sd: u8, dn: u8) -> u32 {
+pub(crate) fn enc_fcvt_s_d(sd: u8, dn: u8) -> Insn {
     debug_assert!(sd < 32 && dn < 32);
-    0x1E62_4000 | ((dn as u32) << 5) | (sd as u32)
+    insn!(
+        0x1E62_4000 | ((dn as u32) << 5) | (sd as u32),
+        "fcvt",
+        [t::s(sd), t::d(dn)]
+    )
 }
 
 // ---- Comparisons + condition-set. ----
 
 /// `CMP <Xn>, <Xm>` = `SUBS XZR, <Xn>, <Xm>` -- compare two registers,
 /// updating the NZCV flags but discarding the result.
-pub(crate) fn enc_cmp_reg(rn: Reg, rm: Reg) -> u32 {
-    0xEB00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (Reg::SP.0 as u32)
+pub(crate) fn enc_cmp_reg(rn: Reg, rm: Reg) -> Insn {
+    insn!(
+        0xEB00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (Reg::SP.0 as u32),
+        "subs",
+        [t::x(Reg::SP), t::x(rn), t::x(rm)]
+    )
 }
 
 /// `CMP <Wn>, <Wm>` -- the 32-bit form of [`enc_cmp_reg`]. The operands
 /// are read as W registers, so bits 32..63 do not reach the flags.
-pub(crate) fn enc_cmp_reg_w(rn: Reg, rm: Reg) -> u32 {
-    0x6B00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (Reg::SP.0 as u32)
+pub(crate) fn enc_cmp_reg_w(rn: Reg, rm: Reg) -> Insn {
+    insn!(
+        0x6B00_0000 | ((rm.0 as u32) << 16) | ((rn.0 as u32) << 5) | (Reg::SP.0 as u32),
+        "subs",
+        [t::w(Reg::SP), t::w(rn), t::w(rm)]
+    )
 }
 
 /// `SUBS <Wd>, <Wn|WSP>, #imm12` -- the 32-bit form of [`enc_subs_imm`].
-pub(crate) fn enc_subs_imm_w(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+pub(crate) fn enc_subs_imm_w(rd: Reg, rn: Reg, imm12: u32) -> Insn {
     debug_assert!(imm12 < 4096, "subs imm: {imm12} > 12-bit max");
-    0x7100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0x7100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "subs",
+        [t::w(rd), t::wsp(rn), t::imm(imm12.into())]
+    )
 }
 
 /// `ADDS Xd, Xn, #imm12`; `cmn Xn, #imm12` with Xd = XZR.
-pub(crate) fn enc_adds_imm(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+pub(crate) fn enc_adds_imm(rd: Reg, rn: Reg, imm12: u32) -> Insn {
     debug_assert!(imm12 < 4096, "adds imm: {imm12} > 12-bit max");
-    0xB100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0xB100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "adds",
+        [t::x(rd), t::xsp(rn), t::imm(imm12.into())]
+    )
 }
 
 /// `ADDS Wd, Wn, #imm12`; `cmn Wn, #imm12` with Wd = WZR.
-pub(crate) fn enc_adds_imm_w(rd: Reg, rn: Reg, imm12: u32) -> u32 {
+pub(crate) fn enc_adds_imm_w(rd: Reg, rn: Reg, imm12: u32) -> Insn {
     debug_assert!(imm12 < 4096, "adds imm: {imm12} > 12-bit max");
-    0x3100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0x3100_0000 | (imm12 << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "adds",
+        [t::w(rd), t::wsp(rn), t::imm(imm12.into())]
+    )
 }
 
 /// AArch64 condition codes -- the 4-bit field that follows comparisons
@@ -1467,6 +2152,15 @@ pub(crate) enum Cond {
 }
 
 impl Cond {
+    /// The `b.<cond>` mnemonic.
+    pub(crate) fn branch(self) -> &'static str {
+        const NAMES: [&str; 14] = [
+            "b.eq", "b.ne", "b.hs", "b.lo", "b.mi", "b.pl", "b.vs", "b.vc", "b.hi", "b.ls", "b.ge",
+            "b.lt", "b.gt", "b.le",
+        ];
+        NAMES[self as usize]
+    }
+
     /// CSET emits `CSINC Xd, XZR, XZR, INVERT(cond)`. The ARM
     /// invariant is that bit 0 of the condition field flips meaning
     /// (EQ <-> NE, LT <-> GE, GT <-> LE), so we just XOR with 1.
@@ -1502,149 +2196,219 @@ impl Cond {
 }
 
 /// `CSINC <Xd>, <Xn>, <Xm>, <cond>`: `Xd = cond ? Xn : Xm + 1`.
-pub(crate) fn enc_csinc(rd: Reg, rn: Reg, rm: Reg, cond: Cond) -> u32 {
-    0x9A80_0400
-        | ((rm.0 as u32) << 16)
-        | ((cond as u32) << 12)
-        | ((rn.0 as u32) << 5)
-        | (rd.0 as u32)
+pub(crate) fn enc_csinc(rd: Reg, rn: Reg, rm: Reg, cond: Cond) -> Insn {
+    insn!(
+        0x9A80_0400
+            | ((rm.0 as u32) << 16)
+            | ((cond as u32) << 12)
+            | ((rn.0 as u32) << 5)
+            | (rd.0 as u32),
+        "csinc",
+        [t::x(rd), t::x(rn), t::x(rm), t::cond(cond)]
+    )
 }
 
 /// `CSEL <Xd>, <Xn>, <Xm>, <cond>`: `Xd = cond ? Xn : Xm`.
-pub(crate) fn enc_csel(rd: Reg, rn: Reg, rm: Reg, cond: Cond) -> u32 {
-    0x9A80_0000
-        | ((rm.0 as u32) << 16)
-        | ((cond as u32) << 12)
-        | ((rn.0 as u32) << 5)
-        | (rd.0 as u32)
+pub(crate) fn enc_csel(rd: Reg, rn: Reg, rm: Reg, cond: Cond) -> Insn {
+    insn!(
+        0x9A80_0000
+            | ((rm.0 as u32) << 16)
+            | ((cond as u32) << 12)
+            | ((rn.0 as u32) << 5)
+            | (rd.0 as u32),
+        "csel",
+        [t::x(rd), t::x(rn), t::x(rm), t::cond(cond)]
+    )
 }
 
 /// `FCSEL <Dd|Sd>, <Dn|Sn>, <Dm|Sm>, <cond>`: `d = cond ? n : m`.
-pub(crate) fn enc_fcsel(dd: u8, dn: u8, dm: u8, cond: Cond, single: bool) -> u32 {
-    (if single { 0x1E20_0C00u32 } else { 0x1E60_0C00 })
-        | ((dm as u32) << 16)
-        | ((cond as u32) << 12)
-        | ((dn as u32) << 5)
-        | (dd as u32)
+pub(crate) fn enc_fcsel(dd: u8, dn: u8, dm: u8, cond: Cond, single: bool) -> Insn {
+    insn!(
+        (if single { 0x1E20_0C00u32 } else { 0x1E60_0C00 })
+            | ((dm as u32) << 16)
+            | ((cond as u32) << 12)
+            | ((dn as u32) << 5)
+            | (dd as u32),
+        "fcsel",
+        [
+            t::sd(dd, single),
+            t::sd(dn, single),
+            t::sd(dm, single),
+            t::cond(cond),
+        ]
+    )
 }
 
 /// `CSET <Xd>, <cond>` = `CSINC Xd, XZR, XZR, invert(cond)`.
 /// Sets `Xd` to 1 if `cond` holds, 0 otherwise.
-pub(crate) fn enc_cset(rd: Reg, cond: Cond) -> u32 {
-    0x9A80_0400
+pub(crate) fn enc_cset(rd: Reg, cond: Cond) -> Insn {
+    insn!(
+        0x9A80_0400
         | ((Reg::SP.0 as u32) << 16) // Rm = XZR
         | (cond.invert() << 12)
         | ((Reg::SP.0 as u32) << 5)  // Rn = XZR
-        | (rd.0 as u32)
+        | (rd.0 as u32),
+        "csinc",
+        [t::x(rd), t::x(Reg::SP), t::x(Reg::SP), t::cond(cond.flip())]
+    )
 }
 
 // ---- Branches. ----
 
 /// `B <label>` -- unconditional branch, PC-relative offset measured
 /// in instructions. Same encoding family as `BL` minus the link bit.
-pub(crate) fn enc_b(imm26: i32) -> u32 {
+pub(crate) fn enc_b(imm26: i32) -> Insn {
     debug_assert!(
         (-(1 << 25)..(1 << 25)).contains(&imm26),
         "b: offset {imm26} out of range"
     );
-    0x1400_0000 | ((imm26 as u32) & 0x03FF_FFFF)
+    insn!(
+        0x1400_0000 | ((imm26 as u32) & 0x03FF_FFFF),
+        "b",
+        [t::target(0, 26)]
+    )
 }
 
 /// `CBZ <Xt>, <label>` -- compare `Xt` with zero and branch if equal.
 /// `imm19` is signed, in instructions. +/-1 MiB range.
-pub(crate) fn enc_cbz(rt: Reg, imm19: i32) -> u32 {
+pub(crate) fn enc_cbz(rt: Reg, imm19: i32) -> Insn {
     debug_assert!(
         (-(1 << 18)..(1 << 18)).contains(&imm19),
         "cbz: offset {imm19} out of range (must fit in signed 19 bits)"
     );
-    0xB400_0000 | (((imm19 as u32) & 0x7_FFFF) << 5) | (rt.0 as u32)
+    insn!(
+        0xB400_0000 | (((imm19 as u32) & 0x7_FFFF) << 5) | (rt.0 as u32),
+        "cbz",
+        [t::x(rt), t::target(5, 19)]
+    )
 }
 
 /// `CBNZ <Xt>, <label>` -- branch if `Xt` is not zero.
-pub(crate) fn enc_cbnz(rt: Reg, imm19: i32) -> u32 {
+pub(crate) fn enc_cbnz(rt: Reg, imm19: i32) -> Insn {
     debug_assert!(
         (-(1 << 18)..(1 << 18)).contains(&imm19),
         "cbnz: offset {imm19} out of range"
     );
-    0xB500_0000 | (((imm19 as u32) & 0x7_FFFF) << 5) | (rt.0 as u32)
+    insn!(
+        0xB500_0000 | (((imm19 as u32) & 0x7_FFFF) << 5) | (rt.0 as u32),
+        "cbnz",
+        [t::x(rt), t::target(5, 19)]
+    )
 }
 
 /// `CBZ Wt, label`: the 32-bit form of [`enc_cbz`].
-pub(crate) fn enc_cbz_w(rt: Reg, imm19: i32) -> u32 {
-    enc_cbz(rt, imm19) & !0x8000_0000
+pub(crate) fn enc_cbz_w(rt: Reg, imm19: i32) -> Insn {
+    insn!(
+        enc_cbz(rt, imm19).word & !0x8000_0000,
+        "cbz",
+        [t::w(rt), t::target(5, 19)]
+    )
 }
 
 /// `CBNZ Wt, label`: the 32-bit form of [`enc_cbnz`].
-pub(crate) fn enc_cbnz_w(rt: Reg, imm19: i32) -> u32 {
-    enc_cbnz(rt, imm19) & !0x8000_0000
+pub(crate) fn enc_cbnz_w(rt: Reg, imm19: i32) -> Insn {
+    let word = enc_cbnz(rt, imm19).word & !0x8000_0000;
+    insn!(word, "cbnz", [t::w(rt), t::target(5, 19)])
 }
 
 /// `TBZ Rt, #bit, label` -- branch if bit `bit` of `Xt` is zero; `imm14`
 /// is signed, in instructions (+/-32 KiB).
-pub(crate) fn enc_tbz(rt: Reg, bit: u8, imm14: i32) -> u32 {
+pub(crate) fn enc_tbz(rt: Reg, bit: u8, imm14: i32) -> Insn {
     debug_assert!(bit < 64, "tbz: bit {bit}");
     debug_assert!(
         (-(1 << 13)..(1 << 13)).contains(&imm14),
         "tbz: offset {imm14} out of range"
     );
     let b = bit as u32;
-    0x3600_0000
-        | ((b >> 5) << 31)
-        | ((b & 31) << 19)
-        | (((imm14 as u32) & 0x3FFF) << 5)
-        | rt.0 as u32
+    insn!(
+        0x3600_0000
+            | ((b >> 5) << 31)
+            | ((b & 31) << 19)
+            | (((imm14 as u32) & 0x3FFF) << 5)
+            | rt.0 as u32,
+        "tbz",
+        [t::r(rt, bit >= 32), t::imm(bit.into()), t::target(5, 14)]
+    )
 }
 
 /// `TBNZ Rt, #bit, label` -- branch if bit `bit` of `Xt` is one.
-pub(crate) fn enc_tbnz(rt: Reg, bit: u8, imm14: i32) -> u32 {
-    enc_tbz(rt, bit, imm14) | 0x0100_0000
+pub(crate) fn enc_tbnz(rt: Reg, bit: u8, imm14: i32) -> Insn {
+    let word = enc_tbz(rt, bit, imm14).word | 0x0100_0000;
+    insn!(
+        word,
+        "tbnz",
+        [t::r(rt, bit >= 32), t::imm(bit.into()), t::target(5, 14)]
+    )
 }
 
 /// `B.<cond> <label>` -- branch if the NZCV flags satisfy `cond`.
 /// `imm19` is signed, in instructions; same +/-1 MiB range as
 /// `CBZ`/`CBNZ`. The encoder builds the canonical form
 /// `0101_0100 imm19 0 cond`.
-pub(crate) fn enc_b_cond(cond: Cond, imm19: i32) -> u32 {
+pub(crate) fn enc_b_cond(cond: Cond, imm19: i32) -> Insn {
     debug_assert!(
         (-(1 << 18)..(1 << 18)).contains(&imm19),
         "b.cond: offset {imm19} out of range (must fit in signed 19 bits)"
     );
-    0x5400_0000 | (((imm19 as u32) & 0x7_FFFF) << 5) | (cond as u32)
+    insn!(
+        0x5400_0000 | (((imm19 as u32) & 0x7_FFFF) << 5) | (cond as u32),
+        cond.branch(),
+        [t::target(5, 19)]
+    )
 }
 
 /// `BLR <Xn>` -- branch with link to the address in `Xn`. Used for
 /// indirect calls (function pointer through GOT).
-pub(crate) fn enc_blr(rn: Reg) -> u32 {
-    0xD63F_0000 | ((rn.0 as u32) << 5)
+/// `B.<cond> <label>` of any 4-bit condition field, `al` and `nv` included.
+pub(crate) fn enc_b_cond_code(cond: u8, imm19: i32) -> Insn {
+    const NAMES: [&str; 16] = [
+        "b.eq", "b.ne", "b.hs", "b.lo", "b.mi", "b.pl", "b.vs", "b.vc", "b.hi", "b.ls", "b.ge",
+        "b.lt", "b.gt", "b.le", "b.al", "b.nv",
+    ];
+    let word = 0x5400_0000 | (((imm19 as u32) & 0x7_FFFF) << 5) | u32::from(cond & 15);
+    insn!(word, NAMES[usize::from(cond & 15)], [t::target(5, 19)])
+}
+
+/// `BRK #imm16`.
+pub(crate) fn enc_brk(imm16: u16) -> Insn {
+    insn!(
+        0xD420_0000 | (u32::from(imm16) << 5),
+        "brk",
+        [t::imm(imm16.into())]
+    )
+}
+
+pub(crate) fn enc_blr(rn: Reg) -> Insn {
+    insn!(0xD63F_0000 | ((rn.0 as u32) << 5), "blr", [t::x(rn)])
 }
 
 /// `BTI C` -- branch-target landing pad accepting an indirect call
 /// (`BLR`, PSTATE.BTYPE 0b10) and a `BR` through x16/x17 (0b01).
 /// `HINT #34`, so it decodes as a NOP where FEAT_BTI is absent.
-pub(crate) const BTI_C: u32 = 0xD503_245F;
+pub(crate) const BTI_C: Insn = Insn::fixed(0xD503_245F, "bti c");
 
 /// `BTI J` -- landing pad accepting a `BR` through any register
 /// (PSTATE.BTYPE 0b11) as well as 0b01. `HINT #36`.
-pub(crate) const BTI_J: u32 = 0xD503_249F;
+pub(crate) const BTI_J: Insn = Insn::fixed(0xD503_249F, "bti j");
 
 /// `PACIASP` -- sign x30 with key A, modifier sp. `HINT #25`, so it
 /// decodes as a NOP where FEAT_PAuth is absent. Also a landing pad
 /// for PSTATE.BTYPE 0b01 / 0b10, which is every way a function entry
 /// is reached indirectly (Arm ARM D24.2.2).
-pub(crate) const PACIASP: u32 = 0xD503_233F;
+pub(crate) const PACIASP: Insn = Insn::fixed(0xD503_233F, "paciasp");
 
 /// `AUTIASP` -- authenticate x30 with key A, modifier sp. `HINT #29`.
 /// The modifier must match the one `PACIASP` signed with, so sp has to
 /// be back at its function-entry value.
-pub(crate) const AUTIASP: u32 = 0xD503_23BF;
+pub(crate) const AUTIASP: Insn = Insn::fixed(0xD503_23BF, "autiasp");
 
 /// `PACIBSP` / `AUTIBSP` -- `PACIASP` / `AUTIASP` with key B. `HINT #27`
 /// and `HINT #31`.
-pub(crate) const PACIBSP: u32 = 0xD503_237F;
-pub(crate) const AUTIBSP: u32 = 0xD503_23FF;
+pub(crate) const PACIBSP: Insn = Insn::fixed(0xD503_237F, "pacibsp");
+pub(crate) const AUTIBSP: Insn = Insn::fixed(0xD503_23FF, "autibsp");
 
 /// The sign and authenticate instructions of the key `hardening` names.
-pub(crate) fn pac_pair(hardening: crate::c5::codegen::Hardening) -> (u32, u32) {
+pub(crate) fn pac_pair(hardening: crate::c5::codegen::Hardening) -> (Insn, Insn) {
     match hardening.pac_b_key {
         true => (PACIBSP, AUTIBSP),
         false => (PACIASP, AUTIASP),
@@ -1655,48 +2419,72 @@ pub(crate) fn pac_pair(hardening: crate::c5::codegen::Hardening) -> (u32, u32) {
 /// decodes as a NOP where FEAT_PAuth is absent and leaves an unsigned
 /// pointer unchanged. x30 is the only register the hint form reaches;
 /// stripping any other needs `XPACI <Xd>`, which requires FEAT_PAuth.
-pub(crate) const XPACLRI: u32 = 0xD503_20FF;
+pub(crate) const XPACLRI: Insn = Insn::fixed(0xD503_20FF, "xpaclri");
 
 /// `NOP` (`HINT #0`).
-pub(crate) const NOP: u32 = 0xD503_201F;
+pub(crate) const NOP: Insn = Insn::fixed(0xD503_201F, "nop");
 
 /// `BR <Xn>` -- branch (no link) to the address in `Xn`. Used by
 /// the `Terminator::TailExt` lowering to forward control to the
 /// IAT/GOT-resolved libc address without saving a return point:
 /// the libc fn's `RET` lands back at the c5 caller's post-call
 /// continuation instead of bouncing back through the trampoline.
-pub(crate) fn enc_br(rn: Reg) -> u32 {
-    0xD61F_0000 | ((rn.0 as u32) << 5)
+pub(crate) fn enc_br(rn: Reg) -> Insn {
+    insn!(0xD61F_0000 | ((rn.0 as u32) << 5), "br", [t::x(rn)])
 }
 
 /// `SVC #imm16` -- supervisor call (system call). On Linux/aarch64
 /// the kernel reads the intrinsic number from `x8` and the arguments
 /// from `x0..x5`; the immediate is conventionally zero.
-pub(crate) fn enc_svc(imm16: u16) -> u32 {
-    0xD400_0001 | ((imm16 as u32) << 5)
+pub(crate) fn enc_svc(imm16: u16) -> Insn {
+    insn!(
+        0xD400_0001 | ((imm16 as u32) << 5),
+        "svc",
+        [t::imm(imm16.into())]
+    )
 }
 
 // ---- Loads / stores of one register at an immediate offset (ARM ARM
 //      C4.1.94): bit 24 selects the scaled imm12 over the signed imm9.
 
 /// One register kind and width of `LDR` / `STR`: the unscaled-offset
-/// word with Rt, Rn and the offset clear, and log2 of the access size.
+/// word with Rt, Rn and the offset clear, log2 of the access size, the
+/// mnemonic of the scaled and of the unscaled form, and the view of Rt:
+/// a general register `x` or `w`, else the SIMD&FP register of the access
+/// size.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct MemOp {
     word: u32,
     scale: u32,
+    name: &'static str,
+    unscaled_name: &'static str,
+    rt: char,
 }
 
-/// An offset field a load or store of one access size holds.
+/// An offset field a load or store of one access size holds, and the byte
+/// offset it reads as.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct MemOff {
     scale: u32,
     field: u32,
+    disp: i64,
 }
 
 impl MemOp {
-    const fn new(word: u32, scale: u32) -> Self {
-        Self { word, scale }
+    const fn new(
+        word: u32,
+        scale: u32,
+        name: &'static str,
+        unscaled_name: &'static str,
+        rt: char,
+    ) -> Self {
+        Self {
+            word,
+            scale,
+            name,
+            unscaled_name,
+            rt,
+        }
     }
 
     /// The access size in bytes.
@@ -1709,6 +2497,7 @@ impl MemOp {
         fits.then(|| MemOff {
             scale: self.scale,
             field: (1 << 24) | (((imm >> self.scale) as u32) << 10),
+            disp: imm,
         })
     }
 
@@ -1716,6 +2505,7 @@ impl MemOp {
         (-256..256).contains(&imm).then_some(MemOff {
             scale: self.scale,
             field: ((imm as u32) & 0x1FF) << 12,
+            disp: imm,
         })
     }
 
@@ -1732,6 +2522,7 @@ impl MemOp {
         (-256..256).contains(&step).then_some(MemOff {
             scale: self.scale,
             field: (((step as u32) & 0x1FF) << 12) | (1 << 10),
+            disp: step,
         })
     }
 
@@ -1752,53 +2543,67 @@ impl MemOp {
     }
 }
 
-pub(crate) const LDR_X: MemOp = MemOp::new(0xF840_0000, 3);
-pub(crate) const STR_X: MemOp = MemOp::new(0xF800_0000, 3);
-pub(crate) const LDR_W: MemOp = MemOp::new(0xB840_0000, 2);
-pub(crate) const LDRSW: MemOp = MemOp::new(0xB880_0000, 2);
-pub(crate) const STR_W: MemOp = MemOp::new(0xB800_0000, 2);
-pub(crate) const LDRH: MemOp = MemOp::new(0x7840_0000, 1);
-pub(crate) const LDRSH: MemOp = MemOp::new(0x7880_0000, 1);
-pub(crate) const STRH: MemOp = MemOp::new(0x7800_0000, 1);
-pub(crate) const LDRB: MemOp = MemOp::new(0x3840_0000, 0);
-pub(crate) const LDRSB: MemOp = MemOp::new(0x3880_0000, 0);
-pub(crate) const STRB: MemOp = MemOp::new(0x3800_0000, 0);
-pub(crate) const LDR_B: MemOp = MemOp::new(0x3C40_0000, 0);
-pub(crate) const STR_B: MemOp = MemOp::new(0x3C00_0000, 0);
-pub(crate) const LDR_H: MemOp = MemOp::new(0x7C40_0000, 1);
-pub(crate) const STR_H: MemOp = MemOp::new(0x7C00_0000, 1);
-pub(crate) const LDR_S: MemOp = MemOp::new(0xBC40_0000, 2);
-pub(crate) const STR_S: MemOp = MemOp::new(0xBC00_0000, 2);
-pub(crate) const LDR_D: MemOp = MemOp::new(0xFC40_0000, 3);
-pub(crate) const STR_D: MemOp = MemOp::new(0xFC00_0000, 3);
-pub(crate) const LDR_Q: MemOp = MemOp::new(0x3CC0_0000, 4);
-pub(crate) const STR_Q: MemOp = MemOp::new(0x3C80_0000, 4);
+pub(crate) const LDR_X: MemOp = MemOp::new(0xF840_0000, 3, "ldr", "ldur", 'x');
+pub(crate) const STR_X: MemOp = MemOp::new(0xF800_0000, 3, "str", "stur", 'x');
+pub(crate) const LDR_W: MemOp = MemOp::new(0xB840_0000, 2, "ldr", "ldur", 'w');
+pub(crate) const LDRSW: MemOp = MemOp::new(0xB880_0000, 2, "ldrsw", "ldursw", 'x');
+pub(crate) const STR_W: MemOp = MemOp::new(0xB800_0000, 2, "str", "stur", 'w');
+pub(crate) const LDRH: MemOp = MemOp::new(0x7840_0000, 1, "ldrh", "ldurh", 'w');
+pub(crate) const LDRSH: MemOp = MemOp::new(0x7880_0000, 1, "ldrsh", "ldursh", 'x');
+pub(crate) const STRH: MemOp = MemOp::new(0x7800_0000, 1, "strh", "sturh", 'w');
+pub(crate) const LDRB: MemOp = MemOp::new(0x3840_0000, 0, "ldrb", "ldurb", 'w');
+pub(crate) const LDRSB: MemOp = MemOp::new(0x3880_0000, 0, "ldrsb", "ldursb", 'x');
+pub(crate) const STRB: MemOp = MemOp::new(0x3800_0000, 0, "strb", "sturb", 'w');
+pub(crate) const LDR_B: MemOp = MemOp::new(0x3C40_0000, 0, "ldr", "ldur", 'v');
+pub(crate) const STR_B: MemOp = MemOp::new(0x3C00_0000, 0, "str", "stur", 'v');
+pub(crate) const LDR_H: MemOp = MemOp::new(0x7C40_0000, 1, "ldr", "ldur", 'v');
+pub(crate) const STR_H: MemOp = MemOp::new(0x7C00_0000, 1, "str", "stur", 'v');
+pub(crate) const LDR_S: MemOp = MemOp::new(0xBC40_0000, 2, "ldr", "ldur", 'v');
+pub(crate) const STR_S: MemOp = MemOp::new(0xBC00_0000, 2, "str", "stur", 'v');
+pub(crate) const LDR_D: MemOp = MemOp::new(0xFC40_0000, 3, "ldr", "ldur", 'v');
+pub(crate) const STR_D: MemOp = MemOp::new(0xFC00_0000, 3, "str", "stur", 'v');
+pub(crate) const LDR_Q: MemOp = MemOp::new(0x3CC0_0000, 4, "ldr", "ldur", 'v');
+pub(crate) const STR_Q: MemOp = MemOp::new(0x3C80_0000, 4, "str", "stur", 'v');
 
 /// `op` between `rt` (a GPR or SIMD register, by `op`) and `[rn + off]`.
-pub(crate) fn enc_mem(op: MemOp, rt: u8, rn: Reg, off: MemOff) -> u32 {
+pub(crate) fn enc_mem(op: MemOp, rt: u8, rn: Reg, off: MemOff) -> Insn {
     assert_eq!(
         off.scale, op.scale,
         "{op:?}: offset built for another access size"
     );
     debug_assert!(rt < 32);
-    op.word | off.field | ((rn.0 as u32) << 5) | (rt as u32)
+    let word = op.word | off.field | ((rn.0 as u32) << 5) | (rt as u32);
+    let (kind, scale) = (op.rt, op.scale as u8);
+    let rt = move || match kind {
+        'x' => t::x(Reg(rt)),
+        'w' => t::w(Reg(rt)),
+        _ => t::fp(rt, scale),
+    };
+    // Bit 24 selects the scaled form; bits 11:10 01 the post-indexed one.
+    if off.field & 1 << 24 != 0 {
+        insn!(word, op.name, [rt(), t::mem_lo12(rn, scale)])
+    } else if off.field >> 10 & 3 == 1 {
+        insn!(word, op.name, [rt(), t::mem(rn, 0), t::imm(off.disp)])
+    } else {
+        insn!(word, op.unscaled_name, [rt(), t::mem(rn, off.disp)])
+    }
 }
 
 /// `LDR <Xt>, [<Xn|SP>, #imm]` -- 64-bit load, immediate offset
 /// scaled by 8. `imm` is the byte offset; range `[0, 32760]`.
-pub(crate) fn enc_ldr_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+pub(crate) fn enc_ldr_imm(rt: Reg, rn: Reg, imm: u32) -> Insn {
     enc_mem(LDR_X, rt.0, rn, LDR_X.scaled(imm))
 }
 
 /// `STR <Xt>, [<Xn|SP>, #imm]` -- 64-bit store. Same scaling as `LDR`.
-pub(crate) fn enc_str_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+pub(crate) fn enc_str_imm(rt: Reg, rn: Reg, imm: u32) -> Insn {
     enc_mem(STR_X, rt.0, rn, STR_X.scaled(imm))
 }
 
 /// `LDR <Wt>, [<Xn|SP>, #imm]` -- 32-bit load (zero-extended into
 /// `Xt`), immediate offset scaled by 4. Used by the Win64 TLS
 /// lowering to read the 4-byte `_tls_index` slot.
-pub(crate) fn enc_ldr32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+pub(crate) fn enc_ldr32_imm(rt: Reg, rn: Reg, imm: u32) -> Insn {
     enc_mem(LDR_W, rt.0, rn, LDR_W.scaled(imm))
 }
 
@@ -1806,14 +2611,14 @@ pub(crate) fn enc_ldr32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 /// the full 64-bit `Xt`, immediate offset scaled by 4. Used by
 /// [`LoadKind::I32`] for signed `int` lvalue reads -- the C signed-int
 /// model requires the high bit of the 4-byte slot to propagate.
-pub(crate) fn enc_ldrsw_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+pub(crate) fn enc_ldrsw_imm(rt: Reg, rn: Reg, imm: u32) -> Insn {
     enc_mem(LDRSW, rt.0, rn, LDRSW.scaled(imm))
 }
 
 /// `STR <Wt>, [<Xn|SP>, #imm]` -- 32-bit store (low half of `Xt`),
 /// immediate offset scaled by 4. Companion to [`enc_ldrsw_imm`] /
 /// [`enc_ldr32_imm`] for the `StoreKind::I32` lowering.
-pub(crate) fn enc_str32_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+pub(crate) fn enc_str32_imm(rt: Reg, rn: Reg, imm: u32) -> Insn {
     enc_mem(STR_W, rt.0, rn, STR_W.scaled(imm))
 }
 
@@ -1835,78 +2640,136 @@ fn enc_reg_offset(form: u32, rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
 
 /// `LDR Xt, [Xn|SP, Rm, <ext> #3]`. The Win64 TLS lowering fetches
 /// `tls_array[_tls_index]` with it.
-pub(crate) fn enc_ldr_reg_lsl3(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
-    enc_reg_offset(0xF860_1800, rt, rn, rm, ext)
+pub(crate) fn enc_ldr_reg_lsl3(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
+    insn!(
+        enc_reg_offset(0xF860_1800, rt, rn, rm, ext),
+        "ldr",
+        [t::x(rt), index(rn, rm, ext, Some(3))]
+    )
 }
 
 /// `LDR St` / `LDR Dt, [Xn|SP, Rm, <ext> #2 / #3]`: the integer forms with
 /// the SIMD&FP bit (26) set.
-pub(crate) fn enc_ldr_fp_reg(single: bool, rt: u8, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
+pub(crate) fn enc_ldr_fp_reg(single: bool, rt: u8, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
     let form = if single { 0xBC60_1800 } else { 0xFC60_1800 };
-    enc_reg_offset(form, Reg(rt), rn, rm, ext)
+    insn!(
+        enc_reg_offset(form, Reg(rt), rn, rm, ext),
+        "ldr",
+        [
+            t::sd(rt, single),
+            index(rn, rm, ext, Some(if single { 2 } else { 3 })),
+        ]
+    )
 }
 
 /// The store counterpart of [`enc_ldr_fp_reg`].
-pub(crate) fn enc_str_fp_reg(single: bool, rt: u8, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
+pub(crate) fn enc_str_fp_reg(single: bool, rt: u8, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
     let form = if single { 0xBC20_1800 } else { 0xFC20_1800 };
-    enc_reg_offset(form, Reg(rt), rn, rm, ext)
+    insn!(
+        enc_reg_offset(form, Reg(rt), rn, rm, ext),
+        "str",
+        [
+            t::sd(rt, single),
+            index(rn, rm, ext, Some(if single { 2 } else { 3 })),
+        ]
+    )
 }
 
 /// `LDRSW Xt, [Xn|SP, Rm, <ext> #2]`.
-pub(crate) fn enc_ldrsw_reg_lsl2(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
-    enc_reg_offset(0xB8A0_1800, rt, rn, rm, ext)
+pub(crate) fn enc_ldrsw_reg_lsl2(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
+    insn!(
+        enc_reg_offset(0xB8A0_1800, rt, rn, rm, ext),
+        "ldrsw",
+        [t::x(rt), index(rn, rm, ext, Some(2))]
+    )
 }
 
 /// `LDR Wt, [Xn|SP, Rm, <ext> #2]`.
-pub(crate) fn enc_ldr32_reg_lsl2(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
-    enc_reg_offset(0xB860_1800, rt, rn, rm, ext)
+pub(crate) fn enc_ldr32_reg_lsl2(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
+    insn!(
+        enc_reg_offset(0xB860_1800, rt, rn, rm, ext),
+        "ldr",
+        [t::w(rt), index(rn, rm, ext, Some(2))]
+    )
 }
 
 /// `LDRSH Xt, [Xn|SP, Rm, <ext> #1]`.
-pub(crate) fn enc_ldrsh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
-    enc_reg_offset(0x78A0_1800, rt, rn, rm, ext)
+pub(crate) fn enc_ldrsh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
+    insn!(
+        enc_reg_offset(0x78A0_1800, rt, rn, rm, ext),
+        "ldrsh",
+        [t::x(rt), index(rn, rm, ext, Some(1))]
+    )
 }
 
 /// `LDRH Wt, [Xn|SP, Rm, <ext> #1]`.
-pub(crate) fn enc_ldrh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
-    enc_reg_offset(0x7860_1800, rt, rn, rm, ext)
+pub(crate) fn enc_ldrh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
+    insn!(
+        enc_reg_offset(0x7860_1800, rt, rn, rm, ext),
+        "ldrh",
+        [t::w(rt), index(rn, rm, ext, Some(1))]
+    )
 }
 
 /// `LDRSB Xt, [Xn|SP, Rm, <ext>]`.
-pub(crate) fn enc_ldrsb_reg(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
-    enc_reg_offset(0x38A0_0800, rt, rn, rm, ext)
+pub(crate) fn enc_ldrsb_reg(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
+    insn!(
+        enc_reg_offset(0x38A0_0800, rt, rn, rm, ext),
+        "ldrsb",
+        [t::x(rt), index(rn, rm, ext, None)]
+    )
 }
 
 /// `LDRB Wt, [Xn|SP, Rm, <ext>]`.
-pub(crate) fn enc_ldrb_reg(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
-    enc_reg_offset(0x3860_0800, rt, rn, rm, ext)
+pub(crate) fn enc_ldrb_reg(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
+    insn!(
+        enc_reg_offset(0x3860_0800, rt, rn, rm, ext),
+        "ldrb",
+        [t::w(rt), index(rn, rm, ext, None)]
+    )
 }
 
 /// `STR Xt, [Xn|SP, Rm, <ext> #3]`.
-pub(crate) fn enc_str_reg_lsl3(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
-    enc_reg_offset(0xF820_1800, rt, rn, rm, ext)
+pub(crate) fn enc_str_reg_lsl3(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
+    insn!(
+        enc_reg_offset(0xF820_1800, rt, rn, rm, ext),
+        "str",
+        [t::x(rt), index(rn, rm, ext, Some(3))]
+    )
 }
 
 /// `STR Wt, [Xn|SP, Rm, <ext> #2]`.
-pub(crate) fn enc_str32_reg_lsl2(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
-    enc_reg_offset(0xB820_1800, rt, rn, rm, ext)
+pub(crate) fn enc_str32_reg_lsl2(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
+    insn!(
+        enc_reg_offset(0xB820_1800, rt, rn, rm, ext),
+        "str",
+        [t::w(rt), index(rn, rm, ext, Some(2))]
+    )
 }
 
 /// `STRH Wt, [Xn|SP, Rm, <ext> #1]`.
-pub(crate) fn enc_strh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
-    enc_reg_offset(0x7820_1800, rt, rn, rm, ext)
+pub(crate) fn enc_strh_reg_lsl1(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
+    insn!(
+        enc_reg_offset(0x7820_1800, rt, rn, rm, ext),
+        "strh",
+        [t::w(rt), index(rn, rm, ext, Some(1))]
+    )
 }
 
 /// `STRB Wt, [Xn|SP, Rm, <ext>]`.
-pub(crate) fn enc_strb_reg(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> u32 {
-    enc_reg_offset(0x3820_0800, rt, rn, rm, ext)
+pub(crate) fn enc_strb_reg(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
+    insn!(
+        enc_reg_offset(0x3820_0800, rt, rn, rm, ext),
+        "strb",
+        [t::w(rt), index(rn, rm, ext, None)]
+    )
 }
 
 /// `LDRSH <Xt>, [<Xn|SP>, #imm]` -- 16-bit load sign-extended into
 /// the full 64-bit `Xt`, immediate offset scaled by 2. Used by
 /// [`LoadKind::I16`] for `short` lvalue reads. Encoding: opc=10
 /// (sign-extend to 64-bit), size=01 (halfword).
-pub(crate) fn enc_ldrsh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+pub(crate) fn enc_ldrsh_imm(rt: Reg, rn: Reg, imm: u32) -> Insn {
     enc_mem(LDRSH, rt.0, rn, LDRSH.scaled(imm))
 }
 
@@ -1914,21 +2777,21 @@ pub(crate) fn enc_ldrsh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 /// `Wt` (which clears the high 32 bits of `Xt`), immediate offset
 /// scaled by 2. Used by [`LoadKind::U16`] for `unsigned short` lvalue
 /// reads. Encoding: opc=01 (load), size=01.
-pub(crate) fn enc_ldrh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+pub(crate) fn enc_ldrh_imm(rt: Reg, rn: Reg, imm: u32) -> Insn {
     enc_mem(LDRH, rt.0, rn, LDRH.scaled(imm))
 }
 
 /// `STRH <Wt>, [<Xn|SP>, #imm]` -- 16-bit store (low half of `Wt`),
 /// immediate offset scaled by 2. Companion to [`enc_ldrsh_imm`] /
 /// [`enc_ldrh_imm`] for the `StoreKind::I16` lowering.
-pub(crate) fn enc_strh_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+pub(crate) fn enc_strh_imm(rt: Reg, rn: Reg, imm: u32) -> Insn {
     enc_mem(STRH, rt.0, rn, STRH.scaled(imm))
 }
 
 /// `LDRB <Wt>, [<Xn|SP>, #imm]` -- byte load, zero-extended into a
 /// 32-bit register (which on AArch64 means the high 32 bits of the
 /// 64-bit register are also cleared).
-pub(crate) fn enc_ldrb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+pub(crate) fn enc_ldrb_imm(rt: Reg, rn: Reg, imm: u32) -> Insn {
     enc_mem(LDRB, rt.0, rn, LDRB.scaled(imm))
 }
 
@@ -1936,13 +2799,13 @@ pub(crate) fn enc_ldrb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
 /// the full 64-bit `Xt`. Used by [`LoadKind::I8`] for `signed char`
 /// lvalue reads. Encoding: opc=10 (sign-extend to 64-bit),
 /// size=00 (byte). Imm is unscaled (byte stride).
-pub(crate) fn enc_ldrsb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+pub(crate) fn enc_ldrsb_imm(rt: Reg, rn: Reg, imm: u32) -> Insn {
     enc_mem(LDRSB, rt.0, rn, LDRSB.scaled(imm))
 }
 
 /// `STRB <Wt>, [<Xn|SP>, #imm]` -- byte store. Stores the low 8 bits
 /// of `Wt` and ignores the rest.
-pub(crate) fn enc_strb_imm(rt: Reg, rn: Reg, imm: u32) -> u32 {
+pub(crate) fn enc_strb_imm(rt: Reg, rn: Reg, imm: u32) -> Insn {
     enc_mem(STRB, rt.0, rn, STRB.scaled(imm))
 }
 
@@ -1991,7 +2854,7 @@ pub(crate) fn enc_lse(
     rt: Reg,
     rn: Reg,
     width: u8,
-) -> u32 {
+) -> Insn {
     let opc = match op {
         LseOp::Add => 0x0000,
         LseOp::Clr => 0x1000,
@@ -1999,103 +2862,242 @@ pub(crate) fn enc_lse(
         LseOp::Set => 0x3000,
         LseOp::Swp => 0x8000,
     };
-    0x3820_0000
+    let word = 0x3820_0000
         | (excl_size(width) << 30)
         | (u32::from(acq) << 23)
         | (u32::from(rel) << 22)
         | ((rs.0 as u32) << 16)
         | opc
         | ((rn.0 as u32) << 5)
-        | (rt.0 as u32)
+        | (rt.0 as u32);
+    let (wide, w) = (width == 8, width_index(width));
+    // A load into the zero register that does not acquire is the
+    // `ST<op>` alias.
+    if rt == Reg::SP && !acq && op != LseOp::Swp {
+        let mnem = LSE_STORES[op as usize][usize::from(rel)][w];
+        return insn!(word, mnem, [t::r(rs, wide), t::mem(rn, 0)]);
+    }
+    let mnem = LSE_LOADS[op as usize][ordering(acq, rel)][w];
+    insn!(word, mnem, [t::r(rs, wide), t::r(rt, wide), t::mem(rn, 0)])
+}
+
+/// The `LD<op>` and `SWP` mnemonics by [`LseOp`], [`ordering`] and
+/// [`width_index`].
+const LSE_LOADS: [[[&str; 3]; 4]; 5] = [
+    [
+        ["ldaddb", "ldaddh", "ldadd"],
+        ["ldaddab", "ldaddah", "ldadda"],
+        ["ldaddalb", "ldaddalh", "ldaddal"],
+        ["ldaddlb", "ldaddlh", "ldaddl"],
+    ],
+    [
+        ["ldclrb", "ldclrh", "ldclr"],
+        ["ldclrab", "ldclrah", "ldclra"],
+        ["ldclralb", "ldclralh", "ldclral"],
+        ["ldclrlb", "ldclrlh", "ldclrl"],
+    ],
+    [
+        ["ldeorb", "ldeorh", "ldeor"],
+        ["ldeorab", "ldeorah", "ldeora"],
+        ["ldeoralb", "ldeoralh", "ldeoral"],
+        ["ldeorlb", "ldeorlh", "ldeorl"],
+    ],
+    [
+        ["ldsetb", "ldseth", "ldset"],
+        ["ldsetab", "ldsetah", "ldseta"],
+        ["ldsetalb", "ldsetalh", "ldsetal"],
+        ["ldsetlb", "ldsetlh", "ldsetl"],
+    ],
+    [
+        ["swpb", "swph", "swp"],
+        ["swpab", "swpah", "swpa"],
+        ["swpalb", "swpalh", "swpal"],
+        ["swplb", "swplh", "swpl"],
+    ],
+];
+
+/// The `ST<op>` mnemonics by [`LseOp`], release and [`width_index`].
+const LSE_STORES: [[[&str; 3]; 2]; 4] = [
+    [
+        ["staddb", "staddh", "stadd"],
+        ["staddlb", "staddlh", "staddl"],
+    ],
+    [
+        ["stclrb", "stclrh", "stclr"],
+        ["stclrlb", "stclrlh", "stclrl"],
+    ],
+    [
+        ["steorb", "steorh", "steor"],
+        ["steorlb", "steorlh", "steorl"],
+    ],
+    [
+        ["stsetb", "stseth", "stset"],
+        ["stsetlb", "stsetlh", "stsetl"],
+    ],
+];
+
+/// The ordering suffix of an acquire / release access: none, `a`, `al`, `l`.
+fn ordering(acq: bool, rel: bool) -> usize {
+    match (acq, rel) {
+        (false, false) => 0,
+        (true, false) => 1,
+        (true, true) => 2,
+        (false, true) => 3,
+    }
+}
+
+/// The size suffix of a `width`-byte access: `b`, `h`, or none.
+fn width_index(width: u8) -> usize {
+    match width {
+        1 => 0,
+        2 => 1,
+        _ => 2,
+    }
 }
 
 /// `CAS{A}{L}{B,H} <Ws>, <Wt>, [<Xn|SP>]` and the X form -- compare the
 /// `width`-byte memory at `rn` with `rs`, store `rt` on a match, and load
 /// the prior contents, zero-extended, into `rs` (FEAT_LSE).
-pub(crate) fn enc_cas(acq: bool, rel: bool, rs: Reg, rt: Reg, rn: Reg, width: u8) -> u32 {
-    0x08A0_7C00
+pub(crate) fn enc_cas(acq: bool, rel: bool, rs: Reg, rt: Reg, rn: Reg, width: u8) -> Insn {
+    let word = 0x08A0_7C00
         | (excl_size(width) << 30)
         | (u32::from(acq) << 22)
         | (u32::from(rel) << 15)
         | ((rs.0 as u32) << 16)
         | ((rn.0 as u32) << 5)
-        | (rt.0 as u32)
+        | (rt.0 as u32);
+    const CAS: [[&str; 3]; 4] = [
+        ["casb", "cash", "cas"],
+        ["casab", "casah", "casa"],
+        ["casalb", "casalh", "casal"],
+        ["caslb", "caslh", "casl"],
+    ];
+    let mnem = CAS[ordering(acq, rel)][width_index(width)];
+    let wide = width == 8;
+    insn!(word, mnem, [t::r(rs, wide), t::r(rt, wide), t::mem(rn, 0)])
 }
 
 /// `CASP{A}{L} <Xs>, <X(s+1)>, <Xt>, <X(t+1)>, [<Xn|SP>]` -- compare and
 /// swap a pair of 64-bit registers (LSE): `rs` and `rt` are even, the
 /// pair at `rs` the comparand and then the prior contents, the pair at
 /// `rt` the replacement.
-pub(crate) fn enc_casp(acq: bool, rel: bool, rs: Reg, rt: Reg, rn: Reg) -> u32 {
-    0x4820_7C00
-        | (u32::from(acq) << 22)
-        | (u32::from(rel) << 15)
-        | ((rs.0 as u32) << 16)
-        | ((rn.0 as u32) << 5)
-        | (rt.0 as u32)
+pub(crate) fn enc_casp(acq: bool, rel: bool, rs: Reg, rt: Reg, rn: Reg) -> Insn {
+    insn!(
+        0x4820_7C00
+            | (u32::from(acq) << 22)
+            | (u32::from(rel) << 15)
+            | ((rs.0 as u32) << 16)
+            | ((rn.0 as u32) << 5)
+            | (rt.0 as u32),
+        ["casp", "caspa", "caspal", "caspl"][ordering(acq, rel)],
+        [
+            t::x(rs),
+            t::x(Reg(rs.0 + 1)),
+            t::x(rt),
+            t::x(Reg(rt.0 + 1)),
+            t::mem(rn, 0),
+        ]
+    )
 }
 
 /// `LDAPR{B,H} <Wt>, [<Xn|SP>]` / `LDAPR <Xt>, [<Xn|SP>]` -- load-acquire
 /// RCpc register of `width` bytes, zero-extended (FEAT_LRCPC).
-pub(crate) fn enc_ldapr(rt: Reg, rn: Reg, width: u8) -> u32 {
-    0x38BF_C000 | (excl_size(width) << 30) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+pub(crate) fn enc_ldapr(rt: Reg, rn: Reg, width: u8) -> Insn {
+    insn!(
+        0x38BF_C000 | (excl_size(width) << 30) | ((rn.0 as u32) << 5) | (rt.0 as u32),
+        ["ldaprb", "ldaprh", "ldapr"][width_index(width)],
+        [t::r(rt, width == 8), t::mem(rn, 0)]
+    )
 }
 
 /// `LDAR{B,H} <Wt>, [<Xn|SP>]` / `LDAR <Wt|Xt>, [<Xn|SP>]` --
 /// load-acquire register of `width` bytes, zero-extended. No offset.
-pub(crate) fn enc_ldar(rt: Reg, rn: Reg, width: u8) -> u32 {
-    0x08DF_FC00 | (excl_size(width) << 30) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+pub(crate) fn enc_ldar(rt: Reg, rn: Reg, width: u8) -> Insn {
+    insn!(
+        0x08DF_FC00 | (excl_size(width) << 30) | ((rn.0 as u32) << 5) | (rt.0 as u32),
+        ["ldarb", "ldarh", "ldar"][width_index(width)],
+        [t::r(rt, width == 8), t::mem(rn, 0)]
+    )
 }
 
 /// `STLR{B,H} <Wt>, [<Xn|SP>]` / `STLR <Wt|Xt>, [<Xn|SP>]` --
 /// store-release register of `width` bytes. No offset.
-pub(crate) fn enc_stlr(rt: Reg, rn: Reg, width: u8) -> u32 {
-    0x089F_FC00 | (excl_size(width) << 30) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+pub(crate) fn enc_stlr(rt: Reg, rn: Reg, width: u8) -> Insn {
+    insn!(
+        0x089F_FC00 | (excl_size(width) << 30) | ((rn.0 as u32) << 5) | (rt.0 as u32),
+        ["stlrb", "stlrh", "stlr"][width_index(width)],
+        [t::r(rt, width == 8), t::mem(rn, 0)]
+    )
 }
 
 /// `LDAXP <Xt1>, <Xt2>, [<Xn|SP>]` -- load-acquire exclusive pair of
 /// 64-bit registers, the load half of a 128-bit exclusive access.
-pub(crate) fn enc_ldaxp(rt: Reg, rt2: Reg, rn: Reg) -> u32 {
-    0xC87F_8000 | ((rt2.0 as u32) << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+pub(crate) fn enc_ldaxp(rt: Reg, rt2: Reg, rn: Reg) -> Insn {
+    insn!(
+        0xC87F_8000 | ((rt2.0 as u32) << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32),
+        "ldaxp",
+        [t::x(rt), t::x(rt2), t::mem(rn, 0)]
+    )
 }
 
 /// `STLXP <Ws>, <Xt1>, <Xt2>, [<Xn|SP>]` -- store-release exclusive
 /// pair of 64-bit registers. `rs` receives 0 on success and 1 when the
 /// monitor was lost.
-pub(crate) fn enc_stlxp(rs: Reg, rt: Reg, rt2: Reg, rn: Reg) -> u32 {
-    0xC820_8000
-        | ((rs.0 as u32) << 16)
-        | ((rt2.0 as u32) << 10)
-        | ((rn.0 as u32) << 5)
-        | (rt.0 as u32)
+pub(crate) fn enc_stlxp(rs: Reg, rt: Reg, rt2: Reg, rn: Reg) -> Insn {
+    insn!(
+        0xC820_8000
+            | ((rs.0 as u32) << 16)
+            | ((rt2.0 as u32) << 10)
+            | ((rn.0 as u32) << 5)
+            | (rt.0 as u32),
+        "stlxp",
+        [t::w(rs), t::x(rt), t::x(rt2), t::mem(rn, 0)]
+    )
 }
 
 /// `LDXP <Xt1>, <Xt2>, [<Xn|SP>]` -- load exclusive pair, the non-acquire
 /// counterpart of [`enc_ldaxp`] (the acquire `o0` bit 15 cleared).
-pub(crate) fn enc_ldxp(rt: Reg, rt2: Reg, rn: Reg) -> u32 {
-    0xC87F_0000 | ((rt2.0 as u32) << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+pub(crate) fn enc_ldxp(rt: Reg, rt2: Reg, rn: Reg) -> Insn {
+    insn!(
+        0xC87F_0000 | ((rt2.0 as u32) << 10) | ((rn.0 as u32) << 5) | (rt.0 as u32),
+        "ldxp",
+        [t::x(rt), t::x(rt2), t::mem(rn, 0)]
+    )
 }
 
 /// `STXP <Ws>, <Xt1>, <Xt2>, [<Xn|SP>]` -- store exclusive pair, the
 /// non-release counterpart of [`enc_stlxp`] (the release `o0` bit 15
 /// cleared). `rs` receives 0 on success and 1 when the monitor was lost.
-pub(crate) fn enc_stxp(rs: Reg, rt: Reg, rt2: Reg, rn: Reg) -> u32 {
-    0xC820_0000
-        | ((rs.0 as u32) << 16)
-        | ((rt2.0 as u32) << 10)
-        | ((rn.0 as u32) << 5)
-        | (rt.0 as u32)
+pub(crate) fn enc_stxp(rs: Reg, rt: Reg, rt2: Reg, rn: Reg) -> Insn {
+    insn!(
+        0xC820_0000
+            | ((rs.0 as u32) << 16)
+            | ((rt2.0 as u32) << 10)
+            | ((rn.0 as u32) << 5)
+            | (rt.0 as u32),
+        "stxp",
+        [t::w(rs), t::x(rt), t::x(rt2), t::mem(rn, 0)]
+    )
 }
 
 /// `CCMP <Xn>, <Xm>, #<nzcv>, <cond>` -- conditional compare (register),
 /// 64-bit. When `cond` holds, compare `Xn` with `Xm`; otherwise set the
 /// flags directly from `nzcv`. Used to fuse a two-word equality test.
-pub(crate) fn enc_ccmp(rn: Reg, rm: Reg, nzcv: u8, cond: Cond) -> u32 {
-    0xFA40_0000
-        | ((rm.0 as u32) << 16)
-        | ((cond as u32) << 12)
-        | ((rn.0 as u32) << 5)
-        | (nzcv as u32 & 0xF)
+pub(crate) fn enc_ccmp(rn: Reg, rm: Reg, nzcv: u8, cond: Cond) -> Insn {
+    insn!(
+        0xFA40_0000
+            | ((rm.0 as u32) << 16)
+            | ((cond as u32) << 12)
+            | ((rn.0 as u32) << 5)
+            | (nzcv as u32 & 0xF),
+        "ccmp",
+        [
+            t::x(rn),
+            t::x(rm),
+            t::imm((nzcv & 0xF).into()),
+            t::cond(cond),
+        ]
+    )
 }
 
 // ---- Loads / stores (unscaled 9-bit signed offset). Used for negative
@@ -2105,144 +3107,219 @@ pub(crate) fn enc_ccmp(rn: Reg, rm: Reg, nzcv: u8, cond: Cond) -> u32 {
 /// Range `[-256, 255]`. Locals sit at `fp - 8`, `fp - 16`, ... so we
 /// reach for this whenever `LDR`'s unsigned scaled form can't fit
 /// the negative offset.
-pub(crate) fn enc_ldur(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_ldur(rt: Reg, rn: Reg, imm: i32) -> Insn {
     enc_mem(LDR_X, rt.0, rn, LDR_X.unscaled(imm))
 }
 
 /// `STUR <Xt>, [<Xn|SP>, #imm]` -- unscaled 9-bit signed offset.
 /// Mirror of [`enc_ldur`].
-pub(crate) fn enc_stur(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_stur(rt: Reg, rn: Reg, imm: i32) -> Insn {
     enc_mem(STR_X, rt.0, rn, STR_X.unscaled(imm))
 }
 
 /// `LDURSW <Xt>, [<Xn|SP>, #imm]` -- load 4 bytes, sign-extend to
 /// 64. Unscaled 9-bit signed offset.
-pub(crate) fn enc_ldursw(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_ldursw(rt: Reg, rn: Reg, imm: i32) -> Insn {
     enc_mem(LDRSW, rt.0, rn, LDRSW.unscaled(imm))
 }
 
 /// `LDUR <Wt>, [<Xn|SP>, #imm]` -- load 4 bytes into a 32-bit
 /// register, zero-extending to the full 64-bit Xt.
-pub(crate) fn enc_ldur32(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_ldur32(rt: Reg, rn: Reg, imm: i32) -> Insn {
     enc_mem(LDR_W, rt.0, rn, LDR_W.unscaled(imm))
 }
 
 /// `LDURSH <Xt>, [<Xn|SP>, #imm]` -- load 2 bytes, sign-extend to
 /// 64. Unscaled 9-bit signed offset.
-pub(crate) fn enc_ldursh(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_ldursh(rt: Reg, rn: Reg, imm: i32) -> Insn {
     enc_mem(LDRSH, rt.0, rn, LDRSH.unscaled(imm))
 }
 
 /// `LDURH <Wt>, [<Xn|SP>, #imm]` -- load 2 bytes, zero-extend
 /// (to 32 bits, implicitly to 64). Unscaled 9-bit signed offset.
-pub(crate) fn enc_ldurh(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_ldurh(rt: Reg, rn: Reg, imm: i32) -> Insn {
     enc_mem(LDRH, rt.0, rn, LDRH.unscaled(imm))
 }
 
 /// `LDURSB <Xt>, [<Xn|SP>, #imm]` -- load 1 byte, sign-extend to
 /// 64. Unscaled 9-bit signed offset.
-pub(crate) fn enc_ldursb(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_ldursb(rt: Reg, rn: Reg, imm: i32) -> Insn {
     enc_mem(LDRSB, rt.0, rn, LDRSB.unscaled(imm))
 }
 
 /// `LDURB <Wt>, [<Xn|SP>, #imm]` -- load 1 byte, zero-extend
 /// (to 32 bits, implicitly to 64). Unscaled 9-bit signed offset.
-pub(crate) fn enc_ldurb(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_ldurb(rt: Reg, rn: Reg, imm: i32) -> Insn {
     enc_mem(LDRB, rt.0, rn, LDRB.unscaled(imm))
 }
 
 /// `STUR <Wt>, [<Xn|SP>, #imm]` -- store low 32 bits of Xt.
-pub(crate) fn enc_stur32(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_stur32(rt: Reg, rn: Reg, imm: i32) -> Insn {
     enc_mem(STR_W, rt.0, rn, STR_W.unscaled(imm))
 }
 
 /// `STURH <Wt>, [<Xn|SP>, #imm]` -- store low 16 bits of Xt.
-pub(crate) fn enc_sturh(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_sturh(rt: Reg, rn: Reg, imm: i32) -> Insn {
     enc_mem(STRH, rt.0, rn, STRH.unscaled(imm))
 }
 
 /// `STURB <Wt>, [<Xn|SP>, #imm]` -- store low 8 bits of Xt.
-pub(crate) fn enc_sturb(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_sturb(rt: Reg, rn: Reg, imm: i32) -> Insn {
     enc_mem(STRB, rt.0, rn, STRB.unscaled(imm))
 }
 
 /// `LSL <Xd>, <Xn>, #shift` -- logical shift left by immediate.
 /// Encoded as `UBFM Xd, Xn, #(-shift mod 64), #(63-shift)`.
-pub(crate) fn enc_lsl_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
+pub(crate) fn enc_lsl_imm(rd: Reg, rn: Reg, shift: u8) -> Insn {
     debug_assert!(shift < 64, "lsl imm: {shift} >= 64");
     let immr = ((64 - shift as u32) & 63) << 16;
     let imms = ((63 - shift as u32) & 63) << 10;
-    0xD340_0000 | immr | imms | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0xD340_0000 | immr | imms | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "ubfm",
+        [
+            t::x(rd),
+            t::x(rn),
+            t::dec(i64::from((64 - u32::from(shift)) & 63)),
+            t::dec(i64::from((63 - u32::from(shift)) & 63)),
+        ]
+    )
 }
 
 /// `LSR <Xd>, <Xn>, #shift` -- logical shift right by immediate.
 /// Encoded as `UBFM Xd, Xn, #shift, #63`.
-pub(crate) fn enc_lsr_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
+pub(crate) fn enc_lsr_imm(rd: Reg, rn: Reg, shift: u8) -> Insn {
     debug_assert!(shift < 64, "lsr imm: {shift} >= 64");
     let immr = ((shift as u32) & 63) << 16;
-    0xD340_FC00 | immr | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0xD340_FC00 | immr | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "ubfm",
+        [
+            t::x(rd),
+            t::x(rn),
+            t::dec(i64::from(shift & 63)),
+            t::dec(63),
+        ]
+    )
 }
 
 /// `ASR <Xd>, <Xn>, #shift` -- arithmetic shift right by immediate.
 /// Encoded as `SBFM Xd, Xn, #shift, #63`.
-pub(crate) fn enc_asr_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
+pub(crate) fn enc_asr_imm(rd: Reg, rn: Reg, shift: u8) -> Insn {
     debug_assert!(shift < 64, "asr imm: {shift} >= 64");
     let immr = ((shift as u32) & 63) << 16;
-    0x9340_FC00 | immr | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0x9340_FC00 | immr | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "sbfm",
+        [
+            t::x(rd),
+            t::x(rn),
+            t::dec(i64::from(shift & 63)),
+            t::dec(63),
+        ]
+    )
 }
 
 /// `REV <Xd>, <Xn>` -- reverse the 8 bytes.
-pub(crate) fn enc_rev64(rd: Reg, rn: Reg) -> u32 {
-    0xDAC0_0C00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_rev64(rd: Reg, rn: Reg) -> Insn {
+    insn!(
+        0xDAC0_0C00 | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "rev",
+        [t::x(rd), t::x(rn)]
+    )
 }
 
 /// `REV <Wd>, <Wn>` -- reverse the low 4 bytes; the 32-bit write
 /// zero-extends into `Xd`.
-pub(crate) fn enc_rev32(rd: Reg, rn: Reg) -> u32 {
-    0x5AC0_0800 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_rev32(rd: Reg, rn: Reg) -> Insn {
+    insn!(
+        0x5AC0_0800 | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "rev",
+        [t::w(rd), t::w(rn)]
+    )
 }
 
 /// `LSR <Wd>, <Wn>, #shift` -- 32-bit logical shift right by
 /// immediate. Encoded as `UBFM Wd, Wn, #shift, #31`; the 32-bit
 /// write zero-extends into `Xd`.
-pub(crate) fn enc_lsr32_imm(rd: Reg, rn: Reg, shift: u8) -> u32 {
+pub(crate) fn enc_lsr32_imm(rd: Reg, rn: Reg, shift: u8) -> Insn {
     debug_assert!(shift < 32, "lsr32 imm: {shift} >= 32");
     let immr = ((shift as u32) & 31) << 16;
-    0x5300_7C00 | immr | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    insn!(
+        0x5300_7C00 | immr | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "ubfm",
+        [
+            t::w(rd),
+            t::w(rn),
+            t::dec(i64::from(shift & 31)),
+            t::dec(31),
+        ]
+    )
 }
 
 /// `SBFX` / `UBFX <Xd>, <Xn>, #lsb, #width`, the aliases of `SBFM` / `UBFM
 /// Xd, Xn, #lsb, #(lsb + width - 1)`.
-pub(crate) fn enc_bfx(signed: bool, rd: Reg, rn: Reg, lsb: u8, width: u8) -> u32 {
+pub(crate) fn enc_bfx(signed: bool, rd: Reg, rn: Reg, lsb: u8, width: u8) -> Insn {
     let (lsb, width) = (u32::from(lsb), u32::from(width));
     debug_assert!(
         (1..64).contains(&width) && lsb + width <= 64,
         "bfx #{lsb}, #{width}"
     );
     let base = if signed { 0x9340_0000 } else { 0xD340_0000 };
-    base | (lsb << 16) | ((lsb + width - 1) << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    insn!(
+        base | (lsb << 16) | ((lsb + width - 1) << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        if signed { "sbfm" } else { "ubfm" },
+        [
+            t::x(rd),
+            t::x(rn),
+            t::dec(lsb.into()),
+            t::dec((lsb + width - 1).into()),
+        ]
+    )
 }
 
 /// `SXTW <Xd>, <Wn>` -- sign-extend low 32 bits of `Wn` into `Xd`.
 /// Alias of `SBFM Xd, Xn, #0, #31`. Used by the sxtw peephole that
 /// folds c5's `Shl 32; Shr 32` sign-narrow shape into one inst.
-pub(crate) fn enc_sxtw(rd: Reg, rn: Reg) -> u32 {
+/// `UXTB` / `UXTH <Wd>, <Wn>`: zero-extend the low `bits` (8 or 16) of
+/// `wn`, `UBFM Wd, Wn, #0, #bits-1`.
+pub(crate) fn enc_uxt_w(rd: Reg, rn: Reg, bits: u8) -> Insn {
+    debug_assert!(matches!(bits, 8 | 16));
+    let imms = u32::from(bits) - 1;
+    let word = 0x5300_0000 | (imms << 10) | ((rn.0 as u32) << 5) | (rd.0 as u32);
+    insn!(
+        word,
+        "ubfm",
+        [t::w(rd), t::w(rn), t::dec(0), t::dec(imms.into())]
+    )
+}
+
+pub(crate) fn enc_sxtw(rd: Reg, rn: Reg) -> Insn {
     // sf=1, opc=00 (SBFM), immr=0, imms=31, Rn, Rd.
-    0x9340_7C00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+    let word = 0x9340_7C00 | ((rn.0 as u32) << 5) | (rd.0 as u32);
+    insn!(word, "sbfm", [t::x(rd), t::x(rn), t::dec(0), t::dec(31)])
 }
 
 /// `SXTH <Xd>, <Wn>` -- sign-extend low 16 bits of `Wn` into `Xd`.
 /// Alias of `SBFM Xd, Xn, #0, #15`. Companion to `enc_sxtw` for the
 /// short-narrow shape (`Shl 48; Shr 48`).
-pub(crate) fn enc_sxth(rd: Reg, rn: Reg) -> u32 {
-    0x9340_3C00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_sxth(rd: Reg, rn: Reg) -> Insn {
+    insn!(
+        0x9340_3C00 | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "sbfm",
+        [t::x(rd), t::x(rn), t::dec(0), t::dec(15)]
+    )
 }
 
 /// `SXTB <Xd>, <Wn>` -- sign-extend low 8 bits of `Wn` into `Xd`.
 /// Alias of `SBFM Xd, Xn, #0, #7`. Companion to `enc_sxtw` for the
 /// char-narrow shape (`Shl 56; Shr 56`).
-pub(crate) fn enc_sxtb(rd: Reg, rn: Reg) -> u32 {
-    0x9340_1C00 | ((rn.0 as u32) << 5) | (rd.0 as u32)
+pub(crate) fn enc_sxtb(rd: Reg, rn: Reg) -> Insn {
+    insn!(
+        0x9340_1C00 | ((rn.0 as u32) << 5) | (rd.0 as u32),
+        "sbfm",
+        [t::x(rd), t::x(rn), t::dec(0), t::dec(7)]
+    )
 }
 
 // ---- Pre-/post-indexed loads & stores. The c5 VM stack push/pop
@@ -2253,33 +3330,43 @@ pub(crate) fn enc_sxtb(rd: Reg, rn: Reg) -> u32 {
 /// accumulator and bump sp down by 16 bytes (the VM stack stays
 /// 16-byte aligned even for 8-byte pushes so calls into libc
 /// satisfy AAPCS64).
-pub(crate) fn enc_str_pre(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_str_pre(rt: Reg, rn: Reg, imm: i32) -> Insn {
     assert!(
         (-256..256).contains(&imm),
         "str-pre imm: {imm} out of range"
     );
     let imm9 = (imm as u32) & 0x1FF;
-    0xF800_0C00 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    insn!(
+        0xF800_0C00 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32),
+        "str",
+        [t::x(rt), t::pre(rn, imm.into())]
+    )
 }
 
 /// `LDR <Xt>, [<Xn|SP>], #imm` -- post-indexed load with writeback.
 /// Mirror for VM pop.
-pub(crate) fn enc_ldr_post(rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_ldr_post(rt: Reg, rn: Reg, imm: i32) -> Insn {
     assert!(
         (-256..256).contains(&imm),
         "ldr-post imm: {imm} out of range"
     );
     let imm9 = (imm as u32) & 0x1FF;
-    0xF840_0400 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    insn!(
+        0xF840_0400 | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32),
+        "ldr",
+        [t::x(rt), t::mem(rn, 0), t::imm(imm.into())]
+    )
 }
 
 /// `LDR <Wt>, [<Xn|SP>], #imm` / `LDRH` / `LDRB` -- post-indexed load of `width` 4, 2 or 1.
-pub(crate) fn enc_ldr_w_post(width: u8, rt: Reg, rn: Reg, imm: i32) -> u32 {
-    enc_str_w_post(width, rt, rn, imm) | 0x0040_0000
+pub(crate) fn enc_ldr_w_post(width: u8, rt: Reg, rn: Reg, imm: i32) -> Insn {
+    let word = enc_str_w_post(width, rt, rn, imm).word | 0x0040_0000;
+    let mnem = ["ldrb", "ldrh", "ldr"][width_index(width)];
+    insn!(word, mnem, [t::w(rt), t::mem(rn, 0), t::imm(imm.into())])
 }
 
 /// `STR <Wt>, [<Xn|SP>], #imm` / `STRH` / `STRB` -- post-indexed store of `width` 4, 2 or 1.
-pub(crate) fn enc_str_w_post(width: u8, rt: Reg, rn: Reg, imm: i32) -> u32 {
+pub(crate) fn enc_str_w_post(width: u8, rt: Reg, rn: Reg, imm: i32) -> Insn {
     assert!(
         (-256..256).contains(&imm),
         "str-post imm: {imm} out of range"
@@ -2290,7 +3377,11 @@ pub(crate) fn enc_str_w_post(width: u8, rt: Reg, rn: Reg, imm: i32) -> u32 {
         _ => 0b00,
     };
     let imm9 = (imm as u32) & 0x1FF;
-    0x3800_0400 | (size << 30) | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32)
+    insn!(
+        0x3800_0400 | (size << 30) | (imm9 << 12) | ((rn.0 as u32) << 5) | (rt.0 as u32),
+        ["strb", "strh", "str"][width_index(width)],
+        [t::w(rt), t::mem(rn, 0), t::imm(imm.into())]
+    )
 }
 
 // ---- Page-relative address load. Pairs with `add xd, xd, #pageoff`
@@ -2303,7 +3394,7 @@ pub(crate) fn enc_str_w_post(width: u8, rt: Reg, rn: Reg, imm: i32) -> u32 {
 /// PC-relative label. `imm21` is signed, in *pages* (4096 bytes).
 /// Pair with [`enc_add_imm`] using the in-page offset to get the
 /// final address.
-pub(crate) fn enc_adrp(rd: Reg, imm21: i32) -> u32 {
+pub(crate) fn enc_adrp(rd: Reg, imm21: i32) -> Insn {
     debug_assert!(
         (-(1 << 20)..(1 << 20)).contains(&imm21),
         "adrp: page offset {imm21} out of signed 21-bit range"
@@ -2311,7 +3402,11 @@ pub(crate) fn enc_adrp(rd: Reg, imm21: i32) -> u32 {
     let v = (imm21 as u32) & 0x1F_FFFF;
     let immlo = v & 0x3;
     let immhi = (v >> 2) & 0x7_FFFF;
-    0x9000_0000 | (immlo << 29) | (immhi << 5) | (rd.0 as u32)
+    insn!(
+        0x9000_0000 | (immlo << 29) | (immhi << 5) | (rd.0 as u32),
+        "adrp",
+        [t::x(rd), t::adrp()]
+    )
 }
 
 /// Lanes of `value` that are not zero, at least one.
@@ -2339,7 +3434,7 @@ pub(crate) fn imm64_insts(value: u64) -> u32 {
 
 /// Build an arbitrary 64-bit immediate into `rd` in the fewest instructions
 /// of the `movz` / `movn` + `movk` sequences and the `orr` bitmask form.
-pub(crate) fn load_imm64(code: &mut Vec<u8>, rd: Reg, value: u64) {
+pub(crate) fn load_imm64(code: &mut CodeBuf, rd: Reg, value: u64) {
     let (Some(invert), _) = imm64_plan(value) else {
         let word = enc_logical_imm(LogicalOp::Orr, true, rd, Reg(31), value);
         emit(code, word.expect("a bitmask immediate"));
@@ -2368,11 +3463,66 @@ pub(crate) fn load_imm64(code: &mut Vec<u8>, rd: Reg, value: u64) {
     }
 }
 
-/// Append a 32-bit instruction to a code buffer in little-endian
-/// byte order. Every encoder in this module funnels through here so
+/// Append an instruction to a code buffer in little-endian byte order,
+/// with its text. Every encoder in this module funnels through here so
 /// the byte order can't get accidentally inverted.
-pub(crate) fn emit(code: &mut Vec<u8>, word: u32) {
+#[inline(always)]
+pub(crate) fn emit(code: &mut CodeBuf, insn: Insn) {
+    let at = code.len();
+    code.extend_from_slice(&insn.word.to_le_bytes());
+    #[cfg(feature = "listing")]
+    code.describe(at, || insn.text());
+    #[cfg(not(feature = "listing"))]
+    let _ = at;
+}
+
+/// Append `insn`'s word to bytes no listing reads: a writer's stub in an
+/// executable or a library.
+pub(crate) fn put(code: &mut Vec<u8>, insn: Insn) {
+    code.extend_from_slice(&insn.word.to_le_bytes());
+}
+
+/// `mnemonic` over `ops` through the instruction catalog, reading as the
+/// catalog takes them.
+pub(crate) fn emit_table(
+    code: &mut CodeBuf,
+    mnemonic: &str,
+    ops: &[super::table::Opnd],
+) -> Result<(), alloc::string::String> {
+    let word = super::table::encode(mnemonic, ops)?;
+    let at = code.len();
     code.extend_from_slice(&word.to_le_bytes());
+    #[cfg(feature = "listing")]
+    code.describe(at, || t::table_text(mnemonic, ops));
+    #[cfg(not(feature = "listing"))]
+    let _ = at;
+    Ok(())
+}
+
+/// Rewrite the instruction at `at` into `mnemonic` over `ops` through the
+/// instruction catalog.
+pub(crate) fn patch_table(
+    code: &mut CodeBuf,
+    at: usize,
+    mnemonic: &str,
+    ops: &[super::table::Opnd],
+) -> Result<(), alloc::string::String> {
+    let word = super::table::encode(mnemonic, ops)?;
+    code[at..at + 4].copy_from_slice(&word.to_le_bytes());
+    #[cfg(feature = "listing")]
+    code.redescribe(at, || t::table_text(mnemonic, ops));
+    Ok(())
+}
+
+/// `UDF #0`, the placeholder of a word a later pass rewrites.
+pub(crate) const UDF: Insn = Insn::fixed(0, "udf #0x0");
+
+/// Rewrite the instruction at `at` into `insn`.
+#[inline(always)]
+pub(crate) fn patch(code: &mut CodeBuf, at: usize, insn: Insn) {
+    code[at..at + 4].copy_from_slice(&insn.word.to_le_bytes());
+    #[cfg(feature = "listing")]
+    code.redescribe(at, || insn.text());
 }
 
 /// Emit `mov <rd>, <rn>` -- but skip the encoding entirely when
@@ -2382,7 +3532,7 @@ pub(crate) fn emit(code: &mut Vec<u8>, word: u32) {
 /// destination and source happen to coincide (e.g. a future change
 /// that lets the regalloc pool overlap with the accumulator) collapses
 /// to zero bytes instead of a wasted instruction.
-pub(crate) fn emit_mov_reg(code: &mut Vec<u8>, rd: Reg, rn: Reg) {
+pub(crate) fn emit_mov_reg(code: &mut CodeBuf, rd: Reg, rn: Reg) {
     if rd == rn {
         return;
     }
@@ -2438,7 +3588,7 @@ struct Aarch64Lower {
     /// [`crate::c5::layout::data_start_aligns`] over the unit's data.
     data_aligns: Vec<(i64, i64)>,
     /// The mapping state spans the section: a body ending in data leaves the
-    /// padding to the next function's first instruction, as under GNU as.
+    /// padding to the next function's first instruction.
     text_map_state: Option<super::map_syms::MapClass>,
     /// Callee entry pc -> return type tag, for the tail-call contract.
     ret_tags: alloc::collections::BTreeMap<usize, i64>,
@@ -2547,7 +3697,12 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
         }
     }
 
-    fn align_entry(&mut self, st: &mut super::ssa::emit_common::LowerState, fn_align: usize) {
+    fn align_entry(
+        &mut self,
+        st: &mut super::ssa::emit_common::LowerState,
+        fn_align: usize,
+        lead: usize,
+    ) {
         // A preceding body's inline-asm data may leave the stream off
         // instruction alignment; the function's first byte pays it.
         super::emit::a64_align_asm_stream(
@@ -2555,12 +3710,12 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
             &mut st.text_data_ranges,
             &mut self.text_map_state,
         );
-        super::pad_to_alignment(&mut st.code, fn_align, &NOP.to_le_bytes());
+        super::pad_to_alignment(&mut st.code, fn_align, lead, &NOP.word.to_le_bytes());
     }
 
-    fn entry_nops(&mut self, code: &mut Vec<u8>, n: u32) {
+    fn entry_nops(&mut self, code: &mut CodeBuf, n: u32) {
         for _ in 0..n {
-            code.extend_from_slice(&NOP.to_le_bytes());
+            emit(code, NOP);
         }
     }
 
@@ -2603,7 +3758,7 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
             native.stack_protect.resolved_for(target, native.code_model),
             entry,
             native.fixed_regs,
-            native.optimize,
+            native.optimizes(),
             native.sibling_calls,
             &self.ret_tags,
         )
@@ -2653,7 +3808,7 @@ impl super::ssa::emit_common::LowerTarget for Aarch64Lower {
     }
 
     fn emit_plt_trampolines(
-        code: &mut Vec<u8>,
+        code: &mut CodeBuf,
         got_fixups: &mut Vec<GotFixup>,
         n_imports: usize,
     ) -> Vec<usize> {
@@ -2746,14 +3901,15 @@ fn apply_fixups(
             )));
         }
         let delta_insns = (delta_bytes / 4) as i32;
-        let word = match f.kind {
+        // The placeholder is the same branch: its text reads the field.
+        let insn = match f.kind {
             BranchKind::B => enc_b(delta_insns),
             BranchKind::Cbz(rt) => enc_cbz(rt, delta_insns),
             BranchKind::Cbnz(rt) => enc_cbnz(rt, delta_insns),
             BranchKind::Bcc(cond) => enc_b_cond(cond, delta_insns),
             BranchKind::Bl => enc_bl(delta_insns),
         };
-        code[f.native_offset..f.native_offset + 4].copy_from_slice(&word.to_le_bytes());
+        code[f.native_offset..f.native_offset + 4].copy_from_slice(&insn.word.to_le_bytes());
     }
     Ok(())
 }
@@ -2783,7 +3939,7 @@ pub(crate) use super::PltCallFixup;
 /// both this `B` and the trampoline entirely on the way back.
 /// Used by the `Terminator::TailExt` lowering.
 pub(crate) fn emit_got_tail_jump(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     plt_call_fixups: &mut Vec<PltCallFixup>,
     import_index: usize,
 ) {
@@ -2802,7 +3958,7 @@ pub(crate) fn emit_got_tail_jump(
 /// pair via the `GotFixup` we record here, identical to the
 /// pre-#61 inline pattern.
 fn emit_plt_trampolines(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     got_fixups: &mut Vec<GotFixup>,
     n_imports: usize,
 ) -> Vec<usize> {
@@ -2857,12 +4013,12 @@ fn apply_plt_call_fixups(
             )));
         }
         let delta_insns = (delta_bytes / 4) as i32;
-        let word = if fx.is_tail {
+        let insn = if fx.is_tail {
             enc_b(delta_insns)
         } else {
             enc_bl(delta_insns)
         };
-        let bytes = word.to_le_bytes();
+        let bytes = insn.word.to_le_bytes();
         code[fx.instr_offset..fx.instr_offset + 4].copy_from_slice(&bytes);
     }
     Ok(())
@@ -2897,7 +4053,7 @@ pub(crate) const SETJMP_AARCH64_ADR_INSN_INDEX: i32 = 12;
 /// `longjmp` routes through SEH and refuses an SEH-free
 /// `jmp_buf`. The Linux / macOS bindings continue to use the
 /// host libc setjmp -- that's already CRT-independent.
-pub(crate) fn emit_setjmp_aarch64(code: &mut Vec<u8>) {
+pub(crate) fn emit_setjmp_aarch64(code: &mut CodeBuf) {
     let start = code.len();
     emit(code, enc_mov_reg(Reg::X16, Reg::X19));
     for (i, off) in (JB_X19_OFF..JB_X29_OFF).step_by(8).enumerate() {
@@ -2945,46 +4101,52 @@ mod tests {
     fn tbz_and_tbnz_forms() {
         // tbz w4, #0, .+8; tbnz w4, #0, .+8; tbz x3, #40, .-4;
         // tbnz x0, #63, .+32764; tbz w30, #31, .-32768
-        assert_eq!(enc_tbz(Reg(4), 0, 2), 0x3600_0044);
-        assert_eq!(enc_tbnz(Reg(4), 0, 2), 0x3700_0044);
-        assert_eq!(enc_tbz(Reg(3), 40, -1), 0xB647_FFE3);
-        assert_eq!(enc_tbnz(Reg::X0, 63, 8191), 0xB7FB_FFE0);
-        assert_eq!(enc_tbz(Reg(30), 31, -8192), 0x36FC_001E);
+        assert_eq!(enc_tbz(Reg(4), 0, 2).word, 0x3600_0044);
+        assert_eq!(enc_tbnz(Reg(4), 0, 2).word, 0x3700_0044);
+        assert_eq!(enc_tbz(Reg(3), 40, -1).word, 0xB647_FFE3);
+        assert_eq!(enc_tbnz(Reg::X0, 63, 8191).word, 0xB7FB_FFE0);
+        assert_eq!(enc_tbz(Reg(30), 31, -8192).word, 0x36FC_001E);
     }
 
     #[test]
     fn movz_x0_42() {
         // movz x0, #42  ->  0xD2800540
-        assert_eq!(enc_movz(Reg::X0, 42, 0), 0xD280_0540);
+        assert_eq!(enc_movz(Reg::X0, 42, 0).word, 0xD280_0540);
     }
 
     #[test]
     fn byte_and_half_vector_loads_and_lane_widths() {
         // ushll v0.8h, v0.8b, #0; ushll v0.4s, v0.4h, #0; ushll v3.8h, v5.8b, #0;
         // xtn v0.8b, v0.8h; xtn v0.4h, v0.4s; xtn v3.8b, v5.8h
-        assert_eq!(enc_uxtl(0, 0, 1), 0x2F08_A400);
-        assert_eq!(enc_uxtl(0, 0, 2), 0x2F10_A400);
-        assert_eq!(enc_uxtl(3, 5, 1), 0x2F08_A4A3);
-        assert_eq!(enc_xtn(0, 0, 1), 0x0E21_2800);
-        assert_eq!(enc_xtn(0, 0, 2), 0x0E61_2800);
-        assert_eq!(enc_xtn(3, 5, 1), 0x0E21_28A3);
+        assert_eq!(enc_uxtl(0, 0, 1).word, 0x2F08_A400);
+        assert_eq!(enc_uxtl(0, 0, 2).word, 0x2F10_A400);
+        assert_eq!(enc_uxtl(3, 5, 1).word, 0x2F08_A4A3);
+        assert_eq!(enc_xtn(0, 0, 1).word, 0x0E21_2800);
+        assert_eq!(enc_xtn(0, 0, 2).word, 0x0E61_2800);
+        assert_eq!(enc_xtn(3, 5, 1).word, 0x0E21_28A3);
         // ldr b0, [x0]; ldr h0, [x0, #2]; str b1, [x3, #1]; str h1, [x3, #2];
         // ldur b0, [x0, #-1]; stur h1, [x3, #-2]
-        assert_eq!(enc_ldr_bh_imm(1, 0, Reg::X0, 0), 0x3D40_0000);
-        assert_eq!(enc_ldr_bh_imm(2, 0, Reg::X0, 2), 0x7D40_0400);
-        assert_eq!(enc_str_bh_imm(1, 1, Reg(3), 1), 0x3D00_0461);
-        assert_eq!(enc_str_bh_imm(2, 1, Reg(3), 2), 0x7D00_0461);
-        assert_eq!(enc_mem(LDR_B, 0, Reg::X0, LDR_B.unscaled(-1)), 0x3C5F_F000);
-        assert_eq!(enc_mem(STR_H, 1, Reg(3), STR_H.unscaled(-2)), 0x7C1F_E061);
+        assert_eq!(enc_ldr_bh_imm(1, 0, Reg::X0, 0).word, 0x3D40_0000);
+        assert_eq!(enc_ldr_bh_imm(2, 0, Reg::X0, 2).word, 0x7D40_0400);
+        assert_eq!(enc_str_bh_imm(1, 1, Reg(3), 1).word, 0x3D00_0461);
+        assert_eq!(enc_str_bh_imm(2, 1, Reg(3), 2).word, 0x7D00_0461);
+        assert_eq!(
+            enc_mem(LDR_B, 0, Reg::X0, LDR_B.unscaled(-1)).word,
+            0x3C5F_F000
+        );
+        assert_eq!(
+            enc_mem(STR_H, 1, Reg(3), STR_H.unscaled(-2)).word,
+            0x7C1F_E061
+        );
     }
 
     #[test]
     fn fp_immediate_forms() {
         // fmov d0, #1.0; fmov s0, #1.0; fmov d17, #-2.5; movi d3, #0
-        assert_eq!(enc_fmov_imm(0, 0x70, false), 0x1E6E_1000);
-        assert_eq!(enc_fmov_imm(0, 0x70, true), 0x1E2E_1000);
-        assert_eq!(enc_fmov_imm(17, 0x84, false), 0x1E70_9011);
-        assert_eq!(enc_movi_d_zero(3), 0x2F00_E403);
+        assert_eq!(enc_fmov_imm(0, 0x70, false).word, 0x1E6E_1000);
+        assert_eq!(enc_fmov_imm(0, 0x70, true).word, 0x1E2E_1000);
+        assert_eq!(enc_fmov_imm(17, 0x84, false).word, 0x1E70_9011);
+        assert_eq!(enc_movi_d_zero(3).word, 0x2F00_E403);
     }
 
     /// The immediate is found by pattern, so a float's pattern read as a
@@ -3014,124 +4176,133 @@ mod tests {
     fn rev_and_lsr32_forms() {
         // rev x0, x1 -> 0xDAC00C20; rev w2, w3 -> 0x5AC00862;
         // lsr w0, w0, #16 -> 0x53107C00
-        assert_eq!(enc_rev64(Reg::X0, Reg(1)), 0xDAC0_0C20);
-        assert_eq!(enc_rev32(Reg(2), Reg(3)), 0x5AC0_0862);
-        assert_eq!(enc_lsr32_imm(Reg::X0, Reg::X0, 16), 0x5310_7C00);
+        assert_eq!(enc_rev64(Reg::X0, Reg(1)).word, 0xDAC0_0C20);
+        assert_eq!(enc_rev32(Reg(2), Reg(3)).word, 0x5AC0_0862);
+        assert_eq!(enc_lsr32_imm(Reg::X0, Reg::X0, 16).word, 0x5310_7C00);
     }
 
     #[test]
     fn bit_count_forms() {
-        assert_eq!(enc_clz32(Reg(1), Reg(2)), 0x5AC0_1041);
-        assert_eq!(enc_clz(Reg(1), Reg(2)), 0xDAC0_1041);
-        assert_eq!(enc_rbit32(Reg(1), Reg(2)), 0x5AC0_0041);
-        assert_eq!(enc_rbit64(Reg(1), Reg(2)), 0xDAC0_0041);
-        assert_eq!(enc_cnt_8b(16, 17), 0x0E20_5A30);
-        assert_eq!(enc_addv_8b(16, 17), 0x0E31_BA30);
-        assert_eq!(enc_fmov_s_to_w(Reg(1), 16), 0x1E26_0201);
-        assert_eq!(enc_fmov_w_to_s(16, Reg(1)), 0x1E27_0030);
+        assert_eq!(enc_clz32(Reg(1), Reg(2)).word, 0x5AC0_1041);
+        assert_eq!(enc_clz(Reg(1), Reg(2)).word, 0xDAC0_1041);
+        assert_eq!(enc_rbit32(Reg(1), Reg(2)).word, 0x5AC0_0041);
+        assert_eq!(enc_rbit64(Reg(1), Reg(2)).word, 0xDAC0_0041);
+        assert_eq!(enc_cnt_8b(16, 17).word, 0x0E20_5A30);
+        assert_eq!(enc_addv_8b(16, 17).word, 0x0E31_BA30);
+        assert_eq!(enc_fmov_s_to_w(Reg(1), 16).word, 0x1E26_0201);
+        assert_eq!(enc_fmov_w_to_s(16, Reg(1)).word, 0x1E27_0030);
         let (r1, r2, r3) = (Reg(1), Reg(2), Reg(3));
-        assert_eq!(enc_addsub_lsr(false, r1, r2, r3, 4, true), 0x8B43_1041);
-        assert_eq!(enc_addsub_lsr(false, r1, r2, r3, 4, false), 0x0B43_1041);
-        assert_eq!(enc_addsub_lsr(true, r1, r2, r3, 1, true), 0xCB43_0441);
-        assert_eq!(enc_addsub_lsr(true, r1, r2, r3, 1, false), 0x4B43_0441);
-        assert_eq!(enc_mul32(r1, r2, r3), 0x1B03_7C41);
+        assert_eq!(enc_addsub_lsr(false, r1, r2, r3, 4, true).word, 0x8B43_1041);
+        assert_eq!(
+            enc_addsub_lsr(false, r1, r2, r3, 4, false).word,
+            0x0B43_1041
+        );
+        assert_eq!(enc_addsub_lsr(true, r1, r2, r3, 1, true).word, 0xCB43_0441);
+        assert_eq!(enc_addsub_lsr(true, r1, r2, r3, 1, false).word, 0x4B43_0441);
+        assert_eq!(enc_mul32(r1, r2, r3).word, 0x1B03_7C41);
     }
 
     #[test]
     fn movz_x0_abcd_lsl16() {
         // movz x0, #0xABCD, lsl #16  ->  0xD2B579A0
-        assert_eq!(enc_movz(Reg::X0, 0xABCD, 1), 0xD2B5_79A0);
+        assert_eq!(enc_movz(Reg::X0, 0xABCD, 1).word, 0xD2B5_79A0);
     }
 
     #[test]
     fn movk_x0_1234_lsl32() {
         // movk x0, #0x1234, lsl #32  ->  0xF2C24680
-        assert_eq!(enc_movk(Reg::X0, 0x1234, 2), 0xF2C2_4680);
+        assert_eq!(enc_movk(Reg::X0, 0x1234, 2).word, 0xF2C2_4680);
     }
 
     #[test]
     fn ins_vector_element_from_gpr() {
         // ins v0.b[0], w17 / v0.b[1], w17 / v3.b[7], w16
-        assert_eq!(enc_ins_gen(0, 1, 0, Reg(17)), 0x4E01_1E20);
-        assert_eq!(enc_ins_gen(0, 1, 1, Reg(17)), 0x4E03_1E20);
-        assert_eq!(enc_ins_gen(3, 1, 7, Reg(16)), 0x4E0F_1E03);
+        assert_eq!(enc_ins_gen(0, 1, 0, Reg(17)).word, 0x4E01_1E20);
+        assert_eq!(enc_ins_gen(0, 1, 1, Reg(17)).word, 0x4E03_1E20);
+        assert_eq!(enc_ins_gen(3, 1, 7, Reg(16)).word, 0x4E0F_1E03);
         // ins v1.h[1], w17 / v2.s[1], w17 / v5.d[1], x9
-        assert_eq!(enc_ins_gen(1, 2, 1, Reg(17)), 0x4E06_1E21);
-        assert_eq!(enc_ins_gen(2, 4, 1, Reg(17)), 0x4E0C_1E22);
-        assert_eq!(enc_ins_gen(5, 8, 1, Reg(9)), 0x4E18_1D25);
+        assert_eq!(enc_ins_gen(1, 2, 1, Reg(17)).word, 0x4E06_1E21);
+        assert_eq!(enc_ins_gen(2, 4, 1, Reg(17)).word, 0x4E0C_1E22);
+        assert_eq!(enc_ins_gen(5, 8, 1, Reg(9)).word, 0x4E18_1D25);
     }
 
     #[test]
     fn umov_gpr_from_vector_element() {
         // umov w1, v0.b[15] / w5, v7.h[3] / w3, v2.s[2] / x0, v1.d[1]
-        assert_eq!(enc_umov_gen(Reg(1), 0, 1, 15), 0x0E1F_3C01);
-        assert_eq!(enc_umov_gen(Reg(5), 7, 2, 3), 0x0E0E_3CE5);
-        assert_eq!(enc_umov_gen(Reg(3), 2, 4, 2), 0x0E14_3C43);
-        assert_eq!(enc_umov_gen(Reg(0), 1, 8, 1), 0x4E18_3C20);
+        assert_eq!(enc_umov_gen(Reg(1), 0, 1, 15).word, 0x0E1F_3C01);
+        assert_eq!(enc_umov_gen(Reg(5), 7, 2, 3).word, 0x0E0E_3CE5);
+        assert_eq!(enc_umov_gen(Reg(3), 2, 4, 2).word, 0x0E14_3C43);
+        assert_eq!(enc_umov_gen(Reg(0), 1, 8, 1).word, 0x4E18_3C20);
     }
 
     #[test]
     fn smov_ins_and_dup_vector_elements() {
         // smov x2, v3.b[5] / x0, v1.h[7] / x9, v4.s[3]
-        assert_eq!(enc_smov_gen(Reg(2), 3, 1, 5), 0x4E0B_2C62);
-        assert_eq!(enc_smov_gen(Reg(0), 1, 2, 7), 0x4E1E_2C20);
-        assert_eq!(enc_smov_gen(Reg(9), 4, 4, 3), 0x4E1C_2C89);
+        assert_eq!(enc_smov_gen(Reg(2), 3, 1, 5).word, 0x4E0B_2C62);
+        assert_eq!(enc_smov_gen(Reg(0), 1, 2, 7).word, 0x4E1E_2C20);
+        assert_eq!(enc_smov_gen(Reg(9), 4, 4, 3).word, 0x4E1C_2C89);
         // mov v1.s[2], v5.s[0] / v0.d[1], v7.d[0]
-        assert_eq!(enc_ins_elem(1, 4, 2, 5), 0x6E14_04A1);
-        assert_eq!(enc_ins_elem(0, 8, 1, 7), 0x6E18_04E0);
+        assert_eq!(enc_ins_elem(1, 4, 2, 5).word, 0x6E14_04A1);
+        assert_eq!(enc_ins_elem(0, 8, 1, 7).word, 0x6E18_04E0);
         // ld1 {v0.b}[15], [x2]; ld1 {v3.h}[6], [x1]; ld1 {v2.d}[1], [x3];
         // st1 {v0.s}[3], [x0]; st1 {v5.d}[1], [sp]
-        assert_eq!(enc_ld1_st1_lane(true, 0, 1, 15, Reg(2)), 0x4D40_1C40);
-        assert_eq!(enc_ld1_st1_lane(true, 3, 2, 6, Reg(1)), 0x4D40_5023);
-        assert_eq!(enc_ld1_st1_lane(true, 2, 8, 1, Reg(3)), 0x4D40_8462);
-        assert_eq!(enc_ld1_st1_lane(false, 0, 4, 3, Reg(0)), 0x4D00_9000);
-        assert_eq!(enc_ld1_st1_lane(false, 5, 8, 1, Reg(31)), 0x4D00_87E5);
+        assert_eq!(enc_ld1_st1_lane(true, 0, 1, 15, Reg(2)).word, 0x4D40_1C40);
+        assert_eq!(enc_ld1_st1_lane(true, 3, 2, 6, Reg(1)).word, 0x4D40_5023);
+        assert_eq!(enc_ld1_st1_lane(true, 2, 8, 1, Reg(3)).word, 0x4D40_8462);
+        assert_eq!(enc_ld1_st1_lane(false, 0, 4, 3, Reg(0)).word, 0x4D00_9000);
+        assert_eq!(enc_ld1_st1_lane(false, 5, 8, 1, Reg(31)).word, 0x4D00_87E5);
         // ror w0, w1, #2; rorv w0, w1, w2
-        assert_eq!(enc_ror_imm_w(Reg(0), Reg(1), 2), 0x1381_0820);
-        assert_eq!(enc_rorv_w(Reg(0), Reg(1), Reg(2)), 0x1AC2_2C20);
+        assert_eq!(enc_ror_imm_w(Reg(0), Reg(1), 2).word, 0x1381_0820);
+        assert_eq!(enc_rorv_w(Reg(0), Reg(1), Reg(2)).word, 0x1AC2_2C20);
         // mov v1.d[1], v2.d[1]; zip1 v3.2d, v4.2d, v5.2d
-        assert_eq!(enc_ins_elem_from(1, 8, 1, 2, 1), 0x6E18_4441);
-        assert_eq!(enc_zip1_2d(3, 4, 5), 0x4EC5_3883);
+        assert_eq!(enc_ins_elem_from(1, 8, 1, 2, 1).word, 0x6E18_4441);
+        assert_eq!(enc_zip1_2d(3, 4, 5).word, 0x4EC5_3883);
         // mov s0, v2.s[3] / d6, v1.d[1]
-        assert_eq!(enc_dup_elem_scalar(0, 2, 4, 3), 0x5E1C_0440);
-        assert_eq!(enc_dup_elem_scalar(6, 1, 8, 1), 0x5E18_0426);
+        assert_eq!(enc_dup_elem_scalar(0, 2, 4, 3).word, 0x5E1C_0440);
+        assert_eq!(enc_dup_elem_scalar(6, 1, 8, 1).word, 0x5E18_0426);
     }
 
     #[test]
     fn ret_x30() {
         // ret  ->  0xD65F03C0
-        assert_eq!(enc_ret(Reg::X30), 0xD65F_03C0);
+        assert_eq!(enc_ret(Reg::X30).word, 0xD65F_03C0);
     }
 
     #[test]
     fn bl_backwards_one_insn() {
         // bl . - 4 (-1 instruction)  ->  0x97FFFFFF
         // (covers the "two's-complement masking is right" case)
-        assert_eq!(enc_bl(-1), 0x97FF_FFFF);
+        assert_eq!(enc_bl(-1).word, 0x97FF_FFFF);
     }
 
     #[test]
     fn bl_backwards_four_insns() {
         // bl . - 16 (-4 instructions)  ->  0x97FFFFFC
-        assert_eq!(enc_bl(-4), 0x97FF_FFFC);
+        assert_eq!(enc_bl(-4).word, 0x97FF_FFFC);
     }
 
     #[test]
     fn bl_forwards() {
         // bl . + 8 (+2 instructions)  ->  0x94000002
-        assert_eq!(enc_bl(2), 0x9400_0002);
+        assert_eq!(enc_bl(2).word, 0x9400_0002);
     }
 
     #[test]
     fn stp_pre_fp_lr_minus_16() {
         // stp x29, x30, [sp, #-16]!  ->  0xA9BF7BFD
-        assert_eq!(enc_stp_pre(Reg::X29, Reg::X30, Reg::SP, -16), 0xA9BF_7BFD);
+        assert_eq!(
+            enc_stp_pre(Reg::X29, Reg::X30, Reg::SP, -16).word,
+            0xA9BF_7BFD
+        );
     }
 
     #[test]
     fn ldp_post_fp_lr_plus_16() {
         // ldp x29, x30, [sp], #16  ->  0xA8C17BFD
-        assert_eq!(enc_ldp_post(Reg::X29, Reg::X30, Reg::SP, 16), 0xA8C1_7BFD);
+        assert_eq!(
+            enc_ldp_post(Reg::X29, Reg::X30, Reg::SP, 16).word,
+            0xA8C1_7BFD
+        );
     }
 
     /// The pair forms at both widths and the post-indexed narrow loads.
@@ -3139,26 +4310,29 @@ mod tests {
     fn pair_and_post_indexed_unit_forms() {
         let (x1, x2, x3) = (Reg(1), Reg(2), Reg(3));
         // ldp w1, w2, [x3, #8]; stp w1, w2, [x3, #-8]
-        assert_eq!(enc_ldp_unit_off(4, x1, x2, x3, 8), 0x2941_0861);
-        assert_eq!(enc_stp_unit_off(4, x1, x2, x3, -8), 0x293F_0861);
+        assert_eq!(enc_ldp_unit_off(4, x1, x2, x3, 8).word, 0x2941_0861);
+        assert_eq!(enc_stp_unit_off(4, x1, x2, x3, -8).word, 0x293F_0861);
         // ldp x16, x17, [x1, #504]
-        assert_eq!(enc_ldp_unit_off(8, Reg(16), Reg(17), x1, 504), 0xA95F_C430);
+        assert_eq!(
+            enc_ldp_unit_off(8, Reg(16), Reg(17), x1, 504).word,
+            0xA95F_C430
+        );
         // ldp x1, x2, [x3], #16; stp x1, x2, [x3], #16
-        assert_eq!(enc_ldp_unit_post(8, x1, x2, x3, 16), 0xA8C1_0861);
-        assert_eq!(enc_stp_unit_post(8, x1, x2, x3, 16), 0xA881_0861);
+        assert_eq!(enc_ldp_unit_post(8, x1, x2, x3, 16).word, 0xA8C1_0861);
+        assert_eq!(enc_stp_unit_post(8, x1, x2, x3, 16).word, 0xA881_0861);
         // ldp w1, w2, [x3], #8; stp w1, w2, [x3], #8
-        assert_eq!(enc_ldp_unit_post(4, x1, x2, x3, 8), 0x28C1_0861);
-        assert_eq!(enc_stp_unit_post(4, x1, x2, x3, 8), 0x2881_0861);
+        assert_eq!(enc_ldp_unit_post(4, x1, x2, x3, 8).word, 0x28C1_0861);
+        assert_eq!(enc_stp_unit_post(4, x1, x2, x3, 8).word, 0x2881_0861);
         // ldr w1, [x3], #4; ldrh w1, [x3], #2; ldrb w1, [x3], #1
-        assert_eq!(enc_ldr_w_post(4, x1, x3, 4), 0xB840_4461);
-        assert_eq!(enc_ldr_w_post(2, x1, x3, 2), 0x7840_2461);
-        assert_eq!(enc_ldr_w_post(1, x1, x3, 1), 0x3840_1461);
+        assert_eq!(enc_ldr_w_post(4, x1, x3, 4).word, 0xB840_4461);
+        assert_eq!(enc_ldr_w_post(2, x1, x3, 2).word, 0x7840_2461);
+        assert_eq!(enc_ldr_w_post(1, x1, x3, 1).word, 0x3840_1461);
     }
 
     #[test]
     fn mov_x0_x19() {
         // mov x0, x19  =  orr x0, xzr, x19  ->  0xAA1303E0
-        assert_eq!(enc_mov_reg(Reg::X0, Reg::X19), 0xAA13_03E0);
+        assert_eq!(enc_mov_reg(Reg::X0, Reg::X19).word, 0xAA13_03E0);
     }
 
     #[test]
@@ -3166,31 +4340,31 @@ mod tests {
         // mov x19, x19 -- the lowering wrapper drops the encoding,
         // since the target == source. Distinct registers still emit
         // the full 4-byte word.
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         emit_mov_reg(&mut code, Reg::X19, Reg::X19);
         assert!(code.is_empty(), "self-mov should be elided");
 
         emit_mov_reg(&mut code, Reg::X0, Reg::X19);
         assert_eq!(code.len(), 4, "distinct-reg mov still emits");
-        assert_eq!(&code[..], &one(enc_mov_reg(Reg::X0, Reg::X19)));
+        assert_eq!(&code[..], &one(enc_mov_reg(Reg::X0, Reg::X19).word));
     }
 
     #[test]
     fn add_x29_sp_zero() {
         // add x29, sp, #0  ->  0x910003FD  (frame-pointer setup)
-        assert_eq!(enc_add_imm(Reg::X29, Reg::SP, 0), 0x9100_03FD);
+        assert_eq!(enc_add_imm(Reg::X29, Reg::SP, 0).word, 0x9100_03FD);
     }
 
     #[test]
     fn sub_sp_sp_16() {
         // sub sp, sp, #16  ->  0xD10043FF  (one local slot, padded)
-        assert_eq!(enc_sub_imm(Reg::SP, Reg::SP, 16), 0xD100_43FF);
+        assert_eq!(enc_sub_imm(Reg::SP, Reg::SP, 16).word, 0xD100_43FF);
     }
 
     #[test]
     fn sub_sp_sp_32() {
         // sub sp, sp, #32  ->  0xD10083FF  (covers the 12-bit shift)
-        assert_eq!(enc_sub_imm(Reg::SP, Reg::SP, 32), 0xD100_83FF);
+        assert_eq!(enc_sub_imm(Reg::SP, Reg::SP, 32).word, 0xD100_83FF);
     }
 
     /// `LDR Xt, [Xn, Xm, LSL #3]` -- Win64 TLS lookup uses this to
@@ -3199,7 +4373,7 @@ mod tests {
     fn ldr_x16_x16_x17_lsl3() {
         // ldr x16, [x16, x17, lsl #3]  ->  0xF8717A10
         assert_eq!(
-            enc_ldr_reg_lsl3(Reg::X16, Reg::X16, Reg::X17, IndexExt::None),
+            enc_ldr_reg_lsl3(Reg::X16, Reg::X16, Reg::X17, IndexExt::None).word,
             0xF871_7A10
         );
     }
@@ -3209,12 +4383,12 @@ mod tests {
     #[test]
     fn byte_register_offset_forms() {
         let lsl = IndexExt::None;
-        assert_eq!(enc_ldrb_reg(r(0), r(1), r(2), lsl), 0x3862_6820);
-        assert_eq!(enc_ldrsb_reg(r(0), r(1), r(2), lsl), 0x38A2_6820);
-        assert_eq!(enc_strb_reg(r(0), r(1), r(2), lsl), 0x3822_6820);
-        assert_eq!(enc_ldrb_reg(r(30), r(29), r(17), lsl), 0x3871_6BBE);
-        assert_eq!(enc_ldrsb_reg(r(9), r(16), r(28), lsl), 0x38BC_6A09);
-        assert_eq!(enc_strb_reg(r(21), r(3), r(15), lsl), 0x382F_6875);
+        assert_eq!(enc_ldrb_reg(r(0), r(1), r(2), lsl).word, 0x3862_6820);
+        assert_eq!(enc_ldrsb_reg(r(0), r(1), r(2), lsl).word, 0x38A2_6820);
+        assert_eq!(enc_strb_reg(r(0), r(1), r(2), lsl).word, 0x3822_6820);
+        assert_eq!(enc_ldrb_reg(r(30), r(29), r(17), lsl).word, 0x3871_6BBE);
+        assert_eq!(enc_ldrsb_reg(r(9), r(16), r(28), lsl).word, 0x38BC_6A09);
+        assert_eq!(enc_strb_reg(r(21), r(3), r(15), lsl).word, 0x382F_6875);
     }
 
     /// The register-offset forms over a word index, every access size with
@@ -3223,27 +4397,42 @@ mod tests {
     #[test]
     fn word_index_forms() {
         use IndexExt::{Sxtw, Uxtw};
-        assert_eq!(enc_ldr_reg_lsl3(r(0), r(1), r(2), Sxtw), 0xF862_D820);
-        assert_eq!(enc_ldr_reg_lsl3(r(0), r(1), r(2), Uxtw), 0xF862_5820);
-        assert_eq!(enc_ldrsw_reg_lsl2(r(3), r(4), r(5), Sxtw), 0xB8A5_D883);
-        assert_eq!(enc_ldr32_reg_lsl2(r(3), r(4), r(5), Uxtw), 0xB865_5883);
-        assert_eq!(enc_ldrsh_reg_lsl1(r(6), r(7), r(8), Sxtw), 0x78A8_D8E6);
-        assert_eq!(enc_ldrh_reg_lsl1(r(6), r(7), r(8), Uxtw), 0x7868_58E6);
-        assert_eq!(enc_ldrsb_reg(r(9), r(10), r(11), Sxtw), 0x38AB_C949);
-        assert_eq!(enc_ldrb_reg(r(9), r(10), r(11), Uxtw), 0x386B_4949);
-        assert_eq!(enc_str_reg_lsl3(r(12), r(13), r(14), Sxtw), 0xF82E_D9AC);
-        assert_eq!(enc_str32_reg_lsl2(r(15), r(16), r(17), Uxtw), 0xB831_5A0F);
-        assert_eq!(enc_strh_reg_lsl1(r(18), r(19), r(20), Sxtw), 0x7834_DA72);
-        assert_eq!(enc_strb_reg(r(21), r(22), r(23), Uxtw), 0x3837_4AD5);
-        assert_eq!(enc_strb_reg(r(21), r(22), r(23), Sxtw), 0x3837_CAD5);
-        assert_eq!(enc_add_index(r(16), r(16), r(17), Sxtw, 3), 0x8B31_CE10);
-        assert_eq!(enc_add_index(r(16), r(1), r(2), Uxtw, 2), 0x8B22_4830);
-        assert_eq!(enc_add_index(r(16), r(16), r(17), Sxtw, 0), 0x8B31_C210);
-        assert_eq!(enc_add_index(r(0), r(29), r(30), Uxtw, 1), 0x8B3E_47A0);
+        assert_eq!(enc_ldr_reg_lsl3(r(0), r(1), r(2), Sxtw).word, 0xF862_D820);
+        assert_eq!(enc_ldr_reg_lsl3(r(0), r(1), r(2), Uxtw).word, 0xF862_5820);
+        assert_eq!(enc_ldrsw_reg_lsl2(r(3), r(4), r(5), Sxtw).word, 0xB8A5_D883);
+        assert_eq!(enc_ldr32_reg_lsl2(r(3), r(4), r(5), Uxtw).word, 0xB865_5883);
+        assert_eq!(enc_ldrsh_reg_lsl1(r(6), r(7), r(8), Sxtw).word, 0x78A8_D8E6);
+        assert_eq!(enc_ldrh_reg_lsl1(r(6), r(7), r(8), Uxtw).word, 0x7868_58E6);
+        assert_eq!(enc_ldrsb_reg(r(9), r(10), r(11), Sxtw).word, 0x38AB_C949);
+        assert_eq!(enc_ldrb_reg(r(9), r(10), r(11), Uxtw).word, 0x386B_4949);
+        assert_eq!(
+            enc_str_reg_lsl3(r(12), r(13), r(14), Sxtw).word,
+            0xF82E_D9AC
+        );
+        assert_eq!(
+            enc_str32_reg_lsl2(r(15), r(16), r(17), Uxtw).word,
+            0xB831_5A0F
+        );
+        assert_eq!(
+            enc_strh_reg_lsl1(r(18), r(19), r(20), Sxtw).word,
+            0x7834_DA72
+        );
+        assert_eq!(enc_strb_reg(r(21), r(22), r(23), Uxtw).word, 0x3837_4AD5);
+        assert_eq!(enc_strb_reg(r(21), r(22), r(23), Sxtw).word, 0x3837_CAD5);
+        assert_eq!(
+            enc_add_index(r(16), r(16), r(17), Sxtw, 3).word,
+            0x8B31_CE10
+        );
+        assert_eq!(enc_add_index(r(16), r(1), r(2), Uxtw, 2).word, 0x8B22_4830);
+        assert_eq!(
+            enc_add_index(r(16), r(16), r(17), Sxtw, 0).word,
+            0x8B31_C210
+        );
+        assert_eq!(enc_add_index(r(0), r(29), r(30), Uxtw, 1).word, 0x8B3E_47A0);
         // A full-width index keeps the shifted-register add.
         assert_eq!(
-            enc_add_index(r(16), r(16), r(17), IndexExt::None, 3),
-            enc_add_reg_lsl(r(16), r(16), r(17), 3)
+            enc_add_index(r(16), r(16), r(17), IndexExt::None, 3).word,
+            enc_add_reg_lsl(r(16), r(16), r(17), 3).word
         );
     }
 
@@ -3269,7 +4458,7 @@ mod tests {
     #[test]
     fn ldr_w17_x17_4() {
         // ldr w17, [x17, #4]  ->  0xB9400631
-        assert_eq!(enc_ldr32_imm(Reg::X17, Reg::X17, 4), 0xB940_0631);
+        assert_eq!(enc_ldr32_imm(Reg::X17, Reg::X17, 4).word, 0xB940_0631);
     }
 
     /// `LDR Xt, [X18, #0x58]` -- the Win64 TLS lookup pulls
@@ -3278,7 +4467,7 @@ mod tests {
     #[test]
     fn ldr_x16_x18_0x58() {
         // ldr x16, [x18, #0x58]  ->  0xF9402E50
-        assert_eq!(enc_ldr_imm(Reg::X16, Reg::X18, 0x58), 0xF940_2E50);
+        assert_eq!(enc_ldr_imm(Reg::X16, Reg::X18, 0x58).word, 0xF940_2E50);
     }
 
     /// `MRS Xt, TPIDR_EL0` -- Linux/aarch64 TLS lookup reads the
@@ -3286,7 +4475,7 @@ mod tests {
     #[test]
     fn mrs_x19_tpidr_el0() {
         // mrs x19, tpidr_el0  ->  0xD53BD053
-        assert_eq!(enc_mrs_tpidr_el0(Reg::X19), 0xD53B_D053);
+        assert_eq!(enc_mrs_tpidr_el0(Reg::X19).word, 0xD53B_D053);
     }
 
     // Encoder spot checks.
@@ -3297,28 +4486,28 @@ mod tests {
 
     #[test]
     fn arith_register_forms() {
-        assert_eq!(enc_add_reg(r(0), r(1), r(2)), 0x8B02_0020);
-        assert_eq!(enc_sub_reg(r(0), r(1), r(2)), 0xCB02_0020);
-        assert_eq!(enc_and_reg(r(0), r(1), r(2)), 0x8A02_0020);
-        assert_eq!(enc_orr_reg(r(0), r(1), r(2)), 0xAA02_0020);
-        assert_eq!(enc_eor_reg(r(0), r(1), r(2)), 0xCA02_0020);
-        assert_eq!(enc_mul(r(0), r(1), r(2)), 0x9B02_7C20);
-        assert_eq!(enc_sdiv(r(0), r(1), r(2)), 0x9AC2_0C20);
-        assert_eq!(enc_smulh(r(0), r(1), r(2)), 0x9B42_7C20);
-        assert_eq!(enc_umulh(r(0), r(1), r(2)), 0x9BC2_7C20);
-        assert_eq!(enc_msub(r(0), r(1), r(2), r(3)), 0x9B02_8C20);
-        assert_eq!(enc_madd(r(0), r(1), r(2), r(3)), 0x9B02_0C20);
-        assert_eq!(enc_lslv(r(0), r(1), r(2)), 0x9AC2_2020);
-        assert_eq!(enc_asrv(r(0), r(1), r(2)), 0x9AC2_2820);
-        assert_eq!(enc_lsrv(r(0), r(1), r(2)), 0x9AC2_2420);
+        assert_eq!(enc_add_reg(r(0), r(1), r(2)).word, 0x8B02_0020);
+        assert_eq!(enc_sub_reg(r(0), r(1), r(2)).word, 0xCB02_0020);
+        assert_eq!(enc_and_reg(r(0), r(1), r(2)).word, 0x8A02_0020);
+        assert_eq!(enc_orr_reg(r(0), r(1), r(2)).word, 0xAA02_0020);
+        assert_eq!(enc_eor_reg(r(0), r(1), r(2)).word, 0xCA02_0020);
+        assert_eq!(enc_mul(r(0), r(1), r(2)).word, 0x9B02_7C20);
+        assert_eq!(enc_sdiv(r(0), r(1), r(2)).word, 0x9AC2_0C20);
+        assert_eq!(enc_smulh(r(0), r(1), r(2)).word, 0x9B42_7C20);
+        assert_eq!(enc_umulh(r(0), r(1), r(2)).word, 0x9BC2_7C20);
+        assert_eq!(enc_msub(r(0), r(1), r(2), r(3)).word, 0x9B02_8C20);
+        assert_eq!(enc_madd(r(0), r(1), r(2), r(3)).word, 0x9B02_0C20);
+        assert_eq!(enc_lslv(r(0), r(1), r(2)).word, 0x9AC2_2020);
+        assert_eq!(enc_asrv(r(0), r(1), r(2)).word, 0x9AC2_2820);
+        assert_eq!(enc_lsrv(r(0), r(1), r(2)).word, 0x9AC2_2420);
     }
 
     #[test]
     fn extended_register_forms_accept_sp() {
         // sub sp, sp, x16 / add sp, sp, x16 / add x0, sp, x0
-        assert_eq!(enc_sub_ext_reg(Reg::SP, Reg::SP, r(16)), 0xCB30_63FF);
-        assert_eq!(enc_add_ext_reg(Reg::SP, Reg::SP, r(16)), 0x8B30_63FF);
-        assert_eq!(enc_add_ext_reg(r(0), Reg::SP, r(0)), 0x8B20_63E0);
+        assert_eq!(enc_sub_ext_reg(Reg::SP, Reg::SP, r(16)).word, 0xCB30_63FF);
+        assert_eq!(enc_add_ext_reg(Reg::SP, Reg::SP, r(16)).word, 0x8B30_63FF);
+        assert_eq!(enc_add_ext_reg(r(0), Reg::SP, r(0)).word, 0x8B20_63E0);
     }
 
     #[test]
@@ -3328,62 +4517,62 @@ mod tests {
         // than truncating or refusing.
         let bytes = 20_000_016u32;
         assert!(!add_sub_imm24_in_range(bytes));
-        let mut add = Vec::new();
+        let mut add = CodeBuf::default();
         emit_add_sp_imm_scratch(&mut add, bytes, Reg(16));
-        let mut want = Vec::new();
+        let mut want = CodeBuf::default();
         load_imm64(&mut want, Reg(16), bytes as u64);
         emit(&mut want, enc_add_ext_reg(Reg::SP, Reg::SP, Reg(16)));
-        assert_eq!(add, want);
+        assert_eq!(*add, *want);
 
         // In-reach counts keep the two-instruction immediate form.
-        let mut small = Vec::new();
+        let mut small = CodeBuf::default();
         emit_add_sp_imm_scratch(&mut small, 0x11180, Reg(16));
-        let mut want_small = Vec::new();
+        let mut want_small = CodeBuf::default();
         emit_add_sp_imm(&mut want_small, 0x11180);
-        assert_eq!(small, want_small);
+        assert_eq!(*small, *want_small);
     }
 
     #[test]
     fn cmp_and_cset() {
         // cmp x0, x1
-        assert_eq!(enc_cmp_reg(r(0), r(1)), 0xEB01_001F);
+        assert_eq!(enc_cmp_reg(r(0), r(1)).word, 0xEB01_001F);
         // cset x0, eq / ne / lt / gt / le / ge
-        assert_eq!(enc_cset(r(0), Cond::Eq), 0x9A9F_17E0);
-        assert_eq!(enc_cset(r(0), Cond::Ne), 0x9A9F_07E0);
-        assert_eq!(enc_cset(r(0), Cond::Lt), 0x9A9F_A7E0);
-        assert_eq!(enc_cset(r(0), Cond::Gt), 0x9A9F_D7E0);
-        assert_eq!(enc_cset(r(0), Cond::Le), 0x9A9F_C7E0);
-        assert_eq!(enc_cset(r(0), Cond::Ge), 0x9A9F_B7E0);
+        assert_eq!(enc_cset(r(0), Cond::Eq).word, 0x9A9F_17E0);
+        assert_eq!(enc_cset(r(0), Cond::Ne).word, 0x9A9F_07E0);
+        assert_eq!(enc_cset(r(0), Cond::Lt).word, 0x9A9F_A7E0);
+        assert_eq!(enc_cset(r(0), Cond::Gt).word, 0x9A9F_D7E0);
+        assert_eq!(enc_cset(r(0), Cond::Le).word, 0x9A9F_C7E0);
+        assert_eq!(enc_cset(r(0), Cond::Ge).word, 0x9A9F_B7E0);
     }
 
     #[test]
     fn branches() {
         // b . - 44 bytes (-11 instructions)  ->  0x17FFFFF5
-        assert_eq!(enc_b(-11), 0x17FF_FFF5);
+        assert_eq!(enc_b(-11).word, 0x17FF_FFF5);
         // cbz x19, . - 48 (-12 instructions)
-        assert_eq!(enc_cbz(Reg::X19, -12), 0xB4FF_FE93);
+        assert_eq!(enc_cbz(Reg::X19, -12).word, 0xB4FF_FE93);
         // cbnz x19, . - 52 (-13 instructions)
-        assert_eq!(enc_cbnz(Reg::X19, -13), 0xB5FF_FE73);
+        assert_eq!(enc_cbnz(Reg::X19, -13).word, 0xB5FF_FE73);
         // blr x16
-        assert_eq!(enc_blr(r(16)), 0xD63F_0200);
+        assert_eq!(enc_blr(r(16)).word, 0xD63F_0200);
     }
 
     #[test]
     fn b_cond_encodings() {
         // b.eq .+0  ->  0x54000000
-        assert_eq!(enc_b_cond(Cond::Eq, 0), 0x5400_0000);
+        assert_eq!(enc_b_cond(Cond::Eq, 0).word, 0x5400_0000);
         // b.ne .+0  ->  0x54000001
-        assert_eq!(enc_b_cond(Cond::Ne, 0), 0x5400_0001);
+        assert_eq!(enc_b_cond(Cond::Ne, 0).word, 0x5400_0001);
         // b.lt .+0  ->  0x5400000B
-        assert_eq!(enc_b_cond(Cond::Lt, 0), 0x5400_000B);
+        assert_eq!(enc_b_cond(Cond::Lt, 0).word, 0x5400_000B);
         // b.ge .+0  ->  0x5400000A
-        assert_eq!(enc_b_cond(Cond::Ge, 0), 0x5400_000A);
+        assert_eq!(enc_b_cond(Cond::Ge, 0).word, 0x5400_000A);
         // b.gt .+0  ->  0x5400000C
-        assert_eq!(enc_b_cond(Cond::Gt, 0), 0x5400_000C);
+        assert_eq!(enc_b_cond(Cond::Gt, 0).word, 0x5400_000C);
         // b.le .+0  ->  0x5400000D
-        assert_eq!(enc_b_cond(Cond::Le, 0), 0x5400_000D);
+        assert_eq!(enc_b_cond(Cond::Le, 0).word, 0x5400_000D);
         // b.ge . - 8 (-2 instructions)  ->  0x54FFFFCA
-        assert_eq!(enc_b_cond(Cond::Ge, -2), 0x54FF_FFCA);
+        assert_eq!(enc_b_cond(Cond::Ge, -2).word, 0x54FF_FFCA);
     }
 
     #[test]
@@ -3410,31 +4599,32 @@ mod tests {
         assert_eq!(Cond::Gt.flip(), Cond::Le);
         assert_eq!(Cond::Mi.flip(), Cond::Pl);
         // cset w0, vs; csinc x0, x0, xzr, le
-        assert_eq!(enc_cset(r(0), Cond::Vs), 0x9A9F_77E0);
-        assert_eq!(enc_csinc(r(0), r(0), Reg::SP, Cond::Le), 0x9A9F_D400);
+        assert_eq!(enc_cset(r(0), Cond::Vs).word, 0x9A9F_77E0);
+        assert_eq!(enc_csinc(r(0), r(0), Reg::SP, Cond::Le).word, 0x9A9F_D400);
     }
 
     #[test]
     fn loads_stores_scaled() {
-        assert_eq!(enc_ldr_imm(r(0), r(1), 16), 0xF940_0820);
-        assert_eq!(enc_str_imm(r(0), r(1), 24), 0xF900_0C20);
-        assert_eq!(enc_ldrb_imm(r(0), r(1), 1), 0x3940_0420);
-        assert_eq!(enc_strb_imm(r(0), r(1), 2), 0x3900_0820);
+        assert_eq!(enc_ldr_imm(r(0), r(1), 16).word, 0xF940_0820);
+        assert_eq!(enc_str_imm(r(0), r(1), 24).word, 0xF900_0C20);
+        assert_eq!(enc_ldrb_imm(r(0), r(1), 1).word, 0x3940_0420);
+        assert_eq!(enc_strb_imm(r(0), r(1), 2).word, 0x3900_0820);
     }
 
     #[test]
     fn loads_stores_unscaled_negative() {
         // ldur x0, [x29, #-8]  ->  0xF85F83A0
-        assert_eq!(enc_ldur(r(0), Reg::X29, -8), 0xF85F_83A0);
+        assert_eq!(enc_ldur(r(0), Reg::X29, -8).word, 0xF85F_83A0);
         // stur x0, [x29, #-16] ->  0xF81F03A0
-        assert_eq!(enc_stur(r(0), Reg::X29, -16), 0xF81F_03A0);
+        assert_eq!(enc_stur(r(0), Reg::X29, -16).word, 0xF81F_03A0);
     }
 
     #[test]
     fn loads_stores_unscaled_simd() {
         // size 111100 opc 0 imm9 00 Rn Rt: D size 11 and S 10 with opc 01 / 00,
         // Q size 00 with opc 11 / 10.
-        let ldur = |op: MemOp, rt: u8, rn: Reg, imm: i32| enc_mem(op, rt, rn, op.unscaled(imm));
+        let ldur =
+            |op: MemOp, rt: u8, rn: Reg, imm: i32| enc_mem(op, rt, rn, op.unscaled(imm)).word;
         assert_eq!(ldur(LDR_D, 0, Reg::X29, -16), 0xFC5F_03A0);
         assert_eq!(ldur(STR_D, 0, Reg::X29, -16), 0xFC1F_03A0);
         assert_eq!(ldur(LDR_D, 17, r(2), 255), 0xFC4F_F051);
@@ -3451,8 +4641,9 @@ mod tests {
 
     #[test]
     fn load_store_offset_takes_the_form_that_holds_it() {
-        let at =
-            |op: MemOp, rt: u8, rn: Reg, disp: i64| op.offset(disp).map(|o| enc_mem(op, rt, rn, o));
+        let at = |op: MemOp, rt: u8, rn: Reg, disp: i64| {
+            op.offset(disp).map(|o| enc_mem(op, rt, rn, o).word)
+        };
         assert_eq!(at(LDR_D, 2, r(3), 32760), Some(0xFD7F_FC62));
         assert_eq!(at(STR_S, 4, r(5), 16380), Some(0xBD3F_FCA4));
         assert_eq!(at(LDR_Q, 1, r(2), 16), Some(0x3DC0_0441));
@@ -3483,38 +4674,38 @@ mod tests {
     #[test]
     fn pre_post_indexed_for_vm_stack() {
         // str x19, [sp, #-16]!  ->  0xF81F0FF3
-        assert_eq!(enc_str_pre(Reg::X19, Reg::SP, -16), 0xF81F_0FF3);
+        assert_eq!(enc_str_pre(Reg::X19, Reg::SP, -16).word, 0xF81F_0FF3);
         // ldr x19, [sp], #16    ->  0xF84107F3
-        assert_eq!(enc_ldr_post(Reg::X19, Reg::SP, 16), 0xF841_07F3);
+        assert_eq!(enc_ldr_post(Reg::X19, Reg::SP, 16).word, 0xF841_07F3);
     }
 
     #[test]
     fn adrp_zero_offset() {
         // adrp x0, .  ->  0x90000000
-        assert_eq!(enc_adrp(r(0), 0), 0x9000_0000);
+        assert_eq!(enc_adrp(r(0), 0).word, 0x9000_0000);
     }
 
     #[test]
     fn emit_writes_little_endian() {
-        let mut code = Vec::new();
-        emit(&mut code, 0xDEAD_BEEF);
-        assert_eq!(code, vec![0xEF, 0xBE, 0xAD, 0xDE]);
+        let mut code = CodeBuf::default();
+        emit(&mut code, insn!(0xDEAD_BEEF, "udf", []));
+        assert_eq!(*code, vec![0xEF, 0xBE, 0xAD, 0xDE]);
     }
 
     #[test]
     fn load_imm64_zero_uses_one_movz() {
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         load_imm64(&mut code, Reg::X0, 0);
         assert_eq!(code.len(), 4);
-        assert_eq!(&code[..], &one(enc_movz(Reg::X0, 0, 0)));
+        assert_eq!(&code[..], &one(enc_movz(Reg::X0, 0, 0).word));
     }
 
     #[test]
     fn load_imm64_small_uses_one_movz() {
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         load_imm64(&mut code, Reg::X0, 42);
         assert_eq!(code.len(), 4);
-        assert_eq!(&code[..], &one(enc_movz(Reg::X0, 42, 0)));
+        assert_eq!(&code[..], &one(enc_movz(Reg::X0, 42, 0).word));
     }
 
     #[test]
@@ -3522,24 +4713,24 @@ mod tests {
         // value 0x1234_0000 -- only one non-zero lane (lane 1). The
         // sequence should be a single `movz xN, #0x1234, lsl #16`,
         // not `movz #0; movk #0x1234, lsl #16`.
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         load_imm64(&mut code, Reg::X0, 0x1234_0000);
         assert_eq!(code.len(), 4);
-        assert_eq!(&code[..], &one(enc_movz(Reg::X0, 0x1234, 1)));
+        assert_eq!(&code[..], &one(enc_movz(Reg::X0, 0x1234, 1).word));
     }
 
     #[test]
     fn load_imm64_full_64bit_uses_movz_plus_three_movk() {
         // value with all four lanes non-zero -- 4 instructions.
         let v: u64 = 0xAAAA_BBBB_CCCC_DDDD;
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         load_imm64(&mut code, Reg::X1, v);
         assert_eq!(code.len(), 16);
         let want = [
-            enc_movz(Reg::X1, 0xDDDD, 0),
-            enc_movk(Reg::X1, 0xCCCC, 1),
-            enc_movk(Reg::X1, 0xBBBB, 2),
-            enc_movk(Reg::X1, 0xAAAA, 3),
+            enc_movz(Reg::X1, 0xDDDD, 0).word,
+            enc_movk(Reg::X1, 0xCCCC, 1).word,
+            enc_movk(Reg::X1, 0xBBBB, 2).word,
+            enc_movk(Reg::X1, 0xAAAA, 3).word,
         ];
         for (i, w) in want.iter().enumerate() {
             let off = i * 4;
@@ -3599,7 +4790,7 @@ mod tests {
             seed
         }));
         for value in values {
-            let mut code = Vec::new();
+            let mut code = CodeBuf::default();
             load_imm64(&mut code, Reg(9), value);
             assert_eq!(run_loads(&code, Reg(9)), Some(value), "{value:#x}");
             let n = (code.len() / 4) as u32;
@@ -3623,28 +4814,28 @@ mod tests {
         }
         // One instruction prefers `movz`, then `movn`, then `orr`.
         let first = |value| {
-            let mut code = Vec::new();
+            let mut code = CodeBuf::default();
             load_imm64(&mut code, Reg(9), value);
             u32::from_le_bytes(code[..4].try_into().unwrap())
         };
-        assert_eq!(first(0xFF00), enc_movz(Reg(9), 0xFF00, 0));
-        assert_eq!(first(!0xF), enc_movn(Reg(9), 0xF, 0));
+        assert_eq!(first(0xFF00), enc_movz(Reg(9), 0xFF00, 0).word);
+        assert_eq!(first(!0xF), enc_movn(Reg(9), 0xF, 0).word);
         assert_eq!(first(0xFF00_FF00_FF00_FF00) & 0xFF80_03FF, 0xB200_03E9);
-        assert_eq!(first(u64::MAX), enc_movn(Reg(9), 0, 0));
+        assert_eq!(first(u64::MAX), enc_movn(Reg(9), 0, 0).word);
     }
 
     #[test]
     fn fma_three_source_encodings() {
         // fmadd d0, d0, d1, d2  (a*b + c)
-        assert_eq!(enc_fma(0, 0, 1, 2, false, false, false), 0x1F41_0800);
+        assert_eq!(enc_fma(0, 0, 1, 2, false, false, false).word, 0x1F41_0800);
         // fnmsub d0, d0, d1, d2  (a*b - c)
-        assert_eq!(enc_fma(0, 0, 1, 2, false, false, true), 0x1F61_8800);
+        assert_eq!(enc_fma(0, 0, 1, 2, false, false, true).word, 0x1F61_8800);
         // fmsub d0, d0, d1, d2  (c - a*b)
-        assert_eq!(enc_fma(0, 0, 1, 2, false, true, false), 0x1F41_8800);
+        assert_eq!(enc_fma(0, 0, 1, 2, false, true, false).word, 0x1F41_8800);
         // fnmadd d0, d0, d1, d2  (-a*b - c)
-        assert_eq!(enc_fma(0, 0, 1, 2, false, true, true), 0x1F61_0800);
+        assert_eq!(enc_fma(0, 0, 1, 2, false, true, true).word, 0x1F61_0800);
         // Single-precision clears the type bit: fmadd s0, s0, s1, s2
-        assert_eq!(enc_fma(0, 0, 1, 2, true, false, false), 0x1F01_0800);
+        assert_eq!(enc_fma(0, 0, 1, 2, true, false, false).word, 0x1F01_0800);
     }
 
     #[test]
@@ -3652,10 +4843,13 @@ mod tests {
         // 0x1111_0000_2222 -- lane 0 = 0x2222, lane 1 = 0, lane 2 = 0x1111.
         // The middle zero lane would clobber the bottom if we emitted a
         // `movk #0, lsl #16`, so it MUST be skipped.
-        let mut code = Vec::new();
+        let mut code = CodeBuf::default();
         load_imm64(&mut code, Reg::X0, 0x1111_0000_2222);
         assert_eq!(code.len(), 8);
-        let want = [enc_movz(Reg::X0, 0x2222, 0), enc_movk(Reg::X0, 0x1111, 2)];
+        let want = [
+            enc_movz(Reg::X0, 0x2222, 0).word,
+            enc_movk(Reg::X0, 0x1111, 2).word,
+        ];
         for (i, w) in want.iter().enumerate() {
             let off = i * 4;
             assert_eq!(&code[off..off + 4], &one(*w));
@@ -3666,7 +4860,7 @@ mod tests {
     // `clang -target aarch64-linux-gnu -march=armv8.4-a -c` + `objdump -d`.
     #[test]
     fn lse_rmw_orders_widths_and_operations() {
-        let lse = |op, acq, rel, s, t, n, w| enc_lse(op, acq, rel, Reg(s), Reg(t), Reg(n), w);
+        let lse = |op, acq, rel, s, t, n, w| enc_lse(op, acq, rel, Reg(s), Reg(t), Reg(n), w).word;
         // ldadd / ldadda / ldaddl / ldaddal x1, x0, [x0]
         assert_eq!(lse(LseOp::Add, false, false, 1, 0, 0, 8), 0xF821_0000);
         assert_eq!(lse(LseOp::Add, true, false, 1, 0, 0, 8), 0xF8A1_0000);
@@ -3692,7 +4886,7 @@ mod tests {
 
     #[test]
     fn cas_orders_and_widths() {
-        let cas = |acq, rel, s, t, n, w| enc_cas(acq, rel, Reg(s), Reg(t), Reg(n), w);
+        let cas = |acq, rel, s, t, n, w| enc_cas(acq, rel, Reg(s), Reg(t), Reg(n), w).word;
         // cas / casa / casl / casal x8, x2, [x0]
         assert_eq!(cas(false, false, 8, 2, 0, 8), 0xC8A8_7C02);
         assert_eq!(cas(true, false, 8, 2, 0, 8), 0xC8E8_7C02);
@@ -3707,11 +4901,11 @@ mod tests {
 
     #[test]
     fn ldapr_widths() {
-        assert_eq!(enc_ldapr(Reg(0), Reg(0), 8), 0xF8BF_C000);
-        assert_eq!(enc_ldapr(Reg(1), Reg(2), 4), 0xB8BF_C041);
-        assert_eq!(enc_ldapr(Reg(1), Reg(2), 2), 0x78BF_C041);
-        assert_eq!(enc_ldapr(Reg(1), Reg(2), 1), 0x38BF_C041);
-        assert_eq!(enc_ldapr(Reg(3), Reg(31), 8), 0xF8BF_C3E3);
+        assert_eq!(enc_ldapr(Reg(0), Reg(0), 8).word, 0xF8BF_C000);
+        assert_eq!(enc_ldapr(Reg(1), Reg(2), 4).word, 0xB8BF_C041);
+        assert_eq!(enc_ldapr(Reg(1), Reg(2), 2).word, 0x78BF_C041);
+        assert_eq!(enc_ldapr(Reg(1), Reg(2), 1).word, 0x38BF_C041);
+        assert_eq!(enc_ldapr(Reg(3), Reg(31), 8).word, 0xF8BF_C3E3);
     }
 
     // Cross-checked against `clang -c` + `otool -t` (aarch64):
@@ -3720,11 +4914,11 @@ mod tests {
     //   ccmp x11,x13,#0,eq=fa4d0160
     #[test]
     fn ldaxp_stlxp_ccmp() {
-        assert_eq!(enc_ldaxp(Reg(1), Reg(2), Reg(3)), 0xC87F_8861);
-        assert_eq!(enc_ldaxp(Reg(5), Reg(6), Reg(7)), 0xC87F_98E5);
-        assert_eq!(enc_stlxp(Reg(0), Reg(1), Reg(2), Reg(3)), 0xC820_8861);
-        assert_eq!(enc_stlxp(Reg(4), Reg(5), Reg(6), Reg(7)), 0xC824_98E5);
-        assert_eq!(enc_ccmp(Reg(11), Reg(13), 0, Cond::Eq), 0xFA4D_0160);
+        assert_eq!(enc_ldaxp(Reg(1), Reg(2), Reg(3)).word, 0xC87F_8861);
+        assert_eq!(enc_ldaxp(Reg(5), Reg(6), Reg(7)).word, 0xC87F_98E5);
+        assert_eq!(enc_stlxp(Reg(0), Reg(1), Reg(2), Reg(3)).word, 0xC820_8861);
+        assert_eq!(enc_stlxp(Reg(4), Reg(5), Reg(6), Reg(7)).word, 0xC824_98E5);
+        assert_eq!(enc_ccmp(Reg(11), Reg(13), 0, Cond::Eq).word, 0xFA4D_0160);
     }
 
     // Cross-checked the same way. The plain LDP / STP forms are the same
@@ -3734,10 +4928,10 @@ mod tests {
     //   ldp x1,x2,[x3]=a9400861   stp x1,x2,[x3]=a9000861
     #[test]
     fn ldxp_stxp_ldp_stp() {
-        assert_eq!(enc_ldxp(Reg(1), Reg(2), Reg(3)), 0xC87F_0861);
-        assert_eq!(enc_stxp(Reg(0), Reg(1), Reg(2), Reg(3)), 0xC820_0861);
-        assert_eq!(enc_ldp_off(Reg(1), Reg(2), Reg(3), 0), 0xA940_0861);
-        assert_eq!(enc_stp_off(Reg(1), Reg(2), Reg(3), 0), 0xA900_0861);
+        assert_eq!(enc_ldxp(Reg(1), Reg(2), Reg(3)).word, 0xC87F_0861);
+        assert_eq!(enc_stxp(Reg(0), Reg(1), Reg(2), Reg(3)).word, 0xC820_0861);
+        assert_eq!(enc_ldp_off(Reg(1), Reg(2), Reg(3), 0).word, 0xA940_0861);
+        assert_eq!(enc_stp_off(Reg(1), Reg(2), Reg(3), 0).word, 0xA900_0861);
     }
 
     /// DecodeBitMasks over a logical-immediate field; `None` when reserved.
@@ -3807,15 +5001,15 @@ mod tests {
     fn logical_immediate_words() {
         use super::super::table::{Opnd, encode};
         // and x0, x1, #0xff; orr w5, w6, #0x1; eor x2, x3, #1 << 63; and sp, x16, #-16.
-        let and = enc_logical_imm(LogicalOp::And, true, Reg(0), Reg(1), 0xFF);
+        let and = enc_logical_imm(LogicalOp::And, true, Reg(0), Reg(1), 0xFF).map(|i| i.word);
         assert_eq!(and, Some(0x9240_1C20));
-        let orr = enc_logical_imm(LogicalOp::Orr, false, Reg(5), Reg(6), 1);
+        let orr = enc_logical_imm(LogicalOp::Orr, false, Reg(5), Reg(6), 1).map(|i| i.word);
         assert_eq!(orr, Some(0x3200_00C5));
-        let eor = enc_logical_imm(LogicalOp::Eor, true, Reg(2), Reg(3), 1 << 63);
+        let eor = enc_logical_imm(LogicalOp::Eor, true, Reg(2), Reg(3), 1 << 63).map(|i| i.word);
         assert_eq!(eor, Some(0xD241_0062));
-        assert_eq!(enc_and_align_down(Reg::SP, Reg(16), 4), 0x927C_EE1F);
+        assert_eq!(enc_and_align_down(Reg::SP, Reg(16), 4).word, 0x927C_EE1F);
         assert_eq!(
-            enc_logical_imm(LogicalOp::And, true, Reg(0), Reg(1), 0x1234),
+            enc_logical_imm(LogicalOp::And, true, Reg(0), Reg(1), 0x1234).map(|i| i.word),
             None
         );
         // Each form packs the word the assembler catalog does.
@@ -3838,7 +5032,7 @@ mod tests {
             ] {
                 let args = [reg(9, is64), reg(20, is64), Opnd::Imm(value as i64)];
                 let want = encode(mnemonic, &args).ok();
-                let got = enc_logical_imm(op, is64, Reg(9), Reg(20), value);
+                let got = enc_logical_imm(op, is64, Reg(9), Reg(20), value).map(|i| i.word);
                 assert_eq!(got, want, "{mnemonic} {value:#x}");
             }
         }
@@ -3847,12 +5041,21 @@ mod tests {
     /// Words from LLVM's assembler.
     #[test]
     fn csel_and_fcsel() {
-        assert_eq!(enc_csel(Reg(1), Reg(2), Reg(3), Cond::Ne), 0x9A83_1041);
-        assert_eq!(enc_csel(Reg(30), Reg(0), Reg(29), Cond::Lt), 0x9A9D_B01E);
-        assert_eq!(enc_fcsel(1, 2, 3, Cond::Ne, false), 0x1E63_1C41);
-        assert_eq!(enc_fcsel(4, 5, 6, Cond::Gt, true), 0x1E26_CCA4);
-        assert_eq!(enc_csinc(Reg(1), Reg(2), Reg(3), Cond::Ne), 0x9A83_1441);
+        assert_eq!(enc_csel(Reg(1), Reg(2), Reg(3), Cond::Ne).word, 0x9A83_1041);
+        assert_eq!(
+            enc_csel(Reg(30), Reg(0), Reg(29), Cond::Lt).word,
+            0x9A9D_B01E
+        );
+        assert_eq!(enc_fcsel(1, 2, 3, Cond::Ne, false).word, 0x1E63_1C41);
+        assert_eq!(enc_fcsel(4, 5, 6, Cond::Gt, true).word, 0x1E26_CCA4);
+        assert_eq!(
+            enc_csinc(Reg(1), Reg(2), Reg(3), Cond::Ne).word,
+            0x9A83_1441
+        );
         // `cinc x5, x6, lt`.
-        assert_eq!(enc_csinc(Reg(5), Reg(6), Reg(6), Cond::Ge), 0x9A86_A4C5);
+        assert_eq!(
+            enc_csinc(Reg(5), Reg(6), Reg(6), Cond::Ge).word,
+            0x9A86_A4C5
+        );
     }
 }

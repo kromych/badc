@@ -3,7 +3,7 @@ self_declared_library_names_resolve.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -30,14 +30,13 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	stur	x0, [x29, #-0x8]
+               	ldur	x1, [x29, #-0x8]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldur	x1, [x29, #-0x8]
                	blr	x1
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x2                // =2
                	cmp	x0, #0x3
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x2               // =2
+               	csel	x0, xzr, x17, eq
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

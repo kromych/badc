@@ -326,7 +326,7 @@ fn dominates(a: BlockId, b: BlockId, idom: &[BlockId]) -> bool {
 /// A retreating edge (target at or before the source in RPO) whose
 /// target does not dominate its source enters a loop past its
 /// header; such a multiple-entry loop has no rotation-safe header.
-fn is_irreducible(func: &FunctionSsa, idom: &[BlockId], rpo: &[usize]) -> bool {
+pub(crate) fn is_irreducible(func: &FunctionSsa, idom: &[BlockId], rpo: &[usize]) -> bool {
     let dom = DomOrder::build(idom);
     for (b, block) in func.blocks.iter().enumerate() {
         if rpo[b] == usize::MAX {
@@ -528,6 +528,27 @@ fn cycle_depths(func: &FunctionSsa, rpo: &[usize]) -> Vec<u32> {
     depth
 }
 
+/// Per block, whether it lies on a cycle of the control flow graph.
+pub(crate) fn on_cycles(func: &FunctionSsa) -> Vec<bool> {
+    let succs: Vec<Vec<BlockId>> = (func.blocks.iter())
+        .map(|b| {
+            successors(
+                &b.terminator,
+                &func.computed_goto_targets,
+                &func.jump_tables,
+            )
+        })
+        .collect();
+    let nodes: Vec<BlockId> = (0..func.blocks.len() as BlockId).collect();
+    let mut cyclic = alloc::vec![false; nodes.len()];
+    for scc in components(&nodes, &succs, |_| true) {
+        if scc.len() > 1 || succs[scc[0] as usize].contains(&scc[0]) {
+            scc.iter().for_each(|&b| cyclic[b as usize] = true);
+        }
+    }
+    cyclic
+}
+
 /// The strongly connected components of `nodes` over the edges `inside`
 /// admits (Tarjan, iterative).
 fn components(
@@ -616,15 +637,15 @@ pub(crate) fn cold_blocks(func: &FunctionSsa) -> Vec<bool> {
 /// loops of a reducible CFG are disjoint or strictly nested (loops
 /// sharing a header were merged), so the smallest containing body is
 /// unique.
-struct LoopForest {
+pub(crate) struct LoopForest {
     /// Innermost loop containing each block, if any.
-    innermost: Vec<Option<usize>>,
+    pub(crate) innermost: Vec<Option<usize>>,
     /// Innermost loop strictly containing each loop, if any.
-    parent: Vec<Option<usize>>,
+    pub(crate) parent: Vec<Option<usize>>,
 }
 
 impl LoopForest {
-    fn build(n_blocks: usize, loops: &[NaturalLoop]) -> LoopForest {
+    pub(crate) fn build(n_blocks: usize, loops: &[NaturalLoop]) -> LoopForest {
         // Stamp bodies from the outermost in; the last (smallest) loop
         // to touch a block is its innermost, and a loop's parent is
         // whatever contained its header before its own stamp. Size

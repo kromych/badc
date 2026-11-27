@@ -153,7 +153,7 @@ impl ReturnAbi {
             b.set_ret_agg(idx);
         }
         b.set_ret_is_fp(is_floating_scalar(return_ty) && !agg);
-        b.set_ret_type_tag(return_ty);
+        b.set_ret_type_tag(return_ty, target);
         let indirect = matches!(abi, StructReturnAbi::Indirect(_));
         let indirect_result_slot = if indirect {
             let slot = b.alloc_synthetic_local();

@@ -3,7 +3,7 @@ atomic_pointer_fetch_scales.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -20,27 +20,27 @@ Disassembly of section .text:
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	stur	x1, [x29, #-0x20]
-               	adrp	x4, <page>
-               	add	x4, x4, <lo12>
-               	stur	x4, [x29, #-0x18]
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
+               	stur	x3, [x29, #-0x18]
                	stur	x1, [x29, #-0x10]
-               	mov	x5, #0x5                // =5
-               	stur	w5, [x29, #-0x8]
+               	mov	x4, #0x5                // =5
+               	stur	w4, [x29, #-0x8]
                	sub	x2, x29, #0x20
                	mov	x0, #0x4                // =4
-               	ldaddal	x0, x3, [x2]
-               	cmp	x3, x1
+               	ldaddal	x0, x5, [x2]
+               	cmp	x5, x1
                	b.ne	<addr>
-               	ldar	x3, [x2]
-               	sub	x3, x3, x1
-               	cmp	x3, #0x4
+               	ldar	x5, [x2]
+               	sub	x5, x5, x1
+               	cmp	x5, #0x4
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x3, #0x8                // =8
-               	stadd	x3, [x2]
+               	mov	x5, #0x8                // =8
+               	stadd	x5, [x2]
                	ldar	x7, [x2]
                	add	x6, x1, #0xc
                	cmp	x7, x6
@@ -61,7 +61,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	neg	x16, x3
+               	neg	x16, x5
                	staddl	x16, [x2]
                	ldar	x2, [x2]
                	cmp	x2, x1
@@ -73,22 +73,22 @@ Disassembly of section .text:
                	mov	x6, #0x48               // =72
                	ldaddal	x6, x16, [x2]
                	ldar	x2, [x2]
-               	add	x4, x4, #0x48
-               	cmp	x2, x4
+               	add	x3, x3, #0x48
+               	cmp	x2, x3
                	b.eq	<addr>
-               	mov	x0, x5
+               	mov	x0, x4
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x2, x29, #0x8
-               	mov	x4, #0x2                // =2
-               	ldaddal	w4, w4, [x2]
-               	cmp	w4, #0x5
+               	mov	x3, #0x2                // =2
+               	ldaddal	w3, w3, [x2]
+               	cmp	w3, #0x5
                	b.ne	<addr>
-               	mov	x4, #0x1                // =1
-               	neg	x16, x4
-               	ldaddal	w16, w4, [x2]
-               	cmp	w4, #0x7
+               	mov	x3, #0x1                // =1
+               	neg	x16, x3
+               	ldaddal	w16, w3, [x2]
+               	cmp	w3, #0x7
                	b.ne	<addr>
                	ldar	w2, [x2]
                	cmp	w2, #0x6
@@ -116,7 +116,7 @@ Disassembly of section .text:
                	add	x1, x1, #0x4
                	cmp	x0, x1
                	b.eq	<addr>
-               	mov	x0, x3
+               	mov	x0, x5
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret

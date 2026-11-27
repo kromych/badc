@@ -3,7 +3,7 @@ overaligned_automatic.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -30,18 +30,18 @@ Disassembly of section .text:
                	movq	%rsp, %rbp
                	subq	$0xc0, %rsp
                	andq	$-0x40, %rsp
-               	leaq	(%rsp), %rax
-               	andq	$0x3f, %rax
-               	leaq	0x60(%rsp), %rcx
-               	andq	$0x1f, %rcx
-               	orq	%rax, %rcx
+               	leaq	(%rsp), %rcx
+               	andq	$0x3f, %rcx
+               	leaq	0x60(%rsp), %rax
+               	andq	$0x1f, %rax
+               	orq	%rcx, %rax
                	leaq	0x40(%rsp), %rdx
                	andq	$0x3f, %rdx
-               	orq	%rdx, %rcx
-               	leaq	0x80(%rsp), %rdx
-               	andq	$0x1f, %rdx
-               	orq	%rdx, %rcx
-               	testl	%ecx, %ecx
+               	orq	%rdx, %rax
+               	leaq	0x80(%rsp), %rsi
+               	andq	$0x1f, %rsi
+               	orq	%rsi, %rax
+               	testl	%eax, %eax
                	je	<addr>
                	movl	$0x1, %eax
                	leave
@@ -50,13 +50,11 @@ Disassembly of section .text:
                	movl	$0x16, 0x6c(%rsp)
                	movq	$0x21, 0x40(%rsp)
                	movl	$0x2c, 0x80(%rsp)
-               	movl	0x6c(%rsp), %ecx
-               	cmpl	$0x16, %ecx
+               	movl	0x6c(%rsp), %eax
+               	cmpl	$0x16, %eax
                	jne	<addr>
-               	leaq	0x40(%rsp), %rcx
-               	andq	$0x3f, %rcx
-               	orq	%rcx, %rax
-               	testq	%rax, %rax
+               	orq	%rdx, %rcx
+               	testq	%rcx, %rcx
                	je	<addr>
                	movl	$0x3, %eax
                	leave

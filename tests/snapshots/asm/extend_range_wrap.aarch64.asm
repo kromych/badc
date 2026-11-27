@@ -3,7 +3,7 @@ extend_range_wrap.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -32,10 +32,9 @@ Disassembly of section .text:
 
 <guarded>:
                	sxtw	x0, w0
-               	mov	x1, #0x0                // =0
-               	add	x2, x0, #0x1
+               	add	x1, x0, #0x1
                	cmp	w0, #0x64
-               	csel	x0, x2, x1, lt
+               	csel	x0, x1, xzr, lt
                	ret
 
 <uwrap>:
@@ -132,10 +131,10 @@ Disassembly of section .text:
 
 <diff_zero>:
                	sub	x0, x0, x1
-               	mov	x1, #0x7                // =7
-               	mov	x2, #0x9                // =9
                	cmp	w0, #0x0
-               	csel	x0, x2, x1, ne
+               	mov	x16, #0x9               // =9
+               	mov	x17, #0x7               // =7
+               	csel	x0, x16, x17, ne
                	ret
 
 <main>:
@@ -250,7 +249,7 @@ Disassembly of section .text:
                	ret
                	ldur	w0, [x29, #-0x10]
                	mov	x1, #0x2                // =2
-               	mov	x2, x1
+               	mov	x2, #0x2                // =2
                	bl	<addr>
                	cmp	w0, #0x1
                	b.eq	<addr>
@@ -280,9 +279,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	ldur	w1, [x29, #-0x10]
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
-               	ldur	w1, [x29, #-0x10]
                	mov	x2, #0x2                // =2
                	bl	<addr>
                	cmp	x0, #0x16

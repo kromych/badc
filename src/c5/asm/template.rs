@@ -56,7 +56,7 @@ fn split_operand_ref(s: &str) -> Option<(Option<u8>, u8, &str)> {
 /// Whether each reference is substitutable is settled at emit time, once the
 /// operands' constants are known.
 pub(crate) fn is_asm_symbol_template(s: &str) -> bool {
-    // GNU as symbol names take letters, digits, `_` and `.`; the first
+    // Symbol names take letters, digits, `_` and `.`; the first
     // character must not be a digit. A name of dots alone is the
     // location counter (`.`), not a symbol.
     let sym_char = |c: u8| c.is_ascii_alphanumeric() || c == b'_' || c == b'.';
@@ -281,8 +281,8 @@ pub(crate) fn parse_raw_template(template: &[u8]) -> Option<alloc::vec::Vec<u8>>
     any.then_some(out)
 }
 
-/// Byte list `.inst` expands to. GNU as assembles `.inst` into
-/// instructions, so the bytes carry the code class a `.byte` list does not;
+/// Byte list `.inst` expands to. `.inst` assembles into instructions, so
+/// the bytes carry the code class a `.byte` list does not;
 /// the name is internal and cannot collide with a source directive.
 pub(crate) const INST_BYTES_DIRECTIVE: &str = ".c5_inst_bytes";
 
@@ -298,8 +298,8 @@ pub(crate) fn data_directive_width(tok: &str) -> Option<usize> {
     })
 }
 
-/// [`data_directive_width`] with x86's `.value`, which GNU as defines for
-/// that architecture alone, a 2-byte element.
+/// [`data_directive_width`] with x86's `.value`, a 2-byte element that
+/// architecture alone defines.
 pub(crate) fn x86_data_directive_width(tok: &str) -> Option<usize> {
     match tok {
         ".value" => Some(2),

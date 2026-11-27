@@ -3,7 +3,7 @@ section_attr_flexible_array_tail.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -22,14 +22,14 @@ Disassembly of section .text:
 <main>:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
+               	adrp	x4, <page>
+               	add	x4, x4, <lo12>
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	ldrb	w2, [x0]
                	cbz	x2, <addr>
-               	ldrb	w4, [x1]
-               	cmp	w2, w4
+               	ldrb	w3, [x1]
+               	cmp	w2, w3
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	add	x1, x1, #0x1
@@ -49,11 +49,11 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
-               	mov	x1, x3
+               	mov	x1, x4
                	ldrb	w2, [x1]
                	cbz	x2, <addr>
-               	ldrb	w4, [x0]
-               	cmp	w2, w4
+               	ldrb	w3, [x0]
+               	cmp	w2, w3
                	b.ne	<addr>
                	add	x1, x1, #0x1
                	add	x0, x0, #0x1
@@ -71,13 +71,13 @@ Disassembly of section .text:
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
                	ret
-               	add	x0, x3, #0x20
+               	add	x0, x4, #0x20
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	ldrb	w2, [x0]
                	cbz	x2, <addr>
-               	ldrb	w4, [x1]
-               	cmp	w2, w4
+               	ldrb	w3, [x1]
+               	cmp	w2, w3
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	add	x1, x1, #0x1
@@ -87,13 +87,13 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	cmp	w0, w1
                	b.ne	<addr>
-               	add	x0, x3, #0x2b
+               	add	x0, x4, #0x2b
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	ldrb	w2, [x0]
                	cbz	x2, <addr>
-               	ldrb	w4, [x1]
-               	cmp	w2, w4
+               	ldrb	w3, [x1]
+               	cmp	w2, w3
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	add	x1, x1, #0x1
@@ -103,13 +103,13 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	cmp	w0, w1
                	b.ne	<addr>
-               	add	x0, x3, #0x36
+               	add	x0, x4, #0x36
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	ldrb	w2, [x0]
                	cbz	x2, <addr>
-               	ldrb	w4, [x1]
-               	cmp	w2, w4
+               	ldrb	w3, [x1]
+               	cmp	w2, w3
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	add	x1, x1, #0x1
@@ -119,12 +119,12 @@ Disassembly of section .text:
                	ldrb	w1, [x1]
                	cmp	w0, w1
                	b.ne	<addr>
-               	add	x1, x3, #0x41
+               	add	x1, x4, #0x41
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	cmp	x0, x1
                	b.hs	<addr>
-               	cmp	x0, x3
+               	cmp	x0, x4
                	b.lo	<addr>
                	mov	x0, #0x8                // =8
                	ret

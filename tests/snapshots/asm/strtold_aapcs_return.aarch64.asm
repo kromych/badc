@@ -3,7 +3,7 @@ strtold_aapcs_return.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -83,12 +83,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x20
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
                	add	x16, sp, #0x40
                	bl	<addr>
                	fmov	d0, x16
+               	sub	x0, x29, #0x20
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
                	bl	<addr>
                	cmp	w0, #0x0
                	b.gt	<addr>

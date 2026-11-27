@@ -3,7 +3,7 @@ search_tables_trees_and_queues.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -283,9 +283,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x1, x29, #0x20
-               	mov	x3, #0x4                // =4
                	add	x0, x1, #0x4
                	sub	x2, x29, #0x80
+               	mov	x3, #0x4                // =4
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
                	bl	<addr>

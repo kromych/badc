@@ -3,7 +3,7 @@ range_guard_field_reload.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -34,11 +34,10 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	mov	x1, #0x7                // =7
                	str	w1, [x0, #0x38]
+               	adrp	x0, <page>
+               	ldr	x1, [x0, #0x10]
                	sub	x0, x29, #0x18
-               	adrp	x1, <page>
-               	ldr	x1, [x1, <lo12>]
                	blr	x1
-               	sub	x2, x29, #0x18
                	ldur	x0, [x29, #-0x10]
                	mov	x17, #0x7fffffffffffffff // =9223372036854775807
                	cmp	x0, x17
@@ -48,8 +47,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldur	w1, [x29, #-0x8]
-               	mov	x3, #0x7fffffffffffffff // =9223372036854775807
-               	sub	x0, x3, x0
+               	mov	x2, #0x7fffffffffffffff // =9223372036854775807
+               	sub	x0, x2, x0
                	cmp	x1, x0
                	csel	x0, x1, x0, lo
                	cmp	w0, #0x7
@@ -62,9 +61,8 @@ Disassembly of section .text:
                	str	w1, [x0, #0x38]
                	adrp	x0, <page>
                	ldr	x1, [x0, #0x10]
-               	mov	x0, x2
+               	sub	x0, x29, #0x18
                	blr	x1
-               	sub	x2, x29, #0x18
                	ldur	x0, [x29, #-0x10]
                	mov	x17, #0x7fffffffffffffff // =9223372036854775807
                	cmp	x0, x17
@@ -74,8 +72,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldur	w1, [x29, #-0x8]
-               	mov	x3, #0x7fffffffffffffff // =9223372036854775807
-               	sub	x0, x3, x0
+               	mov	x2, #0x7fffffffffffffff // =9223372036854775807
+               	sub	x0, x2, x0
                	cmp	x1, x0
                	csel	x0, x1, x0, lo
                	cmp	w0, #0x3
@@ -86,7 +84,7 @@ Disassembly of section .text:
                	str	x1, [x0, #0x30]
                	adrp	x0, <page>
                	ldr	x1, [x0, #0x10]
-               	mov	x0, x2
+               	sub	x0, x29, #0x18
                	blr	x1
                	ldur	x0, [x29, #-0x10]
                	mov	x17, #0x7fffffffffffffff // =9223372036854775807

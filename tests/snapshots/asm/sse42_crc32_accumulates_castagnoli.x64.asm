@@ -3,7 +3,7 @@ sse42_crc32_accumulates_castagnoli.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -36,54 +36,56 @@ Disassembly of section .text:
                	shrxq	%r8, %rsi, %r8
                	andq	$0xff, %r8
                	xorq	%rdi, %r8
-               	movl	%r8d, %edi
-               	movq	%rdi, %r8
-               	shrq	%r8
-               	andq	$0x1, %rdi
-               	negq	%rdi
-               	andq	%rax, %rdi
+               	movl	%r8d, %r8d
+               	movq	%r8, %rdi
+               	shrq	%rdi
+               	andq	$0x1, %r8
+               	negq	%r8
+               	andq	%rax, %r8
                	xorq	%r8, %rdi
                	movq	%rdi, %r8
                	shrq	%r8
                	andq	$0x1, %rdi
                	negq	%rdi
                	andq	%rax, %rdi
+               	xorq	%rdi, %r8
+               	movq	%r8, %rdi
+               	shrq	%rdi
+               	andq	$0x1, %r8
+               	negq	%r8
+               	andq	%rax, %r8
                	xorq	%r8, %rdi
                	movq	%rdi, %r8
                	shrq	%r8
                	andq	$0x1, %rdi
                	negq	%rdi
                	andq	%rax, %rdi
+               	xorq	%rdi, %r8
+               	movq	%r8, %rdi
+               	shrq	%rdi
+               	andq	$0x1, %r8
+               	negq	%r8
+               	andq	%rax, %r8
                	xorq	%r8, %rdi
                	movq	%rdi, %r8
                	shrq	%r8
                	andq	$0x1, %rdi
                	negq	%rdi
                	andq	%rax, %rdi
-               	xorq	%r8, %rdi
-               	movq	%rdi, %r8
-               	shrq	%r8
-               	andq	$0x1, %rdi
+               	xorq	%rdi, %r8
+               	movq	%r8, %r9
+               	shrq	%r9
+               	andq	$0x1, %r8
+               	movq	%r8, %rdi
                	negq	%rdi
                	andq	%rax, %rdi
-               	xorq	%r8, %rdi
-               	movq	%rdi, %r8
-               	shrq	%r8
-               	andq	$0x1, %rdi
-               	negq	%rdi
-               	andq	%rax, %rdi
-               	xorq	%r8, %rdi
-               	movq	%rdi, %r8
-               	shrq	%r8
-               	andq	$0x1, %rdi
-               	negq	%rdi
-               	andq	%rax, %rdi
-               	xorq	%r8, %rdi
-               	movq	%rdi, %r8
-               	shrq	%r8
-               	andq	$0x1, %rdi
-               	negq	%rdi
-               	andq	%rax, %rdi
+               	xorq	%rdi, %r9
+               	movq	%r9, %rdi
+               	shrq	%rdi
+               	andq	$0x1, %r9
+               	movq	%r9, %r8
+               	negq	%r8
+               	andq	%rax, %r8
                	xorq	%r8, %rdi
                	incq	%rcx
                	cmpl	%edx, %ecx
@@ -152,22 +154,23 @@ Disassembly of section .text:
                	movl	-0x4(%rbp), %edx
                	movl	%edi, %edi
                	crc32l	%edx, %edi
+               	movq	%rax, %rdx
                	movabsq	$0x3837363534333231, %r10 # imm = 0x3837363534333231
-               	crc32q	%r10, %rax
-               	movl	%esi, %edx
+               	crc32q	%r10, %rdx
+               	movl	%esi, %eax
                	movl	$0x39, %r10d
-               	crc32b	%r10b, %edx
+               	crc32b	%r10b, %eax
                	movl	%edi, %esi
                	movl	$0x39, %r10d
                	crc32b	%r10b, %esi
-               	movl	%eax, %eax
+               	movl	%edx, %edx
                	movl	$0x39, %r10d
-               	crc32b	%r10b, %eax
+               	crc32b	%r10b, %edx
                	xorq	$-0x1, %rcx
                	cmpl	$0xe3069283, %ecx       # imm = 0xE3069283
                	jne	<addr>
-               	xorq	$-0x1, %rdx
-               	cmpl	$0xe3069283, %edx       # imm = 0xE3069283
+               	xorq	$-0x1, %rax
+               	cmpl	$0xe3069283, %eax       # imm = 0xE3069283
                	jne	<addr>
                	xorq	$-0x1, %rsi
                	cmpl	$0xe3069283, %esi       # imm = 0xE3069283
@@ -179,6 +182,7 @@ Disassembly of section .text:
                	popq	%r14
                	leave
                	retq
+               	movq	%rdx, %rax
                	xorq	$-0x1, %rax
                	cmpl	$0xe3069283, %eax       # imm = 0xE3069283
                	je	<addr>
@@ -198,9 +202,9 @@ Disassembly of section .text:
                	addq	%rax, %rbx
                	movq	%r12, %r14
                	crc32q	%rbx, %r14
-               	movl	$0x8, %edx
                	movq	%r12, %rdi
                	movq	%rbx, %rsi
+               	movl	$0x8, %edx
                	callq	<addr>
                	movl	%eax, %eax
                	cmpq	%rax, %r14
@@ -208,9 +212,9 @@ Disassembly of section .text:
                	movl	%ebx, %eax
                	movq	%r12, %r14
                	crc32l	%eax, %r14d
-               	movl	$0x4, %edx
                	movq	%r12, %rdi
                	movq	%rbx, %rsi
+               	movl	$0x4, %edx
                	callq	<addr>
                	cmpl	%eax, %r14d
                	jne	<addr>
@@ -218,25 +222,27 @@ Disassembly of section .text:
                	andq	$0xffff, %rax           # imm = 0xFFFF
                	movq	%r12, %r14
                	crc32w	%ax, %r14d
-               	movl	$0x2, %edx
                	movq	%r12, %rdi
                	movq	%rbx, %rsi
+               	movl	$0x2, %edx
                	callq	<addr>
+               	nopl	(%rax)
                	cmpl	%eax, %r14d
                	jne	<addr>
                	movq	%rbx, %rax
                	andq	$0xff, %rax
                	movq	%r12, %r14
                	crc32b	%al, %r14d
-               	movl	$0x1, %edx
                	movq	%r12, %rdi
                	movq	%rbx, %rsi
+               	movl	$0x1, %edx
                	callq	<addr>
                	cmpl	%eax, %r14d
                	jne	<addr>
                	movq	%rbx, %r12
                	shrq	$0x20, %r12
                	incq	%r13
+               	nopw	%cs:(%rax,%rax)
                	cmpl	$0xc8, %r13d
                	jl	<addr>
                	xorl	%eax, %eax

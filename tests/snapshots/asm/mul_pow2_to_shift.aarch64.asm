@@ -3,7 +3,7 @@ mul_pow2_to_shift.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -16,10 +16,10 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x1, #0x24c0             // =9408
-               	movk	x1, #0x7, lsl #16
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
+               	mov	x1, #0x24c0             // =9408
+               	movk	x1, #0x7, lsl #16
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10

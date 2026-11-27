@@ -3,7 +3,7 @@ ssa_fp_compare_nan.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,15 +26,14 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	xorl	%eax, %eax
                	movq	%rax, %xmm14
                	movq	%rax, %xmm15
                	vdivsd	%xmm15, %xmm14, %xmm0
                	movl	$0x1, %ecx
-               	movq	%rax, %xmm15
-               	comisd	%xmm0, %xmm15
+               	movq	%rax, %xmm14
+               	comisd	%xmm0, %xmm14
                	cmovbeq	%rax, %rcx
                	movq	%rcx, %rdx
                	orq	$0x2, %rdx
@@ -43,8 +42,8 @@ Disassembly of section .text:
                	cmovaq	%rdx, %rcx
                	movq	%rcx, %rdx
                	orq	$0x4, %rdx
-               	movq	%rax, %xmm15
-               	comisd	%xmm0, %xmm15
+               	movq	%rax, %xmm14
+               	comisd	%xmm0, %xmm14
                	cmovaeq	%rdx, %rcx
                	movq	%rcx, %rdx
                	orq	$0x8, %rdx
@@ -84,11 +83,11 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

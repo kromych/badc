@@ -3,7 +3,7 @@ struct_return_to_global.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -29,15 +29,15 @@ Disassembly of section .text:
                	movq	$0x6, <rip> # <addr>
                	movq	$0x1, <rip> # <addr>
                	xorl	%eax, %eax
-               	leaq	<rip>, %rsi # <addr>
+               	leaq	<rip>, %rdx # <addr>
                	movq	%rax, %rcx
                	shlq	$0x4, %rcx
-               	addq	%rsi, %rcx
-               	imulq	$0xa, %rax, %rdi
-               	movslq	%edi, %rdi
-               	movq	%rdi, (%rcx)
+               	addq	%rdx, %rcx
+               	imulq	$0xa, %rax, %rsi
+               	movq	%rsi, (%rcx)
                	movq	$0x1, 0x8(%rcx)
                	incq	%rax
+               	nop
                	cmpl	$0x4, %eax
                	jl	<addr>
                	movq	<rip>, %rax # <addr>

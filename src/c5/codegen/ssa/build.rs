@@ -1,9 +1,10 @@
 //! Direct construction of [`FunctionSsa`] from a syntactic walk.
 //!
-//! The builder feeds the AST walker (`irgen::walk_function`) and
-//! parser-side synthesis (`emit_sys_trampolines`, the synthetic CRT
-//! entry); anything constructed here is consumed by the allocator
-//! and per-arch emit unchanged.
+//! The builder serves the AST walker
+//! ([`crate::c5::irgen::walk_function`]) and the forwarding bodies of
+//! libc bindings ([`crate::c5::compiler::Compiler::emit_sys_trampolines`]);
+//! anything constructed here is consumed by the allocator and per-arch
+//! emit unchanged.
 //!
 //! Ergonomic API:
 //!
@@ -23,9 +24,9 @@
 //!
 //! Callers are responsible for the structural invariants the
 //! downstream passes rely on: every block has exactly one
-//! terminator; values referenced by an inst are defined earlier in
-//! the same block or reach via the virtual stack (`VstackSpill` /
-//! `VstackReload`); the entry block is block 0.
+//! terminator; a value an inst reads other than through a phi is
+//! defined earlier in the same block or in a dominating block
+//! ([`super::verify`]); the entry block is block 0.
 
 #![allow(dead_code)]
 
@@ -97,6 +98,13 @@ fn index_of(slots: &mut Vec<i64>, slot: i64) -> u32 {
 enum FrameSlot {
     Own(i64),
     Parent(i64),
+}
+
+// Cache entries a call drops on this thread, so a test can bound the
+// work by count rather than by wall clock.
+#[cfg(test)]
+std::thread_local! {
+    pub(crate) static CALL_CACHE_VISITS: core::cell::Cell<u64> = const { core::cell::Cell::new(0) };
 }
 
 /// Discriminant for the pure-value CSE cache. Imm / ImmData /
@@ -180,6 +188,8 @@ pub(crate) struct SsaBuilder {
     /// `switch_to`. Every insert is guarded by a prior `lookup_pure`,
     /// so each key maps to exactly one ValueId.
     pure_cache: hashbrown::HashMap<PureKey, ValueId>,
+    /// The operand-free keys of `pure_cache`, which a call drops.
+    operand_free: Vec<PureKey>,
     /// Per-block start indices in `func.insts`. Index is `BlockId`
     /// as `usize`. Set on [`Self::new_block`] and re-anchored by
     /// [`Self::switch_to`] -- the latter is what guarantees the
@@ -244,6 +254,7 @@ impl SsaBuilder {
             is_internal: false,
             section: None,
             patchable_entry: None,
+            type_hash: None,
             no_instrument: false,
             no_stack_protector: false,
             const_params: 0,
@@ -282,6 +293,9 @@ impl SsaBuilder {
             has_returns_twice_call: false,
             did_unroll: false,
             did_inline: false,
+            frees_rbp: false,
+            fenv_access: false,
+            ret_low_word: false,
         };
         let mut b = Self {
             func,
@@ -291,6 +305,7 @@ impl SsaBuilder {
             parent_frame: None,
             local_cache: Vec::new(),
             pure_cache: hashbrown::HashMap::new(),
+            operand_free: Vec::new(),
             block_starts: Vec::new(),
             block_ends: Vec::new(),
             block_terminators: Vec::new(),
@@ -466,7 +481,7 @@ impl SsaBuilder {
     /// bytes. Consumed by the per-arch emit's frame layout.
     pub(crate) fn set_locals(&mut self, n: i64) {
         self.func.locals = n;
-        // Slots reserved after this point are synthetic; `ssa_slot_coalesce`
+        // Slots reserved after this point are synthetic; `slot_coalesce`
         // reuses only those, leaving the declared range untouched.
         self.func.synthetic_base = n;
     }
@@ -597,6 +612,7 @@ impl SsaBuilder {
         // block's first uses (would need phi to merge them).
         self.local_cache.clear();
         self.pure_cache.clear();
+        self.operand_free.clear();
     }
 
     /// The implicit entry block (block 0). Always exists.
@@ -614,16 +630,17 @@ impl SsaBuilder {
     /// keep across it.
     fn cross_call(&mut self) {
         self.local_cache.clear();
-        self.pure_cache.retain(|k, _| {
-            !matches!(
-                k,
-                PureKey::Imm(_)
-                    | PureKey::ImmF32(_)
-                    | PureKey::ImmData(_)
-                    | PureKey::ImmCode(_)
-                    | PureKey::TlsAddr(_)
-            )
-        });
+        #[cfg(test)]
+        CALL_CACHE_VISITS.with(|n| n.set(n.get() + self.operand_free.len() as u64));
+        for key in self.operand_free.drain(..) {
+            self.pure_cache.remove(&key);
+        }
+    }
+
+    /// Cache an operand-free value, which [`Self::cross_call`] drops.
+    fn cache_operand_free(&mut self, key: PureKey, id: ValueId) {
+        self.pure_cache.insert(key, id);
+        self.operand_free.push(key);
     }
 
     fn lookup_pure(&self, key: PureKey) -> Option<ValueId> {
@@ -691,10 +708,11 @@ impl SsaBuilder {
         self.push(Inst::RetPart { slot: 0, kind })
     }
 
-    /// Record the declared return type. See
-    /// [`FunctionSsa::ret_type_tag`].
-    pub(crate) fn set_ret_type_tag(&mut self, tag: i64) {
+    /// Record the declared return type and whether `target` returns it in
+    /// the low word. See [`FunctionSsa::ret_type_tag`].
+    pub(crate) fn set_ret_type_tag(&mut self, tag: i64, target: crate::c5::Target) {
         self.func.ret_type_tag = Some(tag);
+        self.func.ret_low_word = crate::c5::codegen::return_rides_low_word(tag, target);
     }
 
     /// The accumulated per-parameter FP mask. See
@@ -853,7 +871,7 @@ impl SsaBuilder {
             return cached;
         }
         let id = self.push(Inst::Imm(v));
-        self.pure_cache.insert(PureKey::Imm(v), id);
+        self.cache_operand_free(PureKey::Imm(v), id);
         id
     }
 
@@ -866,7 +884,7 @@ impl SsaBuilder {
             return cached;
         }
         let id = self.push(Inst::Imm(v));
-        self.pure_cache.insert(PureKey::ImmF32(v), id);
+        self.cache_operand_free(PureKey::ImmF32(v), id);
         self.mark_f32(id)
     }
 
@@ -879,7 +897,7 @@ impl SsaBuilder {
             return cached;
         }
         let id = self.push(Inst::ImmData(off));
-        self.pure_cache.insert(PureKey::ImmData(off), id);
+        self.cache_operand_free(PureKey::ImmData(off), id);
         id
     }
 
@@ -900,7 +918,7 @@ impl SsaBuilder {
             return cached;
         }
         let id = self.push(Inst::ImmCode(target_pc));
-        self.pure_cache.insert(PureKey::ImmCode(target_pc), id);
+        self.cache_operand_free(PureKey::ImmCode(target_pc), id);
         id
     }
 
@@ -964,11 +982,9 @@ impl SsaBuilder {
     }
 
     /// `Inst::AllocaInit` -- the frame offset of the per-function alloca
-    /// bookkeeping slot. Slot 0 means "no alloca in this function"; the
-    /// per-arch emit short-circuits and writes nothing for the
-    /// zero case. The walker emits one per function so the
-    /// codegen's per-function state (`current_alloca_top`)
-    /// initializes consistently across SSA producers.
+    /// bookkeeping slot. Slot 0 means "no alloca in this function"; a
+    /// nonzero slot gives the frame a stack pointer that moves at run
+    /// time. It emits no code.
     pub(crate) fn alloca_init(&mut self, slot: i64) -> ValueId {
         self.push(Inst::AllocaInit(slot))
     }
@@ -1020,7 +1036,7 @@ impl SsaBuilder {
         }
         self.local_cache.clear();
         let id = self.push(Inst::TlsAddr(off));
-        self.pure_cache.insert(PureKey::TlsAddr(off), id);
+        self.cache_operand_free(PureKey::TlsAddr(off), id);
         id
     }
 
@@ -1685,7 +1701,7 @@ impl SsaBuilder {
     /// `Inst::FpCast`. Pure value; same input + same kind ->
     /// same output. CSE-eligible. The f32-ness of the result is set
     /// from `kind`: `F64ToF32` and `IntToFp`-to-float callers mark via
-    /// the dedicated [`Self::fp_narrow`] / [`Self::mark_f32`] helpers;
+    /// the dedicated [`Self::fp_narrow_to_f32`] / [`Self::mark_f32`] helpers;
     /// `F32ToF64` clears it.
     pub(crate) fn fp_cast(&mut self, kind: FpCastKind, value: ValueId) -> ValueId {
         let key = PureKey::FpCast {
@@ -1764,6 +1780,7 @@ impl SsaBuilder {
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
+            parts: Vec::new(),
         })
     }
 
@@ -1793,6 +1810,7 @@ impl SsaBuilder {
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
+            parts: Vec::new(),
         });
         self.func.extern_call_refs.push((v, sym_idx));
         v
@@ -1824,6 +1842,7 @@ impl SsaBuilder {
             arg_aggs: alloc::vec::Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
+            parts: Vec::new(),
         })
     }
 

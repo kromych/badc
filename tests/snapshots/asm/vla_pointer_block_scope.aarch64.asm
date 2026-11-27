@@ -3,7 +3,7 @@ vla_pointer_block_scope.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -17,52 +17,52 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40
-               	sub	x1, x29, #0x40
-               	add	x0, x1, #0x1
-               	sub	x0, x0, x1
-               	cmp	x0, #0x1
+               	sub	x0, x29, #0x40
+               	add	x1, x0, #0x1
+               	sub	x1, x1, x0
+               	cmp	x1, #0x1
                	cset	x5, ne
                	adrp	x3, <page>
-               	ldr	x0, [x3, #0x20]
+               	ldr	x1, [x3, #0x20]
                	mov	x2, #0x0                // =0
-               	cbz	x0, <addr>
-               	add	x4, x0, #0x1
-               	sub	x0, x4, x0
-               	cmp	x0, #0x1
+               	cbz	x1, <addr>
+               	add	x4, x1, #0x1
+               	sub	x1, x4, x1
+               	cmp	x1, #0x1
                	cset	x4, ne
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	x0, [x3, #0x20]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	str	x1, [x3, #0x20]
                	orr	x4, x5, x4
-               	add	x5, x1, #0x2
-               	sub	x5, x5, x1
+               	add	x5, x0, #0x2
+               	sub	x5, x5, x0
                	cmp	x5, #0x2
                	cset	x5, ne
                	orr	x5, x4, x5
-               	cbz	x0, <addr>
-               	add	x4, x0, #0x2
-               	sub	x4, x4, x0
+               	cbz	x1, <addr>
+               	add	x4, x1, #0x2
+               	sub	x4, x4, x1
                	cmp	x4, #0x2
                	cset	x4, ne
-               	str	x0, [x3, #0x20]
+               	str	x1, [x3, #0x20]
                	orr	x4, x5, x4
-               	add	x5, x1, #0x4
-               	sub	x5, x5, x1
+               	add	x5, x0, #0x4
+               	sub	x5, x5, x0
                	cmp	x5, #0x4
                	cset	x5, ne
                	orr	x4, x4, x5
-               	cbz	x0, <addr>
-               	add	x2, x0, #0x4
-               	sub	x2, x2, x0
+               	cbz	x1, <addr>
+               	add	x2, x1, #0x4
+               	sub	x2, x2, x1
                	cmp	x2, #0x4
                	cset	x2, ne
-               	str	x0, [x3, #0x20]
-               	orr	x0, x4, x2
-               	add	x2, x1, #0x8
-               	sub	x1, x2, x1
-               	cmp	x1, #0x8
-               	cset	x1, ne
-               	orr	x4, x0, x1
+               	str	x1, [x3, #0x20]
+               	orr	x1, x4, x2
+               	add	x2, x0, #0x8
+               	sub	x0, x2, x0
+               	cmp	x0, #0x8
+               	cset	x0, ne
+               	orr	x4, x1, x0
                	adrp	x2, <page>
                	ldr	x0, [x2, #0x20]
                	mov	x1, #0x0                // =0

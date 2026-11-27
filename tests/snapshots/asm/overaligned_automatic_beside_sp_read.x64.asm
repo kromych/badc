@@ -3,7 +3,7 @@ overaligned_automatic_beside_sp_read.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -58,29 +58,30 @@ Disassembly of section .text:
                	movl	$0xa, %esi
                	callq	<addr>
                	leaq	(%rsp), %rax
-               	movq	-0x8(%rbp), %rcx
-               	movq	%rax, %rdx
-               	andq	$0x3f, %rdx
-               	testl	%edx, %edx
-               	setne	%dl
-               	movzbq	%dl, %rdx
+               	movq	-0x8(%rbp), %rdx
+               	movq	%rax, %rcx
+               	andq	$0x3f, %rcx
+               	testl	%ecx, %ecx
+               	setne	%cl
+               	movzbq	%cl, %rcx
                	movsbq	0x3f(%rsp), %rsi
                	cmpl	$0x3, %esi
                	setne	%sil
                	movzbq	%sil, %rsi
                	shlq	%rsi
-               	orq	%rsi, %rdx
+               	orq	%rsi, %rcx
                	movl	$0x1, %esi
                	movq	%rax, %rdi
-               	subq	%rcx, %rdi
+               	subq	%rdx, %rdi
                	cmpq	$0x1000, %rdi           # imm = 0x1000
                	seta	%dil
                	movzbq	%dil, %rdi
-               	cmpq	%rcx, %rax
-               	cmovaeq	%rdi, %rsi
-               	shlq	$0x2, %rsi
-               	orq	%rsi, %rdx
-               	movq	%rdx, %rax
+               	cmpq	%rdx, %rax
+               	movq	%rdi, %rax
+               	cmovbq	%rsi, %rax
+               	shlq	$0x2, %rax
+               	orq	%rax, %rcx
+               	movq	%rcx, %rax
                	leaq	-0x40(%rbp), %rsp
                	popq	%rbx
                	popq	%r12
@@ -135,9 +136,10 @@ Disassembly of section .text:
                	seta	%sil
                	movzbq	%sil, %rsi
                	cmpq	%rbx, %rax
-               	cmovaeq	%rsi, %rdx
-               	shlq	$0x2, %rdx
-               	orq	%rdx, %rcx
+               	movq	%rsi, %rax
+               	cmovbq	%rdx, %rax
+               	shlq	$0x2, %rax
+               	orq	%rax, %rcx
                	movq	%rcx, %rax
                	leaq	-0x40(%rbp), %rsp
                	popq	%rbx
@@ -149,22 +151,21 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0xa, %edi
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0xa, %edi
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

@@ -8,7 +8,7 @@
 /// Each intrinsic is its one instruction on the argument registers under
 /// `-O`; a 64-bit single-lane form is the scalar instruction on D views,
 /// and `vclt` is `cmgt` with the operands swapped.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_intrinsics_emit_their_instruction() {
     use crate::{NativeOptions, Target};
@@ -47,7 +47,7 @@ fn the_intrinsics_emit_their_instruction() {
 /// between the float and double lanes, each lane `dup` and table lookup,
 /// and each shift by an immediate, an accumulating one in its first
 /// operand's register.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_permutes_emit_their_instruction() {
     use crate::{NativeOptions, Target};
@@ -206,7 +206,7 @@ fn the_interpreter_runs_the_integer_intrinsics() {
 /// A GNU vector comparison, a shift by a constant count and a negation are
 /// the target's one instruction for the whole vector where it has one
 /// (`simd::find`): `<` is `cmgt` with the operands swapped.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_vector_operators_take_the_rows() {
     use crate::{NativeOptions, Target};
@@ -408,7 +408,7 @@ fn the_interpreter_runs_the_loads_stores_and_broadcasts() {
 /// `vmovl_high` lengthens the high half: one `sxtl2` / `uxtl2` (the
 /// `sshll2` / `ushll2` #0 alias) under `-O`, and in the interpreter the
 /// lanes from the middle of the source.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_high_lengthening_moves_read_the_high_half() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -441,7 +441,7 @@ fn the_high_lengthening_moves_read_the_high_half() {
 /// The precision conversions of the high half: `vcvt_high_f64_f32` is
 /// `fcvtl2`, and `vcvt_high_f32_f64` narrows into a register and inserts
 /// it above the low half; the interpreter computes both.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_high_precision_conversions_are_rows() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -465,7 +465,7 @@ fn the_high_precision_conversions_are_rows() {
 /// `vmul_p8` multiplies each byte lane as a polynomial over GF(2), keeping
 /// the low eight bits: one `pmul` under -O, the carry-less product in the
 /// interpreter and in the constant folder.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_polynomial_multiply_is_a_row() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -504,7 +504,7 @@ fn the_polynomial_multiply_is_a_row() {
 /// zero to an integer, saturating at the range and a NaN to zero, and an
 /// unsigned 64-bit lane to a `double` rounded once. Hardware, the
 /// interpreter and the constant folder agree on each edge.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_lane_conversions_saturate_as_the_instructions_do() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -548,7 +548,7 @@ fn the_lane_conversions_saturate_as_the_instructions_do() {
 /// MixColumns. The interpreter's checksum of a round each way is the one
 /// AArch64 hardware and clang compute (148); under -O each is one
 /// instruction, the round on its state's register.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_aes_rounds_are_rows() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -582,7 +582,7 @@ fn the_aes_rounds_are_rows() {
 /// `pmull2` of bytes into halfwords and of doublewords into the 128-bit
 /// lane, which hardware, clang's results, the interpreter and the
 /// constant folder agree on.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_polynomial_long_products_are_rows() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -634,9 +634,8 @@ fn the_polynomial_long_products_are_rows() {
 
 /// `poly128_t` is the 128-bit unsigned integer the ACLE specifies: code
 /// shifts, converts and compares it as one -- the high half of a product is
-/// `pmull` and `mov x0, v0.d[1]` -- and a subscript of it is an error, as
-/// with clang and gcc.
-#[cfg(feature = "full")]
+/// `pmull` and `mov x0, v0.d[1]` -- and a subscript of it is an error.
+#[cfg(feature = "linker")]
 #[test]
 fn poly128_t_is_a_128_bit_integer() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -670,7 +669,7 @@ fn poly128_t_is_a_128_bit_integer() {
 /// The FEAT_SHA3 bitwise forms are rows: `eor3` and `bcax` over four
 /// registers, `rax1` and `xar` over the 64-bit lanes. Hardware, clang and
 /// the interpreter agree, and each is one instruction under -O.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_sha3_bitwise_forms_are_rows() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -712,7 +711,7 @@ fn the_sha3_bitwise_forms_are_rows() {
 /// of each over a seeded state give the checksum AArch64 hardware and
 /// clang give (34) in the interpreter, and each is one instruction under
 /// -O, the hash naming its state halves as q registers.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_sha256_updates_are_rows() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -760,7 +759,7 @@ fn the_sha256_updates_are_rows() {
 /// give (112) in the interpreter, and each is one instruction under -O
 /// after `e` moves to an s register; `vsha1h_u32` is the rotation in a
 /// general register.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_sha1_updates_are_rows() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -805,7 +804,7 @@ fn the_sha1_updates_are_rows() {
 /// The SHA-512 hash and schedule updates are rows: eight chained rounds of
 /// each over a seeded state give the checksum AArch64 hardware and clang
 /// give (247) in the interpreter, and each is one instruction under -O.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_sha512_updates_are_rows() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -854,7 +853,7 @@ fn the_sha512_updates_are_rows() {
 /// negated, and the u32 forms' fractions. Over seeded lanes the
 /// interpreter's results hash to the hardware's, and each is one
 /// instruction under -O, the f64 forms the scalar d-register one.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_estimates_and_steps_are_rows() {
     for fixture in [
@@ -889,7 +888,7 @@ fn the_estimates_and_steps_are_rows() {
 /// The compares against zero are rows of the `#0` forms: over seeded lanes
 /// the interpreter's results hash to the hardware's, and each is one
 /// instruction under -O, a 64-bit lane the scalar d-register form.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_compares_against_zero_are_rows() {
     let src = super::load_fixture("arm_neon_compares_against_zero_on_seeded_lanes.c");
@@ -921,7 +920,7 @@ fn the_compares_against_zero_are_rows() {
 /// interpreter's results hash to the hardware's, and each is one
 /// instruction under -O -- `shll` for a shift by the lane width, and the
 /// pairwise accumulation in its accumulator's register.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_qshlu_shll_and_padal_forms_are_rows() {
     let src = super::load_fixture("arm_neon_qshlu_shll_and_padal_on_seeded_lanes.c");
@@ -952,7 +951,7 @@ fn the_qshlu_shll_and_padal_forms_are_rows() {
 /// The saturating narrowing shifts are rows: over seeded lanes the
 /// interpreter's results hash to the hardware's, and each is one
 /// instruction under -O.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_saturating_narrowing_shifts_are_rows() {
     let src = super::load_fixture("arm_neon_saturating_narrowing_shifts_on_seeded_lanes.c");
@@ -976,7 +975,7 @@ fn the_saturating_narrowing_shifts_are_rows() {
 /// pairwise forms and the reductions are rows: over seeded lanes with
 /// NaNs, zeros and infinities the interpreter's results hash to the
 /// hardware's, and each is one instruction under -O, `vaddvq_f32` two.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_float_pairwise_and_maxnum_forms_are_rows() {
     let src = super::load_fixture("arm_neon_float_pairwise_and_maxnum_on_seeded_lanes.c");
@@ -1008,7 +1007,7 @@ fn the_float_pairwise_and_maxnum_forms_are_rows() {
 /// rounding directions the interpreter's results and flags hash to the
 /// hardware's, and each is one instruction under -O, a float64x1_t the
 /// scalar d-register form.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_roundings_are_rows() {
     let src = super::load_fixture("arm_neon_roundings_on_seeded_lanes.c");
@@ -1036,7 +1035,7 @@ fn the_roundings_are_rows() {
 /// are rows: over seeded lanes the interpreter's results and flags hash
 /// to the hardware's, and each is one instruction under -O, a float64x1_t
 /// the scalar d-register form.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_rounding_and_fixed_point_conversions_are_rows() {
     let src = super::load_fixture("arm_neon_conversions_on_seeded_lanes.c");
@@ -1066,7 +1065,7 @@ fn the_rounding_and_fixed_point_conversions_are_rows() {
 /// that saturate the interpreter's results hash to the hardware's, and
 /// each is one instruction under -O, an accumulating one in its
 /// accumulator's register.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_doubling_multiplies_are_rows() {
     let src = super::load_fixture("arm_neon_doubling_multiplies_on_seeded_lanes.c");
@@ -1095,7 +1094,7 @@ fn the_doubling_multiplies_are_rows() {
 /// instruction under -O naming its lane; a halfword element in v16 or above,
 /// which the encoding cannot name, is broadcast first and takes the vector
 /// form, as at -O0. The float vmla multiplies and adds in two roundings.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_lane_indexed_forms_are_by_element_rows() {
     let src = super::load_fixture("arm_neon_lane_indexed_forms_on_seeded_lanes.c");
@@ -1135,7 +1134,7 @@ fn the_lane_indexed_forms_are_by_element_rows() {
 /// hardware's (the I8MM fixture's on hardware that has it, which the M1
 /// host lacks), and each is one instruction under -O, a lane form naming
 /// its 4-byte group.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_dot_products_are_rows() {
     for fixture in [
@@ -1193,7 +1192,7 @@ fn the_scalar_rdm_lane_forms_saturate_as_the_hardware_does() {
 /// reversal are rows: over seeded lanes the interpreter's results hash to
 /// the hardware's, and each is one instruction under -O, `vcalt` the
 /// `facgt` with its operands swapped.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_magnitude_compares_and_high_narrowing_forms_are_rows() {
     let src = super::load_fixture(
@@ -1224,7 +1223,7 @@ fn the_magnitude_compares_and_high_narrowing_forms_are_rows() {
 /// interpreter's results hash to the hardware's. Two and four vectors
 /// deinterleave by the permutes: `vld2q_u8` is two loads and `uzp1` /
 /// `uzp2` under -O.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_structure_loads_and_stores_move_the_instructions_bytes() {
     let src = super::load_fixture("arm_neon_structure_loads_and_stores_on_seeded_bytes.c");
@@ -1253,7 +1252,7 @@ fn the_structure_loads_and_stores_move_the_instructions_bytes() {
 /// lanes the interpreter's results hash to the hardware's. A lookup in two
 /// 16-byte tables is `tbl` in the first and `tbx` in the second at the
 /// index less 16.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_multi_register_table_lookups_are_one_register_lookups_in_turn() {
     let src = super::load_fixture("arm_neon_multi_register_table_lookups_on_seeded_lanes.c");
@@ -1277,7 +1276,7 @@ fn the_multi_register_table_lookups_are_one_register_lookups_in_turn() {
 /// rows: over seeded lanes the interpreter's results and flags hash to the
 /// hardware's, and each is one instruction under -O, frecpx its scalar
 /// form, the only one it has.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_qrshl_cvtx_and_recpx_forms_are_rows() {
     let src = super::load_fixture("arm_neon_qrshl_cvtx_recpx_and_poly_forms_on_seeded_lanes.c");
@@ -1338,7 +1337,7 @@ fn a_pairwise_sum_of_64_bit_lanes_wraps() {
 /// the saturating extremes the interpreter's results hash to the
 /// hardware's, and `vqadds_s32` is the vector `sqadd` between the moves in
 /// and out of v registers.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_scalar_forms_are_lane_zero_of_the_vector_forms() {
     let src = super::load_fixture("arm_neon_scalar_forms_on_seeded_values.c");
@@ -1380,11 +1379,11 @@ fn neon_keyed_code_takes_the_intrinsics() {
 }
 
 /// `vld1`, `vst1`, `vdup_n` and `vld1_dup` are the load, store and
-/// broadcast of their vector under `-O`, as with gcc 16, with no inline asm
-/// between them and the operations that use them: `ldr q`, `str q`,
-/// `dup v0.4s, w0`, `ldrh` and `dup v0.8h`, and in a loop the loads, `fmla`
-/// and the store around a broadcast made before it.
-#[cfg(feature = "full")]
+/// broadcast of their vector under `-O`, with no inline asm between them
+/// and the operations that use them: `ldr q`, `str q`, `dup v0.4s, w0`,
+/// `ldrh` and `dup v0.8h`, and in a loop the loads, `fmla` and the store
+/// around a broadcast made before it.
+#[cfg(feature = "linker")]
 #[test]
 fn the_loads_stores_and_broadcasts_are_their_instructions() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -1421,7 +1420,7 @@ fn the_loads_stores_and_broadcasts_are_their_instructions() {
 /// A half of a 128-bit vector is its 64-bit lane, and two halves combine
 /// into one register: `mov d, v.d[1]`, nothing for the low half, `ins` and
 /// `zip1`.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_halves_and_their_combination_are_lane_moves() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -1450,7 +1449,7 @@ fn the_halves_and_their_combination_are_lane_moves() {
 /// subscripts of the vector in its register: `ins` of the lane, `ld1` /
 /// `st1` of one lane through the pointer, `str` of lane 0 and
 /// `mov d, v.d[1]`, with nothing for lane 0 of a 64-bit broadcast.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_lane_writes_stores_and_broadcasts_are_register_moves() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -1480,7 +1479,7 @@ fn the_lane_writes_stores_and_broadcasts_are_register_moves() {
 
 /// A lane of an 8-byte vector is read and written in its register, as a
 /// 16-byte vector's is: `smov` and `ins` on the D register.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn an_8_byte_vector_lane_stays_in_its_register() {
     use crate::{NativeOptions, Target};
@@ -1559,7 +1558,7 @@ fn sve_values_survive_calls_and_register_exhaustion() {
 /// Under `-O` an SVE object whose address is not taken takes no storage.
 /// Across a call it takes a slot of the VL-scaled region: forty vectors and
 /// twenty predicates take 43 vector lengths, and none takes z8-z15.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn sve_values_without_an_address_take_registers_and_vl_slots() {
     let words = |src: &str, name: &str| super::perf_codegen::a64_at(src, name, true);
@@ -1607,7 +1606,7 @@ fn sve_values_without_an_address_take_registers_and_vl_slots() {
 
 /// A vector slot more than 256 vector lengths into the region, past the
 /// reach of `[base, #imm, mul vl]`, takes its base from `addvl`.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn far_sve_slots_step_the_base_with_addvl() {
     let mut src =
@@ -1639,7 +1638,7 @@ fn far_sve_slots_step_the_base_with_addvl() {
 
 /// `&x` of an SVE object is a pointer to it: passed to a function, the
 /// argument register takes the object's base.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn an_sve_object_s_address_is_a_pointer_argument() {
     const SRC: &str = "#include <arm_sve.h>\n\
@@ -1660,7 +1659,7 @@ fn an_sve_object_s_address_is_a_pointer_argument() {
 /// The SVE object's storage is the vector length (`cntb`) or the
 /// predicate length (`cntd`) of bytes, and a copy is `ldr` and `str` of a
 /// whole Z or P register, the value's own.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn sve_copies_are_whole_register_loads_and_stores() {
     const SRC: &str = "#include <arm_sve.h>\n\
@@ -1679,7 +1678,7 @@ fn sve_copies_are_whole_register_loads_and_stores() {
 
 /// With no FP register to take, an SVE vector spills to the VL-scaled
 /// region, one vector length `addvl` reserves, at `[base, #-1, mul vl]`.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn sve_vectors_spill_to_the_vl_scaled_region() {
     const SRC: &str = "#include <arm_sve.h>\n\
@@ -1731,7 +1730,7 @@ fn sve_arguments_and_results_follow_the_sve_pcs() {
 /// floating-point arguments advance too, and a predicate p[NPRN]; past z7
 /// and p3 the caller passes the address of a copy in its VL-scaled region,
 /// in x[NGRN] or on the stack. Each callee reads its arguments there.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn sve_arguments_take_z_and_p_registers_or_a_copy_s_address() {
     const SRC: &str = include_str!("../../../tests/fixtures/sve/pcs_arguments.c");
@@ -1801,7 +1800,7 @@ fn sve_arguments_take_z_and_p_registers_or_a_copy_s_address() {
 /// values stay in z0-z7 and z24-z31. `aarch64_sve_pcs` declares the
 /// standard for a function of no SVE type. A vector across the base
 /// standard's call takes a slot, not z8-z15.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn sve_pcs_functions_preserve_z8_to_z23_and_p4_to_p15() {
     const SRC: &str = include_str!("../../../tests/fixtures/sve/pcs_preserves.c");
@@ -1872,7 +1871,7 @@ fn the_first_sve_rows_run_in_the_interpreter() {
 /// zeroing form `movprfx` of the governed lanes, the merging form into a
 /// destination holding its second operand through a scratch; an unsigned
 /// compare `cmphi`, an unsigned `svwhilelt` `whilelo`.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_sve_rows_emit_their_instructions() {
     const SRC: &str = "#include <arm_sve.h>\n\
@@ -1937,7 +1936,7 @@ fn the_sve_rows_emit_their_instructions() {
 
 /// A predicate that governs an instruction takes p0-p6; one live across a
 /// call, in its slot, is reloaded into p7 for the store it governs.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn a_governing_predicate_takes_p0_to_p6_or_is_reloaded_into_p7() {
     const SRC: &str = "#include <arm_sve.h>\n\
@@ -2039,7 +2038,7 @@ fn the_sve_shift_rows_take_unsigned_counts() {
     .map(|e| e.to_string())
     .unwrap_or_default();
     assert!(err.contains("types differ in the operand 3"), "{err}");
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     {
         const ASM: &str = "#include <arm_sve.h>\n\
             svint32_t lsl_x(svbool_t pg, svint32_t a, svuint32_t c) { return svlsl_x(pg, a, c); }\n\
@@ -2084,7 +2083,7 @@ fn the_sve_reductions_take_their_lanes_type() {
             );
         }
     }
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     {
         const ASM: &str = "#include <arm_sve.h>\n\
             int8_t maxv(svbool_t pg, svint8_t a) { return svmaxv(pg, a); }\n\
@@ -2153,7 +2152,7 @@ fn the_sve_permutes_move_lanes_across_the_vector() {
     .map(|e| e.to_string())
     .unwrap_or_default();
     assert!(err.contains("must be a constant from 0 to 63"), "{err}");
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     {
         const ASM: &str = "#include <arm_sve.h>\n\
             svint32_t dl(svint32_t a, uint32_t i) { return svdup_lane(a, i); }\n\
@@ -2212,7 +2211,7 @@ fn an_inactive_sve_lane_raises_no_floating_exception() {
 /// the bit clear, division, minimum and maximum the destructive forms,
 /// a division into its divisor's register `sdivr`, and svbic_x the
 /// unpredicated doubleword BIC.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_sve_arithmetic_rows_emit_their_instructions() {
     const SRC: &str = "#include <arm_sve.h>\n\
@@ -2291,7 +2290,7 @@ fn sve_differences_high_products_roots_and_saturation() {
             );
         }
     }
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     {
         const ASM: &str = "#include <arm_sve.h>\n\
             svint32_t abd_z(svbool_t pg, svint32_t b, svint32_t a) { return svabd_z(pg, a, b); }\n\
@@ -2342,7 +2341,7 @@ fn sve_multiply_adds_destroy_the_operand_the_destination_holds() {
             );
         }
     }
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     {
         const ASM: &str = "#include <arm_sve.h>\n\
             svint32_t mla_m(svbool_t pg, svint32_t b, svint32_t a, svint32_t c) { return svmla_m(pg, a, b, c); }\n\
@@ -2401,7 +2400,7 @@ fn sve_bit_counts_and_conversions_change_the_element_type() {
             );
         }
     }
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     {
         const ASM: &str = "#include <arm_sve.h>\n\
             svuint32_t cnt_m(svuint32_t i, svbool_t pg, svint32_t a) { return svcnt_m(i, pg, a); }\n\
@@ -2443,7 +2442,7 @@ fn sve_predicate_permutes_move_whole_lanes() {
             );
         }
     }
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     {
         const ASM: &str = "#include <arm_sve.h>\n\
             svbool_t z1(svbool_t a, svbool_t b) { return svzip1_b16(a, b); }\n\
@@ -2486,7 +2485,7 @@ fn sve_index_counts_from_its_base_by_its_step() {
             );
         }
     }
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     {
         const ASM: &str = "#include <arm_sve.h>\n\
             svint32_t i0(void) { return svindex_s32(0, 1); }\n\
@@ -2525,7 +2524,7 @@ fn sve_constant_operands_take_the_immediate_forms() {
             );
         }
     }
-    #[cfg(feature = "full")]
+    #[cfg(feature = "linker")]
     {
         const ASM: &str = "#include <arm_sve.h>\n\
             svint32_t asr_x(svbool_t pg, svint32_t a) { return svasr_n_s32_x(pg, a, 3); }\n\
@@ -2570,7 +2569,7 @@ fn sve_constant_operands_take_the_immediate_forms() {
 /// unpredicated doubleword one, a predicate form its zeroing instruction,
 /// svnot_b_z `not`, svsel `sel`, svptest `ptest` and the `cset` of the
 /// flag it reads.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_sve_logic_select_and_test_rows_emit_their_instructions() {
     const SRC: &str = "#include <arm_sve.h>\n\
@@ -2625,7 +2624,7 @@ fn the_sve_logic_select_and_test_rows_emit_their_instructions() {
 
 /// A row's predicate operands in slots reload into p7, p15 and p14 in
 /// turn; an SVE-PCS function whose row reloads one into p15 saves it.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn predicate_operands_in_slots_reload_into_p7_p15_and_p14() {
     const ACROSS: &str = "#include <arm_sve.h>\n\
@@ -2661,7 +2660,7 @@ fn predicate_operands_in_slots_reload_into_p7_p15_and_p14() {
 /// lanes of up to 4 bytes that of its scalar, so under `-O` no extension
 /// of a 32-bit parameter precedes them; a doubleword lane takes the
 /// sign-extended int.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn a_32_bit_while_and_a_narrow_dup_read_the_low_word_alone() {
     const SRC: &str = "#include <arm_sve.h>\n\
@@ -2694,7 +2693,7 @@ fn a_32_bit_while_and_a_narrow_dup_read_the_low_word_alone() {
 /// other way round, a subtraction is the reversed one, and the don't-care
 /// form of a vector with itself needs no prefix. The fixture computes
 /// what scalar C does.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn a_destructive_sve_row_into_its_second_operand_swaps_reverses_or_takes_a_scratch() {
     const SRC: &str = include_str!("../../../tests/fixtures/sve/rows_destructive.c");
@@ -2735,7 +2734,7 @@ fn a_destructive_sve_row_into_its_second_operand_swaps_reverses_or_takes_a_scrat
 /// An SVE-PCS leaf moves the FP scratch its rows write into z24-z31 where
 /// a register there is free, and saves of z16 and z17, the scratch it
 /// falls back to, the one a row writes alone: the integer sum's D register.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn an_sve_pcs_leaf_saves_the_scratch_its_rows_write_alone() {
     // `n` sums live at once; the result their sum, or its svaddv.
@@ -2791,7 +2790,7 @@ fn an_sve_pcs_leaf_saves_the_scratch_its_rows_write_alone() {
 /// keeps the base banks, as a callee of the base standard may change
 /// z16-z31: its scalars across the call take the registers a base-PCS
 /// twin gives them.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn an_sve_pcs_function_without_calls_takes_z24_to_z31_before_z16_to_z23() {
     let mut src = String::from(
@@ -2837,7 +2836,7 @@ fn an_sve_pcs_function_without_calls_takes_z24_to_z31_before_z16_to_z23() {
 /// a site writes them, not wherever a predicate sits in a slot: p15
 /// reloading a second operand of a 4-bit field and p14 computing a result
 /// bound for a slot, and p7 only where a predicate in a slot governs.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn an_sve_pcs_leaf_saves_the_predicate_stages_its_sites_write() {
     const SRC: &str = include_str!("../../../tests/fixtures/sve/pcs_preserves.c");
@@ -2918,4 +2917,53 @@ fn an_overloaded_sve_intrinsic_names_each_operand_once() {
         err.contains("takes an SVE vector or predicate operand"),
         "{err}"
     );
+}
+
+/// `Imm(0)` stands for a zero vector too. One read as a 128-bit NEON
+/// operand, spilled when the banks are cut to one register each, keeps its
+/// whole width in its slot: interleaving bytes with it by `zip1` / `zip2`
+/// sums the bytes natively at -O as at the full register file.
+#[cfg(all(
+    target_arch = "aarch64",
+    any(target_os = "linux", target_os = "macos", target_os = "windows")
+))]
+#[test]
+fn a_spilled_zero_vector_keeps_its_width() {
+    use crate::{CompileOptions, Compiler, NativeOptions, Target, jit_run_with_options};
+    let src = "#include <arm_neon.h>\n\
+        static unsigned char buf[640];\n\
+        static unsigned long sum(const unsigned char *p, const unsigned char *q, int n, int step, int a, int b) {\n\
+            uint8x16_t zero = {0};\n\
+            uint64x2_t acc = {0}, acc2 = {0};\n\
+            for (int i = 0, j = 0, k = n; i < n; i += step, j += a, k -= b) {\n\
+                uint8x16_t x = vld1q_u8(p + i), y = vld1q_u8(q + (k & 0x1f0));\n\
+                acc = vpadalq_u32(acc, vpaddlq_u16(vpaddlq_u8(vzip1q_u8(x, zero))));\n\
+                acc2 = vaddq_u64(acc2, vpaddlq_u32(vpaddlq_u16(vpaddlq_u8(vzip2q_u8(y, zero)))));\n\
+                acc2 = vaddq_u64(acc2, vdupq_n_u64((unsigned long)j));\n\
+            }\n\
+            return vgetq_lane_u64(acc, 0) + vgetq_lane_u64(acc, 1) + (vgetq_lane_u64(acc2, 0) > 0 ? 0 : 1);\n\
+        }\n\
+        int main(void) {\n\
+            for (int i = 0; i < 640; i++) buf[i] = (unsigned char)(i * 131 + (i >> 3));\n\
+            unsigned long want = 0;\n\
+            for (int i = 0; i < 640; i += 16) for (int t = 0; t < 8; t++) want += buf[i + t];\n\
+            return sum(buf, buf + 128, 640, 16, 3, 5) == want ? 0 : 1;\n\
+        }\n";
+    let host = if cfg!(target_os = "macos") {
+        Target::MacOSAarch64
+    } else if cfg!(windows) {
+        Target::WindowsAarch64
+    } else {
+        Target::LinuxAarch64
+    };
+    for (gpr, fpr) in [(1, 1), (1, 2), (usize::MAX, usize::MAX)] {
+        let code = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(gpr, fpr, || {
+            let program = Compiler::with_options(src.into(), host, CompileOptions::default())
+                .compile()
+                .expect("compile");
+            let opts = NativeOptions::new().with_optimize();
+            jit_run_with_options(&program, &[String::from("p")], opts, &mut |_| {}).expect("run")
+        });
+        assert_eq!(code, 0, "registers per bank: {gpr} general, {fpr} vector");
+    }
 }

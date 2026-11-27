@@ -3,7 +3,7 @@ ftw_walk.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -26,9 +26,9 @@ Disassembly of section .text:
                	cmp	w2, #0x1
                	mov	x1, #0x0                // =0
                	b.ne	<addr>
+               	str	x2, [sp, #0x8]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	str	x2, [sp, #0x8]
                	bl	<addr>
                	sxtw	x0, w0
                	ldr	x2, [sp, #0x8]
@@ -58,10 +58,9 @@ Disassembly of section .text:
                	ret
 
 <stop_at_file>:
-               	mov	x0, #0x2a               // =42
-               	mov	x1, #0x0                // =0
                	cmp	w2, #0x0
-               	csel	x0, x1, x0, ne
+               	mov	x17, #0x2a              // =42
+               	csel	x0, xzr, x17, ne
                	ret
 
 <main>:
@@ -79,14 +78,12 @@ Disassembly of section .text:
                	cbnz	x0, <addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
+               	mov	x3, x0
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	mov	x1, #0x200              // =512
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mov	x16, x3
-               	mov	x3, x0
-               	mov	x0, x16
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

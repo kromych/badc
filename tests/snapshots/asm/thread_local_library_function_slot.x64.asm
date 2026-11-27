@@ -3,7 +3,7 @@ thread_local_library_function_slot.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,23 +26,22 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movq	<rip>, %rsi # <addr>
-               	movq	%fs:0x0, %rcx
-               	addq	$-0x8, %rcx
-               	movq	(%rcx), %rdx
+               	movq	%fs:0x0, %rdx
+               	addq	$-0x8, %rdx
+               	movq	(%rdx), %rcx
                	movq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
-               	cmpq	%rsi, %rdx
+               	cmpq	%rsi, %rcx
                	sete	%sil
                	movzbq	%sil, %rsi
-               	cmpq	%rdi, %rdx
+               	cmpq	%rdi, %rcx
                	cmovneq	%rax, %rsi
                	testq	%rsi, %rsi
                	je	<addr>
+               	movq	(%rdx), %rax
                	leaq	<rip>, %rdi
-               	movq	(%rcx), %rax
                	callq	*%rax
                	cmpq	$0x3, %rax
                	sete	%al
@@ -50,8 +49,8 @@ Disassembly of section .text:
                	xorl	%ecx, %ecx
                	testq	%rax, %rax
                	je	<addr>
-               	leaq	<rip>, %rdi
                	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi
                	callq	*%rax
                	cmpq	$0x2, %rax
                	sete	%cl
@@ -59,15 +58,13 @@ Disassembly of section .text:
                	testl	%ecx, %ecx
                	sete	%al
                	movzbq	%al, %rax
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <__c5_sys_strlen>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rdi
+               	subq	$0x18, %rsp
+               	movq	%rdi, (%rsp)
+               	movq	(%rsp), %rdi
                	callq	<addr>
-               	leave
+               	addq	$0x18, %rsp
                	retq

@@ -3,7 +3,7 @@ inline_asm_a64_pmull.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -35,6 +35,7 @@ Disassembly of section .text:
                	cmovneq	%rsi, %rcx
                	shlq	%rax
                	shrq	%rdx
+               	nopl	(%rax)
                	testq	%rdx, %rdx
                	jne	<addr>
                	andq	$0xffff, %rcx           # imm = 0xFFFF

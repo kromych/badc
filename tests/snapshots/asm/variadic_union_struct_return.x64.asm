@@ -3,7 +3,7 @@ variadic_union_struct_return.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -90,26 +90,22 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	<rip>, %rdx
+               	pushq	%rax
                	xorl	%edi, %edi
                	leaq	<rip>, %rsi
+               	leaq	<rip>, %rdx
                	movl	$0x64, %ecx
                	movb	$0x0, %al
                	callq	<addr>
-               	movq	%rax, -0x10(%rbp)
-               	movl	-0x10(%rbp), %eax
                	cmpl	$0xaf, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	popq	%r11
                	retq
                	cmpq	$0x7, %rdx
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	popq	%r11
                	retq
                	xorl	%edi, %edi
                	leaq	<rip>, %rsi
@@ -117,18 +113,16 @@ Disassembly of section .text:
                	movl	$0x1, %ecx
                	movb	$0x0, %al
                	callq	<addr>
-               	movq	%rax, -0x10(%rbp)
-               	movl	-0x10(%rbp), %eax
                	cmpl	$0x42, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	popq	%r11
                	retq
                	cmpq	$0x7, %rdx
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	leave
+               	popq	%r11
                	retq

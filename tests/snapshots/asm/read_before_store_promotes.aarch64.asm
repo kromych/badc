@@ -3,7 +3,7 @@ read_before_store_promotes.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -14,10 +14,10 @@ Disassembly of section .text:
                	brk	#0x1
 
 <maybe>:
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x2                // =2
                	cmp	w0, #0x0
-               	csel	x0, x1, x2, ne
+               	mov	x16, #0x1               // =1
+               	mov	x17, #0x2               // =2
+               	csel	x0, x16, x17, ne
                	ret
 
 <self_init>:
@@ -45,17 +45,17 @@ Disassembly of section .text:
                	ret
 
 <narrow_maybe>:
-               	mov	x1, #-0x3               // =-3
-               	mov	x2, #0x7                // =7
                	cmp	w0, #0x0
-               	csel	x0, x1, x2, ne
+               	mov	x16, #-0x3              // =-3
+               	mov	x17, #0x7               // =7
+               	csel	x0, x16, x17, ne
                	ret
 
 <u8_maybe>:
-               	mov	x1, #0xc8               // =200
-               	mov	x2, #0x9                // =9
                	cmp	w0, #0x0
-               	csel	x0, x1, x2, ne
+               	mov	x16, #0xc8              // =200
+               	mov	x17, #0x9               // =9
+               	csel	x0, x16, x17, ne
                	ret
 
 <loop_first>:
@@ -103,15 +103,10 @@ Disassembly of section .text:
                	ret
 
 <inlined>:
-               	sxtw	x0, w0
-               	mov	x1, #0x0                // =0
-               	mov	x17, #0xa               // =10
-               	mul	x2, x0, x17
                	cmp	w0, #0x2
-               	csel	x1, x2, x1, gt
-               	mov	x2, #-0x1               // =-1
-               	cmp	w0, #0x2
-               	csel	x1, x1, x2, gt
+               	mov	x16, #0x1e              // =30
+               	mov	x17, #-0x1              // =-1
+               	csel	x1, x16, x17, gt
                	add	x0, x0, #0x3
                	mov	x17, #0xa               // =10
                	mul	x0, x0, x17
@@ -284,6 +279,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x16, #0x9               // =9
+               	str	x16, [sp]
+               	mov	x16, #0x28              // =40
+               	str	x16, [sp, #0x8]
                	mov	x0, #0x1                // =1
                	mov	x1, #0x2                // =2
                	mov	x2, #0x3                // =3
@@ -292,10 +291,6 @@ Disassembly of section .text:
                	mov	x5, #0x6                // =6
                	mov	x6, #0x7                // =7
                	mov	x7, #0x8                // =8
-               	mov	x16, #0x9               // =9
-               	str	x16, [sp]
-               	mov	x16, #0x28              // =40
-               	str	x16, [sp, #0x8]
                	bl	<addr>
                	cmp	x0, #0x27
                	b.eq	<addr>

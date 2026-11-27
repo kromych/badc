@@ -3,7 +3,7 @@ function_typed_parameter.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,35 +26,32 @@ Disassembly of section .text:
                	int3
 
 <apply>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movq	%rdi, %rax
                	movq	%rsi, %rdi
                	callq	*%rax
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <apply_bare>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movq	%rdi, %rax
                	movq	%rsi, %rdi
                	callq	*%rax
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <passthrough>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movq	%rdi, %rax
                	movq	%rsi, %rdi
                	callq	*%rax
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <doubler>:
+               	shlq	%rdi
                	movq	%rdi, %rax
-               	shlq	%rax
                	retq
 
 <take_slot>:

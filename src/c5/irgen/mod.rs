@@ -48,6 +48,15 @@ mod types;
 mod vector;
 
 pub(crate) use function::walk_function;
+
+/// Which value a read-modify-write expression yields: the object's value
+/// before the update (postfix `++` and `--`), or after it (the prefix
+/// forms and compound assignment).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Yields {
+    Old,
+    New,
+}
 pub(crate) use types::fold_const_int_binop;
 #[cfg(test)]
 pub(crate) use types::fold_int_binop;
@@ -356,12 +365,35 @@ struct Walker<'a> {
 pub(crate) struct NamedRefs {
     pub weak: bool,
     pub interposable: bool,
+    /// [`crate::c5::program::Program::no_plt_calls`].
+    pub got_calls: bool,
 }
 
 impl NamedRefs {
+    pub(crate) fn of(program: &crate::c5::program::Program) -> Self {
+        Self {
+            weak: program.weak_refs_by_name,
+            interposable: program.interposable_refs,
+            got_calls: program.no_plt_calls,
+        }
+    }
+
     fn names(self, s: &Symbol) -> bool {
         (self.weak && s.is_weak_definition())
             || (self.interposable && s.is_interposable_definition())
+    }
+
+    /// `-fno-plt`: a call to a library binding or to a function this unit
+    /// declares without defining loads the callee from its GOT entry,
+    /// unless its visibility binds it within the component.
+    pub(crate) fn calls_through_got(self, s: &Symbol) -> bool {
+        use crate::c5::program::SymVisibility;
+        self.got_calls
+            && (s.class == Token::Sys as i64 || (s.is_fun_entity() && !s.defined_here))
+            && !matches!(
+                s.visibility,
+                Some(SymVisibility::Hidden | SymVisibility::Internal)
+            )
     }
 }
 

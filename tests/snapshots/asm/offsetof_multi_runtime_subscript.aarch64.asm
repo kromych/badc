@@ -3,7 +3,7 @@ offsetof_multi_runtime_subscript.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -22,48 +22,48 @@ Disassembly of section .text:
                	add	x6, x2, #0x2
                	mul	x2, x1, x5
                	add	x3, x2, #0x2
-               	cmp	x3, x6
+               	cmp	w3, w6
                	b.ne	<addr>
                	add	x6, x0, #0x1
                	lsl	x6, x6, #1
                	add	x6, x6, #0x2
                	add	x3, x3, #0x2
-               	cmp	x3, x6
+               	cmp	w3, w6
                	b.ne	<addr>
                	add	x3, x0, #0x2
                	lsl	x3, x3, #1
                	add	x3, x3, #0x2
                	add	x6, x2, #0x4
                	add	x6, x6, #0x2
-               	cmp	x6, x3
+               	cmp	w6, w3
                	b.ne	<addr>
                	add	x3, x0, #0x3
                	lsl	x3, x3, #1
                	add	x3, x3, #0x2
                	add	x6, x2, #0x6
                	add	x6, x6, #0x2
-               	cmp	x6, x3
+               	cmp	w6, w3
                	b.ne	<addr>
                	add	x3, x0, #0x4
                	lsl	x3, x3, #1
                	add	x3, x3, #0x2
                	add	x6, x2, #0x8
                	add	x6, x6, #0x2
-               	cmp	x6, x3
+               	cmp	w6, w3
                	b.ne	<addr>
                	add	x3, x0, #0x5
                	lsl	x3, x3, #1
                	add	x3, x3, #0x2
                	add	x6, x2, #0xa
                	add	x6, x6, #0x2
-               	cmp	x6, x3
+               	cmp	w6, w3
                	b.ne	<addr>
                	add	x0, x0, #0x6
                	lsl	x0, x0, #1
                	add	x0, x0, #0x2
                	add	x2, x2, #0xc
                	add	x2, x2, #0x2
-               	cmp	x2, x0
+               	cmp	w2, w0
                	b.ne	<addr>
                	add	x1, x1, #0x1
                	cmp	w1, #0x5
@@ -79,14 +79,14 @@ Disassembly of section .text:
                	add	x5, x2, #0x48
                	add	x2, x4, x0, lsl #3
                	add	x6, x2, #0x48
-               	cmp	x6, x5
+               	cmp	w6, w5
                	b.ne	<addr>
                	add	x1, x1, #0x1
                	lsl	x1, x1, #2
                	add	x1, x1, #0x48
                	add	x2, x2, #0x4
                	add	x2, x2, #0x48
-               	cmp	x2, x1
+               	cmp	w2, w1
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x3
@@ -102,14 +102,14 @@ Disassembly of section .text:
                	mul	x2, x0, x3
                	lsl	x6, x2, #2
                	add	x6, x6, #0x50
-               	cmp	x5, x6
+               	cmp	w5, w6
                	b.ne	<addr>
                	add	x1, x1, #0x4
                	add	x1, x1, #0x50
                	add	x2, x2, #0x1
                	lsl	x2, x2, #2
                	add	x2, x2, #0x50
-               	cmp	x1, x2
+               	cmp	w1, w2
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x4
@@ -125,19 +125,19 @@ Disassembly of section .text:
                	mul	x3, x0, x5
                	add	x3, x4, x3
                	add	x7, x3, #0xac
-               	cmp	x7, x6
+               	cmp	w7, w6
                	b.ne	<addr>
                	add	x6, x2, #0x1
                	add	x6, x1, x6, lsl #2
                	add	x7, x3, #0x4
                	add	x7, x7, #0xac
-               	cmp	x7, x6
+               	cmp	w7, w6
                	b.ne	<addr>
                	add	x2, x2, #0x2
                	add	x2, x1, x2, lsl #2
                	add	x3, x3, #0x8
                	add	x3, x3, #0xac
-               	cmp	x3, x2
+               	cmp	w3, w2
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x4

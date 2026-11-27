@@ -3,7 +3,7 @@ dlopen_null_searches_the_global_scope.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,21 +26,18 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	pushq	%rbx
                	xorl	%edi, %edi
                	movl	$0x2, %esi
                	callq	<addr>
-               	movq	%rax, %r10
-               	movq	%r10, 0x8(%rsp)
-               	testq	%r10, %r10
+               	movq	%rax, %rbx
+               	testq	%rbx, %rbx
                	jne	<addr>
                	movl	$0x1, %eax
-               	leave
+               	popq	%rbx
                	retq
+               	movq	%rbx, %rdi
                	leaq	<rip>, %rsi
-               	movq	0x8(%rsp), %rdi
                	callq	<addr>
                	testq	%rax, %rax
                	je	<addr>
@@ -49,7 +46,7 @@ Disassembly of section .text:
                	cmpq	$0x6, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	popq	%rbx
                	retq
                	xorl	%edi, %edi
                	leaq	<rip>, %rsi
@@ -61,11 +58,11 @@ Disassembly of section .text:
                	cmpq	$0x5, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	popq	%rbx
                	retq
                	callq	<addr>
+               	movq	%rbx, %rdi
                	leaq	<rip>, %rsi
-               	movq	0x8(%rsp), %rdi
                	callq	<addr>
                	testq	%rax, %rax
                	jne	<addr>
@@ -73,9 +70,9 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	jne	<addr>
                	movl	$0x4, %eax
-               	leave
+               	popq	%rbx
                	retq
-               	movq	0x8(%rsp), %rdi
+               	movq	%rbx, %rdi
                	callq	<addr>
                	movslq	%eax, %rax
                	xorl	%ecx, %ecx
@@ -83,5 +80,5 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	cmovneq	%rdx, %rcx
                	movq	%rcx, %rax
-               	leave
+               	popq	%rbx
                	retq

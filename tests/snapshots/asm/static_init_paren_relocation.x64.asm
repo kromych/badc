@@ -3,7 +3,7 @@ static_init_paren_relocation.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -30,22 +30,21 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	xorl	%edi, %edi
+               	pushq	%rax
                	movq	<rip>, %rax # <addr>
-               	movq	%rdi, %rsi
+               	xorl	%edi, %edi
+               	xorl	%esi, %esi
                	callq	*%rax
                	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x82, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movq	<rip>, %rax # <addr>
                	leaq	<rip>, %rcx # <addr>
@@ -55,17 +54,17 @@ Disassembly of section .text:
                	cmpl	$0x63, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	xorl	%edi, %edi
                	movq	<rip>, %rax # <addr>
-               	movq	%rdi, %rsi
+               	xorl	%edi, %edi
+               	xorl	%esi, %esi
                	callq	*%rax
                	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

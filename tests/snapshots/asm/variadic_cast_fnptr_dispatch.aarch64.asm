@@ -3,7 +3,7 @@ variadic_cast_fnptr_dispatch.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -17,10 +17,10 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	sub	x0, x29, #0x20
                	sturb	wzr, [x29, #-0x20]
-               	adrp	x1, <page>
-               	ldr	x6, [x1, #0x10]
+               	adrp	x0, <page>
+               	ldr	x6, [x0, #0x10]
+               	sub	x0, x29, #0x20
                	mov	x1, #0x20               // =32
                	adrp	x2, <page>
                	add	x2, x2, <lo12>

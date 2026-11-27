@@ -1,18 +1,20 @@
 //! `__imp_X` names the import-address slot of `X`, the PE/COFF import
-//! convention for a dllimport entity. A reference to such a name no input
-//! defines becomes a reference to `X` through its GOT slot, which keeps the
-//! slot the loader fills -- the import's address, not its thunk.
+//! convention for a dllimport entity, and so does `X` itself where an import
+//! library declares it CONST. A reference to such a name no input defines
+//! becomes a reference to `X` through its GOT slot, which keeps the slot the
+//! loader fills -- the import's address, not its thunk.
 //! When the link defines `X` the reference resolves to the definition, with
 //! the warning lld and MSVC's link give (LNK4217).
 
+use super::got_relax::{self, GotUse};
 use super::link_err;
 use super::object::{NativeMachine, NativeObject, NativeSymSection, NativeSymbol};
 use crate::c5::diag::Code;
 use crate::c5::error::C5Error;
 use crate::c5::object::elf_reloc_types::{
-    R_AARCH64_ADR_GOT_PAGE, R_AARCH64_ADR_PREL_PG_HI21, R_AARCH64_LD64_GOT_LO12_NC,
-    R_AARCH64_LDST64_ABS_LO12_NC, R_X86_64_GOTPCREL, R_X86_64_PC32, aarch64_reloc_desc,
-    x86_64_reloc_desc,
+    R_AARCH64_ADD_ABS_LO12_NC, R_AARCH64_ADR_GOT_PAGE, R_AARCH64_ADR_PREL_PG_HI21,
+    R_AARCH64_LD64_GOT_LO12_NC, R_AARCH64_LDST64_ABS_LO12_NC, R_X86_64_GOTPCREL, R_X86_64_PC32,
+    aarch64_reloc_desc, x86_64_reloc_desc,
 };
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::format;
@@ -29,26 +31,42 @@ pub(crate) struct SlotReads {
     pub warnings: Vec<(Code, String)>,
 }
 
-/// The GOT form of a slot read: x86-64 `mov` / `call` / `jmp` through
-/// `[rip + __imp_X]`, the aarch64 `adrp` + `ldr` pair.
-fn slot_form(machine: NativeMachine, rtype: u32) -> Option<u32> {
+/// The GOT form of a reference to a slot name at `at`: a read of the slot
+/// (x86-64 `[rip + __imp_X]` in any instruction, the aarch64 `adrp` + `ldr`
+/// pair) or its address (an aarch64 `add`). A GOT load of the name's address
+/// takes the slot's, and becomes `lea` or `add`.
+fn slot_form(machine: NativeMachine, text: &mut [u8], at: usize, rtype: u32) -> Option<u32> {
     match (machine, rtype) {
         (NativeMachine::X86_64, R_X86_64_PC32) => Some(R_X86_64_GOTPCREL),
-        (NativeMachine::Aarch64, R_AARCH64_ADR_PREL_PG_HI21) => Some(R_AARCH64_ADR_GOT_PAGE),
+        (NativeMachine::X86_64, _) => (got_relax::got_use(text, at, rtype) == GotUse::Load)
+            .then(|| got_relax::relax(text, at, GotUse::Load))
+            .map(|_| R_X86_64_GOTPCREL),
+        (NativeMachine::Aarch64, R_AARCH64_ADR_PREL_PG_HI21 | R_AARCH64_ADR_GOT_PAGE) => {
+            Some(R_AARCH64_ADR_GOT_PAGE)
+        }
         (NativeMachine::Aarch64, R_AARCH64_LDST64_ABS_LO12_NC) => Some(R_AARCH64_LD64_GOT_LO12_NC),
+        (NativeMachine::Aarch64, R_AARCH64_ADD_ABS_LO12_NC) => Some(R_AARCH64_ADD_ABS_LO12_NC),
+        (NativeMachine::Aarch64, R_AARCH64_LD64_GOT_LO12_NC) => {
+            got_relax::a64_ldr_to_add(text, at).then_some(R_AARCH64_ADD_ABS_LO12_NC)
+        }
         _ => None,
     }
 }
 
-/// `None` when no input names an undefined import slot.
-pub(crate) fn bind_slot_reads(objs: &[NativeObject]) -> Result<Option<SlotReads>, C5Error> {
+/// `None` when no input names an undefined import slot; `consts` are the
+/// CONST imports' names.
+pub(crate) fn bind_slot_reads(
+    objs: &[NativeObject],
+    consts: &BTreeSet<&str>,
+) -> Result<Option<SlotReads>, C5Error> {
     let definer: BTreeMap<&str, &str> = (objs.iter())
         .flat_map(|o| o.symbols.iter().map(move |s| (s, o.source.as_str())))
         .filter(|(s, _)| s.binding != 0 && s.section != NativeSymSection::Undef)
         .map(|(s, src)| (s.name.as_str(), src))
         .collect();
     let slot_of = |s: &NativeSymbol| -> Option<String> {
-        let target = s.name.strip_prefix(PREFIX)?;
+        let name = s.name.as_str();
+        let target = (name.strip_prefix(PREFIX)).or(consts.contains(name).then_some(name))?;
         (s.section == NativeSymSection::Undef
             && s.binding != 0
             && !target.is_empty()
@@ -101,15 +119,16 @@ pub(crate) fn bind_slot_reads(objs: &[NativeObject]) -> Result<Option<SlotReads>
             let Some(&at) = target_of.get(&r.sym_idx) else {
                 continue;
             };
-            let Some(rtype) = slot_form(obj.machine, r.rtype) else {
+            let field = r.offset as usize;
+            let Some(rtype) = slot_form(obj.machine, &mut obj.text, field, r.rtype) else {
                 let desc = match obj.machine {
                     NativeMachine::X86_64 => x86_64_reloc_desc(r.rtype),
                     NativeMachine::Aarch64 => aarch64_reloc_desc(r.rtype),
                 };
                 let text = format!(
-                    "`{PREFIX}{}` names an import-address slot, which only a load reads; \
-                     {} references it through {desc}",
-                    obj.symbols[at].name, obj.source
+                    "`{}` names an import-address slot, which a reference reads or takes the \
+                     address of; {} references it through {desc}",
+                    obj.symbols[r.sym_idx].name, obj.source
                 );
                 return Err(link_err(Code::RELOCATION, "", &text));
             };
@@ -123,8 +142,8 @@ pub(crate) fn bind_slot_reads(objs: &[NativeObject]) -> Result<Option<SlotReads>
             .chain(&obj.tls_relocs)
             .map(|r| r.sym_idx)
             .collect();
-        for &i in target_of.keys() {
-            if !elsewhere.contains(&i) {
+        for (&i, &at) in &target_of {
+            if i != at && !elsewhere.contains(&i) {
                 obj.symbols[i].binding = 0;
             }
         }

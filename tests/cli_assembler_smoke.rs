@@ -416,10 +416,10 @@ fn apple_section_visibility_and_page_operands_assemble() {
     assert_eq!(got, want);
 }
 
-/// gas takes an ELF section's type from its name (bfd's special-section
-/// table) and adds the name's attributes to the written ones unless the
-/// written ones name another attribute. A symbol in a thread-local section
-/// is `STT_TLS`. Rows measured against gas 2.46.1 on x86-64.
+/// An ELF section with a special name takes its type from the name and adds
+/// the name's attributes to the written ones unless the written ones name
+/// another attribute. A symbol in a thread-local section is `STT_TLS`.
+/// Rows measured against gas 2.46.1 on x86-64.
 #[test]
 fn special_section_names_take_their_type_and_attributes() {
     const PROGBITS: u32 = 1;
@@ -503,10 +503,10 @@ fn an_unreferenced_globl_declaration_reaches_the_symbol_table() {
 }
 
 /// An immediate whose expression folds to a value already fixed where the
-/// instruction sits takes the operand's `imm8` form, as GNU as 2.46.1 does
+/// instruction sits takes the operand's `imm8` form
 /// (`subl $(1b - start), %ebp`). A form with no `imm8` keeps the wide
 /// field, and so does a reference to a label the instruction's own width
-/// would move -- there GNU as settles the field before the layout, and the
+/// would move -- there the field is settled before the layout, and the
 /// two widths give different values.
 #[test]
 fn a_folded_expression_immediate_takes_the_narrow_form() {
@@ -536,8 +536,7 @@ fn a_folded_expression_immediate_takes_the_narrow_form() {
         &format!("{back}\ttestl $(1b - start), %ebp\n\tmovl $(1b - start), %ebp\n"),
     );
     assert_eq!(&t[6..], [0xf7, 0xc5, 0x05, 0, 0, 0, 0xbd, 0x05, 0, 0, 0]);
-    // A forward reference keeps the wide field and its value, matching the
-    // layout GNU as settles on.
+    // A forward reference keeps the wide field and its value.
     let t = text_of(
         "imm-forward",
         "\t.text\nlo:\n\tsubl $(hi - lo), %ebp\n\tnop\n\tnop\nhi:\n\tnop\n",
@@ -592,7 +591,7 @@ fn hidden_visibility_reaches_the_symbol_table() {
     assert_eq!(visibility(&bytes, "vis"), Some(STV_HIDDEN));
     assert_eq!(visibility(&bytes, "_bss"), Some(STV_HIDDEN));
     // A `.hidden` name that surfaces nowhere else still gets an undefined
-    // entry carrying the visibility, as GNU as emits one.
+    // entry carrying the visibility.
     assert_eq!(visibility(&bytes, "_ebss"), Some(STV_HIDDEN));
 }
 
@@ -712,7 +711,7 @@ fn relocs(bytes: &[u8], want: &str) -> Vec<(u64, u32, i64)> {
 
 #[test]
 fn a_constant_assignment_with_external_linkage_becomes_an_absolute_symbol() {
-    // GNU as puts `sym = <constant>` in the symbol table as SHN_ABS. A
+    // `sym = <constant>` enters the symbol table as SHN_ABS. A
     // generated unit may define a payload's length that way for C code to
     // read, so the symbol has to survive the fold.
     let d = dir("abs-sym");
@@ -928,12 +927,11 @@ fn assembler_options_are_checked_rather_than_passed_on() {
     assert!(ok, "-Xassembler must accept what -Wa, accepts");
 }
 
-/// GNU as keeps a label whose name carries the local-label prefix out of
+/// A label whose name carries the local-label prefix stays out of
 /// `.symtab` unless `-L` / `--keep-locals` is given, whatever `.type` and
 /// `.size` name it: a `.L` label typed `@function` and sized is still
-/// dropped by `as`. References reduce to
-/// the label's section plus an addend either way, so the option moves no
-/// relocation.
+/// dropped. References reduce to the label's section plus an addend
+/// either way, so the option moves no relocation.
 #[test]
 fn local_labels_reach_the_symbol_table_only_under_keep_locals() {
     const SRC: &str = "\t.text\n\t.globl entry\n\t.type entry, @function\nentry:\n\
@@ -969,8 +967,8 @@ fn local_labels_reach_the_symbol_table_only_under_keep_locals() {
         locals(&objs[0])
     );
     // STB_LOCAL | STT_FUNC, sized by the `.size` directive. The numeric
-    // label `1:` gets no entry: gas's own stand-in for one carries no
-    // name a source can spell and never reaches the table.
+    // label `1:` gets no entry: its stand-in carries no name a source can
+    // spell and never reaches the table.
     for (i, o) in objs[1..].iter().enumerate() {
         assert_eq!(
             locals(o),
@@ -1099,16 +1097,15 @@ fn m16_and_m32_write_an_i386_object() {
             "{flag}: R_386_16, R_386_PC32, R_386_8, R_386_16, R_386_32: {types:?}"
         );
         // SHT_REL has no addend field, so the `calll`'s -4 rides in the
-        // relocated field, as gas writes it.
+        // relocated field.
         let (pc32_off, _) = types[1];
         let field = &b[text.2 + pc32_off as usize..text.2 + pc32_off as usize + 4];
         assert_eq!(field, (-4i32).to_le_bytes(), "{flag}: implicit addend");
     }
 }
 
-/// The assembler starts in 32-bit mode under `-m16` / `-m32`, the way
-/// `as --32` does; `.code16` in the source moves it from there. Bytes
-/// are GNU as 2.46.1's.
+/// The assembler starts in 32-bit mode under `-m16` / `-m32`; `.code16`
+/// in the source moves it from there. Bytes are GNU as 2.46.1's.
 #[test]
 fn m32_starts_the_encoder_in_32_bit_mode() {
     let d = dir("m32-mode");
@@ -1187,7 +1184,7 @@ fn direct_far_branches_assemble_to_an_i386_object() {
 
 /// A `.code16` branch to a label in the same section resolves at
 /// assembly time, leaving no relocation, and takes the `rel8` form its
-/// displacement fits, as GNU as does in every code-size mode.
+/// displacement fits, in every code-size mode.
 #[test]
 fn code16_same_section_branches_resolve_in_place() {
     let d = dir("code16-br");
@@ -1230,9 +1227,9 @@ fn code32_and_code64_short_branches_take_rel8() {
 }
 
 /// A branch out of reach until an earlier branch's long form moves it
-/// toward a target an alignment holds in place stays short, as GNU as
-/// 2.46.1 leaves it: with every branch short `jb near` falls 128 bytes
-/// short of `near`, and once `jne far` takes rel32 it reaches it with 124.
+/// toward a target an alignment holds in place stays short: with every
+/// branch short `jb near` falls 128 bytes short of `near`, and once
+/// `jne far` takes rel32 it reaches it with 124.
 #[test]
 fn a_branch_an_earlier_long_form_brings_into_reach_stays_short() {
     let t = text_of(
@@ -1272,7 +1269,7 @@ fn e3_branches_take_the_address_size_prefix_by_mode() {
             0xfe
         ]
     );
-    // A counter the mode cannot address is rejected, as GNU as rejects it.
+    // A counter the mode cannot address is rejected.
     let d = dir("e3-reject");
     write(&d, "r.s", "x:\tjcxz x\n");
     let (ok, text) = run(&d, &["-q", "-c", "--target=linux-x64", "r.s", "-o", "r.o"]);
@@ -1427,7 +1424,7 @@ fn a_folded_operand_expression_takes_every_short_form() {
     assert_eq!(t, [0x90, 0x8b, 0x43, 0xff]);
 }
 
-/// GNU as fixes a non-branch field's width when it parses the instruction,
+/// A non-branch field's width is fixed when the instruction is parsed,
 /// so a difference folds only over items whose sizes are already fixed
 /// there. A branch that may still relax, an alignment, and an `.org`
 /// between the labels keep the wide field even though the final layout
@@ -2045,6 +2042,78 @@ fn section64(bytes: &[u8], want: &str) -> Vec<u8> {
     Vec::new()
 }
 
+/// An instruction whose memory operand neither a suffix nor a register
+/// sizes takes a default width: the mode's default operand size
+/// (`inc (%rax)` is `incl`), the mode's stack size for the stack and
+/// near-branch group, and a form's sole width. Each row is GNU as 2.47's
+/// encoding, as is each mode's below.
+#[test]
+fn an_unsized_memory_operand_takes_the_width_gnu_as_gives_it() {
+    for (insn, want) in [
+        ("add $1, (%rax)", "83 00 01"),
+        ("sub $300, (%rax)", "81 28 2c 01 00 00"),
+        ("and $1, (%rax)", "83 20 01"),
+        ("or $1, (%rax)", "83 08 01"),
+        ("xor $1, (%rax)", "83 30 01"),
+        ("adc $1, (%rax)", "83 10 01"),
+        ("sbb $1, (%rax)", "83 18 01"),
+        ("cmp $1, (%rax)", "83 38 01"),
+        ("mov $1, (%rax)", "c7 00 01 00 00 00"),
+        ("rol (%rax)", "d1 00"),
+        ("ror $3, (%rax)", "c1 08 03"),
+        ("rcl %cl, (%rax)", "d3 10"),
+        ("rcr (%rax)", "d1 18"),
+        ("sal $1, (%rax)", "d1 20"),
+        ("shl $1, (%rax)", "d1 20"),
+        ("shr %cl, (%rax)", "d3 28"),
+        ("sar $2, (%rax)", "c1 38 02"),
+        ("inc (%rax)", "ff 00"),
+        ("dec (%rax)", "ff 08"),
+        ("not (%rax)", "f7 10"),
+        ("neg (%rax)", "f7 18"),
+        ("mul (%rax)", "f7 20"),
+        ("imul (%rax)", "f7 28"),
+        ("div (%rax)", "f7 30"),
+        ("idiv (%rax)", "f7 38"),
+        ("test $1, (%rax)", "f7 00 01 00 00 00"),
+        ("nop (%rax)", "0f 1f 00"),
+        ("bt $3, (%rax)", "0f ba 20 03"),
+        ("bts $3, (%rax)", "0f ba 28 03"),
+        ("btr $3, (%rax)", "0f ba 30 03"),
+        ("btc $3, (%rax)", "0f ba 38 03"),
+        ("cvtsi2sd (%rax), %xmm0", "f2 0f 2a 00"),
+        ("cvtsi2ss 8(%rax), %xmm1", "f3 0f 2a 48 08"),
+        ("push (%rax)", "ff 30"),
+        ("pop (%rax)", "8f 00"),
+        ("call *(%rax)", "ff 10"),
+        ("jmp *(%rax)", "ff 20"),
+        ("sete (%rax)", "0f 94 00"),
+        ("cmpxchg8b (%rax)", "0f c7 08"),
+        ("lgdt (%rax)", "0f 01 10"),
+        ("add $1, sym(%rip)", "83 05 00 00 00 00 01"),
+    ] {
+        let hex: Vec<String> = text_of("unsized-mem", &format!("{insn}\n"))
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        assert_eq!(hex.join(" "), want, "{insn}");
+    }
+    for (mode, insn, want) in [
+        (".code32", "inc (%eax)", "ff 00"),
+        (".code32", "push (%eax)", "ff 30"),
+        (".code32", "cmpxchg8b (%eax)", "0f c7 08"),
+        (".code16", "inc (%bx)", "ff 07"),
+        (".code16", "add $1, (%bx)", "83 07 01"),
+        (".code16", "shl (%bx)", "d1 27"),
+    ] {
+        let hex: Vec<String> = text_of("unsized-mem-mode", &format!("{mode}\n{insn}\n.code64\n"))
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        assert_eq!(hex.join(" "), want, "{mode} {insn}");
+    }
+}
+
 /// Assemble `src` for x86_64 and return its `.text`.
 fn text_of(name: &str, src: &str) -> Vec<u8> {
     section64(&object_of(name, src), ".text")
@@ -2137,8 +2206,7 @@ fn named_relocs(bytes: &[u8], want: &str) -> Vec<(u64, u32, String, i64)> {
 /// A direct branch takes `R_X86_64_PLT32` only where the link may bind it
 /// through a PLT slot -- a named function symbol. A target the assembler
 /// reduces to a section symbol takes `R_X86_64_PC32`, which is what GNU as
-/// 2.46.1 emits for the same source; it is the shape `entry_64.o`,
-/// `memmove_64.o` and `retpoline.o` carry.
+/// 2.46.1 emits for the same source.
 #[test]
 fn a_branch_against_a_section_symbol_takes_pc32() {
     const PC32: u32 = 2;
@@ -2229,8 +2297,8 @@ fn branch_forms_settle_against_each_other() {
 
 /// A `.org` between a branch and its target absorbs what the branch saves,
 /// so the short form does not reach even though it does in the layout the
-/// long form produces. GNU as settles on the long form, and so does badc: a
-/// form is taken only when it reaches in the layout that choice produces.
+/// long form produces. The long form holds: a form is taken only when it
+/// reaches in the layout that choice produces.
 #[test]
 fn a_branch_an_org_pushes_out_of_range_keeps_the_long_form() {
     let t = text_of(
@@ -2482,9 +2550,9 @@ fn a_set_alias_binds_as_the_unit_declared_the_name() {
 }
 
 /// A `.set` alias whose chain ends at a name the unit does not define emits
-/// no symbol of its own: GNU as 2.46.1 drops the alias, resolves every
-/// reference against the chain's end, and gives the end an undefined global
-/// entry whether or not anything references it. A `.globl` on the alias
+/// no symbol of its own: the alias drops out, every reference resolves
+/// against the chain's end, and the end takes an undefined global entry
+/// whether or not anything references it. A `.globl` on the alias
 /// changes none of that.
 #[test]
 fn a_set_alias_of_an_undefined_name_resolves_against_the_name() {
@@ -2535,14 +2603,14 @@ fn a_set_alias_of_an_undefined_name_resolves_against_the_name() {
 }
 
 /// `.set name, sym + k` assigns the symbol at an offset. Where the unit's
-/// layout does not place `sym`, the name is an alias with an addend: GNU as
-/// 2.46.1 emits no symbol for it and lands every reference on `sym`, the
-/// offset folded into the addend. For `.text: .set x, ext+8; call x; jmp x`
-/// it writes `e8 00 00 00 00 e9 00 00 00 00` with `PLT32 ext + 4` at 0x1 and
+/// layout does not place `sym`, the name is an alias with an addend: it
+/// takes no symbol and every reference lands on `sym`, the offset folded
+/// into the addend. For `.text: .set x, ext+8; call x; jmp x` GNU as 2.46.1
+/// writes `e8 00 00 00 00 e9 00 00 00 00` with `PLT32 ext + 4` at 0x1 and
 /// 0x6; for `.set x, ext+8; .data; .quad x; .long x` it writes `64 ext + 8`
 /// at 0 and `32 ext + 8` at 8. An alias of a name the unit defines takes its
-/// place at the offset, keeping the target's type and size, as gas gives
-/// `d+8` value 8 size 16 OBJECT and `f+1` value 1 size 1 FUNC.
+/// place at the offset, keeping the target's type and size: `d+8` value 8
+/// size 16 OBJECT and `f+1` value 1 size 1 FUNC.
 #[test]
 fn a_set_alias_of_a_symbol_at_an_offset_carries_the_addend() {
     const OBJECT_GLOBAL: u8 = 0x11;
@@ -2780,9 +2848,9 @@ fn a_rex_prefix_writes_a_far_branch() {
     );
 }
 
-/// GNU as orders the legacy prefixes segment, address size, operand size,
-/// then repeat / lock, whatever order the statement writes them in, and takes
-/// a memory operand's address size from the base register it names. The three
+/// The legacy prefixes go in the order segment, address size, operand size,
+/// then repeat / lock, whatever order the statement writes them in, and a
+/// memory operand's address size is the base register's. The three
 /// positions a template holds -- a `.s` unit, file-scope asm, and a function
 /// body -- share the ordering, so each yields GNU as 2.46.1's bytes for the
 /// source below.
@@ -3146,8 +3214,8 @@ fn a_dot_s_object_carries_the_gnu_as_section_roster() {
 }
 
 /// An STT_FILE symbol appears only for a `.file "name"` directive, named
-/// by its operand; GNU as emits none for a unit without one, and the
-/// numbered DWARF form (`.file N "name"`) names no symbol either.
+/// by its operand; a unit without one has none, and the numbered DWARF
+/// form (`.file N "name"`) names no symbol either.
 #[test]
 fn a_file_symbol_appears_only_per_dot_file_directive() {
     let plain = object_for("file-none", SHAPE_A64, "linux-aarch64");
@@ -3182,8 +3250,8 @@ fn a_file_symbol_appears_only_per_dot_file_directive() {
     );
 }
 
-/// `.ident` strings pool into `.comment` in GNU as shape -- a leading NUL,
-/// each string NUL-terminated, SHF_MERGE | SHF_STRINGS with byte entsize.
+/// `.ident` strings pool into `.comment` -- a leading NUL, each string
+/// NUL-terminated, SHF_MERGE | SHF_STRINGS with byte entsize.
 #[test]
 fn ident_strings_pool_into_dot_comment() {
     let bytes = object_for(
@@ -3203,8 +3271,8 @@ fn ident_strings_pool_into_dot_comment() {
     );
 }
 
-/// A default section the unit leaves empty claims no alignment: GNU as
-/// keeps `.text` / `.data` / `.bss` at addralign 1 until content raises it.
+/// A default section the unit leaves empty claims no alignment: `.text` /
+/// `.data` / `.bss` stay at addralign 1 until content raises it.
 #[test]
 fn an_empty_default_section_claims_no_alignment() {
     let bytes = object_for(
@@ -3221,8 +3289,8 @@ fn an_empty_default_section_claims_no_alignment() {
     }
 }
 
-/// Section symbols follow the GNU as target policy: the x86 backend omits
-/// every one no relocation references, the aarch64 backend keeps them all.
+/// Section symbols follow a per-target policy: x86 omits every one no
+/// relocation references, aarch64 keeps them all.
 #[test]
 fn unused_section_symbols_follow_the_target_policy() {
     let count = |bytes: &[u8]| {
@@ -3279,12 +3347,12 @@ fn section_headers64(b: &[u8]) -> Vec<(String, u32, u64, u32, u64)> {
         .collect()
 }
 
-/// GNU as keeps the `.previous` slot beside the `.pushsection` stack and
+/// The `.previous` slot sits beside the `.pushsection` stack and
 /// `.popsection` restores what the push saved, so a `.section` /
 /// `.previous` pair bracketing a pushed section returns to the section
 /// before the pair, and a label after the pair belongs to that section.
 /// The `.discard.annotate_insn` header carries the `M` flag and the entry
-/// size and `.text.hot` its `o` link, as GNU as 2.46.1 writes them.
+/// size and `.text.hot` its `o` link.
 #[test]
 fn previous_after_a_push_pop_pair_and_the_section_attributes_match_gas() {
     const PC32: u32 = 2;
@@ -3366,7 +3434,7 @@ const STB_LOCAL: u8 = 0;
 const STB_GLOBAL: u8 = 1;
 
 /// `@gnu_unique_object` makes an `STT_OBJECT` bound `STB_GNU_UNIQUE`, `.globl`,
-/// `.weak` or neither, and the OS/ABI GNU, as GNU as 2.46.1 writes them.
+/// `.weak` or neither, and the OS/ABI GNU, which defines the binding.
 #[test]
 fn a_gnu_unique_object_is_bound_stb_gnu_unique() {
     const STB_GNU_UNIQUE: u8 = 10;
@@ -3422,7 +3490,7 @@ fn a_common_symbol_is_defined_whatever_the_current_section() {
 }
 
 /// `.type` and `.size` may precede the label they name in another section,
-/// and give a name nothing defines an undefined global, as in GNU as 2.46.1.
+/// and give a name nothing defines an undefined global.
 #[test]
 fn a_type_before_its_label_applies_in_any_section() {
     let src = "\t.type y, @object\n\t.size y, 4\n\t.type f2, @function\n\t.globl q\n\
@@ -3614,8 +3682,8 @@ fn i386_relocation_operators_take_the_relocations_gas_writes() {
     );
 }
 
-/// A function's asm statement calls through `@PLT`; an operator gas or the
-/// psABI has no relocation for is refused by name.
+/// A function's asm statement calls through `@PLT`; an operator no
+/// relocation covers in its position is refused by name.
 #[test]
 fn relocation_operators_outside_their_forms_are_refused() {
     let bytes = object_of_c("plt-in-c", "void f(void) { __asm__(\"call wf@PLT\"); }\n");
@@ -3679,7 +3747,7 @@ fn error_positions(errors: &[String]) -> Vec<String> {
         .collect()
 }
 
-/// gas reports every error of a unit, each at `file:line`; a block comment
+/// Every error of a unit is reported, each at `file:line`; a block comment
 /// over several lines leaves the lines after it in place.
 #[test]
 fn every_bad_statement_is_reported_at_its_line() {
@@ -3711,7 +3779,125 @@ fn every_bad_statement_is_reported_at_its_line() {
     }
 }
 
-/// gas follows the preprocessor's line markers back to each line's file.
+/// The warning lines of a unit that assembles, under `flags`.
+fn assembly_warnings(target: &str, name: &str, body: &str, flags: &[&str]) -> Vec<String> {
+    let d = dir(&format!("warnings-{target}-{name}"));
+    write(&d, name, body);
+    let target = format!("--target={target}");
+    let args = [&["-q", "-c", &target, name, "-o", "u.o"][..], flags].concat();
+    let text = run_ok(&d, &args);
+    (text.lines())
+        .filter(|l| l.contains(" warning: "))
+        .map(String::from)
+        .collect()
+}
+
+/// A memory operand that neither a suffix nor a register sizes takes a
+/// default width; where the instruction has more than one, the statement
+/// is reported with the form encoded. A width the mode fixes (the stack
+/// group) or the instruction's only width is no choice.
+#[test]
+fn a_defaulted_memory_operand_width_is_reported_with_the_form_encoded() {
+    let body = "\t.text\n\t.globl f\nf:\n\tinc (%rax)\n\tincq (%rax)\n\tinc %eax\n\
+                \tpush (%rax)\n\tfld (%rax)\n\tfldcw (%rax)\n\tlods (%rsi), %al\n\
+                \tlods (%rsi)\n\tret\n";
+    let warnings = assembly_warnings("linux-x64", "w.s", body, &[]);
+    assert_eq!(
+        error_positions(&warnings),
+        ["w.s:4: warning", "w.s:8: warning", "w.s:11: warning"],
+        "{warnings:#?}"
+    );
+    for (w, form) in warnings.iter().zip(["incl", "flds", "lodsl"]) {
+        assert!(
+            w.ends_with(&format!("encoded as `{form}` [B5003] [-Wasm-operand-size]")),
+            "{w}"
+        );
+    }
+    let quiet = assembly_warnings("linux-x64", "w.s", body, &["-Wno-asm-operand-size"]);
+    assert!(quiet.is_empty(), "{quiet:#?}");
+    let d = dir("operand-size-werror");
+    write(&d, "w.s", body);
+    let (ok, text) = run(
+        &d,
+        &[
+            "-q",
+            "-c",
+            "--target=linux-x64",
+            "-Werror=asm-operand-size",
+            "w.s",
+            "-o",
+            "u.o",
+        ],
+    );
+    assert!(!ok && text.contains("w.s:4: error"), "{text}");
+}
+
+/// `.warning` reports its text at its line and assembly goes on, also in a
+/// conditional over section labels, which the layout values; `.error`
+/// reports its text and fails the unit.
+#[test]
+fn warning_and_error_directives_report_their_text() {
+    for target in ["linux-x64", "linux-aarch64"] {
+        let body = "\t.text\n\t.globl f\nf:\n\t.warning \"check the table\"\n\tret\n";
+        let warnings = assembly_warnings(target, "w.s", body, &[]);
+        assert_eq!(error_positions(&warnings), ["w.s:4: warning"], "{target}");
+        assert!(
+            warnings[0].ends_with("`.warning` check the table [B5004] [-Wasm-warning]"),
+            "{target}: {}",
+            warnings[0]
+        );
+        let body = "\t.text\n\t.globl f\nf:\n\tnop\n1:\n\t.if 1b - f > 0\n\
+                    \t.warning \"past the start\"\n\t.endif\n\tret\n";
+        let warnings = assembly_warnings(target, "d.s", body, &[]);
+        assert_eq!(error_positions(&warnings), ["d.s:7: warning"], "{target}");
+        assert!(
+            warnings[0].contains("`.warning` past the start"),
+            "{target}: {}",
+            warnings[0]
+        );
+        let body = "\t.text\n\t.globl f\nf:\n\t.error \"the table is full\"\n\tret\n";
+        let errors = assembly_errors(target, "e.s", body, &[]);
+        assert_eq!(error_positions(&errors), ["e.s:4: error"], "{target}");
+        assert!(
+            errors[0].contains("`.error` the table is full"),
+            "{target}: {}",
+            errors[0]
+        );
+    }
+}
+
+/// An `asm` statement's assembler warnings are reported at the statement,
+/// in a function body and at file scope.
+#[test]
+fn an_asm_statement_reports_its_assembler_warnings_at_its_line() {
+    let src = "void f(int *p)\n{\n    __asm__(\"inc %0\" : \"+m\"(*p));\n\
+               __asm__(\".warning \\\"in a body\\\"\");\n}\n\
+               __asm__(\".globl g\\ng:\\n\\tinc (%rax)\\n\\tret\\n\");\n";
+    let d = dir("asm-statement-warnings");
+    write(&d, "u.c", src);
+    let text = run_ok(&d, &["-q", "-c", "--target=linux-x64", "u.c", "-o", "u.o"]);
+    let warnings: Vec<&str> = text.lines().filter(|l| l.contains(" warning: ")).collect();
+    let at = |line: &str, tail: &str| {
+        warnings
+            .iter()
+            .any(|w| w.starts_with(&format!("u.c:{line}:")) && w.ends_with(tail))
+    };
+    assert!(
+        at("3", "encoded as `incl` [B5003] [-Wasm-operand-size]"),
+        "{text}"
+    );
+    assert!(
+        at("4", "`.warning` in a body [B5004] [-Wasm-warning]"),
+        "{text}"
+    );
+    assert!(
+        at("6", "encoded as `incl` [B5003] [-Wasm-operand-size]"),
+        "{text}"
+    );
+    assert_eq!(warnings.len(), 3, "{text}");
+}
+
+/// An error follows the preprocessor's line markers back to its line's file.
 #[test]
 fn a_preprocessed_unit_reports_the_line_of_the_original_file() {
     for (target, mov, bad, bad_in_header) in [
@@ -3729,7 +3915,7 @@ fn a_preprocessed_unit_reports_the_line_of_the_original_file() {
     }
 }
 
-/// gas reports an expansion's error at its body line, a macro's with a note
+/// An expansion's error is reported at its body line, a macro's with a note
 /// per invocation, innermost first; markers apply as of the definition.
 #[test]
 fn an_error_in_an_expansion_is_reported_at_its_body_line() {
@@ -3795,6 +3981,345 @@ fn every_layout_error_is_reported_at_its_line() {
             error_positions(&errors),
             ["sets.s:4: error", "sets.s:6: error"],
             "{target}: {errors:#?}"
+        );
+    }
+}
+
+/// A unit in GNU as's Intel syntax: registers and immediates bare, the
+/// destination first, `size ptr` memory with a segment, a scaled index and a
+/// RIP base, `offset`, an equated constant, MASM's `0FFh`, a character
+/// constant, extending moves from memory, a size `ptr` gives where no
+/// register does, indirect branches, AVX-512 decorations, prefixes, and a
+/// return to AT&T syntax.
+const INTEL_UNIT: &str = ".intel_syntax noprefix
+.set K, 24
+.text
+.globl f
+f:
+    push rbp
+    mov rbp, rsp
+    mov eax, 1
+    mov rax, qword ptr [rdi]
+    mov qword ptr [rdi + 8], rax
+    mov dword ptr [rdi + rcx*4 - 16], 7
+    mov byte ptr [rdi], 0FFh
+    add qword ptr [rsp + K], 1
+    lea rax, [rip + g]
+    lea rcx, [rax + rdx*8]
+    mov rax, qword ptr fs:[0x28]
+    movzx eax, byte ptr [rsi]
+    movsx rax, word ptr [rsi]
+    movsxd rax, dword ptr [rsi]
+    movzx edi, ah
+    movsx eax, bh
+    mov ch, dl
+    add dh, 3
+    and r8, NOT 15
+    mov eax, (3 SHL 4) or 1
+    mov ecx, 12 MOD 5
+    mov edx, 64 SHR 2 XOR 1
+    mov esi, [(r11 + 0) + 4 * rsi]
+    mov [((rsp + K) + 1 * 8)], r11d
+    lea rax, [(rax + rcx*2) + 3]
+    cqo
+    imul rax, qword ptr [rbx], 8
+    shl dword ptr [rax], cl
+    shld qword ptr [rsi], rbx, 3
+    crc32 eax, byte ptr [rax]
+    sete byte ptr [rdx]
+    mov rax, offset g
+    mov al, 'a'
+    call g
+    call qword ptr [rip + g@GOTPCREL]
+    jmp qword ptr [rax + 8]
+    jne 1f
+    xor eax, eax
+1:  cvtsi2sd xmm0, dword ptr [rax]
+    fld qword ptr [rax]
+    fild word ptr [rsi + 8]
+    fistp qword ptr [rdi]
+    fsub st(3), st
+    fdivp st(2), st
+    fsubp
+    fadd st, st(1)
+    vpaddd ymm0, ymm1, ymmword ptr [rax]
+    vcvtpd2ps xmm0, ymmword ptr [rax]
+    vcvttpd2dq xmm1, xmmword ptr [rax + 8]
+    vaddps zmm0{k1}{z}, zmm1, dword ptr [rax]{1to16}
+    lock xadd dword ptr [rdx], eax
+    rep movsb
+    ret
+.att_syntax
+    movq %rax, %rbx
+.data
+g: .quad 0
+";
+
+/// The same unit in AT&T syntax.
+const ATT_UNIT: &str = ".set K, 24
+.text
+.globl f
+f:
+    push %rbp
+    mov %rsp, %rbp
+    mov $1, %eax
+    movq (%rdi), %rax
+    movq %rax, 8(%rdi)
+    movl $7, -16(%rdi,%rcx,4)
+    movb $0xFF, (%rdi)
+    addq $1, K(%rsp)
+    lea g(%rip), %rax
+    lea (%rax,%rdx,8), %rcx
+    movq %fs:0x28, %rax
+    movzbl (%rsi), %eax
+    movswq (%rsi), %rax
+    movslq (%rsi), %rax
+    movzbl %ah, %edi
+    movsbl %bh, %eax
+    movb %dl, %ch
+    addb $3, %dh
+    and $~15, %r8
+    mov $((3 << 4) | 1), %eax
+    mov $(12 % 5), %ecx
+    mov $(64 >> 2 ^ 1), %edx
+    movl (%r11,%rsi,4), %esi
+    movl %r11d, K+8(%rsp)
+    leaq 3(%rax,%rcx,2), %rax
+    cqto
+    imulq $8, (%rbx), %rax
+    shll %cl, (%rax)
+    shldq $3, %rbx, (%rsi)
+    crc32b (%rax), %eax
+    sete (%rdx)
+    mov $g, %rax
+    mov $'a', %al
+    call g
+    call *g@GOTPCREL(%rip)
+    jmp *8(%rax)
+    jne 1f
+    xor %eax, %eax
+1:  cvtsi2sdl (%rax), %xmm0
+    fldl (%rax)
+    filds 8(%rsi)
+    fistpll (%rdi)
+    fsubr %st, %st(3)
+    fdivrp %st, %st(2)
+    fsubrp
+    fadd %st(1), %st
+    vpaddd (%rax), %ymm1, %ymm0
+    vcvtpd2psy (%rax), %xmm0
+    vcvttpd2dqx 8(%rax), %xmm1
+    vaddps (%rax){1to16}, %zmm1, %zmm0{%k1}{z}
+    lock xadd %eax, (%rdx)
+    rep movsb
+    ret
+    movq %rax, %rbx
+.data
+g: .quad 0
+";
+
+/// `.intel_syntax noprefix` assembles to the object its AT&T spelling does,
+/// in a `.s` file and in `asm` statements, inline ones with operands
+/// included.
+#[test]
+fn intel_syntax_assembles_as_its_att_spelling() {
+    let d = dir("intel-syntax");
+    let mut objects = Vec::new();
+    for (name, body) in [("i.s", INTEL_UNIT), ("a.s", ATT_UNIT)] {
+        write(&d, name, body);
+        let obj = name.replace(".s", ".o");
+        run_ok(&d, &["-q", "--target=linux-x64", "-c", name, "-o", &obj]);
+        objects.push(std::fs::read(d.join(&obj)).expect("read object"));
+    }
+    assert!(
+        objects[0] == objects[1],
+        "the Intel and AT&T objects differ"
+    );
+    let inline = |template: &str| {
+        format!(
+            "int f(int x) {{ int r; __asm__({template} : \"=r\"(r) : \"r\"(x) : \"eax\"); return r; }}\n"
+        )
+    };
+    let intel_c = inline(
+        "\".intel_syntax noprefix\\n\\tlea eax, [rdi + rdi*2 + 7]\\n\\t.att_syntax\\n\\tmovl %%eax, %0\"",
+    );
+    let att_c = inline("\"leal 7(%%rdi,%%rdi,2), %%eax\\n\\tmovl %%eax, %0\"");
+    let mut texts = Vec::new();
+    for (name, body) in [("i.c", intel_c), ("a.c", att_c)] {
+        write(&d, name, &body);
+        let obj = name.replace(".c", ".o");
+        run_ok(
+            &d,
+            &["-q", "--target=linux-x64", "-O", "-c", name, "-o", &obj],
+        );
+        texts.push(text_bytes(
+            &std::fs::read(d.join(&obj)).expect("read object"),
+        ));
+    }
+    assert_eq!(texts[0], texts[1]);
+}
+
+/// An Intel-syntax statement that names no instruction operand is reported
+/// at its line, as is an `.att_syntax` mode badc does not read.
+#[test]
+fn intel_syntax_reports_what_it_cannot_restate() {
+    let d = dir("intel-syntax-errors");
+    write(
+        &d,
+        "bad.s",
+        ".intel_syntax noprefix\n.text\nmov eax, [rax + rbx + rcx]\n.att_syntax noprefix\n",
+    );
+    let (ok, text) = run(
+        &d,
+        &["-q", "--target=linux-x64", "-c", "bad.s", "-o", "bad.o"],
+    );
+    assert!(!ok, "{text}");
+    assert!(
+        text.contains("bad.s:3:") && text.contains("adds three registers"),
+        "{text}"
+    );
+    assert!(
+        text.contains("bad.s:4:") && text.contains("`.att_syntax noprefix`"),
+        "{text}"
+    );
+}
+
+/// AT&T `shld` and `shrd` take a memory destination and `shrd` an immediate
+/// count; an unsized memory operand takes the width of the register beside
+/// it but a shift's `%cl` count, or the one width the instruction has.
+#[test]
+fn double_shifts_and_sole_width_memory_assemble() {
+    let d = dir("double-shift");
+    write(
+        &d,
+        "s.s",
+        ".text\nshldw %cl, %bx, (%rsi)\nshld %cl, %ebx, (%rsi)\nshrdq $5, %r9, 8(%rax)\n\
+         shrd $5, %r9, %r10\nsete (%rdx)\nsetnz 3(%rax)\n",
+    );
+    run_ok(&d, &["-q", "--target=linux-x64", "-c", "s.s", "-o", "s.o"]);
+    let text = text_bytes(&std::fs::read(d.join("s.o")).expect("read object"));
+    assert_eq!(
+        text,
+        [
+            0x66, 0x0f, 0xa5, 0x1e, 0x0f, 0xa5, 0x1e, 0x4c, 0x0f, 0xac, 0x48, 0x08, 0x05, 0x4d,
+            0x0f, 0xac, 0xca, 0x05, 0x0f, 0x94, 0x02, 0x0f, 0x95, 0x40, 0x03
+        ]
+    );
+}
+
+/// `(type, symbol name, addend)` of every entry of a named RELA section.
+fn relocs_by_symbol(bytes: &[u8], want: &str) -> Vec<(u32, String, i64)> {
+    let u16at = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let u32at = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
+    let u64at = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
+    let syms = sym_table(bytes);
+    let shoff = u64at(0x28) as usize;
+    let (shentsize, shnum, shstrndx) = (u16at(0x3a), u16at(0x3c), u16at(0x3e));
+    let names = u64at(shoff + shstrndx * shentsize + 0x18) as usize;
+    let sections: Vec<String> = (0..shnum)
+        .map(|i| {
+            let n = names + u32at(shoff + i * shentsize);
+            let end = bytes[n..].iter().position(|&b| b == 0).unwrap();
+            String::from_utf8_lossy(&bytes[n..n + end]).into_owned()
+        })
+        .collect();
+    let Some(i) = sections.iter().position(|n| n == want) else {
+        return Vec::new();
+    };
+    let sh = shoff + i * shentsize;
+    let (off, size) = (u64at(sh + 0x18) as usize, u64at(sh + 0x20) as usize);
+    (0..size)
+        .step_by(24)
+        .map(|e| {
+            let info = u64at(off + e + 8);
+            let (name, _, shndx, _, _) = &syms[(info >> 32) as usize];
+            // A section symbol carries no name of its own; it reads as its
+            // section's.
+            let name = match name.is_empty() {
+                true => sections[*shndx as usize].clone(),
+                false => name.clone(),
+            };
+            (
+                (info & 0xffff_ffff) as u32,
+                name,
+                u64at(off + e + 16) as i64,
+            )
+        })
+        .collect()
+}
+
+/// A relocation a gas operator writes (`@GOTPCREL`) against a label
+/// the unit defines names the label, not its section plus its offset: the
+/// addend of a GOT relocation applies to the slot, so the section's slot
+/// stepped by the offset would read another entry. A `.L` temporary so
+/// referenced stays in the symbol table. A plain reference still reduces
+/// to the section.
+#[test]
+fn operator_relocations_name_a_local_label() {
+    let d = dir("got-local");
+    write(
+        &d,
+        "g.s",
+        ".text\n.globl f\nf:\n    call g\n    call *g@GOTPCREL(%rip)\n    \
+         movq .Lh@GOTPCREL(%rip), %rax\n    ret\n\
+         .data\npad: .quad 0\ng: .quad 0\n.Lh: .quad 0\n",
+    );
+    run_ok(&d, &["-q", "--target=linux-x64", "-c", "g.s", "-o", "g.o"]);
+    let bytes = std::fs::read(d.join("g.o")).unwrap();
+    let (pc32, gotpcrelx, rex_gotpcrelx) = (2, 41, 42);
+    assert_eq!(
+        relocs_by_symbol(&bytes, ".rela.text"),
+        [
+            (pc32, String::from(".data"), 4),
+            (gotpcrelx, String::from("g"), -4),
+            (rex_gotpcrelx, String::from(".Lh"), -4),
+        ]
+    );
+}
+
+/// The aarch64 GOT access GNU as and clang assemble -- `adrp :got:` and
+/// `ldr :got_lo12:`, the `#` optional -- names its symbol, a local label's
+/// own among them, since the slot belongs to the symbol. A plain reference
+/// to the label still reduces to its section.
+#[test]
+fn aarch64_got_accesses_name_their_symbol() {
+    let d = dir("a64-got");
+    write(
+        &d,
+        "g.s",
+        ".text\n.globl f\nf:\n    adrp x0, :got:g\n    ldr x0, [x0, :got_lo12:g]\n    \
+         adrp x1, :got:lab\n    ldr x1, [x1, #:got_lo12:lab]\n    adrp x2, lab\n    ret\n\
+         lab:\n    ret\n",
+    );
+    run_ok(
+        &d,
+        &["-q", "--target=linux-aarch64", "-c", "g.s", "-o", "g.o"],
+    );
+    let bytes = std::fs::read(d.join("g.o")).unwrap();
+    let (page, got_page, got_lo12) = (275, 311, 312);
+    assert_eq!(
+        relocs_by_symbol(&bytes, ".rela.text"),
+        [
+            (got_page, String::from("g"), 0),
+            (got_lo12, String::from("g"), 0),
+            (got_page, String::from("lab"), 0),
+            (got_lo12, String::from("lab"), 0),
+            (page, String::from(".text"), 0x18),
+        ]
+    );
+    // The slot holds a 64-bit address, read by `ldr Xt` alone.
+    for (body, op) in [
+        ("add x0, x0, :got:g", ":got:"),
+        ("ldr w0, [x0, :got_lo12:g]", ":got_lo12:"),
+    ] {
+        write(&d, "e.s", &format!(".text\nf:\n    {body}\n"));
+        let (ok, err) = run(
+            &d,
+            &["-q", "--target=linux-aarch64", "-c", "e.s", "-o", "e.o"],
+        );
+        assert!(
+            !ok && err.contains(&format!("`{op}` operand outside")),
+            "{body}: {err}"
         );
     }
 }

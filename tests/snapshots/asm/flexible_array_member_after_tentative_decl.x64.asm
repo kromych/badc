@@ -3,7 +3,7 @@ flexible_array_member_after_tentative_decl.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -63,13 +63,13 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	cmpq	$0x10, %rax
                	jne	<addr>
+               	movq	<rip>, %rax # <addr>
+               	cmpq	$0x11, %rax
+               	jne	<addr>
+               	movq	<rip>, %rax # <addr>
+               	cmpq	$0x12, %rax
+               	jne	<addr>
                	leaq	<rip>, %rax # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	cmpq	$0x11, %rcx
-               	jne	<addr>
-               	movq	<rip>, %rcx # <addr>
-               	cmpq	$0x12, %rcx
-               	jne	<addr>
                	movq	<rip>, %rcx # <addr>
                	cmpq	$0x13, %rcx
                	jne	<addr>

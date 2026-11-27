@@ -3,7 +3,7 @@ thread_local_image_alignment.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -57,49 +57,46 @@ Disassembly of section .text:
                	retq
 
 <thread_main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0xa, %edi
                	callq	<addr>
                	movslq	%eax, %rax
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x38, %rsp
                	xorl	%edi, %edi
                	callq	<addr>
                	testl	%eax, %eax
                	je	<addr>
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	xorl	%edi, %edi
                	movl	$0x2, %esi
                	callq	<addr>
-               	leaq	<rip>, %rsi
                	movq	%rax, 0x8(%rsp)
                	movq	%rax, %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	movq	%rax, %r10
                	movq	%r10, 0x18(%rsp)
                	movq	0x8(%rsp), %rax
-               	leaq	<rip>, %rsi
                	movq	%rax, %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	movq	%rax, %r10
                	movq	%r10, 0x10(%rsp)
-               	leaq	-0x10(%rbp), %rdi
+               	movq	0x18(%rsp), %r11
+               	leaq	0x20(%rsp), %rdi
                	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
-               	movq	0x18(%rsp), %r11
-               	movq	%rsi, %rcx
+               	xorl	%ecx, %ecx
                	callq	*%r11
-               	movq	-0x10(%rbp), %rdi
-               	leaq	-0x8(%rbp), %rsi
+               	movq	0x20(%rsp), %rdi
                	movq	0x10(%rsp), %r11
+               	leaq	0x28(%rsp), %rsi
                	callq	*%r11
-               	movq	-0x8(%rbp), %rax
-               	leave
+               	movq	0x28(%rsp), %rax
+               	addq	$0x38, %rsp
                	retq

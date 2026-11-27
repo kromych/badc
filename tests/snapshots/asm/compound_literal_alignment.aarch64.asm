@@ -3,7 +3,7 @@ compound_literal_alignment.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -17,9 +17,9 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	adrp	x0, <page>
-               	ldr	x1, [x0, #0x28]
-               	and	x2, x1, #0xf
+               	adrp	x1, <page>
+               	ldr	x0, [x1, #0x28]
+               	and	x2, x0, #0xf
                	cbz	w2, <addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
@@ -49,10 +49,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldr	x1, [x1]
-               	cmp	x1, #0x1
+               	ldr	x0, [x0]
+               	cmp	x0, #0x1
                	b.ne	<addr>
-               	ldr	x0, [x0, #0x28]
+               	ldr	x0, [x1, #0x28]
                	ldr	x0, [x0, #0x8]
                	cmp	x0, #0x2
                	b.eq	<addr>

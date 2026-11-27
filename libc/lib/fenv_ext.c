@@ -5,6 +5,7 @@
 #ifdef _WIN32
 
 #include <fenv.h>
+#pragma STDC FENV_ACCESS ON
 
 int feraiseexcept(int excepts) {
     static const struct {

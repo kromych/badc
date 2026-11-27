@@ -3,7 +3,7 @@ posix_unix_headers.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,39 +26,29 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x80, %rsp
+               	subq	$0x88, %rsp
                	xorl	%ecx, %ecx
                	movq	%rcx, %rax
-               	movb	%cl, -0x80(%rbp,%rax)
+               	movb	%cl, (%rsp,%rax)
                	incq	%rax
                	cmpl	$0x80, %eax
                	jl	<addr>
-               	movzbq	-0x80(%rbp), %rax
+               	movzbq	(%rsp), %rax
                	orq	$0x8, %rax
-               	movb	%al, -0x80(%rbp)
-               	movzbq	-0x7b(%rbp), %rcx
-               	orq	$0x1, %rcx
-               	movb	%cl, -0x7b(%rbp)
-               	andq	$0xff, %rcx
-               	testb	$0x1, %cl
-               	jne	<addr>
-               	movl	$0x2, %eax
-               	leave
-               	retq
+               	movb	%al, (%rsp)
+               	orb	$0x1, 0x5(%rsp)
                	testb	$0x10, %al
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x88, %rsp
                	retq
                	andq	$-0x9, %rax
-               	movb	%al, -0x80(%rbp)
+               	movb	%al, (%rsp)
                	testb	$0x8, %al
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x88, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x88, %rsp
                	retq

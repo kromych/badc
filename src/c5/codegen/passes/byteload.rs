@@ -792,6 +792,7 @@ mod tests {
             tls_dynamic: false,
             section: None,
             patchable_entry: None,
+            type_hash: None,
             no_instrument: false,
             no_stack_protector: false,
             is_weak: false,
@@ -826,6 +827,9 @@ mod tests {
             has_returns_twice_call: false,
             did_unroll: false,
             did_inline: false,
+            frees_rbp: false,
+            fenv_access: false,
+            ret_low_word: false,
             insts,
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -1165,6 +1169,7 @@ mod tests {
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,
+                    parts: Vec::new(),
                 }, // v2
                 u8_load(0, 1), // v3
                 shl(3, 8),     // v4

@@ -3,7 +3,7 @@ dlopen_null_searches_the_global_scope.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -26,9 +26,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
+               	mov	x0, x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x0, x20
                	bl	<addr>
                	mov	x1, x0
                	cbz	x1, <addr>
@@ -57,9 +57,9 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0x20
                	ret
                	bl	<addr>
+               	mov	x0, x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x0, x20
                	bl	<addr>
                	cbnz	x0, <addr>
                	bl	<addr>
@@ -71,10 +71,9 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x5                // =5
                	cmp	x0, #0x0
-               	csel	x0, x2, x1, ne
+               	mov	x16, #0x5               // =5
+               	csel	x0, x16, xzr, ne
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret

@@ -218,7 +218,7 @@ impl<'a> Walker<'a> {
             FuncletBody::Finally(_) => (SehCtx::Finally { abnormal: first }, void, "$fin$"),
         };
         fb.set_name(name.into());
-        fb.set_ret_type_tag(ret_ty);
+        fb.set_ret_type_tag(ret_ty, self.target);
         let mut w = Walker {
             ast: self.ast,
             fun,

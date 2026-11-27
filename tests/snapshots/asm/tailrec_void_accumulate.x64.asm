@@ -3,7 +3,7 @@ tailrec_void_accumulate.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -31,13 +31,13 @@ Disassembly of section .text:
                	addq	%rax, %rcx
                	movq	%rcx, <rip> # <addr>
                	decq	%rax
+               	nopl	(%rax)
                	testl	%eax, %eax
                	jne	<addr>
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x64, %edi
                	callq	<addr>
                	xorl	%eax, %eax
@@ -45,5 +45,5 @@ Disassembly of section .text:
                	movq	<rip>, %rdx # <addr>
                	cmpq	$0x13ba, %rdx           # imm = 0x13BA
                	cmovneq	%rcx, %rax
-               	popq	%rbp
+               	popq	%r11
                	retq

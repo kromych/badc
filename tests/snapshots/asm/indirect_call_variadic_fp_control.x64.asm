@@ -3,7 +3,7 @@ indirect_call_variadic_fp_control.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -58,6 +58,7 @@ Disassembly of section .text:
                	jmp	<addr>
                	incq	%rax
                	movl	-0xd0(%rbp), %ecx
+               	nop
                	cmpl	%ecx, %eax
                	jge	<addr>
                	testb	$0x1, %al
@@ -96,30 +97,27 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
+               	movsd	<rip>, %xmm0
+               	movsd	<rip>, %xmm1
                	movl	$0x4, %edi
                	movl	$0x1, %esi
-               	movsd	<rip>, %xmm0
                	movl	$0x3, %edx
-               	movsd	<rip>, %xmm1
                	movb	$0x2, %al
                	callq	<addr>
                	movapd	%xmm0, %xmm2
-               	movsd	<rip>, %xmm0
-               	ucomisd	%xmm0, %xmm2
+               	ucomisd	<rip>, %xmm2
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movl	$0x4, %edi
-               	movl	$0x1, %esi
                	movsd	<rip>, %xmm0
-               	movl	$0x3, %edx
                	movsd	<rip>, %xmm1
                	movsd	%xmm2, 0x8(%rsp)
+               	movl	$0x4, %edi
+               	movl	$0x1, %esi
+               	movl	$0x3, %edx
                	movb	$0x2, %al
                	callq	<addr>
                	movsd	0x8(%rsp), %xmm2
@@ -127,8 +125,8 @@ Disassembly of section .text:
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

@@ -3,7 +3,7 @@ generic_selection_qualified.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -38,23 +38,21 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	xorl	%eax, %eax
-               	movl	%eax, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rcx
-               	leaq	0x4(%rcx), %rdx
-               	subq	%rcx, %rdx
-               	movq	%rdx, %rcx
-               	sarq	$0x3f, %rcx
-               	shrq	$0x3e, %rcx
+               	movl	%eax, 0x8(%rsp)
+               	leaq	0x8(%rsp), %rdx
+               	leaq	0x4(%rdx), %rcx
+               	subq	%rdx, %rcx
+               	movq	%rcx, %rdx
+               	sarq	$0x3f, %rdx
+               	shrq	$0x3e, %rdx
                	addq	%rdx, %rcx
                	sarq	$0x2, %rcx
                	cmpq	$0x1, %rcx
                	je	<addr>
                	movl	$0x1c, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	leave
+               	addq	$0x18, %rsp
                	retq

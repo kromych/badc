@@ -3,7 +3,7 @@ pragma_pack_push_pop_forms.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,9 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	movq	$0x1d, <rip> # <addr>
                	movq	<rip>, %rax # <addr>
                	cmpq	$0x38, %rax
@@ -38,7 +36,6 @@ Disassembly of section .text:
                	movq	<rip>, %rax # <addr>
                	cmpq	$0x38, %rax
                	jb	<addr>
-               	leaq	<rip>, %rdi # <addr>
                	movl	<rip>, %eax # <addr>
                	shlq	$0x2b, %rax
                	sarq	$0x2b, %rax
@@ -52,21 +49,22 @@ Disassembly of section .text:
                	cmpq	$0x38, %rax
                	je	<addr>
                	movl	$0x8, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
-               	leaq	-0x18(%rbp), %rsi
-               	movq	$0x0, -0x18(%rbp)
-               	movq	$0x0, -0x10(%rbp)
-               	movq	$0x0, -0x8(%rbp)
-               	movb	$0x38, -0x10(%rbp)
+               	movq	$0x0, 0x8(%rsp)
+               	movq	$0x0, 0x10(%rsp)
+               	movq	$0x0, 0x18(%rsp)
+               	movb	$0x38, 0x10(%rsp)
+               	leaq	<rip>, %rdi # <addr>
+               	leaq	0x8(%rsp), %rsi
                	movl	$0x18, %edx
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x9, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq

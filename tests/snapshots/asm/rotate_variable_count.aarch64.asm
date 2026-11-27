@@ -3,7 +3,7 @@ rotate_variable_count.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -27,29 +27,29 @@ Disassembly of section .text:
                	ldp	x16, x17, [x1, #0x20]
                	stp	x16, x17, [x0, #0x20]
                	mov	x6, #0x0                // =0
+               	sub	x7, x29, #0x40
                	mov	x2, #0x1                // =1
                	stur	w2, [x29, #-0x10]
                	b	<addr>
-               	sub	x0, x29, #0x40
-               	ldr	x3, [x0, x6, lsl #3]
+               	ldr	x3, [x7, x6, lsl #3]
                	ldursw	x0, [x29, #-0x10]
-               	ror	x7, x3, x0
-               	ldursw	x4, [x29, #-0x10]
+               	ror	x8, x3, x0
+               	ldursw	x5, [x29, #-0x10]
                	mov	x0, #0x0                // =0
                	mov	x1, x0
                	b	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.ge	<addr>
-               	lsl	x5, x2, x0
-               	and	x5, x3, x5
-               	cbz	x5, <addr>
-               	sub	x5, x0, x4
-               	and	x5, x5, #0x3f
-               	lsl	x5, x2, x5
-               	orr	x1, x1, x5
+               	lsl	x4, x2, x0
+               	and	x4, x3, x4
+               	cbz	x4, <addr>
+               	sub	x4, x0, x5
+               	and	x4, x4, #0x3f
+               	lsl	x4, x2, x4
+               	orr	x1, x1, x4
                	b	<addr>
-               	cmp	x7, x1
+               	cmp	x8, x1
                	b.ne	<addr>
                	ldursw	x0, [x29, #-0x10]
                	add	x0, x0, #0x1

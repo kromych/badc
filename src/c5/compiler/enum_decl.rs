@@ -340,9 +340,8 @@ impl Compiler {
         let c = EnumCompletion { tag, underlying };
         for s in &mut self.symbols {
             c.ty(&mut s.type_, &mut s.incomplete_enum_tag);
-            c.ty(&mut s.h_type, &mut s.h_incomplete_enum_tag);
             c.fn_type(&mut s.fn_type);
-            c.fn_type(&mut s.h_fn_type);
+            s.outer.complete_enum(&c);
         }
         for b in self.block_scopes.iter_mut().flatten() {
             b.complete_enum(&c);

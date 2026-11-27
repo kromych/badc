@@ -3,7 +3,7 @@ addr_compare_disjoint_blocks.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,23 +26,20 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	movl	<rip>, %eax # <addr>
-               	movl	%eax, -0x18(%rbp)
-               	leaq	-0x18(%rbp), %rdx
-               	leaq	-0x8(%rbp), %rsi
+               	movl	%eax, 0x8(%rsp)
+               	leaq	0x8(%rsp), %rdx
+               	leaq	0x18(%rsp), %rsi
                	cmpq	%rdx, %rsi
                	sete	%al
                	movzbq	%al, %rax
                	leaq	(%rax,%rax,2), %rax
                	movb	%al, <rip> # <addr>
-               	movsbq	%al, %rax
                	testl	%eax, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	xorl	%eax, %eax
                	movq	%rax, %rcx
@@ -53,36 +50,37 @@ Disassembly of section .text:
                	cmpq	%rsi, %rdx
                	cmoveq	%rdi, %rcx
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x4, %eax
                	jl	<addr>
                	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movl	$0x4, %eax
-               	movl	%eax, -0x18(%rbp)
-               	leaq	-0x10(%rbp), %rcx
+               	movl	%eax, 0x8(%rsp)
+               	leaq	0x10(%rsp), %rcx
                	leaq	0x8(%rcx), %rdx
-               	leaq	-0x18(%rbp), %rcx
+               	leaq	0x8(%rsp), %rcx
                	cmpq	%rcx, %rdx
                	setne	%dl
                	movzbq	%dl, %rdx
                	cmpl	$0x1, %edx
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	xorl	%edx, %edx
-               	movb	%dl, -0x18(%rbp)
-               	leaq	-0x8(%rbp), %rsi
+               	movb	%dl, 0x8(%rsp)
+               	leaq	0x18(%rsp), %rsi
                	cmpq	%rcx, %rsi
                	setne	%cl
                	movzbq	%cl, %rcx
                	cmpl	$0x1, %ecx
                	je	<addr>
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movq	%rdx, %rax
-               	leave
+               	addq	$0x28, %rsp
                	retq

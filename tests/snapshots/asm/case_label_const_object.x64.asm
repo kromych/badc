@@ -3,7 +3,7 @@ case_label_const_object.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -52,8 +52,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x9, <rip> # <addr>
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x3e8, %eax            # imm = 0x3E8
@@ -62,11 +61,11 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0xb, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0xa, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

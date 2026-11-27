@@ -3,7 +3,7 @@ page_multiple_alignment.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -67,13 +67,13 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x8, %eax
                	retq
-               	addq	$0x10000, %rcx          # imm = 0x10000
-               	testl	$0x3fff, %ecx           # imm = 0x3FFF
+               	leaq	0x10000(%rcx), %rsi
+               	testl	$0x3fff, %esi           # imm = 0x3FFF
                	je	<addr>
                	movl	$0x9, %eax
                	retq
-               	leaq	0x1(%rax), %rcx
-               	testl	$0x3fff, %ecx           # imm = 0x3FFF
+               	leaq	0x1(%rax), %rsi
+               	testl	$0x3fff, %esi           # imm = 0x3FFF
                	jne	<addr>
                	movl	$0x14, %eax
                	retq
@@ -85,8 +85,7 @@ Disassembly of section .text:
                	movl	$0xb, <rip> # <addr>
                	movl	$0x16, <rip> # <addr>
                	movl	$0x21, (%rdx)
-               	leaq	<rip>, %rax # <addr>
-               	addq	$0x14000, %rax          # imm = 0x14000
+               	leaq	0x14000(%rcx), %rax
                	movl	$0x2c, (%rax)
                	movl	<rip>, %eax # <addr>
                	cmpl	$0xb, %eax
@@ -99,7 +98,12 @@ Disassembly of section .text:
                	movl	(%rax), %eax
                	cmpl	$0x21, %eax
                	jne	<addr>
-               	xorl	%eax, %eax
-               	retq
+               	leaq	<rip>, %rax # <addr>
+               	addq	$0x14000, %rax          # imm = 0x14000
+               	movl	(%rax), %eax
+               	cmpl	$0x2c, %eax
+               	je	<addr>
                	movl	$0x1e, %eax
+               	retq
+               	xorl	%eax, %eax
                	retq

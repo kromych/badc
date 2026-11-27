@@ -3,7 +3,7 @@ variadic_callee_frame.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -296,7 +296,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x4                // =4
-               	mov	x1, x0
+               	mov	x1, #0x4                // =4
                	bl	<addr>
                	cbz	w0, <addr>
                	mov	x0, #0x2                // =2

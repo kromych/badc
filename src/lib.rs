@@ -25,10 +25,13 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 // Without `native-emit` the on-disk writers are gated out, leaving
 // their support code (the `Machine` enum, `lower_for`, reloc tables,
-// per-binding metadata read only by the writers) unreferenced. That
-// configuration is a deliberate slim build, so allow the dead code
-// rather than gating each field and helper individually.
-#![cfg_attr(not(feature = "native-emit"), allow(dead_code))]
+// per-binding metadata read only by the writers) unreferenced; without
+// `linker` (which implies `native-emit`) so is the link's (the relocation
+// kinds it applies, the symbol-version reader, the link map's placement
+// record). Those configurations are deliberate slim builds, so allow the
+// dead code rather than gating each field and helper individually; the
+// `full` build keeps the lint.
+#![cfg_attr(not(feature = "linker"), allow(dead_code))]
 // `+` and `-` at the start of a doc-comment line are heavy-use
 // markdown bullets in this codebase's narrative comments
 // (declarator / parser shapes, ABI option-bit lists). Rust 1.95
@@ -146,11 +149,12 @@ pub use c5::{
     BinaryFormat, BuildId, C5Error, CStd, CodeModel, CompileOptions, Compiler,
     DEFAULT_SSP_BUFFER_SIZE, DWARF_FORMAT_BITS, DWARF_VERSION, ElfClass, ElfImageOptions, ExecForm,
     FixedReg, FixedRegs, FpContract, GuardSeg, GuardSymbol, Hardening, Host, IncludeOrigin,
-    IncludeRecord, IncludeStatus, IndirectBranch, LaxVectors, MachOImageOptions, NativeOptions,
-    OutputKind, Overwrite, PatchableEntry, PredefinedKind, PredefinedSymbol, Preprocessed,
-    Profiling, Program, SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect, StackProtector, StructDef,
-    SymVisibility, Target, TargetSet, Trace, VariableInfo, Vm, X86ExtOption, X86Features,
-    dep_escape, dep_prerequisites, dep_render, embedded_headers, fixed_register, jit_run,
+    IncludeRecord, IncludeStatus, IndirectBranch, InlineStringOps, JitModule, LaxVectors,
+    MachOImageOptions, NativeOptions, OutputKind, Overwrite, PatchableEntry, PeImageOptions,
+    PredefinedKind, PredefinedSymbol, Preprocessed, Profiling, Program, SYSV_TLS_GUARD_OFFSET,
+    Sanitize, SanitizerCheck, StackGuard, StackProtect, StackProtector, StructDef, SymVisibility,
+    Target, TargetSet, Trace, VariableInfo, Vm, X86ExtOption, X86Features, dep_escape,
+    dep_prerequisites, dep_render, embedded_headers, fixed_register, jit_load, jit_run,
     jit_run_with_options, mach_o_symbol_name, predefined_symbols, stack_guard_sysreg,
 };
 #[cfg(feature = "native-emit")]
@@ -162,16 +166,16 @@ pub use c5::{
 #[cfg(feature = "std")]
 pub use c5::{StdHost, write_output_file};
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 pub use c5::is_resource_file;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 pub use c5::{
     ArchiveMember, Binding, DylibSpec, IndexedArchive, Linkage, Subsystem, elf_archive_symbols,
     embedded_compiler_rt, embedded_libc, embedded_runtime, embedded_source_label,
     is_arm64x_archive, jit_run_with_sources, read_archive, write_archive,
 };
 
-#[cfg(all(feature = "full", feature = "std"))]
+#[cfg(all(feature = "linker", feature = "std"))]
 pub use c5::{
     ArchiveInclusion, DataImportSlots, ExportForm, ImageOptions, LdsEmit, LdsObject, LdsOptions,
     LdsResult, LinkOptions, LinkerScript, MergedNative, MergedSymbol, NativeMachine, NativeObject,
@@ -181,9 +185,10 @@ pub use c5::{
     detect_binary_format, emit_aarch64_plt, emit_plt_for, emit_x86_64_plt, import_libraries,
     is_arm64x_native_member, is_coff_import_member, is_coff_object, is_elf_object,
     is_ld_invocation, is_mach_o_dylib, is_mach_o_fat, is_mach_o_object, is_native_object,
-    is_pe_dll, is_tbd, library_bindings, link_native_objects, link_native_objects_with,
-    link_native_objects_with_options, link_native_objects_with_shared_libs, link_resolves_symbol,
-    link_with_script, mach_o_archive_symbols, mach_o_fat_slice, module_definition, os_error_text,
+    is_pe_dll, is_tbd, ld_identity, library_bindings, link_native_objects,
+    link_native_objects_with, link_native_objects_with_options,
+    link_native_objects_with_shared_libs, link_resolves_symbol, link_with_script,
+    mach_o_archive_symbols, mach_o_fat_slice, module_definition, os_error_text,
     parse_import_member, parse_lds_object, parse_linker_script, parse_mach_o_dylib,
     parse_mach_o_loader, parse_native_elf, parse_native_mach_o, parse_native_object,
     parse_native_object_for, parse_pe_dll, parse_shared_library, parse_tbd, parse_z_keyword,

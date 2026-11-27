@@ -3,7 +3,7 @@ sysv_single_fp_vectors.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -23,27 +23,27 @@ Disassembly of section .text:
                	ldr	w16, [x1]
                	str	w16, [x0]
                	adrp	x0, <page>
-               	ldr	d1, [x0, #0x10]
-               	sub	x2, x29, #0x8
+               	ldr	d2, [x0, #0x10]
+               	sub	x1, x29, #0x8
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x16, [x0]
-               	str	x16, [x2]
-               	ldur	s2, [x29, #-0x10]
+               	str	x16, [x1]
+               	ldur	s1, [x29, #-0x10]
                	fmov	s0, #1.50000000
-               	fcmp	s2, s0
-               	cset	x1, eq
-               	orr	x1, x1, #0x2
-               	orr	x1, x1, #0x4
-               	cmp	x1, #0x7
+               	fcmp	s1, s0
+               	cset	x2, eq
+               	orr	x2, x2, #0x2
+               	orr	x2, x2, #0x4
+               	cmp	x2, #0x7
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x3ff8000000000000 // =4609434218613702656
-               	fmov	d17, x1
-               	fcmp	d1, d17
+               	mov	x2, #0x3ff8000000000000 // =4609434218613702656
+               	fmov	d17, x2
+               	fcmp	d2, d17
                	cset	x3, eq
                	orr	x3, x3, #0x2
                	orr	x3, x3, #0x4
@@ -71,7 +71,7 @@ Disassembly of section .text:
                	mov	x16, #0x4059000000000000 // =4636737291354636288
                	fmov	d2, x16
                	fmov	d1, #25.00000000
-               	fmov	d16, x1
+               	fmov	d16, x2
                	fmadd	d2, d16, d2, d1
                	fcvtzs	x0, d2
                	add	x0, x0, #0x7
@@ -84,7 +84,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x16, [x0]
-               	str	x16, [x2]
+               	str	x16, [x1]
                	ldr	s2, [x0]
                	mov	x16, #0x42c80000        // =1120403456
                	fmov	s3, w16
@@ -112,7 +112,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	fmov	d16, x1
+               	fmov	d16, x2
                	mov	x0, v16.d[0]
                	mov	x17, #0x3ff8000000000000 // =4609434218613702656
                	cmp	x0, x17

@@ -3,7 +3,7 @@ setjmp_longjmp_roundtrip.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,8 +26,7 @@ Disassembly of section .text:
                	int3
 
 <deep>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	<rip>, %eax # <addr>
                	incq	%rax
                	movl	%eax, <rip> # <addr>
@@ -43,6 +42,7 @@ Disassembly of section .text:
                	movl	<rip>, %ecx # <addr>
                	incq	%rcx
                	movl	%ecx, <rip> # <addr>
+               	nopl	(%rax)
                	testl	%eax, %eax
                	jle	<addr>
                	decq	%rax
@@ -52,7 +52,7 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	jle	<addr>
                	leaq	-0x1(%rax), %rdi
-               	popq	%rbp
+               	popq	%r11
                	jmp	<addr>
                	leaq	<rip>, %rdi # <addr>
                	callq	<addr>

@@ -3,7 +3,7 @@ arm_acle_crc32_and_sha.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -36,71 +36,71 @@ Disassembly of section .text:
                	andq	$0x1, %rax
                	negq	%rax
                	andq	%rcx, %rax
-               	xorq	%rdi, %rax
-               	movl	%eax, %eax
+               	xorq	%rax, %rdi
+               	movl	%edi, %eax
                	movq	%rax, %rdi
                	shrq	%rdi
                	andq	$0x1, %rax
                	negq	%rax
                	andq	%rcx, %rax
-               	xorq	%rdi, %rax
-               	movl	%eax, %eax
+               	xorq	%rax, %rdi
+               	movl	%edi, %eax
                	movq	%rax, %rdi
                	shrq	%rdi
                	andq	$0x1, %rax
                	negq	%rax
                	andq	%rcx, %rax
-               	xorq	%rdi, %rax
-               	movl	%eax, %eax
+               	xorq	%rax, %rdi
+               	movl	%edi, %eax
                	movq	%rax, %rdi
                	shrq	%rdi
                	andq	$0x1, %rax
                	negq	%rax
                	andq	%rcx, %rax
-               	xorq	%rdi, %rax
-               	movl	%eax, %eax
+               	xorq	%rax, %rdi
+               	movl	%edi, %eax
                	movq	%rax, %rdi
                	shrq	%rdi
                	andq	$0x1, %rax
                	negq	%rax
                	andq	%rcx, %rax
-               	xorq	%rdi, %rax
-               	movl	%eax, %eax
+               	xorq	%rax, %rdi
+               	movl	%edi, %eax
                	movq	%rax, %rdi
                	shrq	%rdi
                	andq	$0x1, %rax
                	negq	%rax
                	andq	%rcx, %rax
-               	xorq	%rdi, %rax
-               	movl	%eax, %eax
+               	xorq	%rax, %rdi
+               	movl	%edi, %eax
                	movq	%rax, %rdi
                	shrq	%rdi
                	andq	$0x1, %rax
                	negq	%rax
                	andq	%rcx, %rax
-               	xorq	%rdi, %rax
-               	movl	%eax, %eax
-               	movq	%rax, %rdi
-               	shrq	%rdi
-               	andq	$0x1, %rax
-               	negq	%rax
-               	andq	%rcx, %rax
+               	xorq	%rax, %rdi
+               	movl	%edi, %edi
+               	movq	%rdi, %rax
+               	shrq	%rax
+               	andq	$0x1, %rdi
+               	negq	%rdi
+               	andq	%rcx, %rdi
                	xorq	%rdi, %rax
                	incq	%rdx
+               	nopw	(%rax,%rax)
                	cmpl	$0x9, %edx
                	jl	<addr>
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
+               	subq	$0x48, %rsp
                	xorl	%eax, %eax
-               	imulq	$0x25, %rax, %rdx
-               	addq	$0xb, %rdx
-               	andq	$0xff, %rdx
-               	movb	%dl, -0x40(%rbp,%rax)
+               	imulq	$0x25, %rax, %rcx
+               	addq	$0xb, %rcx
+               	andq	$0xff, %rcx
+               	movb	%cl, (%rsp,%rax)
                	incq	%rax
+               	nop
                	cmpl	$0x3d, %eax
                	jl	<addr>
                	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
@@ -111,7 +111,7 @@ Disassembly of section .text:
                	cmpl	$0x340bc6d9, %eax       # imm = 0x340BC6D9
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x48, %rsp
                	retq
                	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
                	leaq	<rip>, %rsi
@@ -121,8 +121,8 @@ Disassembly of section .text:
                	cmpl	$0x1cf96d7c, %eax       # imm = 0x1CF96D7C
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x48, %rsp
                	retq
                	movl	$0x2a, %eax
-               	leave
+               	addq	$0x48, %rsp
                	retq

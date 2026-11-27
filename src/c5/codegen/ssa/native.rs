@@ -105,6 +105,7 @@ pub(crate) fn compile_function_to_bytes(
                     text_data_ranges: &mut text_data_ranges,
                     local_shift_bytes: &mut alloc::collections::BTreeMap::new(),
                     frame_stack: &mut alloc::collections::BTreeMap::new(),
+                    asm_warnings: &mut alloc::vec::Vec::new(),
                     param_frame_offsets: &mut alloc::collections::BTreeMap::new(),
                     region_frame_offsets: &mut alloc::collections::BTreeMap::new(),
                     mcount_sites: &mut alloc::vec::Vec::new(),
@@ -222,6 +223,7 @@ pub(crate) fn compile_function_to_bytes(
                     text_data_ranges: &mut text_data_ranges,
                     local_shift_bytes: &mut alloc::collections::BTreeMap::new(),
                     frame_stack: &mut alloc::collections::BTreeMap::new(),
+                    asm_warnings: &mut alloc::vec::Vec::new(),
                     param_frame_offsets: &mut alloc::collections::BTreeMap::new(),
                     region_frame_offsets: &mut alloc::collections::BTreeMap::new(),
                     mcount_sites: &mut alloc::vec::Vec::new(),
@@ -262,8 +264,8 @@ pub(crate) fn compile_function_to_bytes(
                     super::super::FunctionEntry::default(),
                     super::super::FixedRegs::NONE,
                     false,
-                    true,
-                    false,
+                    (true, true),
+                    super::super::BranchPadding::Off,
                 )
             };
             if ok.is_err() {

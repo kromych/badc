@@ -384,6 +384,12 @@ int sendfile(int fd, int s, long offset, long *len, struct sf_hdtr *hdtr,
 
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
+// glibc's checking entry points, which an object built against glibc's headers
+// with _FORTIFY_SOURCE calls in place of the functions.
+#pragma binding(libc::__recv_chk,     "__recv_chk")
+#pragma binding(libc::__recvfrom_chk, "__recvfrom_chk")
+ssize_t __recv_chk(int, void *, size_t, size_t, int);
+ssize_t __recvfrom_chk(int, void *, size_t, size_t, int, struct sockaddr *, socklen_t *);
 #pragma binding(libc::socket,     "socket")
 #pragma binding(libc::bind,       "bind")
 #pragma binding(libc::listen,     "listen")

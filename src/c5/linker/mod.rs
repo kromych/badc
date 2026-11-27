@@ -133,7 +133,7 @@ pub use delay_load::delay_load_root;
 pub use image::write_executable_elf64;
 #[cfg(feature = "std")]
 pub use implib::write_import_library;
-pub use ld_driver::{is_ld_invocation, os_error_text, run_ld, script_unreadable};
+pub use ld_driver::{is_ld_invocation, ld_identity, os_error_text, run_ld, script_unreadable};
 #[cfg(feature = "std")]
 #[allow(unused_imports)]
 pub use lds::{LinkerScript, parse_linker_script};

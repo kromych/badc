@@ -3,7 +3,7 @@ vector_object_alignment.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -31,26 +31,26 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	subq	$0xa0, %rsp
                	andq	$-0x20, %rsp
-               	leaq	-0x10(%rbp), %rcx
-               	leaq	<rip>, %rax
-               	movq	(%rax), %r10
-               	movq	%r10, (%rcx)
-               	leaq	0x20(%rsp), %rdx
-               	leaq	<rip>, %rax
-               	movups	(%rax), %xmm14
+               	leaq	-0x10(%rbp), %rax
+               	leaq	<rip>, %rcx
+               	movq	(%rcx), %r10
+               	movq	%r10, (%rax)
+               	leaq	0x20(%rsp), %rcx
+               	leaq	<rip>, %rdx
+               	movups	(%rdx), %xmm14
+               	movups	%xmm14, (%rcx)
+               	leaq	(%rsp), %rdx
+               	leaq	<rip>, %rsi
+               	movups	(%rsi), %xmm14
                	movups	%xmm14, (%rdx)
-               	leaq	(%rsp), %rsi
-               	leaq	<rip>, %rax
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rsi)
-               	movups	0x10(%rax), %xmm14
-               	movups	%xmm14, 0x10(%rsi)
-               	leaq	0x30(%rsp), %rax
+               	movups	0x10(%rsi), %xmm14
+               	movups	%xmm14, 0x10(%rdx)
+               	leaq	0x30(%rsp), %rsi
                	leaq	<rip>, %rdi
                	movups	(%rdi), %xmm14
-               	movups	%xmm14, (%rax)
+               	movups	%xmm14, (%rsi)
                	movups	0x10(%rdi), %xmm14
-               	movups	%xmm14, 0x10(%rax)
+               	movups	%xmm14, 0x10(%rsi)
                	leaq	0x50(%rsp), %rdi
                	leaq	<rip>, %r8
                	movups	(%r8), %xmm14
@@ -59,43 +59,42 @@ Disassembly of section .text:
                	movups	%xmm14, 0x10(%rdi)
                	movups	0x20(%r8), %xmm14
                	movups	%xmm14, 0x20(%rdi)
-               	leaq	0x80(%rsp), %rdi
-               	leaq	<rip>, %r8
-               	movups	(%r8), %xmm14
-               	movups	%xmm14, (%rdi)
-               	testb	$0x7, %cl
+               	leaq	0x80(%rsp), %r8
+               	leaq	<rip>, %r9
+               	movups	(%r9), %xmm14
+               	movups	%xmm14, (%r8)
+               	testb	$0x7, %al
                	je	<addr>
                	movl	$0x1d, %eax
                	leave
                	retq
-               	testb	$0xf, %dl
+               	testb	$0xf, %cl
                	je	<addr>
                	movl	$0x1e, %eax
                	leave
                	retq
-               	testb	$0x1f, %sil
+               	testb	$0x1f, %dl
                	je	<addr>
                	movl	$0x1f, %eax
                	leave
                	retq
-               	testb	$0xf, %al
+               	testb	$0xf, %sil
                	jne	<addr>
-               	addq	$0x10, %rax
+               	leaq	0x10(%rsi), %rax
                	testb	$0xf, %al
                	je	<addr>
                	movl	$0x20, %eax
                	leave
                	retq
-               	leaq	0x50(%rsp), %rax
-               	testb	$0xf, %al
+               	testb	$0xf, %dil
                	jne	<addr>
-               	addq	$0x10, %rax
+               	leaq	0x10(%rdi), %rax
                	testb	$0xf, %al
                	je	<addr>
                	movl	$0x21, %eax
                	leave
                	retq
-               	testb	$0xf, %dil
+               	testb	$0xf, %r8b
                	je	<addr>
                	movl	$0x22, %eax
                	leave
@@ -130,34 +129,34 @@ Disassembly of section .text:
                	je	<addr>
                	leave
                	retq
-               	leaq	0x20(%rsp), %rcx
-               	leaq	<rip>, %rax
-               	movups	(%rax), %xmm14
+               	leaq	0x20(%rsp), %rax
+               	leaq	<rip>, %rcx
+               	movups	(%rcx), %xmm14
+               	movups	%xmm14, (%rax)
+               	leaq	(%rsp), %rcx
+               	leaq	<rip>, %rdx
+               	movups	(%rdx), %xmm14
                	movups	%xmm14, (%rcx)
-               	leaq	(%rsp), %rdx
-               	leaq	<rip>, %rax
-               	movups	(%rax), %xmm14
-               	movups	%xmm14, (%rdx)
-               	movups	0x10(%rax), %xmm14
-               	movups	%xmm14, 0x10(%rdx)
-               	leaq	0x30(%rsp), %rax
+               	movups	0x10(%rdx), %xmm14
+               	movups	%xmm14, 0x10(%rcx)
+               	leaq	0x30(%rsp), %rdx
                	leaq	<rip>, %rsi
                	movups	(%rsi), %xmm14
-               	movups	%xmm14, (%rax)
+               	movups	%xmm14, (%rdx)
                	movups	0x10(%rsi), %xmm14
-               	movups	%xmm14, 0x10(%rax)
-               	testb	$0xf, %cl
+               	movups	%xmm14, 0x10(%rdx)
+               	testb	$0xf, %al
                	je	<addr>
                	movl	$0x25, %eax
                	leave
                	retq
-               	testb	$0x1f, %dl
+               	testb	$0x1f, %cl
                	je	<addr>
                	movl	$0x26, %eax
                	jmp	<addr>
-               	testb	$0xf, %al
+               	testb	$0xf, %dl
                	jne	<addr>
-               	addq	$0x10, %rax
+               	leaq	0x10(%rdx), %rax
                	testb	$0xf, %al
                	je	<addr>
                	movl	$0x27, %eax
@@ -194,8 +193,7 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movl	<rip>, %ecx # <addr>
                	addq	%rcx, %rax
-               	movl	<rip>, %ecx # <addr>
-               	addq	%rcx, %rax
+               	addq	$0x4, %rax
                	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x1b, %eax
@@ -262,7 +260,8 @@ Disassembly of section .text:
                	addq	%rcx, %rax
                	movl	<rip>, %ecx # <addr>
                	addq	%rcx, %rax
-               	addq	$0xd, %rax
+               	movl	<rip>, %ecx # <addr>
+               	addq	%rcx, %rax
                	cmpl	$0x27, %eax
                	je	<addr>
                	movl	$0x15, %eax

@@ -3,7 +3,7 @@ x86_cache_and_state_intrinsics.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -39,11 +39,10 @@ Disassembly of section .text:
                	movl	$0x1, %ecx
                	cmpl	$0x5, %eax
                	cmovneq	%rcx, %rdi
-               	leaq	<rip>, %rax # <addr>
-               	movq	%rax, %r10
+               	leaq	<rip>, %rdx # <addr>
+               	movq	%rdx, %r10
                	fxsave	(%r10)
                	xorl	%ecx, %ecx
-               	leaq	<rip>, %rdx # <addr>
                	movl	$0x1, %eax
                	shlq	$0x8, %rcx
                	movzbq	(%rdx,%rax), %rsi
@@ -74,6 +73,7 @@ Disassembly of section .text:
                	movzbq	(%rdx,%rsi), %rsi
                	orq	%rsi, %rcx
                	decq	%rax
+               	nopw	(%rax,%rax)
                	testl	%eax, %eax
                	jge	<addr>
                	testl	%ecx, %ecx

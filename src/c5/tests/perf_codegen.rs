@@ -436,6 +436,98 @@ impl Misses {
     }
 }
 
+/// A contracted `a * b + c` is one fused operation, also under
+/// `FENV_ACCESS` on, where a multiply left behind unread would still run and
+/// raise the flags of a rounding the expression no longer has.
+#[test]
+fn a_contraction_leaves_no_multiply_under_fenv_access() {
+    const SRC: &str = "#pragma STDC FENV_ACCESS ON\n\
+        double fused(double a, double b, double c) { return a * b + c; }\n";
+    let insns = x64(SRC, "fused");
+    // `mulsd` / `vmulsd`, and a VEX `vfmadd`/`vfmsub` (0F38 map, 0x98-0xBF).
+    assert!(!insns.iter().any(|i| i.op == 0x0F59), "{insns:x?}");
+    assert!(
+        insns
+            .iter()
+            .any(|i| i.vex && (0x3898..=0x38BF).contains(&i.op)),
+        "{insns:x?}"
+    );
+    let ws = a64(SRC, "fused");
+    // FMUL and FMADD, double precision.
+    assert!(
+        !ws.iter().any(|&w| w & 0xFFE0_FC00 == 0x1E60_0800),
+        "{ws:08x?}"
+    );
+    assert!(
+        ws.iter().any(|&w| w & 0xFFE0_8000 == 0x1F40_0000),
+        "{ws:08x?}"
+    );
+}
+
+/// Floating arithmetic of a loop's invariants and the conversion of an
+/// invariant `long` run once ahead of the loop with `FENV_ACCESS` off, the
+/// default; under the pragma they stay where the program performs them,
+/// a quotient of constants is not evaluated at translation time, and a
+/// quotient nothing reads is still performed (C17 7.6.1p2, F.8.4, F.9.1).
+#[test]
+fn floating_invariants_move_unless_fenv_access_is_on() {
+    const SRC: &str = "void f(double *a, const double *b, double x, double y, int n)\n\
+        { for (int i = 0; i < n; i++) a[i] = b[i] * (x * y); }\n\
+        void g(double *a, const double *b, long k, int n)\n\
+        { for (int i = 0; i < n; i++) a[i] = b[i] + (double)k; }\n\
+        double third(void) { double a = 1.0, b = 3.0; return a / b; }\n\
+        void unread(double x) { double q = x / 0.0; (void)q; }\n\
+        #pragma STDC FENV_ACCESS ON\n\
+        void f_on(double *a, const double *b, double x, double y, int n)\n\
+        { for (int i = 0; i < n; i++) a[i] = b[i] * (x * y); }\n\
+        void g_on(double *a, const double *b, long k, int n)\n\
+        { for (int i = 0; i < n; i++) a[i] = b[i] + (double)k; }\n\
+        double third_on(void) { double a = 1.0, b = 3.0; return a / b; }\n\
+        void unread_on(double x) { double q = x / 0.0; (void)q; }\n";
+    let mut m = Misses::default();
+    // `mulsd` / `vmulsd` of two registers, `cvtsi2sd`, `divsd` / `vdivsd`.
+    let x_mul = |i: &X64Insn| i.op == 0x0F59 && i.reg_form();
+    let x_cvt = |i: &X64Insn| i.op == 0x0F2A;
+    let x_div = |i: &X64Insn| i.op == 0x0F5E;
+    // FMUL of the two parameters `d0 * d1`, SCVTF from a 64-bit register and
+    // FDIV, double precision.
+    let a_mul =
+        |w: u32| w & 0xFFE0_FC00 == 0x1E60_0800 && (w >> 5) & 31 == 0 && (w >> 16) & 31 == 1;
+    let a_cvt = |w: u32| w & 0xFFFF_FC00 == 0x9E62_0000;
+    let a_div = |w: u32| w & 0xFFE0_FC00 == 0x1E60_1800;
+    for (suffix, on) in [("", false), ("_on", true)] {
+        let f = format!("f{suffix}");
+        let insns = x64(SRC, &f);
+        m.expect(x64_in_loop(&insns, x_mul) == on, || {
+            format!("x86-64 {f}: {insns:x?}")
+        });
+        let ws = a64(SRC, &f);
+        m.expect(a64_in_loop(&ws, a_mul) == on, || {
+            format!("aarch64 {f}: {ws:08x?}")
+        });
+        let g = format!("g{suffix}");
+        let insns = x64(SRC, &g);
+        m.expect(x64_in_loop(&insns, x_cvt) == on, || {
+            format!("x86-64 {g}: {insns:x?}")
+        });
+        let ws = a64(SRC, &g);
+        m.expect(a64_in_loop(&ws, a_cvt) == on, || {
+            format!("aarch64 {g}: {ws:08x?}")
+        });
+        for name in [format!("third{suffix}"), format!("unread{suffix}")] {
+            let insns = x64(SRC, &name);
+            m.expect(insns.iter().any(x_div) == on, || {
+                format!("x86-64 {name}: {insns:x?}")
+            });
+            let ws = a64(SRC, &name);
+            m.expect(ws.iter().any(|&w| a_div(w)) == on, || {
+                format!("aarch64 {name}: {ws:08x?}")
+            });
+        }
+    }
+    m.finish();
+}
+
 /// Every direct branch lands on an instruction that is neither the next one
 /// nor an unconditional branch.
 pub(super) fn a64_branches_land_on_code(ws: &[u32]) -> bool {
@@ -1144,7 +1236,10 @@ fn x64_constant_store_is_one_instruction_in_every_form() {
             ][..],
         ),
         ("at", &[&[0xC7, 0x04, 0xB7, 0x2A, 0x00, 0x00, 0x00]]),
-        ("frame", &[&[0xC7, 0x45, 0xF8, 0x03, 0x00, 0x00, 0x00]]),
+        (
+            "frame",
+            &[&[0xC7, 0x44, 0x24, 0x08, 0x03, 0x00, 0x00, 0x00]],
+        ),
         ("seg", &[&[0x65, 0x48, 0xC7, 0x07, 0xFE, 0xFF, 0xFF, 0xFF]]),
         (
             "flt",
@@ -1508,27 +1603,65 @@ fn a_signed_char_binding_is_told_from_one_without_a_prototype() {
     }
 }
 
-/// `long` is 4 bytes on LLP64 and 8 on LP64, and `return_is_low_word` is
-/// asked before the target is fixed, so it answers for the types that are
-/// narrow on every target and for no others.
+/// A return rides the low word for the integer types narrower than the
+/// register at the target: those below `long` everywhere, and `long` where
+/// it is 4 bytes (LLP64).
 #[test]
-fn only_target_independent_narrow_returns_ride_the_low_word() {
-    use crate::c5::codegen::return_is_low_word;
+fn a_return_narrower_than_the_register_at_the_target_rides_the_low_word() {
+    use crate::c5::codegen::return_rides_low_word;
     use crate::c5::compiler::types::{PLAIN_CHAR_BIT, UNSIGNED_BIT, void_ty};
     use crate::c5::token::Ty;
-    assert!(return_is_low_word(Ty::Char as i64 | PLAIN_CHAR_BIT), "char");
-    for ty in [Ty::Bool, Ty::Char, Ty::Short, Ty::Int] {
-        assert!(return_is_low_word(ty as i64), "{ty:?}");
-        assert!(
-            return_is_low_word(ty as i64 | UNSIGNED_BIT),
-            "unsigned {ty:?}"
+    let targets = [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::MacOSAarch64,
+        Target::WindowsX64,
+    ];
+    for target in targets {
+        assert!(return_rides_low_word(
+            Ty::Char as i64 | PLAIN_CHAR_BIT,
+            target
+        ));
+        for ty in [Ty::Bool, Ty::Char, Ty::Short, Ty::Int] {
+            assert!(return_rides_low_word(ty as i64, target), "{ty:?}");
+            assert!(return_rides_low_word(ty as i64 | UNSIGNED_BIT, target));
+            assert!(!return_rides_low_word(ty as i64 + Ty::Ptr as i64, target));
+        }
+        for ty in [Ty::LongLong, Ty::Float, Ty::Double] {
+            assert!(!return_rides_low_word(ty as i64, target), "{ty:?}");
+        }
+        let long = target.is_windows();
+        assert_eq!(return_rides_low_word(Ty::Long as i64, target), long);
+        assert_eq!(
+            return_rides_low_word(Ty::Long as i64 | UNSIGNED_BIT, target),
+            long
         );
-        assert!(!return_is_low_word(ty as i64 + Ty::Ptr as i64), "{ty:?} *");
+        assert!(!return_rides_low_word(void_ty(), target));
     }
-    for ty in [Ty::Long, Ty::LongLong, Ty::Float, Ty::Double] {
-        assert!(!return_is_low_word(ty as i64), "{ty:?}");
+}
+
+/// A function returning a 32-bit `long` (LLP64) leaves the bits above it
+/// unwritten, as one returning `int` does; under LP64 the conversion from
+/// `int` widens. Both exits of a recursive one alike.
+#[test]
+fn a_32_bit_long_return_takes_no_widening() {
+    use super::codegen::function_bytes;
+    const SRC: &str = "long id(int n) { return n; }\n\
+long f(int n) { if (n < 2) return n; return f(n - 1) + f(n - 2); }\n";
+    // movsxd r64, r/m32.
+    let widen = |i: &X64Insn| i.op == 0x63 && i.rex & 0x08 != 0;
+    for (target, want) in [(Target::WindowsX64, 0), (Target::LinuxX64, 1)] {
+        let obj = object_at(SRC, target, true);
+        let insns = x64_insns(&function_bytes(&obj, "id"));
+        assert_eq!(
+            insns.iter().filter(|i| widen(i)).count(),
+            want,
+            "{target:?} id: {insns:x?}"
+        );
     }
-    assert!(!return_is_low_word(void_ty()));
+    let obj = object_at(SRC, Target::WindowsX64, true);
+    let insns = x64_insns(&function_bytes(&obj, "f"));
+    assert!(!insns.iter().any(widen), "f: {insns:x?}");
 }
 
 /// Imports returning each narrow integer type, read (`read_*`) and called for
@@ -1867,23 +2000,41 @@ fn x64_division_saves_nothing_it_does_not_clobber() {
     m.finish();
 }
 
-/// Six values live across a division, one more than the caller-saved
-/// registers outside rdx:rax, leave the sixth in rdx, which the division
-/// saves around itself; nothing is live in rax, which it does not save.
+/// Eight values live across a division, one more than the seven
+/// caller-saved registers outside rdx:rax, leave one in rax or rdx, which
+/// the division keeps around itself -- pushed, or stored below rsp in a
+/// frame with no pointer -- and it keeps nothing in the other.
 #[test]
-fn x64_division_saves_rdx_a_live_value_holds() {
-    const SRC: &str = "long keep(long a, long b, long c, long d, long e, long f) {\n\
+fn x64_division_saves_the_one_of_rdx_rax_a_live_value_holds() {
+    const SRC: &str = "long keep(long a, long b, long c, long d, long e, const long *p) {\n\
+        long x = p[0], y = p[1], z = p[2];\n\
         long q = a / b;\n\
-        return q + a + b + c + d + e + f;\n}\n";
+        return q + a + b + c + d + e + x + y + z;\n}\n";
     let insns = x64(SRC, "keep");
-    let div = insns.iter().position(uses_rdx_rax);
-    let push = insns.iter().position(|i| saves(i, 2) && i.op == 0x52);
-    let pop = insns.iter().position(|i| saves(i, 2) && i.op == 0x5A);
-    let around = div
-        .zip(push.zip(pop))
-        .is_some_and(|(d, (p, q))| p < d && d < q);
-    assert!(around, "{insns:x?}");
-    assert!(!insns.iter().any(|i| saves(i, 0)), "{insns:x?}");
+    let Some(div) = insns.iter().position(uses_rdx_rax) else {
+        panic!("no division: {insns:x?}");
+    };
+    // `mov [rsp + d], r` / `mov r, [rsp + d]` of a low register `r`.
+    let sp_move = |i: &X64Insn, op: u16, r: u8| {
+        i.op == op
+            && i.rex & 4 == 0
+            && i.modrm
+                .is_some_and(|m| (m >> 3) & 7 == r && m & 7 == 4 && m >> 6 != 3)
+            && i.sib.is_some_and(|s| s & 7 == 4)
+    };
+    let kept = |r: u8| {
+        let (before, after) = insns.split_at(div);
+        let pushed = before
+            .iter()
+            .any(|i| i.op == 0x50 + u16::from(r) && i.rex & 1 == 0)
+            && after
+                .iter()
+                .any(|i| i.op == 0x58 + u16::from(r) && i.rex & 1 == 0);
+        let stored =
+            before.iter().any(|i| sp_move(i, 0x89, r)) && after.iter().any(|i| sp_move(i, 0x8B, r));
+        pushed || stored
+    };
+    assert!(kept(0) != kept(2), "{insns:x?}");
 }
 
 /// The parameter's entry extension reads the incoming register.
@@ -2567,9 +2718,13 @@ return a + f(x, 6, 5, 4, 3, 2, 1);\n}\n";
         !insns.iter().any(|i| imm_dst(i).is_some_and(callee_saved)),
         || format!("x86-64: a constant in a callee-saved register: {insns:x?}"),
     );
-    let pushes = insns.iter().filter(|i| matches!(i.op, 0x50..=0x57)).count();
-    m.expect(pushes == 4, || {
-        format!("x86-64: {pushes} pushes, not rbp and three: {insns:x?}")
+    // rbp is a saved register where the frame keeps no frame pointer.
+    let pointerless = x64_frame_reg(&insns) != RBP;
+    let saves = (insns.iter())
+        .filter(|i| x64_is_save(i) || pointerless && i.op == 0x55 && i.rex == 0)
+        .count();
+    m.expect(saves == 3, || {
+        format!("x86-64: {saves} saves, not three: {insns:x?}")
     });
     m.finish();
 }
@@ -2630,6 +2785,55 @@ fn aarch64_frames_spill_only_past_the_callee_saved_bank() {
         a64_spills == 0 || (20..=28).all(|r| a64_gprs.contains(&r)),
         || format!("vfork main on aarch64: {a64_spills} spill slots while saving {a64_gprs:?}"),
     );
+    m.finish();
+}
+
+/// A loop body that issues every lane's loads, then every lane's operations
+/// keeps more vectors live than the register file holds; reordered to keep
+/// a lane's values together, it spills none and saves no callee-saved vector
+/// register: the eight-lane NEON syndrome on AArch64, and a four-lane one in
+/// GNU vectors on x86-64.
+#[test]
+fn a_body_issued_lane_by_stage_is_reordered_to_spill_nothing() {
+    const SRC: &str = "typedef unsigned v4u __attribute__((vector_size(16)));\n\
+void syndrome4(const v4u *src, v4u *out, int disks) {\n\
+    v4u p0 = src[0], p1 = src[1], p2 = src[2], p3 = src[3];\n\
+    v4u q0 = p0, q1 = p1, q2 = p2, q3 = p3;\n\
+    const v4u k = {0x1d, 0x1d, 0x1d, 0x1d};\n\
+    for (int z = 1; z < disks; z++) {\n\
+        const v4u *d = src + 4 * z;\n\
+        v4u d0 = d[0], d1 = d[1], d2 = d[2], d3 = d[3];\n\
+        p0 ^= d0; p1 ^= d1; p2 ^= d2; p3 ^= d3;\n\
+        v4u m0 = q0 >> 7, m1 = q1 >> 7, m2 = q2 >> 7, m3 = q3 >> 7;\n\
+        v4u s0 = q0 << 1, s1 = q1 << 1, s2 = q2 << 1, s3 = q3 << 1;\n\
+        m0 &= k; m1 &= k; m2 &= k; m3 &= k;\n\
+        q0 = s0 ^ m0 ^ d0; q1 = s1 ^ m1 ^ d1; q2 = s2 ^ m2 ^ d2; q3 = s3 ^ m3 ^ d3;\n\
+    }\n\
+    out[0] = p0; out[1] = p1; out[2] = p2; out[3] = p3;\n\
+    out[4] = q0; out[5] = q1; out[6] = q2; out[7] = q3;\n\
+}\n";
+    let header = |src: &str, name: &str, target: Target| {
+        let (body, _) = optimized_function_full_pool(src, name, target);
+        let field = |key: &str| {
+            let at = body
+                .find(key)
+                .unwrap_or_else(|| panic!("no `{key}`: {body}"));
+            let rest = &body[at + key.len()..];
+            rest[..rest.find([' ', '\n']).unwrap_or(rest.len())].to_string()
+        };
+        (field("spill_count="), field("fp_used="))
+    };
+    let raid6 = super::load_fixture("neon_raid6_checksum.c");
+    let mut m = Misses::default();
+    for (src, name, target) in [
+        (raid6.as_str(), "neon8_gen_syndrome", Target::LinuxAarch64),
+        (SRC, "syndrome4", Target::LinuxX64),
+    ] {
+        let (spills, saved) = header(src, name, target);
+        m.expect(spills == "0" && saved == "[]", || {
+            format!("{name} on {target:?}: spill_count={spills} fp_used={saved}")
+        });
+    }
     m.finish();
 }
 
@@ -3040,9 +3244,9 @@ void step4(unsigned char *p, const unsigned char *d) {\n\
 
 /// Vector parameters and results travel in v registers (AAPCS64 6.4.2): a
 /// function taking and returning `uint32x4_t` is its instructions and
-/// `ret`, as with gcc 16, and a loop over parameters keeps them
-/// in registers. Stored to the frame on entry and returned through it, the
-/// loop below took 49 instructions.
+/// `ret`, and a loop over parameters keeps them in registers. Stored to
+/// the frame on entry and returned through it, the loop below took 49
+/// instructions.
 #[test]
 fn vector_parameters_and_results_stay_in_registers() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -3072,9 +3276,9 @@ uint32x4_t round4(uint32x4_t a, uint32x4_t b, uint32x4_t c, uint32x4_t d, int n)
 }
 
 /// GNU vector arithmetic on 16-byte vectors is one SIMD instruction per
-/// operator (`Inst::VecBinop`), as with gcc 16: `a * x + y` over
-/// `float` lanes is `fmul`, `fadd` and `ret` on AArch64 and `mulps`,
-/// `addps` and `ret` on x86-64. Lowered per lane, it took 59 instructions.
+/// operator (`Inst::VecBinop`): `a * x + y` over `float` lanes is `fmul`,
+/// `fadd` and `ret` on AArch64 and `mulps`, `addps` and `ret` on x86-64.
+/// Lowered per lane, it took 59 instructions.
 #[test]
 fn vector_arithmetic_is_one_instruction_per_operator() {
     const SRC: &str = "typedef float v4f __attribute__((vector_size(16)));\n\
@@ -3126,11 +3330,11 @@ __m64 mu(__m64 a, __m64 b) { return _mm_mul_su32(a, b); }\n";
 }
 
 /// A GNU vector wider than the SIMD registers takes each operator in
-/// register-wide parts, as with gcc 16: a 32-byte `int` sum on AArch64 is
-/// two `add v.4s` between the loads and the stores, a comparison, a shift
-/// and a negation two of their SIMD rows, and a 64-byte sum four `add
-/// v.4s`; on x86-64 without AVX-512 the 64-byte sum is two `vpaddd ymm`.
-/// Each took a load, an operation and a store per lane.
+/// register-wide parts: a 32-byte `int` sum on AArch64 is two `add v.4s`
+/// between the loads and the stores, a comparison, a shift and a negation
+/// two of their SIMD rows, and a 64-byte sum four `add v.4s`; on x86-64
+/// without AVX-512 the 64-byte sum is two `vpaddd ymm`. Each took a load,
+/// an operation and a store per lane.
 #[test]
 fn a_vector_wider_than_the_registers_takes_register_wide_parts() {
     const SRC: &str = "typedef int v8si __attribute__((vector_size(32)));\n\
@@ -3381,8 +3585,8 @@ v2du shr(v2du a, v2du c) { return a >> c; }\n";
     m.finish();
 }
 
-/// A 256-bit vector of four 64-bit lanes is built as clang builds it: each
-/// lane a load reads only for the vector goes straight into an xmm register
+/// A 256-bit vector of four 64-bit lanes is built in pairs: each lane a
+/// load reads only for the vector goes straight into an xmm register
 /// (`vmovq m64`), two pair up (`vunpcklpd`) and the pairs join
 /// (`vinserti128`), with no move of the low pair over itself; lanes in
 /// general registers take `vmovq` and `vpinsrq`. Each lane took a general
@@ -3440,8 +3644,8 @@ void axpy(float *y, const float *x, float a, int n) {\n\
 /// An object of a GNU vector type is a vector though no SIMD operation
 /// reads it: copied in from bytes and out through a pointer it is one load
 /// and one store, through an inlined function's result too, and one value
-/// in every lane is a broadcast and a store, as with gcc 16. Each took a
-/// frame copy, and the broadcast a store per lane.
+/// in every lane is a broadcast and a store. Each took a frame copy, and
+/// the broadcast a store per lane.
 #[test]
 fn a_vector_object_moves_whole_without_a_simd_operation() {
     const SRC: &str = "typedef signed char v8c __attribute__((vector_size(8)));\n\
@@ -3478,9 +3682,9 @@ void wrap(v16c *r, const signed char *p) { *r = load(p); }\n";
 
 /// A half of a 16-byte vector parameter taken through `memcpy` is a lane of
 /// its register, and two 8-byte halves stored side by side and read back
-/// whole are one insert, as with gcc 16: nothing for the low half,
-/// `mov d0, v0.d[1]` and `mov v0.d[1], v1.d[0]` on AArch64, each from a
-/// store to the frame and a reload.
+/// whole are one insert: nothing for the low half, `mov d0, v0.d[1]` and
+/// `mov v0.d[1], v1.d[0]` on AArch64, each from a store to the frame and a
+/// reload.
 #[test]
 fn vector_halves_move_in_registers() {
     const SRC: &str = "typedef signed char i8x16 __attribute__((vector_size(16)));\n\
@@ -3709,6 +3913,105 @@ fn a_loop_takes_the_registers_of_values_living_through_it() {
     m.finish();
 }
 
+/// A dispatch loop holds eleven values its cases update, and one case reads
+/// none of them and computes with temporaries of its own. The values give
+/// their registers up for that case, stored at its entry and loaded at its
+/// exit, so its products touch no frame slot. AArch64 runs over a pool of
+/// eight registers a bank, which the loop's values fill as they fill
+/// x86-64's.
+#[test]
+fn a_switch_case_takes_the_registers_of_values_living_through_it() {
+    const SRC: &str = "typedef unsigned long u;\n\
+u f(const unsigned char *ops, long n, const u *o, u *t) {\n\
+    u a0 = o[0], a1 = o[1], a2 = o[2], a3 = o[3], a4 = o[4], a5 = o[5];\n\
+    u a6 = o[6], a7 = o[7], a8 = o[8], a9 = o[9], a10 = o[10];\n\
+    u acc = 0;\n\
+    for (long pc = 0; pc < n; pc++) {\n\
+        switch (ops[pc] & 3) {\n\
+        case 0: a0 += a1 ^ pc; a2 ^= a0; a3 += a2 >> 1; a4 ^= a3; a5 += a4; break;\n\
+        case 1: {\n\
+            u t0 = t[0], t1 = t[1], t2 = t[2], t3 = t[3];\n\
+            u p0 = t0 * t1, p1 = t2 * t3, p2 = t0 * t3;\n\
+            u s = p0 + p1 + p2;\n\
+            u d = (p0 ^ t3) + (p1 ^ t0) + (p2 ^ t1);\n\
+            t[pc & 3] = s ^ d;\n\
+            acc += s - d + p0;\n\
+            break;\n\
+        }\n\
+        case 2: a6 += a7 ^ pc; a8 ^= a6; a9 += a8 >> 2; a10 ^= a9; break;\n\
+        default: a1 += a3 ^ a6; a7 -= a10; acc += a0 ^ a8; break;\n\
+        }\n\
+    }\n\
+    return acc ^ a0 ^ a1 ^ a2 ^ a3 ^ a4 ^ a5 ^ a6 ^ a7 ^ a8 ^ a9 ^ a10;\n\
+}\n";
+    let mut m = Misses::default();
+    // x86-64: from the case's first `imul` to its last.
+    let insns = x64(SRC, "f");
+    let frame = |i: &X64Insn| {
+        let Some(modrm) = i.modrm.filter(|m| m >> 6 != 3) else {
+            return false;
+        };
+        match modrm & 7 {
+            4 => i.sib.is_some_and(|s| s & 7 == 4) && i.rex & 1 == 0,
+            5 => modrm >> 6 != 0 && i.rex & 1 == 0,
+            _ => false,
+        }
+    };
+    let muls: Vec<usize> = (0..insns.len())
+        .filter(|&k| insns[k].op == 0x0FAF)
+        .collect();
+    let span = muls.first().zip(muls.last()).map(|(&a, &b)| &insns[a..=b]);
+    m.expect(
+        muls.len() == 3 && span.is_some_and(|s| !s.iter().any(frame)),
+        || format!("x86-64: {insns:x?}"),
+    );
+    // AArch64: from the case's first `mul` / `madd` to its last.
+    let words = function_words(&object_with_pool(SRC, Target::LinuxAarch64, (8, 8)), "f");
+    let madd = |w: u32| w & 0xFFE0_8000 == 0x9B00_0000;
+    let off_frame = |w: u32| {
+        let base = (w >> 5) & 31;
+        let access = a64_mem_imm(w).is_some() || w & 0x3A00_0000 == 0x2800_0000;
+        access && (base == 31 || base == 29)
+    };
+    let muls: Vec<usize> = (0..words.len()).filter(|&k| madd(words[k])).collect();
+    let span = muls.first().zip(muls.last()).map(|(&a, &b)| &words[a..=b]);
+    m.expect(
+        muls.len() == 3 && span.is_some_and(|s| !s.iter().any(|&w| off_frame(w))),
+        || format!("aarch64: {words:08x?}"),
+    );
+    m.finish();
+}
+
+/// Twelve values carried around a loop with its counter, its bound and one
+/// temporary hold fifteen general registers at once: the x86-64 banks give
+/// r10 and r11 with the rest, so nothing reaches the frame.
+#[test]
+fn a_loop_holding_fifteen_values_keeps_them_in_registers() {
+    const SRC: &str = "typedef unsigned long u;\n\
+u f(const u *p, long n) {\n\
+    u a = p[0], b = p[1], c = p[2], d = p[3], e = p[4], g = p[5];\n\
+    u h = p[6], i = p[7], j = p[8], k = p[9], l = p[10], m = p[11];\n\
+    for (long x = 0; x < n; x++) {\n\
+        u t = a + (b ^ (u)x);\n\
+        a = b + c; b = c ^ d; c = d + e; d = e ^ g; e = g + h; g = h ^ i;\n\
+        h = i + j; i = j ^ k; j = k + l; k = l ^ m; l = m + t; m = t ^ (a >> 1);\n\
+    }\n\
+    return a ^ b ^ c ^ d ^ e ^ g ^ h ^ i ^ j ^ k ^ l ^ m;\n\
+}\n";
+    let insns = x64(SRC, "f");
+    let frame = |i: &X64Insn| {
+        let Some(modrm) = i.modrm.filter(|m| m >> 6 != 3) else {
+            return false;
+        };
+        match modrm & 7 {
+            4 => i.sib.is_some_and(|s| s & 7 == 4) && i.rex & 1 == 0,
+            5 => modrm >> 6 != 0 && i.rex & 1 == 0,
+            _ => false,
+        }
+    };
+    assert!(!insns.iter().any(frame), "{insns:x?}");
+}
+
 /// A member of an element before the pointer is reached through the
 /// access's own displacement, composed with the member's offset where the
 /// element's address feeds several members: no `lea` on x86-64, an
@@ -3928,8 +4231,8 @@ d2 dz(double x) { return (d2){x}; }\n";
 }
 
 /// A 32-bit unsigned rotate by a constant is the 32-bit rotate
-/// instruction, as with gcc 16: `ror w0, w0, #2` and `rorl $2, %eax`; by
-/// a runtime count to the left, the rotate right by its negation.
+/// instruction: `ror w0, w0, #2` and `rorl $2, %eax`; by a runtime count
+/// to the left, the rotate right by its negation.
 #[test]
 fn a_32_bit_rotate_is_one_instruction() {
     const SRC: &str = "unsigned r(unsigned x) { return x << 30 | x >> 2; }\n\
@@ -4024,8 +4327,8 @@ v4 same(void) { int w = 5; return (v4){w, w + 1, w, w + 1}; }\n";
 /// A vector with a zero or all-ones operand is its other operand, and a
 /// constant in every lane takes no general register: `movi` / `mvni` where
 /// the lane has the modified-immediate form, `vpxor` for zero, `vpcmpeqd`
-/// for all ones, as with gcc 16. Each was the operation on a vector built
-/// through a general register.
+/// for all ones. Each was the operation on a vector built through a
+/// general register.
 #[test]
 fn constant_vectors_and_their_identities() {
     const SRC: &str = "typedef int v4 __attribute__((vector_size(16)));\n\
@@ -4073,11 +4376,11 @@ v8c f(void) { signed char b = 1; return (v8c){b, 2, 3, 4, 5, 6, 7, (signed char)
     m.finish();
 }
 
-/// A GNU vector of one value in every lane is a broadcast of it, as with
-/// gcc 16: `dup` from a general register or from an FP register's lane 0
-/// and `ret` on AArch64; on x86-64 `vmovd` and `vpbroadcastd`, or one
-/// `vbroadcastss`, and `ret`, at 16 and 32 bytes, from an insert per lane.
-/// A lane read of one is the value.
+/// A GNU vector of one value in every lane is a broadcast of it: `dup`
+/// from a general register or from an FP register's lane 0 and `ret` on
+/// AArch64; on x86-64 `vmovd` and `vpbroadcastd`, or one `vbroadcastss`,
+/// and `ret`, at 16 and 32 bytes, from an insert per lane. A lane read of
+/// one is the value.
 #[test]
 fn a_vector_of_one_value_is_a_broadcast() {
     const SRC: &str = "typedef int v4si __attribute__((vector_size(16)));\n\
@@ -4179,10 +4482,10 @@ u8x16 ldv(const u8x16 *p) { return *p; }\n";
 
 /// GNU vector arithmetic on 32-byte vectors is one ymm instruction per
 /// operator on x86-64, whose x86-64-v3 baseline has AVX2, with the value in
-/// a ymm register: `*r = *a + *b` is gcc 16's two loads, `vpaddd`, the
-/// store, `vzeroupper` and `ret`, from 36 lane by lane; a sum over an array
-/// keeps its accumulator in a register across the loop, with no store
-/// before the one after it.
+/// a ymm register: `*r = *a + *b` is two loads, `vpaddd`, the store,
+/// `vzeroupper` and `ret`, from 36 lane by lane; a sum over an array keeps
+/// its accumulator in a register across the loop, with no store before the
+/// one after it.
 #[test]
 fn ymm_vector_arithmetic_stays_in_registers() {
     const SRC: &str = "typedef int v8i __attribute__((vector_size(32)));\n\
@@ -4204,12 +4507,12 @@ v8i acc(const v8i *p, int n) { v8i s = {0}; for (int i = 0; i < n; i++) s = s + 
 }
 
 /// A lane write or read of a GNU vector that is a value is an instruction on
-/// its register, as with gcc 16: `(v2l){a, b}` is two `vpinsrq` (`ins` on
-/// AArch64), `v[2] = x` of a float vector one `vpinsrd` (`mov v.s[2]`), and
-/// `v[3]` of a short vector `vpextrw` and the sign extension (`smov`), with
-/// no stack access; a lane of a ymm value is `vextracti128` and `vpextrd`.
-/// Each went through the vector's stack slot, the lane stored and the whole
-/// vector reloaded.
+/// its register: `(v2l){a, b}` is two `vpinsrq` (`ins` on AArch64),
+/// `v[2] = x` of a float vector one `vpinsrd` (`mov v.s[2]`), and `v[3]` of
+/// a short vector `vpextrw` and the sign extension (`smov`), with no stack
+/// access; a lane of a ymm value is `vextracti128` and `vpextrd`. Each went
+/// through the vector's stack slot, the lane stored and the whole vector
+/// reloaded.
 #[test]
 fn vector_lanes_stay_in_registers() {
     const SRC: &str = "typedef long long v2l __attribute__((vector_size(16)));\n\
@@ -4248,12 +4551,11 @@ long sx(v8s v) { return v[3]; }\n";
     m.finish();
 }
 
-/// Lane writes into a ymm value chain on its 128-bit halves, as with gcc
-/// 16: `{a, b, c, d}` of four `long long` is `vmovq` and `vpinsrq` per half
-/// and one `vinserti128`, writes into both halves of a loaded vector take
-/// each half out once and put it back once, and a read of the low half
-/// reads the register. Each lane access took its half out (and a write
-/// put it back).
+/// Lane writes into a ymm value chain on its 128-bit halves: `{a, b, c, d}`
+/// of four `long long` is `vmovq` and `vpinsrq` per half and one
+/// `vinserti128`, writes into both halves of a loaded vector take each half
+/// out once and put it back once, and a read of the low half reads the
+/// register. Each lane access took its half out (and a write put it back).
 #[test]
 fn ymm_lane_writes_chain_per_half() {
     const SRC: &str = "typedef long long v4l __attribute__((vector_size(32)));\n\
@@ -4321,10 +4623,10 @@ int main(void) { return mmx(); }\n";
     );
 }
 
-/// An 8-byte NEON vector parameter and result stay in their registers, as
-/// with gcc 16: `vadd_s32(a, b)` returned is `add v0.2s, v0.2s, v1.2s` and
-/// `ret`. The result went through the frame twice, once as a `double` and
-/// once as an integer word.
+/// An 8-byte NEON vector parameter and result stay in their registers:
+/// `vadd_s32(a, b)` returned is `add v0.2s, v0.2s, v1.2s` and `ret`. The
+/// result went through the frame twice, once as a `double` and once as an
+/// integer word.
 #[test]
 fn an_8_byte_neon_vector_crosses_calls_in_its_register() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -4338,11 +4640,10 @@ float32x4_t add4(float32x4_t a, float32x4_t b) { return vaddq_f32(a, b); }\n";
     m.finish();
 }
 
-/// A vector of constants an operation reads is one load of read-only data,
-/// as with gcc 16: `_mm256_setr_epi8` of 32 constants (a compound literal,
-/// as each of the set / setr constructors is) and a constant compound
-/// literal held in a local are a `vmovups` from their image, with no stack
-/// copy. The
+/// A vector of constants an operation reads is one load of read-only data:
+/// `_mm256_setr_epi8` of 32 constants (a compound literal, as each of the
+/// set / setr constructors is) and a constant compound literal held in a
+/// local are a `vmovups` from their image, with no stack copy. The
 /// constructor was a call building the vector byte by byte, and the local
 /// took two 16-byte copies to the stack and a 32-byte load from it.
 #[test]
@@ -4410,9 +4711,9 @@ int f(const v4l *p) { return hs(p[0]) + hs(p[1]); }\n";
     assert!(f.iter().all(|i| i.op != 0xE8), "x86-64 f: {f:x?}");
 }
 
-/// The AVX2 intrinsics are their VEX instructions on ymm registers, as with
-/// gcc 16: `_mm256_movemask_epi8(_mm256_shuffle_epi8(p[0], p[1]))` is the
-/// two loads, `vpshufb`, `vpmovmskb`, `vzeroupper` and `ret`, and a sum of
+/// The AVX2 intrinsics are their VEX instructions on ymm registers:
+/// `_mm256_movemask_epi8(_mm256_shuffle_epi8(p[0], p[1]))` is the two
+/// loads, `vpshufb`, `vpmovmskb`, `vzeroupper` and `ret`, and a sum of
 /// `_mm256_adds_epu8` over an array keeps its accumulator in a register,
 /// with no store in the loop. Each was the SSE instruction on each half,
 /// its operands split and joined through memory.
@@ -4440,9 +4741,9 @@ int mask(const __m256i *p) { return _mm256_movemask_epi8(_mm256_shuffle_epi8(p[0
 }
 
 /// SSE intrinsics keep their vectors in xmm registers (`SimdVal`): a
-/// round loop over four `__m128i` parameters makes no memory access, as
-/// with gcc 16. Each intrinsic read its operands from the frame and wrote
-/// its result back, 85 instructions where it is now 19.
+/// round loop over four `__m128i` parameters makes no memory access. Each
+/// intrinsic read its operands from the frame and wrote its result back,
+/// 85 instructions where it is now 19.
 #[test]
 fn sse_intrinsic_values_stay_in_registers() {
     const SRC: &str = "#include <emmintrin.h>\n\
@@ -4467,8 +4768,8 @@ __m128i round4(__m128i a, __m128i b, __m128i c, __m128i d, int n) {\n\
 }
 
 /// The 8-byte `<arm_neon.h>` forms and 4- and 8-byte `w` outputs pass their
-/// values in SIMD registers, as gcc 16 does: each function is its
-/// instructions and `ret`, with no frame.
+/// values in SIMD registers: each function is its instructions and `ret`,
+/// with no frame.
 #[test]
 fn eight_byte_simd_values_take_no_frame() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -4554,7 +4855,7 @@ int flag(long x) { int ok = 1; if (f(x)) ok = 0; return ok; }\n";
     m.expect(matches!((call, fmov), (Some(c), Some(k)) if k > c), || {
         format!("aarch64 fm: the constant is not set after the call: {ws:08x?}")
     });
-    for (name, len) in [("ret", 6), ("flag", 9)] {
+    for (name, len) in [("ret", 6), ("flag", 8)] {
         let ws = a64(SRC, name);
         m.expect(ws.len() == len, || {
             format!(
@@ -4575,9 +4876,9 @@ int flag(long x) { int ok = 1; if (f(x)) ok = 0; return ok; }\n";
             !insns.iter().any(|i| imm_dst(i).is_some_and(callee_saved)),
             || format!("x86-64 {name}: a constant in a callee-saved register: {insns:x?}"),
         );
-        let pushes = insns.iter().filter(|i| matches!(i.op, 0x50..=0x57)).count();
-        m.expect(pushes == 1, || {
-            format!("x86-64 {name}: {pushes} pushes, not rbp alone: {insns:x?}")
+        let pushes = insns.iter().filter(|i| x64_is_save(i)).count();
+        m.expect(pushes == 0, || {
+            format!("x86-64 {name}: {pushes} saves: {insns:x?}")
         });
     }
     let insns = x64(SRC, "fm");
@@ -5421,6 +5722,393 @@ int f(const unsigned char *p, int n) {\n\
     assert!(!ws[first].iter().any(|&w| adrp(w)), "{ws:08x?}");
 }
 
+/// How much more thread CPU time compiling `source(large)` takes than
+/// `source(small)`: four rounds alternate the two, the small one compiled
+/// `large / small` times a round, and the sums compare, so linear work
+/// comes out near that ratio and work quadratic in the input near its
+/// square. The thread's clock leaves out the time spent waiting for a core.
+#[cfg(not(debug_assertions))]
+fn compile_growth(
+    source: impl Fn(usize) -> String,
+    (small, large): (usize, usize),
+    optimize: bool,
+) -> f64 {
+    use super::thread_cpu_time;
+    use core::time::Duration;
+    let (a, b) = (source(small), source(large));
+    let times = (large / small) as u32;
+    let cost = |src: &str, reps: u32| {
+        let start = thread_cpu_time();
+        for _ in 0..reps {
+            object_at(src, Target::LinuxX64, optimize);
+        }
+        thread_cpu_time() - start
+    };
+    let (mut ta, mut tb) = (Duration::ZERO, Duration::ZERO);
+    for _ in 0..4 {
+        ta += cost(&a, times);
+        tb += cost(&b, 1);
+    }
+    assert!(!ta.is_zero(), "no measurable compile time to compare");
+    tb.as_secs_f64() * f64::from(times) / ta.as_secs_f64()
+}
+
+/// Branches on a merged constant whose value is also read past the
+/// branch: threading each predecessor past its merge places a phi where
+/// the value's two definitions meet. The placed phis take one tape rewrite
+/// per pass, not one each, so eight times the branches take under 24 times
+/// the compile's thread CPU time at `-O`.
+#[test]
+#[cfg(not(debug_assertions))]
+fn many_rethreaded_branches_take_one_tape_rewrite() {
+    use core::fmt::Write;
+    let source = |n: usize| {
+        let mut src = String::from("int f(int a, int b) {\n    int s = 0;\n");
+        for i in 0..n {
+            let _ = writeln!(
+                src,
+                "    {{ int c = a > {i} ? 1 : 2; if (b) c = 3; \
+                 if (c == 1) s += {i}; else s -= {i}; s ^= c; }}"
+            );
+        }
+        src + "    return s;\n}\n"
+    };
+    let growth = compile_growth(source, (250, 2000), true);
+    assert!(
+        growth < 24.0,
+        "8x the branches took {growth:.1}x the CPU time"
+    );
+}
+
+/// Run-once loops: threading each loop's entry past its test retires the
+/// loop, whose phis' readers then read the entry values. The pass goes on
+/// past each retired loop, so eight times the loops take under 24 times
+/// the compile's thread CPU time at `-O`.
+#[test]
+#[cfg(not(debug_assertions))]
+fn many_retired_run_once_loops_take_one_threading_pass() {
+    use core::fmt::Write;
+    let source = |n: usize| {
+        let mut src = String::from("int f(int a) {\n    int s = 0;\n");
+        for i in 0..n {
+            let _ = writeln!(src, "    for (int done = 0; !done; done = 1) s += a + {i};");
+        }
+        src + "    return s;\n}\n"
+    };
+    let growth = compile_growth(source, (250, 2000), true);
+    assert!(growth < 24.0, "8x the loops took {growth:.1}x the CPU time");
+}
+
+/// A call drops the operand-free values of the block's value cache, and
+/// only those: over a thousand calls in one block, each with a value of
+/// its own computed ahead of it, the calls visit one entry in all, where a
+/// scan of the cache per call visits every value the block computed
+/// before it (two million here). Counted in cache entries visited.
+#[test]
+fn a_call_drops_only_the_cached_operand_free_values() {
+    use crate::c5::codegen::ssa::build::CALL_CACHE_VISITS;
+    use core::fmt::Write;
+    const N: u64 = 1000;
+    let mut src = String::from(
+        "static inline __attribute__((always_inline)) int helper(int x) \
+         { if (x > 3) return x * 2; return x + 1; }\nint f(int a) {\n    int s = 0;\n",
+    );
+    for i in 0..N {
+        let _ = writeln!(src, "    s += helper(a + {i});");
+    }
+    src.push_str("    return s;\n}\n");
+    let before = CALL_CACHE_VISITS.with(|n| n.get());
+    object_at(&src, Target::LinuxX64, false);
+    let visits = CALL_CACHE_VISITS.with(|n| n.get()) - before;
+    assert!(
+        visits < 8 * N,
+        "{N} calls visited {visits} cache entries: the cache is scanned per call"
+    );
+}
+
+/// One block of `n` vector loads, `n` products of two of them and `n`
+/// stores: `n` vectors live at once.
+fn wide_vectors(n: usize) -> String {
+    use core::fmt::Write;
+    let mut s = String::from(
+        "typedef unsigned v4u __attribute__((vector_size(16)));\n\
+         void wide(const v4u *p, v4u *q) {\n",
+    );
+    for k in 0..n {
+        let _ = writeln!(s, "    v4u a{k} = p[{k}];");
+    }
+    for k in 0..n {
+        let _ = writeln!(s, "    v4u b{k} = a{k} * a{};", (k * 7 + 1) % n);
+    }
+    for k in 0..n {
+        let _ = writeln!(s, "    q[{k}] = b{k};");
+    }
+    s.push_str("}\n");
+    s
+}
+
+/// How much more thread CPU time `pass` takes over the walked `wide` of
+/// `large` vectors than of `small`, each after `prep`: rounds interleave
+/// the two sizes and are summed, the small one run `large / small` times a
+/// round, so linear work comes out near that ratio and work quadratic in
+/// the block near its square.
+#[cfg(not(debug_assertions))]
+fn wide_block_growth(
+    optimize: bool,
+    (small, large): (usize, usize),
+    prep: impl Fn(&mut crate::c5::ir::FunctionSsa),
+    pass: impl Fn(&mut crate::c5::ir::FunctionSsa),
+) -> f64 {
+    use super::thread_cpu_time;
+    use core::time::Duration;
+    const ROUNDS: u32 = 8;
+    let batch = (large / small) as u32;
+    let walk = |n: usize| {
+        use crate::c5::codegen::ssa::shadow::produce_ssa_funcs;
+        let opts = crate::CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_optimize(optimize);
+        let program = crate::Compiler::with_options(wide_vectors(n), Target::LinuxX64, opts)
+            .compile()
+            .expect("compile");
+        let mut f = (produce_ssa_funcs(&program, Target::LinuxX64, optimize, true))
+            .expect("walk")
+            .into_iter()
+            .find(|f| f.name == "wide")
+            .expect("wide");
+        prep(&mut f);
+        f
+    };
+    let (small, large) = (walk(small), walk(large));
+    let cost = |f: &crate::c5::ir::FunctionSsa, reps: u32| {
+        let mut total = Duration::ZERO;
+        for _ in 0..reps {
+            let mut g = f.clone();
+            let start = thread_cpu_time();
+            pass(&mut g);
+            total += thread_cpu_time() - start;
+        }
+        total
+    };
+    let (mut s, mut l) = (Duration::ZERO, Duration::ZERO);
+    for _ in 0..ROUNDS {
+        s += cost(&small, batch);
+        l += cost(&large, 1);
+    }
+    assert!(!s.is_zero(), "no measurable cost to compare");
+    l.as_secs_f64() * f64::from(batch) / s.as_secs_f64()
+}
+
+/// The -O0 slot coalescing of a block with thousands of vectors live at
+/// once builds its interference a word of 64 bits at a time and colors
+/// each object through the shorter of its row and the row's complement.
+#[test]
+#[cfg(not(debug_assertions))]
+fn slot_coalescing_a_wide_block_is_not_quadratic() {
+    let growth = wide_block_growth(
+        false,
+        (250, 2000),
+        |_| {},
+        |f| {
+            crate::c5::codegen::ssa::slot_coalesce::run(
+                core::slice::from_mut(f),
+                false,
+                Default::default(),
+            );
+        },
+    );
+    assert!(
+        growth < 32.0,
+        "8x the vectors took {growth:.1}x the CPU time"
+    );
+}
+
+/// The vector-slot promotion of a block with thousands of vector objects
+/// looks each object up rather than scanning every multi-cell object.
+#[test]
+#[cfg(not(debug_assertions))]
+fn vector_slots_of_a_wide_block_are_not_quadratic() {
+    let growth = wide_block_growth(
+        true,
+        (250, 4000),
+        |_| {},
+        |f| {
+            crate::c5::codegen::ssa::vector_slots::run(f);
+        },
+    );
+    assert!(
+        growth < 64.0,
+        "16x the vectors took {growth:.1}x the CPU time"
+    );
+}
+
+/// Splitting a block's objects finds the ones nothing reads through sets
+/// built once, not by scanning every value and copy per object: over a
+/// block of 300 vectors live at once the search examines about 19000
+/// entries, where a scan per object examined 16 million. Counted in
+/// entries examined, which no host load moves.
+/// Either target's -O build sizes the frame for both 8-byte units of each
+/// crowded vector's slot, which a debug build checks as it computes the
+/// slot's offset.
+#[test]
+fn crowded_vectors_take_slots_the_frame_holds() {
+    let src = super::crowded_vectors_across_a_call_source();
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        object_at(&src, target, true);
+    }
+}
+
+#[test]
+fn splitting_a_wide_block_examines_each_value_once() {
+    use crate::c5::codegen::passes::sroa::UNREAD_SCAN;
+    let before = UNREAD_SCAN.with(|n| n.get());
+    object_at(&wide_vectors(300), Target::LinuxX64, true);
+    let examined = UNREAD_SCAN.with(|n| n.get()) - before;
+    assert!(
+        examined < 200 * 300,
+        "300 vectors took {examined} entries: the objects are scanned for one by one"
+    );
+}
+
+/// Each threaded edge settles what stays reachable from the head's
+/// strongly connected component rather than by a walk of the function:
+/// over a thousand rethreaded merges and a thousand retired loops, the
+/// visits stay within a few per site (1 and 12 here), where a walk per
+/// edge visits every block of the function per site. Counted in blocks
+/// visited, which no host load moves.
+#[test]
+fn threaded_edges_settle_reachability_per_component() {
+    use crate::c5::codegen::passes::thread_phi_branches::REACH_VISITS;
+    use core::fmt::Write;
+    const N: u64 = 1000;
+    let mut merges = String::from("int f(int a, int b) {\n    int s = 0;\n");
+    let mut loops = String::from("int g(int a) {\n    int s = 0;\n");
+    for i in 0..N {
+        let _ = writeln!(
+            merges,
+            "    {{ int c = a > {i} ? 1 : 2; if (b) c = 3; \
+             if (c == 1) s += {i}; else s -= {i}; s ^= c; }}"
+        );
+        let _ = writeln!(
+            loops,
+            "    for (int done = 0; !done; done = 1) s += a + {i};"
+        );
+    }
+    for src in [&mut merges, &mut loops] {
+        src.push_str("    return s;\n}\n");
+        let before = REACH_VISITS.with(|n| n.get());
+        object_at(src, Target::LinuxX64, true);
+        let visits = REACH_VISITS.with(|n| n.get()) - before;
+        assert!(
+            visits < 32 * N,
+            "{N} sites took {visits} block visits: reachability is walked per edge"
+        );
+    }
+}
+
+/// A chain of loads from a constant table, each indexed by the one
+/// before, folds in one sweep: a load whose index a folded load gives
+/// folds in the same sweep, so eight times the chain takes under 24 times
+/// the compile's thread CPU time at `-O`, and the function returns a
+/// constant.
+#[test]
+#[cfg(not(debug_assertions))]
+fn a_chain_of_constant_table_loads_folds_in_one_sweep() {
+    use core::fmt::Write;
+    let source = |n: usize| {
+        let table: Vec<String> = (0..=n).map(|i| ((i + 1) % (n + 1)).to_string()).collect();
+        let mut src = alloc::format!(
+            "static const int t[{}] = {{{}}};\nint f(void) {{\n    int v = t[0];\n",
+            n + 1,
+            table.join(",")
+        );
+        for _ in 0..n {
+            let _ = writeln!(src, "    v = t[v];");
+        }
+        src + "    return v;\n}\n"
+    };
+    let growth = compile_growth(source, (125, 1000), true);
+    assert!(growth < 24.0, "8x the chain took {growth:.1}x the CPU time");
+    let loads = x64(&source(1000), "f")
+        .iter()
+        .filter(|i| i.op == 0x8B)
+        .count();
+    assert_eq!(loads, 0, "every load folds");
+}
+
+/// A function calling an always-inline body of two blocks many times: the
+/// splices of a round take one rebuild of the caller, not one each, so
+/// eight times the calls take under 24 times the compile's thread CPU time
+/// at `-O0`, where only the mandatory splices run.
+#[test]
+#[cfg(not(debug_assertions))]
+fn many_multi_block_splices_compile_in_time_linear_in_their_number() {
+    use core::fmt::Write;
+    let source = |n: usize| {
+        let mut s = String::from(
+            "static inline __attribute__((always_inline)) int helper(int x) \
+             { if (x > 3) return x * 2; return x + 1; }\n\
+             int f(int a) {\n    int s = 0;\n",
+        );
+        for i in 0..n {
+            let _ = writeln!(s, "    s += helper(a + {i});");
+        }
+        s + "    return s;\n}\n"
+    };
+    let growth = compile_growth(source, (250, 2000), false);
+    assert!(growth < 24.0, "8x the calls took {growth:.1}x the CPU time");
+    let calls = (x64_at(&source(2000), "f", false).iter())
+        .filter(|i| i.op == 0xE8)
+        .count();
+    assert_eq!(calls, 0, "every call is spliced");
+}
+
+/// A function of conditional updates, each a branch if-conversion turns
+/// into a select: the conversions take one sweep and one tape rewrite,
+/// not a pass over the function each, so eight times the updates take
+/// under 24 times the compile's thread CPU time at `-O`.
+#[test]
+#[cfg(not(debug_assertions))]
+fn many_convertible_branches_compile_in_time_linear_in_their_number() {
+    use core::fmt::Write;
+    const N: usize = 3000;
+    let source = |n: usize| {
+        let mut src = String::from("long f(long a, long b) {\n    long x = 0;\n");
+        for i in 0..n {
+            let _ = if i % 2 == 1 {
+                writeln!(src, "    if (a > {i}) x += {};", i % 7 + 1)
+            } else {
+                writeln!(src, "    if (b < {i}) x -= {};", i % 5 + 1)
+            };
+        }
+        src + "    return x;\n}\n"
+    };
+    let growth = compile_growth(source, (N / 8, N), true);
+    assert!(
+        growth < 24.0,
+        "8x the updates took {growth:.1}x the CPU time"
+    );
+    let cmov = |i: &&X64Insn| matches!(i.op, 0x0F40..=0x0F4F);
+    assert_eq!(x64(&source(N), "f").iter().filter(cmov).count(), N);
+}
+
+/// A computed-goto dispatch is a cycle entered at every label, no natural
+/// loop. The table address its dispatches read is set once, ahead of the
+/// cycle, where the entry's own dispatch reads it too.
+#[test]
+fn computed_goto_dispatch_sets_its_table_address_once() {
+    const SRC: &str = "int run(const unsigned char *pc, int acc) {\n\
+    static void *const t[] = {&&add, &&sub, &&dbl, &&halt};\n\
+    goto *t[*pc++];\n\
+add: acc += *pc++; goto *t[*pc++];\n\
+sub: acc -= *pc++; goto *t[*pc++];\n\
+dbl: acc *= 2; goto *t[*pc++];\n\
+halt: return acc;\n}\n";
+    let adrp = |w: &&u32| **w & 0x9F00_0000 == 0x9000_0000;
+    let ws = a64(SRC, "run");
+    assert_eq!(ws.iter().filter(adrp).count(), 1, "{ws:08x?}");
+}
+
 /// A select or a branch on an `int` parameter tests its low word, so the
 /// parameter takes no entry sign extension; one the function also reads
 /// at 64 bits keeps it.
@@ -5770,13 +6458,13 @@ fn constant_stack_arguments_take_no_register() {
         .find(|i| matches!(i.op, 0x81 | 0x83) && i.modrm == Some(0xEC))
         .map_or(0, |i| i.imm);
     assert!(frame <= 16, "x86-64 frame of {frame} bytes");
-    // Each fits `mov m64, imm32`: of the 125 stack slots, all but the five
-    // whose constant (0, 1, 2, 45) a register argument also takes.
+    // Each of the 124 stack slots takes `mov m64, imm32`, the four whose
+    // constant (0 to 3) a register argument also reads included.
     let stores = insns
         .iter()
         .filter(|i| i.op == 0xC7 && i.rex & 0x08 != 0)
         .count();
-    assert_eq!(stores, 120, "immediate stores");
+    assert_eq!(stores, 124, "immediate stores");
     // AArch64: the outgoing area of 123 stack slots, nothing past it.
     let sub_sp = |w: u32| {
         (w & 0xFF80_03FF == 0xD100_03FF)
@@ -5793,6 +6481,240 @@ fn constant_stack_arguments_take_no_register() {
         .filter(|&&w| w & 0xBFC0_03FF == 0xB900_03FF)
         .count();
     assert_eq!(zr_stores, 3, "{zr:08x?}");
+}
+
+/// A constant or a local's address read only as a register argument is set
+/// by the call's marshaling into its argument register. With two registers
+/// per bank and the parameters live across the call, they took spill slots,
+/// a store each and a reload into the argument register; now none is
+/// loaded ahead of the call.
+#[test]
+fn register_arguments_the_call_sets_take_no_slot() {
+    const SRC: &str = "void sink(char *p, char *q, char *r, long k, long j, long v);\n\
+        long f(long a, long b, long c, long d) {\n\
+            char p[16], q[16], r[16];\n\
+            sink(p, q, r, 7, 9, a + 3);\n\
+            return a + b + c + d + p[0] + q[0] + r[0];\n\
+        }\n";
+    let caps = (2, 2);
+    // x86-64: rdi, rsi, rdx by `lea` off rsp, rcx and r8 by `mov r32, imm32`.
+    let insns = x64_insns(&function_bytes(
+        &object_with_pool(SRC, Target::LinuxX64, caps),
+        "f",
+    ));
+    let call = insns.iter().position(|i| i.op == 0xE8).expect("call");
+    let before = &insns[..call];
+    for (reg, k) in [(1u8, 7i64), (8, 9)] {
+        assert!(
+            before
+                .iter()
+                .any(|i| i.op == 0xB8 + u16::from(reg & 7) && i.rex & 1 == reg >> 3 && i.imm == k),
+            "x86-64: {k} set into register {reg}: {before:x?}"
+        );
+    }
+    for reg in [7u8, 6, 2] {
+        assert!(
+            before
+                .iter()
+                .any(|i| i.op == 0x8D && i.regs().0 == reg && i.mem_base() == Some(4)),
+            "x86-64: address set into register {reg}: {before:x?}"
+        );
+        assert!(
+            !before
+                .iter()
+                .any(|i| i.op == 0x8B && !i.reg_form() && i.regs().0 == reg),
+            "x86-64: register {reg} loaded ahead of the call: {before:x?}"
+        );
+    }
+    // AArch64: x0-x2 by `sub xN, x29, #imm`, x3 and x4 by `movz`, and no
+    // `ldr` into x0-x4 ahead of the call.
+    let words = function_words(&object_with_pool(SRC, Target::LinuxAarch64, caps), "f");
+    let call = words
+        .iter()
+        .position(|&w| w & 0xFC00_0000 == 0x9400_0000)
+        .expect("bl");
+    let before = &words[..call];
+    for rd in 0..3u32 {
+        assert!(
+            before.iter().any(|&w| w & 0xFF80_03FF == 0xD100_03A0 | rd),
+            "aarch64: address set into x{rd}: {before:08x?}"
+        );
+    }
+    for (rd, k) in [(3u32, 7u32), (4, 9)] {
+        assert!(
+            before.contains(&(0xD280_0000 | k << 5 | rd)),
+            "aarch64: {k} set into x{rd}: {before:08x?}"
+        );
+    }
+    let ldr_x = |w: u32| w & 0xFFC0_0000 == 0xF940_0000 && w & 0x1F < 5;
+    assert!(
+        !before.iter().any(|&w| ldr_x(w)),
+        "aarch64: an argument register loaded ahead of the call: {before:08x?}"
+    );
+}
+
+/// A data or code address of this unit read only as a register argument is
+/// set by the call's marshaling, RIP-relative on x86-64 and by an `adrp` /
+/// `add` pair on AArch64, with nothing loaded into an argument register
+/// ahead of the call, under two registers per bank.
+#[test]
+fn address_arguments_the_call_sets_take_no_slot() {
+    const SRC: &str = "int table[4];\n\
+        static int helper(void) { return 1; }\n\
+        void sink(int *t, int (*f)(void), char *p, long k, long v);\n\
+        long f(long a, long b, long c, long d) {\n\
+            char p[16];\n\
+            sink(table, helper, p, 7, a + 3);\n\
+            return a + b + c + d + p[0];\n\
+        }\n";
+    let caps = (2, 2);
+    let insns = x64_insns(&function_bytes(
+        &object_with_pool(SRC, Target::LinuxX64, caps),
+        "f",
+    ));
+    let call = insns.iter().position(|i| i.op == 0xE8).expect("call");
+    let before = &insns[..call];
+    // `lea reg, [rip + disp32]`: ModRM mod 00, rm 101.
+    let rip_lea = |reg: u8| {
+        before
+            .iter()
+            .any(|i| i.op == 0x8D && i.regs().0 == reg && i.modrm.is_some_and(|m| m & 0xC7 == 0x05))
+    };
+    assert!(rip_lea(7) && rip_lea(6), "x86-64: {before:x?}");
+    for reg in [7u8, 6] {
+        assert!(
+            !before
+                .iter()
+                .any(|i| i.op == 0x8B && !i.reg_form() && i.regs().0 == reg),
+            "x86-64: register {reg} loaded ahead of the call: {before:x?}"
+        );
+    }
+    let words = function_words(&object_with_pool(SRC, Target::LinuxAarch64, caps), "f");
+    let call = words
+        .iter()
+        .position(|&w| w & 0xFC00_0000 == 0x9400_0000)
+        .expect("bl");
+    let before = &words[..call];
+    for rd in 0..2u32 {
+        let adrp = |w: u32| w & 0x9F00_001F == 0x9000_0000 | rd;
+        assert!(
+            before.iter().any(|&w| adrp(w)),
+            "aarch64: x{rd}: {before:08x?}"
+        );
+    }
+    let ldr_x = |w: u32| w & 0xFFC0_0000 == 0xF940_0000 && w & 0x1F < 2;
+    assert!(
+        !before.iter().any(|&w| ldr_x(w)),
+        "aarch64: an argument register loaded ahead of the call: {before:08x?}"
+    );
+}
+
+/// AArch64: a local's address one `sub` from fp reaches, read by a call
+/// ahead of a loop and by one inside it, is set by each call; no
+/// callee-saved register holds it across the loop.
+#[test]
+fn a_near_local_address_is_set_by_each_call() {
+    const SRC: &str = "void use(char *p, int i);\nvoid init(char *p);\n\
+        void f(int n) { char buf[32]; init(buf); for (int i = 0; i < n; i++) use(buf, i); }\n";
+    let words = function_words(&object_at(SRC, Target::LinuxAarch64, true), "f");
+    // `sub xd, x29, #imm12`.
+    let from_fp = |w: u32| w & 0xFFC0_03E0 == 0xD100_03A0;
+    let calls: Vec<usize> = (words.iter().enumerate())
+        .filter(|&(_, &w)| w & 0xFC00_0000 == 0x9400_0000)
+        .map(|(i, _)| i)
+        .collect();
+    assert_eq!(calls.len(), 2, "{words:08x?}");
+    for &c in &calls {
+        assert!(
+            words[..c]
+                .iter()
+                .rev()
+                .take(2)
+                .any(|&w| from_fp(w) && w & 31 == 0),
+            "the address is not set ahead of the call at {c}: {words:08x?}"
+        );
+    }
+    assert!(
+        !words
+            .iter()
+            .any(|&w| from_fp(w) && (19..=28).contains(&(w & 31))),
+        "a callee-saved register holds the address: {words:08x?}"
+    );
+}
+
+/// x86-64: a scratch register a site borrowed stays in its slot past an
+/// instruction that does not read it, and the next site borrowing it into
+/// the same slot uses it as it is: no load of a slot into a register is
+/// followed, across one instruction naming neither, by a store of that
+/// register back into the slot. The fixture's vector lanes keep the
+/// scratch pair borrowed from one lane to the next.
+#[test]
+fn a_borrowed_scratch_is_not_reloaded_to_be_stored_back() {
+    const SRC: &str = include_str!("../../../tests/fixtures/c/values_saved_around_calls.c");
+    let insns = x64_insns(&function_bytes(
+        &object_at(SRC, Target::LinuxX64, true),
+        "main",
+    ));
+    // `mov r64, [rsp + disp]` / `mov [rsp + disp], r64`.
+    let slot_mov = |i: &X64Insn, op: u16| {
+        (i.op == op && i.rex_w() && !i.reg_form() && i.mem_base() == Some(4))
+            .then(|| (i.regs().0, i.disp))
+    };
+    for w in insns.windows(3) {
+        let (Some((r, d)), Some(back)) = (slot_mov(&w[0], 0x8B), slot_mov(&w[2], 0x89)) else {
+            continue;
+        };
+        let (a, b) = w[1].regs();
+        assert!(
+            back != (r, d) || w[1].modrm.is_none() || a == r || b == r,
+            "r{r} reloaded from [rsp + {d:#x}] and stored back at {:#x}: {insns:x?}",
+            w[0].at
+        );
+    }
+}
+
+/// AArch64: a select's zero arm is `xzr`: no register holds the constant
+/// and no instruction sets it, so each function is the compare, the
+/// `csel` reading `xzr`, and the return, with the subtraction ahead.
+#[test]
+fn a_zero_select_arm_reads_the_zero_register() {
+    const SRC: &str = "long clamp(long a, long b) { return a > b ? 0 : a - b; }\n\
+        long pick(long a, long b, long c) { return a < b ? 0 : c; }\n";
+    let obj = object_at(SRC, Target::LinuxAarch64, true);
+    for (name, len) in [("clamp", 4), ("pick", 3)] {
+        let words = function_words(&obj, name);
+        let csel = |w: &u32| w & 0xFFE0_0C00 == 0x9A80_0000 && (w >> 5) & 31 == 31;
+        assert!(
+            words.len() == len && words.iter().any(csel),
+            "{name}: {words:08x?}"
+        );
+    }
+}
+
+/// AArch64: a data address evaluated ahead of a conditional argument and
+/// read by the call alone is set by the call, an `adrp` / `add` pair into
+/// x0 just before the `bl`, not held in a register across the branch.
+#[test]
+fn an_address_one_call_reads_is_set_by_it() {
+    const SRC: &str = "void sink(const char *a, const char *b, long k);\n\
+        long f(long a, long b, const char *p) {\n\
+            sink(\"first\", p ? p : \"\", a + b);\n\
+            return a;\n\
+        }\n";
+    let words = function_words(&object_at(SRC, Target::LinuxAarch64, true), "f");
+    let bl = words
+        .iter()
+        .position(|&w| w & 0xFC00_0000 == 0x9400_0000)
+        .expect("bl");
+    let adrp_x0 = |w: &u32| w & 0x9F00_001F == 0x9000_0000;
+    let branch = words
+        .iter()
+        .position(|&w| w & 0x7E00_0000 == 0x3400_0000)
+        .expect("cbz");
+    assert!(
+        !words[..branch].iter().any(adrp_x0) && adrp_x0(&words[bl - 2]),
+        "{words:08x?}"
+    );
 }
 
 /// A stack argument read from a local array, with nothing between the read
@@ -6095,6 +7017,24 @@ fn x64_is_store(i: &X64Insn) -> bool {
 
 const RBP: u8 = 5;
 
+/// The register `insns` address their frame from: rbp where the prologue
+/// sets it (`mov rbp, rsp`), else rsp, in a frame with no pointer.
+fn x64_frame_reg(insns: &[X64Insn]) -> u8 {
+    let sets_rbp = |i: &X64Insn| i.op == 0x89 && i.rex_w() && i.modrm == Some(0xE5);
+    if insns.iter().any(sets_rbp) { RBP } else { 4 }
+}
+
+/// An access to the frame addressed from `fr` ([`x64_frame_reg`]): through
+/// rsp, at or above it, past the red zone below.
+fn x64_in_frame(i: &X64Insn, fr: u8) -> bool {
+    i.mem_base() == Some(fr) && (fr == RBP || i.disp >= 0)
+}
+
+/// A `push` of rbx or r12-r15: a callee-saved register's save.
+fn x64_is_save(i: &X64Insn) -> bool {
+    i.op == 0x53 && i.rex & 1 == 0 || matches!(i.op, 0x54..=0x57) && i.rex & 1 == 1
+}
+
 /// Type punning through the address of a parameter (#1159's shape): one
 /// store of the incoming register into the slot and one read of it back.
 const BITS: &str = "unsigned long long bits(double d) { return *(unsigned long long *)&d; }\n";
@@ -6114,10 +7054,11 @@ fn a_load_through_a_local_address_folds_the_frame_offset() {
         format!("aarch64 bits: a frame address is materialized: {ws:08x?}")
     });
     let insns = x64(BITS, "bits");
+    let fr = x64_frame_reg(&insns);
     m.expect(
         !insns
             .iter()
-            .any(|i| i.op == 0x8D && i.mem_base() == Some(RBP)),
+            .any(|i| i.op == 0x8D && i.mem_base() == Some(fr)),
         || format!("x86-64 bits: a frame address is materialized: {insns:x?}"),
     );
     // The address the call takes is not an access, so it still materializes.
@@ -6126,10 +7067,11 @@ fn a_load_through_a_local_address_folds_the_frame_offset() {
         format!("aarch64 keep: the escaping address is gone: {ws:08x?}")
     });
     let insns = x64(KEEP, "keep");
+    let fr = x64_frame_reg(&insns);
     m.expect(
         insns
             .iter()
-            .any(|i| i.op == 0x8D && i.mem_base() == Some(RBP)),
+            .any(|i| i.op == 0x8D && i.mem_base() == Some(fr)),
         || format!("x86-64 keep: the escaping address is gone: {insns:x?}"),
     );
     m.finish();
@@ -6149,9 +7091,10 @@ fn an_address_taken_parameter_is_homed_once() {
         format!("aarch64 bits: {stores} stores into the frame: {ws:08x?}")
     });
     let insns = x64(BITS, "bits");
+    let fr = x64_frame_reg(&insns);
     let stores = insns
         .iter()
-        .filter(|i| x64_is_store(i) && i.mem_base() == Some(RBP))
+        .filter(|i| x64_is_store(i) && x64_in_frame(i, fr))
         .count();
     m.expect(stores == 1, || {
         format!("x86-64 bits: {stores} stores into the frame: {insns:x?}")
@@ -6169,9 +7112,10 @@ fn an_address_taken_parameter_is_homed_once() {
     // A body store narrower than the read past it leaves the prologue's
     // bytes observable, so both stores stand.
     let insns = x64(WIDE, "wide");
+    let fr = x64_frame_reg(&insns);
     let stores = insns
         .iter()
-        .filter(|i| x64_is_store(i) && i.mem_base() == Some(RBP))
+        .filter(|i| x64_is_store(i) && x64_in_frame(i, fr))
         .count();
     m.expect(stores == 2, || {
         format!("x86-64 wide: {stores} stores into the frame: {insns:x?}")
@@ -6203,9 +7147,10 @@ fn a_floating_parameter_homes_from_its_own_bank() {
         || format!("aarch64 wide: the home store crosses banks: {ws:08x?}"),
     );
     let insns = x64(WIDE, "wide");
+    let fr = x64_frame_reg(&insns);
     let home = insns
         .iter()
-        .find(|i| x64_is_store(i) && i.mem_base() == Some(RBP));
+        .find(|i| x64_is_store(i) && x64_in_frame(i, fr));
     m.expect(home.is_some_and(|i| i.op == 0x0F11), || {
         format!("x86-64 wide: the home store crosses banks: {insns:x?}")
     });
@@ -6241,9 +7186,10 @@ fn a_local_access_folds_only_where_the_slot_form_says_the_same_thing() {
         format!("aarch64 narrow: {stores} stores into the frame: {ws:08x?}")
     });
     let insns = x64(NARROW, "narrow");
+    let fr = x64_frame_reg(&insns);
     let stores = insns
         .iter()
-        .filter(|i| x64_is_store(i) && i.mem_base() == Some(RBP))
+        .filter(|i| x64_is_store(i) && x64_in_frame(i, fr))
         .count();
     m.expect(stores == 2, || {
         format!("x86-64 narrow: {stores} stores into the frame: {insns:x?}")
@@ -6259,7 +7205,8 @@ fn a_local_access_folds_only_where_the_slot_form_says_the_same_thing() {
         format!("aarch64 vol: {stores} stores, {loads} loads: {ws:08x?}")
     });
     let insns = x64(VOL, "vol");
-    let frame = |i: &&X64Insn| i.mem_base() == Some(RBP);
+    let fr = x64_frame_reg(&insns);
+    let frame = |i: &&X64Insn| x64_in_frame(i, fr);
     let stores = insns.iter().filter(|i| x64_is_store(i) && frame(i)).count();
     let loads = insns
         .iter()
@@ -7399,9 +8346,13 @@ fn aggregate_copy_saves_nothing_and_moves_sixteen_bytes() {
             || format!("aarch64 {name}: the pairs and the loop: {ws:08x?}"),
         );
         let insns = x64(COPIES, name);
-        let pushes = insns.iter().filter(|i| matches!(i.op, 0x50..=0x57)).count();
-        let pops = insns.iter().filter(|i| matches!(i.op, 0x58..=0x5F)).count();
-        m.expect(pushes == usize::from(frame) && pops == 0, || {
+        let pushes = insns.iter().filter(|i| x64_is_save(i)).count();
+        // The pops of callee-saved registers and rbp; the pad's is r11.
+        let pops = (insns.iter())
+            .filter(|i| matches!(i.op, 0x58..=0x5F) && !(i.op == 0x5B && i.rex & 1 == 1))
+            .count();
+        let frame_pops = usize::from(frame && x64_frame_reg(&insns) == RBP);
+        m.expect(pushes == 0 && pops == frame_pops, || {
             format!("x86-64 {name}: {pushes} pushes and {pops} pops: {insns:x?}")
         });
         let loads = insns.iter().filter(|i| i.op == 0x0F10).count();
@@ -7521,9 +8472,9 @@ fn constant_parts_are_set_again_after_a_call() {
             && after_call.iter().any(|i| i.op == 0xBA && i.imm == 8),
         || format!("x86-64 across: the parts are not set after the call: {insns:x?}"),
     );
-    let pushes = insns.iter().filter(|i| matches!(i.op, 0x50..=0x57)).count();
-    m.expect(pushes == 1, || {
-        format!("x86-64 across: {pushes} pushes, not rbp alone: {insns:x?}")
+    let pushes = insns.iter().filter(|i| x64_is_save(i)).count();
+    m.expect(pushes == 0, || {
+        format!("x86-64 across: {pushes} saves: {insns:x?}")
     });
     m.finish();
 }
@@ -7772,15 +8723,128 @@ void g(double v) { coef[1] = v; }\n";
         .iter()
         .filter(|b| (b.is_jmp() || b.is_jcc()) && b.target() <= b.at)
         .map(|b| {
+            // A multi-byte NOP (`0F 1F /0`) names an address it does not access.
             (insns.iter())
                 .filter(|i| i.at >= b.target() && i.at <= b.at)
-                .filter(|i| i.modrm.is_some() && !i.reg_form())
+                .filter(|i| i.modrm.is_some() && !i.reg_form() && i.op != 0x0F1F)
                 .count()
         })
         .collect::<Vec<_>>();
     m.expect(!reads.is_empty() && reads.iter().all(|&n| n == 1), || {
         format!("x86-64: {insns:x?}")
     });
+    m.finish();
+}
+
+/// x86-64: a floating load of the unit's data, addressed off rip, whose one
+/// reader is the next floating add, subtract, multiply, divide or fused
+/// multiply-add is that op's `disp32(%rip)` operand, as a load through a
+/// pointer is. In `sum` the loop reads fifteen of the polynomial's sixteen
+/// coefficients in its multiply-adds and the frame holds none of them;
+/// `lin` and `sq` read every constant in the op that uses it.
+#[test]
+fn a_static_floating_load_is_its_readers_rip_operand() {
+    const SRC: &str = "static double c[16];\n\
+static float g[2];\n\
+void set(int k, double v) { c[k] = v; g[k & 1] = (float)v; }\n\
+static double h(double x) {\n\
+    return c[0] + x * (c[1] + x * (c[2] + x * (c[3] + x * (c[4] + x * (c[5] + x * (c[6]\n\
+        + x * (c[7] + x * (c[8] + x * (c[9] + x * (c[10] + x * (c[11] + x * (c[12]\n\
+        + x * (c[13] + x * (c[14] + x * c[15]))))))))))))));\n\
+}\n\
+double sum(const double *xs, int n) {\n\
+    double s = 0;\n\
+    for (int i = 0; i < n; i++) s += h(xs[i]);\n\
+    return s;\n\
+}\n\
+double lin(double x) { return ((x + c[1]) * x - c[2]) / c[3]; }\n\
+float sq(float x) { return x * g[0] / g[1]; }\n";
+    let mut m = Misses::default();
+    let rip = |i: &X64Insn| i.modrm.is_some_and(|m| m & 0xC7 == 0x05);
+    let frame = |i: &X64Insn| matches!(i.mem_base(), Some(4 | 5));
+    // The VEX scalar arithmetic (0F 58..5E) and FMA (0F 38 99..BF) rows.
+    let arith = |i: &X64Insn| i.vex && matches!(i.op, 0x0F58..=0x0F5E | 0x3899..=0x38BF);
+    let insns = x64(SRC, "sum");
+    let back = insns.iter().find(|b| b.is_jcc() && b.target() <= b.at);
+    let in_loop = |i: &&X64Insn| back.is_some_and(|b| i.at >= b.target() && i.at <= b.at);
+    let folded = insns.iter().filter(in_loop).filter(|i| rip(i) && arith(i));
+    m.expect(folded.count() == 15 && !insns.iter().any(frame), || {
+        format!("x86-64 sum: {insns:x?}")
+    });
+    for (name, ops) in [("lin", 3), ("sq", 2)] {
+        let insns = x64(SRC, name);
+        let folded = insns.iter().filter(|i| rip(i) && arith(i)).count();
+        m.expect(
+            folded == ops && insns.iter().filter(|i| rip(i)).count() == ops,
+            || format!("x86-64 {name}: {insns:x?}"),
+        );
+    }
+    m.finish();
+}
+
+/// `tests/perf/horner.c`, its clock read in place of `bench_clock.h`.
+fn horner_perf_source() -> String {
+    include_str!("../../../tests/perf/horner.c").replace(
+        "#include \"bench_clock.h\"",
+        "#include <time.h>\n\
+static double bench_ms(void) {\n\
+    struct timespec now;\n\
+    clock_gettime(CLOCK_MONOTONIC, &now);\n\
+    return (double)now.tv_sec * 1000.0 + (double)now.tv_nsec / 1000000.0;\n\
+}",
+    )
+}
+
+/// The loads LICM moves out of a loop stay as many as the bank holds: the
+/// rest are read from the table where the loop uses them, with no frame
+/// slot. The polynomial loops of `tests/perf/horner.c` hold sixteen
+/// coefficients; on x86-64 the Horner loop keeps most in registers and
+/// reads the others in its multiply-adds, and the Estrin loop, whose copies
+/// would crowd out its own values, keeps its loads. Over a 24-register
+/// floating bank on AArch64 neither loop stores or reloads a value. Each
+/// loop reread the slots its spilled copies took, every iteration.
+#[test]
+fn moved_loads_past_the_bank_are_read_where_they_are_used() {
+    let src = horner_perf_source();
+    let mut m = Misses::default();
+    let insns = x64(&src, "main");
+    let frame = |i: &X64Insn| matches!(i.mem_base(), Some(4 | 5));
+    let fma = |i: &X64Insn| i.vex && matches!(i.op, 0x3899..=0x38BF);
+    let inner: Vec<&[X64Insn]> = (insns.iter().enumerate())
+        .filter(|(_, b)| b.is_jcc() && b.target() <= b.at)
+        .filter_map(|(k, b)| {
+            let top = insns.iter().position(|i| i.at == b.target())?;
+            let body = &insns[top..=k];
+            (body.iter().any(fma) && !body.iter().any(|i| i.op == 0xE8)).then_some(body)
+        })
+        .collect();
+    let held = |body: &[X64Insn]| body.iter().filter(|i| fma(i) && i.reg_form()).count();
+    m.expect(
+        inner.len() >= 2
+            && !inner.iter().any(|body| body.iter().any(frame))
+            && inner.iter().any(|body| held(body) >= 8),
+        || format!("x86-64 main: {insns:x?}"),
+    );
+    let ws = function_words(
+        &object_with_pool(&src, Target::LinuxAarch64, (usize::MAX, 12)),
+        "main",
+    );
+    // FMADD (scalar, double), BL, and a load or store (op0 bits 27 and 25
+    // are 1 and 0) off sp or x29.
+    let fmadd = |w: u32| w & 0xFFE0_8000 == 0x1F40_0000;
+    let bl = |w: u32| w >> 26 == 0b100101;
+    let frame = |w: u32| w & 0x0A00_0000 == 0x0800_0000 && matches!((w >> 5) & 31, 29 | 31);
+    let loops: Vec<&[u32]> = (ws.iter().enumerate())
+        .filter_map(|(i, &w)| match a64_branch(w, i) {
+            Some((t, _)) if t >= 0 && t as usize <= i => Some(&ws[t as usize..=i]),
+            _ => None,
+        })
+        .filter(|body| body.iter().any(|&w| fmadd(w)) && !body.iter().any(|&w| bl(w)))
+        .collect();
+    m.expect(
+        loops.len() >= 2 && !loops.iter().any(|body| body.iter().any(|&w| frame(w))),
+        || format!("AArch64 main: {ws:08x?}"),
+    );
     m.finish();
 }
 
@@ -7812,6 +8876,93 @@ double f(const double *c, const double *xs, int n) {\n\
         format!("x86-64 f: {insns:x?}")
     });
     m.finish();
+}
+
+/// A named argument System V AMD64 passes in two registers goes as its
+/// parts: a constant compound literal reaches its registers as immediates
+/// and an object read through a pointer as its two loads, with no frame
+/// object staging either.
+#[test]
+fn x64_a_two_register_aggregate_argument_goes_as_its_parts() {
+    const SRC: &str = "typedef struct { long u, tag; } V;\n\
+V callee(void *c, V a, V b);\n\
+V caller(void *c, V *p) { return callee(c, p[-1], (V){ 0, 3 }); }\n";
+    let insns = x64(SRC, "caller");
+    let frame = |i: &X64Insn| {
+        i.modrm.is_some_and(|m| {
+            let (md, rm) = (m >> 6, m & 7);
+            md != 3
+                && i.rex & 1 == 0
+                && ((rm == 5 && md != 0) || (rm == 4 && i.sib.is_some_and(|s| s & 7 == 4)))
+        })
+    };
+    assert!(
+        !insns.iter().any(frame),
+        "an argument is staged in the frame: {insns:x?}"
+    );
+    let three = |i: &&X64Insn| i.imm == 3 && matches!(i.op, 0xb8..=0xbf | 0xc7);
+    assert!(
+        insns.iter().any(|i| three(&i)),
+        "the tag is not an immediate: {insns:x?}"
+    );
+}
+
+/// A local read back through a cast of its address, `*(T *)&local`, stays
+/// in registers: the address is read by that load alone, which reads the
+/// slot as a load of the local does, so the slot is promoted like one no
+/// address names.
+#[test]
+fn x64_a_local_read_through_its_cast_address_stays_in_registers() {
+    const SRC: &str = "long long f(const unsigned char *p) {\n\
+unsigned long long k = p[0];\n\
+if (k >= 0x80) k = (k << 7) ^ p[1];\n\
+return *(long long *)&k;\n}\n";
+    let insns = x64(SRC, "f");
+    // A memory operand based on rbp (`disp(%rbp)`) or rsp (a SIB base of 4).
+    let frame = |i: &X64Insn| {
+        i.modrm.is_some_and(|m| {
+            let (md, rm) = (m >> 6, m & 7);
+            md != 3
+                && i.rex & 1 == 0
+                && ((rm == 5 && md != 0) || (rm == 4 && i.sib.is_some_and(|s| s & 7 == 4)))
+        })
+    };
+    assert!(
+        !insns.iter().any(frame),
+        "the local is in the frame: {insns:x?}"
+    );
+}
+
+/// A value saved around the call in a loop, defined ahead of the loop and
+/// never redefined, is stored once where it is defined: the call only
+/// reloads it. Here more values cross the call than the callee-saved
+/// registers hold, so the row, column and box indices are saved around it.
+#[test]
+fn x64_value_saved_around_a_call_in_a_loop_is_stored_before_the_loop() {
+    const SRC: &str = "struct board { unsigned row[9], col[9], box[9]; unsigned char cell[81];\n\
+int found; };\n void search(struct board *s, int filled);\n\
+void step(struct board *s, int best, int r, int c, int b, unsigned mask, int filled) {\n\
+for (unsigned m = mask; m != 0 && s->found < 2; m &= m - 1) {\n\
+unsigned bit = m & -m;\n s->cell[best] = (unsigned char)bit;\n\
+s->row[r] |= bit;\n s->col[c] |= bit;\n s->box[b] |= bit;\n\
+search(s, filled + 1);\n\
+s->row[r] &= ~bit;\n s->col[c] &= ~bit;\n s->box[b] &= ~bit;\n }\n}\n";
+    let insns = x64(SRC, "step");
+    // `mov [rsp + disp], r64`: a SIB byte naming rsp as the base.
+    let frame_store = |i: &X64Insn| {
+        i.op == 0x89
+            && i.modrm.is_some_and(|m| m >> 6 != 3 && m & 7 == 4)
+            && i.sib.is_some_and(|s| s & 7 == 4)
+            && i.rex & 1 == 0
+    };
+    assert!(
+        insns.iter().any(frame_store),
+        "nothing is saved: {insns:x?}"
+    );
+    assert!(
+        !x64_in_loop(&insns, frame_store),
+        "a save is stored in the loop: {insns:x?}"
+    );
 }
 
 /// A spilled indirect-call target that no free register can hold across
@@ -7884,6 +9035,88 @@ long s = 0; for (long i = 0; i < n; i++) s += a[i] * (x * y + 3); return s; }\n"
         matches!((mul, head), (Some(m), Some(h)) if m < h),
         "the invariant product is in the loop: {ws:08x?}"
     );
+}
+
+/// Rows of a 56-byte struct indexed by two counters: row `i`'s position and
+/// mass are read once before the inner loop, whose stores reach only the
+/// velocity fields of rows `i` and `j`. Row `j`'s position and mass are one
+/// load per field in the loop: the stores between the mass's three reads
+/// leave it in a register.
+#[test]
+fn fields_a_strided_loop_does_not_store_are_read_before_it() {
+    const SRC: &str = "struct body { double x, y, z, vx, vy, vz, mass; };\n\
+struct body rows[5];\n\
+void pull(void) {\n\
+    for (int i = 0; i < 5; i++) {\n\
+        struct body *bi = &rows[i];\n\
+        for (int j = i + 1; j < 5; j++) {\n\
+            struct body *bj = &rows[j];\n\
+            double dx = bi->x - bj->x, dy = bi->y - bj->y, dz = bi->z - bj->z;\n\
+            bi->vx -= dx * bj->mass;\n\
+            bi->vy -= dy * bj->mass;\n\
+            bi->vz -= dz * bj->mass;\n\
+            bj->vx += dx * bi->mass;\n\
+            bj->vy += dy * bi->mass;\n\
+            bj->vz += dz * bi->mass;\n\
+        }\n\
+    }\n\
+}\n";
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        // The full register files, which the plan's measure is taken with.
+        let dump = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(
+            usize::MAX,
+            usize::MAX,
+            || ssa_dump_for(SRC, "pull", target, true),
+        );
+        // The live loads of the block that stores, by displacement.
+        let block = (dump.split("  block "))
+            .find(|b| b.contains("Store {"))
+            .expect("the inner loop");
+        let live = |disp: &str| {
+            (block.lines())
+                .filter(|l| l.contains("Load {") && l.contains(disp) && !l.ends_with("-> -"))
+                .count()
+        };
+        for disp in ["disp=0,", "disp=8,", "disp=16,"] {
+            assert_eq!(live(disp), 1, "{target:?} {disp}\n{dump}");
+        }
+        assert_eq!(live("disp=48,"), 1, "{target:?}\n{dump}");
+    }
+}
+
+/// On AArch64 a frame object's address and a floating constant a loop
+/// reads are set once before it: the `sub xN, x29, #imm` of each local
+/// array and the `fmov dN, #4.0` the compare takes, which the loop would
+/// otherwise form every iteration.
+#[test]
+fn a64_frame_addresses_and_float_constants_are_set_before_the_loop() {
+    const SRC: &str = "extern void use(int *, int *);\n\
+void copy(int n) {\n\
+    int a[16], b[16];\n\
+    use(a, b);\n\
+    for (int i = 0; i < n; i++) a[i & 15] = b[i & 15];\n\
+    use(a, b);\n}\n\
+int outside(const double *x, const double *y, int n) {\n\
+    int c = 0;\n\
+    for (int i = 0; i < n; i++) if (x[i] * x[i] + y[i] * y[i] > 4.0) c++;\n\
+    return c;\n}\n";
+    // The words of the loop that closes with the first backward branch.
+    let body = |ws: &[u32]| {
+        (ws.iter().enumerate())
+            .find_map(|(i, &w)| match a64_branch(w, i) {
+                Some((t, _)) if t < i as i64 => Some(ws[t as usize..i].to_vec()),
+                _ => None,
+            })
+            .expect("a loop")
+    };
+    // `add` / `sub xd, x29, #imm`.
+    let frame_addr = |w: u32| matches!(w & 0xFF00_03E0, 0x9100_03A0 | 0xD100_03A0);
+    // `fmov dd, #imm`, `fmov sd, #imm`.
+    let fmov_imm = |w: u32| w & 0xFF20_1FE0 == 0x1E20_1000;
+    let ws = a64(SRC, "copy");
+    assert!(!body(&ws).iter().any(|&w| frame_addr(w)), "{ws:08x?}");
+    let ws = a64(SRC, "outside");
+    assert!(!body(&ws).iter().any(|&w| fmov_imm(w)), "{ws:08x?}");
 }
 
 #[test]
@@ -8001,13 +9234,43 @@ fn a64_a_compare_with_a_small_negative_is_cmn() {
     );
 }
 
+/// A group opened at a loop step whose jump does not follow it -- the step
+/// sets flags another block's branch reads -- pads nothing: only an open
+/// the first pass closed pads, so the loop's padding stays what the branch
+/// relaxation counted and its backward rel8 jump stays in range under the
+/// `-O` default's loop padding.
+#[test]
+fn x64_a_left_branch_group_pads_nothing() {
+    let src = "int a, c;\n\
+               int **b;\n\
+               static unsigned short add16(unsigned short x, unsigned short y) { return x + y; }\n\
+               void d(void) {\n\
+                   int e;\n\
+                   a = 0;\n\
+                   for (; a < 3; ++a) {\n\
+                       int f[4][4] = {5};\n\
+                       for (e = 1; e < 9; e = add16(e, 8))\n\
+                           ;\n\
+                       *b = &f[3][1];\n\
+                       if (c)\n\
+                           continue;\n\
+                   }\n\
+               }\n";
+    object_at(src, Target::LinuxX64, true);
+}
+
 /// Under `-mbranches-within-32B-boundaries` no local jump, nor a flag-setting
 /// instruction with the conditional jump it fuses with, crosses or ends on a
 /// 32-byte boundary, and the function starts on one; the same source has such
-/// groups without the option.
+/// groups under `-mno-` at some entry shift (`-fpatchable-function-entry`),
+/// and under `-O` with neither the loops' groups alone keep off the
+/// boundaries at every shift.
 #[test]
 fn x64_branch_groups_stay_within_32_byte_windows() {
-    use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, emit_native_with_options};
+    use crate::{
+        CompileOptions, Compiler, NativeOptions, OutputKind, PatchableEntry,
+        emit_native_with_options,
+    };
     const SRC: &str = "int match(const unsigned char *a, const unsigned char *b, int n, int lim) {\n\
     int best = 0;\n\
     for (int s = 0; s < n; s++) {\n\
@@ -8028,10 +9291,18 @@ fn x64_branch_groups_stay_within_32_byte_windows() {
     )
     .compile()
     .expect("compile");
-    let groups = |on: bool| {
+    // Per option and entry shift: the function's start, and the crossing
+    // groups and those of them that close a loop (a backward jump).
+    let groups = |on: Option<bool>, shift: u32| {
+        // The frame form is fixed: the premise is a layout with a crossing.
         let opts = NativeOptions {
             output_kind: OutputKind::Relocatable,
             branches_within_32b: on,
+            omit_frame_pointer: Some(false),
+            patchable_function_entry: PatchableEntry {
+                nops: shift,
+                before: 0,
+            },
             ..NativeOptions::new().with_optimize()
         };
         // The full banks, whatever caps the environment sets.
@@ -8051,7 +9322,7 @@ fn x64_branch_groups_stay_within_32_byte_windows() {
                 || (matches!(i.op, 0xF6 | 0xF7) && r == 0)
                 || (matches!(i.op, 0xFE | 0xFF) && r <= 1)
         };
-        let crossing = (insns.iter().enumerate())
+        let crossing: Vec<bool> = (insns.iter().enumerate())
             .filter(|(_, i)| i.is_jcc() || i.is_jmp())
             .filter(|&(k, i)| {
                 let from = match k.checked_sub(1).map(|p| &insns[p]) {
@@ -8061,17 +9332,119 @@ fn x64_branch_groups_stay_within_32_byte_windows() {
                 let (lo, end) = (start + from, start + i.at + i.len);
                 lo / 32 != (end - 1) / 32 || end % 32 == 0
             })
-            .count();
-        (start, crossing)
+            .map(|(_, i)| i.target() <= i.at)
+            .collect();
+        (
+            start,
+            crossing.len(),
+            crossing.iter().filter(|&&b| b).count(),
+        )
     };
-    let (_, without) = groups(false);
     assert!(
-        without > 0,
+        (0..32).any(|shift| groups(Some(false), shift).1 > 0),
         "no group crosses a boundary without the option"
     );
-    let (start, with) = groups(true);
-    assert_eq!(start % 32, 0);
-    assert_eq!(with, 0);
+    for shift in 0..32 {
+        let (start, with, _) = groups(Some(true), shift);
+        assert_eq!(start % 32, 0, "shift {shift}");
+        assert_eq!(with, 0, "shift {shift}");
+        // Unset under `-O`: the groups inside loops, the back edges among them.
+        let (start, _, back) = groups(None, shift);
+        assert_eq!(start % 32, 0, "shift {shift}");
+        assert_eq!(back, 0, "shift {shift}");
+    }
+}
+
+/// Under `-O` a call inside a loop, and every call, return and jump of a
+/// function that calls itself, its entry's test included, keeps off 32-byte
+/// boundaries as a loop's jumps do, at every entry shift, and so they do
+/// under `-mbranches-within-32B-boundaries`, which leaves a call that runs
+/// once where it falls; under `-mno-` some call crosses or ends on one.
+#[test]
+fn x64_calls_and_returns_that_repeat_stay_within_32_byte_windows() {
+    use crate::{
+        CompileOptions, Compiler, NativeOptions, OutputKind, PatchableEntry,
+        emit_native_with_options,
+    };
+    const SRC: &str = "int leaf(int);\n\
+int sum(const int *a, int n) {\n\
+    int s = 0;\n\
+    for (int i = 0; i < n; i++) s += leaf(a[i]) + leaf(i);\n\
+    return s;\n\
+}\n\
+int walk(int n, int k) {\n\
+    if (n < 2) return n + k;\n\
+    return walk(n - 1, k ^ n) + walk(n - 2, k + 3) * 3;\n\
+}\n\
+int once(int x) {\n\
+    return leaf(x) + leaf(x + 1) * leaf(x + 2) - leaf(x ^ 5);\n\
+}\n";
+    let program = Compiler::with_options(
+        SRC.to_string(),
+        Target::LinuxX64,
+        CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_optimize(true),
+    )
+    .compile()
+    .expect("compile");
+    // Per option, entry shift and function: the calls, returns and jumps
+    // that cross or end on a boundary, a conditional jump with the
+    // flag-setting instruction ahead of it; elsewhere only the calls.
+    let crossing = |on: Option<bool>, shift: u32, name: &str| {
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            branches_within_32b: on,
+            patchable_function_entry: PatchableEntry {
+                nops: shift,
+                before: 0,
+            },
+            ..NativeOptions::new().with_optimize()
+        };
+        let obj = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(
+            usize::MAX,
+            usize::MAX,
+            || emit_native_with_options(&program, Target::LinuxX64, opts),
+        )
+        .expect("emit");
+        let start = elf_func_value(&obj, name).expect(name) as usize;
+        let insns = x64_insns(&function_bytes(&obj, name));
+        let call = |i: &X64Insn| {
+            i.op == 0xE8 || (i.op == 0xFF && i.modrm.is_some_and(|m| (m >> 3) & 7 == 2))
+        };
+        let transfer = |i: &X64Insn| call(i) || i.op == 0xC3 || i.is_jmp() || i.is_jcc();
+        (insns.iter().enumerate())
+            .filter(|(_, i)| if name == "walk" { transfer(i) } else { call(i) })
+            .filter(|&(k, i)| {
+                let from = match k.checked_sub(1).map(|p| &insns[p]) {
+                    Some(p) if i.is_jcc() && matches!(p.op, 0x38..=0x3D | 0x83 | 0x84 | 0x85) => {
+                        p.at
+                    }
+                    _ => i.at,
+                };
+                let (lo, end) = (start + from, start + i.at + i.len);
+                lo / 32 != (end - 1) / 32 || end % 32 == 0
+            })
+            .count()
+    };
+    assert!(
+        (0..32).any(|shift| crossing(Some(false), shift, "sum") > 0),
+        "no call crosses a boundary without padding"
+    );
+    assert!(
+        (0..32).any(|shift| crossing(Some(true), shift, "once") > 0),
+        "the option pads a call that runs once"
+    );
+    for shift in 0..32 {
+        for on in [None, Some(true)] {
+            assert_eq!(crossing(on, shift, "sum"), 0, "sum, {on:?}, shift {shift}");
+            assert_eq!(
+                crossing(on, shift, "walk"),
+                0,
+                "walk, {on:?}, shift {shift}"
+            );
+        }
+    }
 }
 
 /// A load, an addition, subtraction or bitwise operation on it and the store
@@ -8351,20 +9724,22 @@ long mix(int n) {\n\
     return s;\n\
 }\n";
     let insns = x64(SRC, "mix");
-    // Every indexed access names rbp as its SIB base.
+    let fr = x64_frame_reg(&insns);
+    // Every indexed access names the frame register as its SIB base.
     let indexed = |i: &X64Insn| {
         i.modrm.is_some_and(|m| m >> 6 != 3 && m & 7 == 4)
             && i.sib.is_some_and(|b| (b >> 3) & 7 != 4)
     };
     let stray = (insns.iter())
-        .filter(|i| indexed(i) && i.sib.is_some_and(|b| b & 7 != 5 || i.rex & 1 != 0))
+        .filter(|i| indexed(i) && i.sib.is_some_and(|b| b & 7 != fr || i.rex & 1 != 0))
         .count();
     assert_eq!(stray, 0, "{insns:x?}");
-    // ModRM rm = 100 (SIB) with SIB base = rbp (101) and a displacement.
+    // ModRM rm = 100 (SIB) with SIB base the frame register and the object's
+    // offset: below rbp, or above rsp.
     let off_frame = |i: &X64Insn| {
         i.modrm.is_some_and(|m| m >> 6 != 3 && m & 7 == 4)
-            && i.sib.is_some_and(|b| b & 7 == 5)
-            && i.disp < 0
+            && i.sib.is_some_and(|b| b & 7 == fr)
+            && (i.disp < 0) == (fr == RBP)
     };
     let loads = insns
         .iter()
@@ -8375,7 +9750,7 @@ long mix(int n) {\n\
         .filter(|i| i.op == 0x89 && off_frame(i))
         .count();
     let frame_leas = (insns.iter())
-        .filter(|i| i.op == 0x8D && i.mem_base() == Some(5))
+        .filter(|i| i.op == 0x8D && i.mem_base() == Some(fr))
         .count();
     assert!(loads >= 2 && stores >= 1 && frame_leas == 1, "{insns:x?}");
 }
@@ -8649,7 +10024,11 @@ int plain(int x) { if (x > 0) return x; slow(x); return 0; }\n";
     for (name, predicted) in [("hinted", true), ("plain", false)] {
         let insns = x64_insns(&function_bytes(&obj, name));
         let ret = insns.iter().position(|i| i.op == 0xC3);
-        let push = insns.iter().position(|i| i.op == 0x55 && i.rex == 0);
+        // `push rbp`, or `sub rsp` or the pad `push rax` in a frame with no
+        // pointer.
+        let push = (insns.iter()).position(|i| {
+            matches!(i.op, 0x50 | 0x55) && i.rex == 0 || i.op == 0x83 && i.modrm == Some(0xEC)
+        });
         assert!(insns.first().is_some_and(|i| !i.is_jcc()), "{name}");
         assert!(
             insns.get(1).is_some_and(X64Insn::is_jcc),
@@ -8804,8 +10183,8 @@ double dot(const double *x, const double *y, int n) {\n\
 }
 
 /// A floating constant every reader of which takes a memory operand is read
-/// off its read-only literal by each and holds no register; one compared
-/// is loaded into a register.
+/// off its read-only literal by each and holds no register, a comparison
+/// reading it on the side `[u]comis` takes from memory included.
 #[test]
 fn x64_a_floating_constant_read_by_arithmetic_is_a_literal_operand() {
     const SRC: &str = "double lit(double a, double b) { return (a + 2.0) * (b - 2.0) + a * 0.5; }\n\
@@ -8817,7 +10196,9 @@ int cmp(double a, double b) { return a + 2.0 < b * 2.0 && a > 2.0; }\n";
     // movsd / movss off rip: a constant loaded into a register.
     let literal_load = |i: &X64Insn| i.op == 0x0F10 && rip(i);
     let arith = |i: &X64Insn| i.vex && matches!(i.op, 0x0F58 | 0x0F59 | 0x0F5C | 0x0F5E);
-    for (name, loads) in [("lit", 0), ("flit", 0), ("cmp", 1)] {
+    // `comisd` / `ucomisd` / `comiss` / `ucomiss`.
+    let compare = |i: &X64Insn| matches!(i.op, 0x0F2E | 0x0F2F);
+    for (name, loads) in [("lit", 0), ("flit", 0), ("cmp", 0)] {
         let insns = x64_insns(&function_bytes(&obj, name));
         assert_eq!(
             insns.iter().filter(|i| literal_load(i)).count(),
@@ -8833,6 +10214,11 @@ int cmp(double a, double b) { return a + 2.0 < b * 2.0 && a > 2.0; }\n";
             );
         }
     }
+    let insns = x64_insns(&function_bytes(&obj, "cmp"));
+    assert!(
+        insns.iter().any(|i| compare(i) && rip(i)),
+        "cmp: no literal compare: {insns:x?}"
+    );
 }
 
 /// A fused multiply-add writes its result over an operand dying at it, the
@@ -8860,12 +10246,12 @@ fn x64_a_fused_multiply_add_result_takes_a_dying_operands_register() {
     );
 }
 
-/// An integer of 32 bits or fewer converted to `double` in a loop is
-/// converted once ahead of it: the result is exact and sets no flag
-/// (C17 6.3.1.4p2). A 64-bit one, which may round and raise inexact, stays.
+/// An integer converted to `double` in a loop is converted once ahead of
+/// it; under `FENV_ACCESS` on, where a conversion is an operation on the
+/// environment, it stays.
 #[test]
 fn a_narrow_integer_converted_in_a_loop_is_converted_before_it() {
-    const SRC: &str = "void addk(double *a, const double *b, int k, int n) {\n\
+    const BODIES: &str = "void addk(double *a, const double *b, int k, int n) {\n\
     for (int i = 0; i < n; i++) a[i] = b[i] + (double)k;\n\
 }\n\
 void addu(double *a, const double *b, unsigned k, int n) {\n\
@@ -8874,9 +10260,14 @@ void addu(double *a, const double *b, unsigned k, int n) {\n\
 void addl(double *a, const double *b, long k, int n) {\n\
     for (int i = 0; i < n; i++) a[i] = b[i] + (double)k;\n\
 }\n";
+    let on = format!("#pragma STDC FENV_ACCESS ON\n{BODIES}");
     let mut m = Misses::default();
-    for (name, inside) in [("addk", false), ("addu", false), ("addl", true)] {
-        let insns = x64(SRC, name);
+    let cases = [("addk", false), ("addu", false), ("addl", false)]
+        .map(|c| (BODIES, c))
+        .into_iter()
+        .chain([("addk", true), ("addu", true), ("addl", true)].map(|c| (on.as_str(), c)));
+    for (src, (name, inside)) in cases {
+        let insns = x64(src, name);
         // The loop: from a backward branch's target to the branch.
         let body = insns
             .iter()
@@ -8887,9 +10278,12 @@ void addl(double *a, const double *b, long k, int n) {\n\
             .iter()
             .any(|i| i.op == 0x0F2A && body.is_some_and(|(lo, hi)| (lo..hi).contains(&i.at)));
         m.expect(body.is_some() && in_loop == inside, || {
-            format!("x86-64 {name}: converts in the loop: {in_loop}: {insns:x?}")
+            format!(
+                "x86-64 {name} on={}: converts in the loop: {in_loop}: {insns:x?}",
+                src != BODIES
+            )
         });
-        let ws = a64(SRC, name);
+        let ws = a64(src, name);
         let body = ws.iter().enumerate().find_map(|(k, &w)| {
             a64_branch(w, k).and_then(|(t, _)| (t < k as i64).then_some((t as usize, k)))
         });
@@ -8900,7 +10294,10 @@ void addl(double *a, const double *b, long k, int n) {\n\
             .enumerate()
             .any(|(k, &w)| cvt(w) && body.is_some_and(|(lo, hi)| (lo..hi).contains(&k)));
         m.expect(body.is_some() && in_loop == inside, || {
-            format!("aarch64 {name}: converts in the loop: {in_loop}: {ws:08x?}")
+            format!(
+                "aarch64 {name} on={}: converts in the loop: {in_loop}: {ws:08x?}",
+                src != BODIES
+            )
         });
     }
     m.finish();
@@ -9063,7 +10460,9 @@ void many(void) { fill(1); fill(2); fill(3); fill(4); }\n";
         .filter(|i| matches!(i.op, 0x81 | 0x83) && i.modrm == Some(0xEC))
         .map(|i| i.imm)
         .collect();
-    assert_eq!(frame, [16], "{insns:x?}");
+    // With no frame pointer the `sub` takes the 8 bytes `push rbp` would.
+    let record = if x64_frame_reg(&insns) == RBP { 0 } else { 8 };
+    assert_eq!(frame, [16 + record], "{insns:x?}");
 }
 
 /// A word copied out of memory into a local, as a read of an unaligned
@@ -9081,7 +10480,8 @@ unsigned long words(const u16 *p, int n) {\n\
   for (int i = 0; i < n; i++) { u32 a = read_u32(p + i); sink(a); s += a; }\n\
   return s + tag; }\n";
     let insns = x64(SRC, "words");
-    let frame_address = |i: &&X64Insn| i.op == 0x8D && i.mem_base() == Some(5);
+    let fr = x64_frame_reg(&insns);
+    let frame_address = |i: &&X64Insn| i.op == 0x8D && i.mem_base() == Some(fr);
     assert_eq!(insns.iter().filter(frame_address).count(), 1, "{insns:x?}");
 }
 

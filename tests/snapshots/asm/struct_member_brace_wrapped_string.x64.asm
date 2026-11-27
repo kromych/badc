@@ -3,7 +3,7 @@ struct_member_brace_wrapped_string.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,9 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x120, %rsp            # imm = 0x120
+               	subq	$0x128, %rsp            # imm = 0x128
                	leaq	<rip>, %rax # <addr>
                	addq	$0x8, %rax
                	leaq	<rip>, %rcx # <addr>
@@ -48,7 +46,7 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x128, %rsp            # imm = 0x128
                	retq
                	leaq	<rip>, %rax # <addr>
                	addq	$0x4, %rax
@@ -62,6 +60,7 @@ Disassembly of section .text:
                	incq	%rax
                	incq	%rcx
                	movsbq	(%rax), %rdx
+               	nop
                	testq	%rdx, %rdx
                	jne	<addr>
                	movsbq	(%rax), %rax
@@ -69,9 +68,9 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x128, %rsp            # imm = 0x128
                	retq
-               	leaq	-0x108(%rbp), %rax
+               	leaq	0x18(%rsp), %rax
                	leaq	<rip>, %rcx # <addr>
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
@@ -113,6 +112,7 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	je	<addr>
                	movsbq	(%rcx), %rsi
+               	nop
                	cmpl	%esi, %edx
                	jne	<addr>
                	incq	%rax
@@ -125,9 +125,9 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x128, %rsp            # imm = 0x128
                	retq
-               	leaq	-0x120(%rbp), %rax
+               	leaq	(%rsp), %rax
                	leaq	<rip>, %rcx # <addr>
                	movups	(%rcx), %xmm14
                	movups	%xmm14, (%rax)
@@ -139,6 +139,7 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	je	<addr>
                	movsbq	(%rcx), %rsi
+               	nop
                	cmpl	%esi, %edx
                	jne	<addr>
                	incq	%rax
@@ -151,8 +152,8 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x128, %rsp            # imm = 0x128
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x128, %rsp            # imm = 0x128
                	retq

@@ -57,6 +57,10 @@ Output mode -- pick at most one (defaults to a native binary):
                            Merge the relocatable objects and print the
                            sections and the symbols the merge defines,
                            then exit.
+  -v                       Report the version on stderr and go on with
+                           the build; with no input, only report it.
+                           -Wl,-v reports the linker's.
+  --version                Print the version and exit.
   --install [<dir>]        Write every embedded header and the runtime
                            source under <dir> (default $BADC_HOME, else
                            ~/.badc), recreating the include/ + lib/
@@ -105,6 +109,12 @@ Multi-TU knobs:
                            object (machine code + symbol table +
                            relocs) linkable by `ld` / `lld`.
                            Target pins at compile time.
+  -S                       As -c, writing the object's assembly
+                           listing in its place: `<stem>.s`, or
+                           -o's path (`-o -` standard output).
+                           Each function's instructions with
+                           their offsets, bytes and text, block
+                           labels and the symbols operands name.
   --ar -o <lib>.a <inputs> Compile the sources and archive them with
                            the objects, with a symbol index.
   --ar <key> <lib>.a [file...]
@@ -122,6 +132,11 @@ Multi-TU knobs:
                            Searched in the -L directories, then in the
                            standard directories under --sysroot; no
                            other directory is read.
+  -u <symbol>, -u<symbol>, --undefined=<symbol>
+                           Treat <symbol> as referenced, so the archive
+                           member defining it joins the link.
+                           Repeatable. Under --jit and
+                           --interp it reaches the runtime pool only.
   --whole-archive, --no-whole-archive
                            Load every member of the archives named
                            after --whole-archive, up to
@@ -319,7 +334,7 @@ Compile knobs:
                            restores the compiler's own headers.
   -nostdlibinc             As -nostdinc, keeping the compiler's own
                            headers (<stdarg.h>, <stddef.h>, <stdint.h>,
-                           the intrinsic headers, ...), as clang does.
+                           the intrinsic headers, ...).
   -print-file-name=<name>  Print the full path of <name>, or <name> when
                            badc has none. `include` names the directory
                            of the compiler's own headers; on the
@@ -390,7 +405,7 @@ Compile knobs:
                            (`--keep-locals`) keeps the local-label
                            temporaries -- the `.L`-prefixed names --
                            in a `-c` object's symbol table, which
-                           GNU as drops without it.
+                           are dropped without it.
   -m16 / -m32 / -m64       Code model, x86 targets only. `-m16` and
                            `-m32` preprocess the unit as i386 (`__i386__`
                            defined, `__x86_64__` not, ILP32 widths) and
@@ -431,7 +446,11 @@ Compile knobs:
                            default: badc implements most but not all of
                            the GNU C surface, so code gating a feature
                            badc lacks (__int128) on __GNUC__ keeps
-                           compiling unless this is requested.
+                           compiling unless this is requested. They
+                           claim GNU C 4.3.0.
+  -fgnuc-version=V         Define the GNU C identity macros claiming
+                           version V (major[.minor[.patch]]); 0 defines
+                           none. The last of it and --gnu wins.
   --msvc                   Windows targets: define the MSVC identity
                            macros (_MSC_VER, _MSC_FULL_VER, _M_X64 /
                            _M_ARM64, ...) and leave __STDC__ undefined,
@@ -455,6 +474,9 @@ Compile knobs:
                            whatever the default is. With --gnu the model
                            is reported as __GNUC_GNU_INLINE__ /
                            __GNUC_STDC_INLINE__.
+  -fms-extensions          Accepted: the unnamed members of a tagged or
+                           typedef'd structure or union type it allows
+                           are accepted without it.
   -fstrict-flex-arrays[=N] Which trailing array members
                            __builtin_object_size treats as unbounded
                            when reached through a pointer: at level 0
@@ -478,6 +500,21 @@ Compile knobs:
                            the function returns is not turned into a
                            jump after the epilogue.
                            -foptimize-sibling-calls restores the default.
+  -fcrash-report           A hosted executable reports a fatal signal
+                           (an exception no handler takes, on Windows):
+                           the signal and its address, the registers,
+                           and the frames, named by the symbol table or
+                           a -g build's PDB. On with any -fsanitize
+                           check; -fno-crash-report turns it off.
+  -fno-plt                 A call to a library function or to one the
+                           unit declares without defining loads the
+                           callee from its GOT entry and calls through
+                           it, with no PLT stub: x86-64 ELF objects, and
+                           aarch64 ones under -fPIC. A hidden or static
+                           callee stays direct. -fplt restores the
+                           default.
+  -fno-unroll-loops        Keep -O from fully unrolling constant-trip
+                           loops. -funroll-loops restores the default.
   -fPIC, -fpic             Emit a position-independent `-c` object: a
   -fPIE, -fpie             switch table takes the label-difference form,
                            so no absolute relocation reaches the object.
@@ -540,17 +577,23 @@ Compile knobs:
                            float or double copied from memory to memory
                            moves through a general register; one the
                            source computes is refused.
+  -mno-outline-atomics     AArch64: accepted; every atomic operation is
+                           emitted inline, never as a call to the
+                           __aarch64_* helpers.
   -mstrict-align, -mno-strict-align
                            Keep every compiler-generated memory access
                            naturally aligned for its width, as memory
                            that faults on an unaligned access needs.
-  -mbranches-within-32B-boundaries
+  -m[no-]branches-within-32B-boundaries
                            x86-64: start every function at a multiple of
                            32 bytes and pad with NOPs before a jump or a
                            fused compare-and-jump that would cross or end
                            on a 32-byte boundary, which cores with the
                            update for Intel erratum SKX102 decode
-                           without the uop cache.
+                           without the uop cache; or pad nothing. Under
+                           -O, unless given, the jumps inside loops and
+                           in functions that call themselves. Their calls
+                           and returns pad either way.
   -mindirect-branch=keep|thunk-extern|thunk-inline
                            x86-64: route each indirect call and jump
                            through __x86_indirect_thunk_<reg>, or
@@ -599,12 +642,12 @@ Compile knobs:
                            `armv9.6-a`, `armv8-r`) or `native`, with
                            -mcpu='s modifiers; it overrides -mcpu='s
                            extensions.
-  -march=CPU               x86 CPU selection: gcc's CPU names and
-                           x86-64-v3/v4 predefine the feature macros of
-                           the extensions below that the CPU has;
-                           `native` reads the host's. x86-64 code
-                           assumes x86-64-v3, so a CPU without it is
-                           refused.
+  -march=CPU               x86 CPU selection: a CPU name (haswell,
+                           znver4, ...) or x86-64-v3/v4 predefines the
+                           feature macros of the extensions below that
+                           the CPU has; `native` reads the host's.
+                           x86-64 code assumes x86-64-v3, so a CPU
+                           without it is refused.
   -mEXT / -mno-EXT         An x86 extension and those it implies: sse3,
                            ssse3, sse4.1, sse4.2, popcnt, crc32, avx,
                            avx2, fma, f16c, aes, pclmul, sha, vaes,
@@ -616,7 +659,7 @@ Compile knobs:
                            is refused for an x86-64-v3 extension the
                            code generator emits unless -mno-sse keeps
                            the code off the vector registers. Any other
-                           gcc extension is refused when enabled.
+                           extension is refused when enabled.
   -mtune=CPU               Accepted; badc has one scheduling model.
   -mstack-protector-guard=global|tls|sysreg
                            Where the guard value is read from. The

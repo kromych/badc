@@ -3,7 +3,7 @@ section_attr_bss_family_zero_fill.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -48,6 +48,7 @@ Disassembly of section .text:
                	cmpl	$0x200, %eax            # imm = 0x200
                	jl	<addr>
                	xorl	%eax, %eax
+               	nopw	(%rax,%rax)
                	cmpb	$0x0, (%rdx,%rax)
                	jne	<addr>
                	incq	%rax

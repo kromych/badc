@@ -3,7 +3,7 @@ indirect_call_through_global_fn_ptr.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -32,29 +32,27 @@ Disassembly of section .text:
                	retq
 
 <driver>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x7, <rip> # <addr>
                	movl	$0x23, %edx
                	movl	%edx, <rip> # <addr>
-               	leaq	<rip>, %rdi # <addr>
                	movl	<rip>, %esi # <addr>
                	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	callq	*%rax
                	movl	<rip>, %eax # <addr>
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x7, <rip> # <addr>
                	movl	$0x23, %edx
                	movl	%edx, <rip> # <addr>
-               	leaq	<rip>, %rdi # <addr>
                	movl	<rip>, %esi # <addr>
                	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	callq	*%rax
                	movl	<rip>, %eax # <addr>
-               	popq	%rbp
+               	popq	%r11
                	retq

@@ -3,7 +3,7 @@ va_arg_int_seq.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -47,10 +47,10 @@ Disassembly of section .text:
                	str	w17, [x16, #0x18]
                	mov	x17, #-0x80             // =-128
                	str	w17, [x16, #0x1c]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldr	x1, [x29, #0x10]
                	ldrsw	x2, [x29, #0x18]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	bl	<addr>
                	mov	x20, #0x0               // =0
                	ldrsw	x0, [x29, #0x18]
@@ -75,9 +75,9 @@ Disassembly of section .text:
                	ldr	x9, [sp], #0x10
                	mov	x0, x16
                	ldrsw	x2, [x0]
+               	mov	x1, x20
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	mov	x1, x20
                	bl	<addr>
                	add	x20, x20, #0x1
                	ldrsw	x0, [x29, #0x18]

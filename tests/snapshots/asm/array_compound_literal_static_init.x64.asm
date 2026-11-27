@@ -3,7 +3,7 @@ array_compound_literal_static_init.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -66,22 +66,22 @@ Disassembly of section .text:
                	movl	$0x6, %eax
                	retq
                	movq	<rip>, %rax # <addr>
-               	movl	0x28(%rax), %eax
-               	cmpl	$-0x1, %eax
+               	movl	0x28(%rax), %ecx
+               	cmpl	$-0x1, %ecx
                	je	<addr>
                	movl	$0x7, %eax
                	retq
-               	movq	<rip>, %rax # <addr>
                	cmpq	$0x0, 0x20(%rax)
                	je	<addr>
                	movl	$0x8, %eax
                	retq
                	movq	<rip>, %rax # <addr>
-               	movl	0x8(%rax), %ecx
-               	cmpl	$0x7, %ecx
+               	movl	0x8(%rax), %eax
+               	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x9, %eax
                	retq
+               	movq	<rip>, %rax # <addr>
                	cmpl	$0x0, 0x18(%rax)
                	jne	<addr>
                	cmpq	$0x0, 0x10(%rax)

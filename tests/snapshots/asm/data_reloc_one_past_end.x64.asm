@@ -3,7 +3,7 @@ data_reloc_one_past_end.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -34,6 +34,7 @@ Disassembly of section .text:
                	movq	(%rax), %rsi
                	addq	%rsi, %rcx
                	addq	$0x8, %rax
+               	nopl	(%rax)
                	cmpq	%rdx, %rax
                	jne	<addr>
                	movq	<rip>, %rax # <addr>

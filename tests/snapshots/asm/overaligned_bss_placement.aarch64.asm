@@ -3,7 +3,7 @@ overaligned_bss_placement.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -47,7 +47,6 @@ Disassembly of section .text:
                	ldrb	w1, [x2]
                	add	x0, x0, x1
                	add	x0, x0, #0x4
-               	mov	x1, #0x0                // =0
                	cmp	w0, #0xa
-               	csel	x0, x1, x3, eq
+               	csel	x0, xzr, x3, eq
                	ret

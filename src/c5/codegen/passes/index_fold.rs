@@ -37,14 +37,12 @@
 
 use alloc::vec::Vec;
 
-use crate::c5::ir::{
-    BinOp, FunctionSsa, IndexExt, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
-};
+use crate::c5::ir::{BinOp, FunctionSsa, IndexExt, Inst, LoadKind, StoreKind, ValueId};
 
 /// Access width in bytes for a load kind. Used by the displacement
 /// fold, which applies to integer and floating accesses alike (the
 /// immediate-offset emit honors `disp` for every kind on both targets).
-fn load_width(kind: LoadKind) -> u8 {
+pub(crate) fn load_width(kind: LoadKind) -> u8 {
     match kind {
         LoadKind::I64 | LoadKind::F64 => 8,
         LoadKind::I32 | LoadKind::U32 | LoadKind::F32 => 4,
@@ -58,7 +56,7 @@ fn load_width(kind: LoadKind) -> u8 {
 }
 
 /// Access width in bytes for a store kind. See [`load_width`].
-fn store_width(kind: StoreKind) -> u8 {
+pub(crate) fn store_width(kind: StoreKind) -> u8 {
     match kind {
         StoreKind::I64 | StoreKind::F64 => 8,
         StoreKind::I32 | StoreKind::F32 => 4,
@@ -225,41 +223,16 @@ pub(crate) fn mark_pc_rel_accesses(func: &mut FunctionSsa, strict_align: bool) {
 /// block exit accumulators.
 /// A pure value nothing reads, which [`use_counts`] does not count as a
 /// use of its operands.
-fn dead(counts: &[u32], inst: &Inst, i: usize) -> bool {
-    counts.get(i) == Some(&0) && inst.is_pure()
+fn dead(func: &FunctionSsa, counts: &[u32], inst: &Inst, i: usize) -> bool {
+    counts.get(i) == Some(&0) && func.is_pure(inst)
 }
 
 fn use_counts(func: &FunctionSsa) -> Vec<u32> {
-    let mut counts = alloc::vec![0u32; func.insts.len()];
-    let bump = |v: ValueId, counts: &mut [u32]| {
-        if let Some(slot) = counts.get_mut(v as usize) {
-            *slot += 1;
-        }
-    };
-    for inst in &func.insts {
-        crate::c5::codegen::ssa::reg_alloc::for_each_operand(inst, |v| bump(v, &mut counts));
-    }
-    for block in &func.blocks {
-        match block.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => bump(cond, &mut counts),
-            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
-                bump(target, &mut counts)
-            }
-            Terminator::Return(v) => bump(v, &mut counts),
-            Terminator::Jmp(_)
-            | Terminator::TailExt(_)
-            | Terminator::FallThrough(_)
-            | Terminator::AsmGoto { .. }
-            | Terminator::Unreachable => {}
-        }
-        if block.exit_acc != NO_VALUE {
-            bump(block.exit_acc, &mut counts);
-        }
-    }
+    let mut counts = crate::c5::codegen::ssa::reg_alloc::value_reads(func);
     // A pure value nothing reads goes with the emit's dead-pure skip, and
     // its operands lose that use.
     let mut dead: Vec<usize> = (0..counts.len())
-        .filter(|&i| counts[i] == 0 && func.insts[i].is_pure())
+        .filter(|&i| counts[i] == 0 && func.is_pure(&func.insts[i]))
         .collect();
     while let Some(i) = dead.pop() {
         crate::c5::codegen::ssa::reg_alloc::for_each_operand(&func.insts[i], |v| {
@@ -267,7 +240,7 @@ fn use_counts(func: &FunctionSsa) -> Vec<u32> {
                 && *c > 0
             {
                 *c -= 1;
-                if *c == 0 && func.insts[v as usize].is_pure() {
+                if *c == 0 && func.is_pure(&func.insts[v as usize]) {
                     dead.push(v as usize);
                 }
             }
@@ -344,7 +317,7 @@ fn foldable_scaled_addresses(
     let mut seen: alloc::collections::BTreeMap<ValueId, (u8, u32)> =
         alloc::collections::BTreeMap::new();
     for (i, inst) in func.insts.iter().enumerate() {
-        if dead(counts, inst, i) {
+        if dead(func, counts, inst, i) {
             continue;
         }
         let (addr, width) = match inst {
@@ -456,7 +429,7 @@ fn foldable_displaced_addresses(
     let mut uses: alloc::collections::BTreeMap<ValueId, Vec<(u8, i64, bool)>> =
         alloc::collections::BTreeMap::new();
     for (i, inst) in func.insts.iter().enumerate() {
-        if dead(counts, inst, i) {
+        if dead(func, counts, inst, i) {
             continue;
         }
         let (addr, w, disp, align) = match inst {
@@ -510,26 +483,6 @@ fn displacement_reaches(off: i64, w: u8, bounded: bool) -> bool {
     }
 }
 
-/// The slot and displacement a frame address names, for a `width`-byte
-/// access the local forms can carry: they state no alignment bound, which
-/// only the `strict_align` lowering reads, so there an access bounded below
-/// its width keeps its address.
-fn folded_slot(
-    insts: &[Inst],
-    addr: ValueId,
-    disp: i32,
-    (width, align): (u8, u8),
-    strict_align: bool,
-) -> Option<(i64, i32)> {
-    if strict_align && align != 0 && align < width {
-        return None;
-    }
-    match insts.get(addr as usize)? {
-        Inst::LocalAddr(off) => Some((*off, disp)),
-        _ => None,
-    }
-}
-
 /// Fold `Load`/`Store` through `LocalAddr(off)` into `LoadLocal` /
 /// `StoreLocal`, which the per-arch emit addresses off the frame base
 /// with no register for the address. Runs after the value numbering, so
@@ -540,59 +493,57 @@ pub(crate) fn fold_slot_addresses(funcs: &mut [FunctionSsa], strict_align: bool)
     for func in funcs.iter_mut() {
         let mut rewrites: Vec<(usize, Inst)> = Vec::new();
         for (idx, inst) in func.insts.iter().enumerate() {
-            let folded = match inst {
-                Inst::Load {
-                    addr,
-                    disp,
-                    kind,
-                    volatile,
-                    align,
-                    ..
-                } => folded_slot(
-                    &func.insts,
-                    *addr,
-                    *disp,
-                    (load_width(*kind), *align),
-                    strict_align,
-                )
-                .map(|(off, disp)| Inst::LoadLocal {
-                    off,
-                    disp,
-                    kind: *kind,
-                    volatile: *volatile,
-                }),
-                Inst::Store {
-                    addr,
-                    disp,
-                    value,
-                    kind,
-                    volatile,
-                    align,
-                    ..
-                } => folded_slot(
-                    &func.insts,
-                    *addr,
-                    *disp,
-                    (store_width(*kind), *align),
-                    strict_align,
-                )
-                .map(|(off, disp)| Inst::StoreLocal {
-                    off,
-                    disp,
-                    value: *value,
-                    kind: *kind,
-                    volatile: *volatile,
-                    nsw: false,
-                }),
-                _ => None,
+            let addr = match inst {
+                Inst::Load { addr, .. } | Inst::Store { addr, .. } => *addr,
+                _ => continue,
             };
-            if let Some(inst) = folded {
-                rewrites.push((idx, inst));
+            if let Some(Inst::LocalAddr(off)) = func.insts.get(addr as usize)
+                && let Some(local) = local_form(inst, *off, strict_align)
+            {
+                rewrites.push((idx, local));
             }
         }
         for (idx, inst) in rewrites {
             func.insts[idx] = inst;
         }
+    }
+}
+
+/// The `LoadLocal` / `StoreLocal` a `Load` / `Store` through `LocalAddr(off)`
+/// is, or `None` for another instruction or, under `strict_align`, an access
+/// bounded below its width: the local forms state no alignment bound, which
+/// only the `strict_align` lowering reads.
+pub(crate) fn local_form(inst: &Inst, off: i64, strict_align: bool) -> Option<Inst> {
+    let under = |width: u8, align: u8| strict_align && align != 0 && align < width;
+    match *inst {
+        Inst::Load {
+            disp,
+            kind,
+            volatile,
+            align,
+            ..
+        } if !under(load_width(kind), align) => Some(Inst::LoadLocal {
+            off,
+            disp,
+            kind,
+            volatile,
+        }),
+        Inst::Store {
+            disp,
+            value,
+            kind,
+            volatile,
+            align,
+            ..
+        } if !under(store_width(kind), align) => Some(Inst::StoreLocal {
+            off,
+            disp,
+            value,
+            kind,
+            volatile,
+            nsw: false,
+        }),
+        _ => None,
     }
 }
 
@@ -899,6 +850,7 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::c5::ir::{NO_VALUE, Terminator};
     use alloc::vec;
 
     // v0 = Imm (the pre-normalize w); v1 = Shl(v0, k); v2 = Shr(v1, k).
@@ -1367,14 +1319,31 @@ mod tests {
     /// under `strict_align` an access with one keeps its address.
     #[test]
     fn a_local_address_folds_at_any_offset_and_natural_alignment() {
-        let insts = vec![Inst::LocalAddr(-3)];
-        assert_eq!(folded_slot(&insts, 0, 0, (8, 0), true), Some((-3, 0)));
-        assert_eq!(folded_slot(&insts, 0, 8, (8, 0), true), Some((-3, 8)));
-        assert_eq!(folded_slot(&insts, 0, 0, (8, 8), true), Some((-3, 0)));
-        assert_eq!(folded_slot(&insts, 0, 0, (8, 1), true), None);
-        assert_eq!(folded_slot(&insts, 0, 0, (8, 1), false), Some((-3, 0)));
-        // Only a frame address folds; a computed one keeps its `Load`.
-        let insts = vec![Inst::Imm(0)];
-        assert_eq!(folded_slot(&insts, 0, 0, (8, 0), false), None);
+        let load = |disp, align| Inst::Load {
+            addr: 0,
+            disp,
+            kind: LoadKind::I64,
+            volatile: false,
+            align,
+            pc_rel: false,
+        };
+        let local = |disp| {
+            alloc::format!(
+                "{:?}",
+                Some(Inst::LoadLocal {
+                    off: -3,
+                    disp,
+                    kind: LoadKind::I64,
+                    volatile: false,
+                })
+            )
+        };
+        let form = |inst: &Inst, strict| alloc::format!("{:?}", local_form(inst, -3, strict));
+        assert_eq!(form(&load(0, 0), true), local(0));
+        assert_eq!(form(&load(8, 0), true), local(8));
+        assert_eq!(form(&load(0, 8), true), local(0));
+        assert_eq!(form(&load(0, 1), true), "None");
+        assert_eq!(form(&load(0, 1), false), local(0));
+        assert_eq!(form(&Inst::Imm(0), false), "None");
     }
 }

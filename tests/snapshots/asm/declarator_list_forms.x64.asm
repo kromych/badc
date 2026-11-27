@@ -3,7 +3,7 @@ declarator_list_forms.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -30,41 +30,34 @@ Disassembly of section .text:
                	retq
 
 <sub>:
+               	subq	%rsi, %rdi
                	movq	%rdi, %rax
-               	subq	%rsi, %rax
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	movl	$0x2, %eax
+               	leaq	<rip>, %rcx # <addr>
+               	movq	%rcx, <rip> # <addr>
+               	movl	%eax, <rip> # <addr>
+               	movl	<rip>, %ecx # <addr>
+               	cmpl	$0x4, %ecx
+               	jne	<addr>
+               	movl	<rip>, %ecx # <addr>
+               	cmpl	$0x3, %ecx
+               	jne	<addr>
+               	movq	<rip>, %rcx # <addr>
+               	movl	(%rcx), %ecx
+               	cmpl	$0x2, %ecx
+               	je	<addr>
                	movl	$0x1, %eax
-               	movl	%eax, -0x8(%rbp)
-               	movl	$0x2, %ecx
-               	leaq	<rip>, %rdx # <addr>
-               	movq	%rdx, <rip> # <addr>
-               	movl	%ecx, <rip> # <addr>
-               	movl	<rip>, %edx # <addr>
-               	cmpl	$0x4, %edx
-               	jne	<addr>
-               	movl	<rip>, %edx # <addr>
-               	cmpl	$0x3, %edx
-               	jne	<addr>
-               	movq	<rip>, %rdx # <addr>
-               	movl	(%rdx), %edx
-               	cmpl	$0x2, %edx
-               	je	<addr>
-               	leave
                	retq
-               	movl	<rip>, %eax # <addr>
+               	movl	<rip>, %ecx # <addr>
                	movl	<rip>, %edx # <addr>
-               	addq	%rdx, %rax
+               	addq	%rdx, %rcx
                	movl	<rip>, %edx # <addr>
-               	addq	%rdx, %rax
-               	cmpl	$0x8, %eax
+               	addq	%rdx, %rcx
+               	cmpl	$0x8, %ecx
                	je	<addr>
-               	movq	%rcx, %rax
-               	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x3, %eax
@@ -73,7 +66,6 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	movl	<rip>, %ecx # <addr>
@@ -83,7 +75,6 @@ Disassembly of section .text:
                	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
                	retq
                	movq	<rip>, %rax # <addr>
                	movsbq	(%rax), %rax
@@ -94,7 +85,6 @@ Disassembly of section .text:
                	cmpl	$0x64, %eax
                	je	<addr>
                	movl	$0x5, %eax
-               	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x7, %eax
@@ -105,24 +95,12 @@ Disassembly of section .text:
                	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x6, %eax
-               	leave
-               	retq
-               	movl	-0x8(%rbp), %eax
-               	addq	%rax, %rax
-               	incq	%rax
-               	addq	$0x2, %rax
-               	cmpl	$0x5, %eax
-               	je	<addr>
-               	movl	$0x7, %eax
-               	leave
                	retq
                	movl	<rip>, %eax # <addr>
                	addq	$0x3, %rax
                	cmpl	$0x8, %eax
                	je	<addr>
                	movl	$0x8, %eax
-               	leave
                	retq
                	movl	$0x2a, %eax
-               	leave
                	retq

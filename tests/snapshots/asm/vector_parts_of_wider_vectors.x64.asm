@@ -3,7 +3,7 @@ vector_parts_of_wider_vectors.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -176,10 +176,10 @@ Disassembly of section .text:
                	leave
                	retq
                	xorl	%eax, %eax
-               	movq	-0x8(%rbp), %rdx
-               	addq	%rax, %rdx
-               	andq	$0xff, %rdx
-               	movb	%dl, (%rsp,%rax)
+               	movq	-0x8(%rbp), %rcx
+               	addq	%rax, %rcx
+               	andq	$0xff, %rcx
+               	movb	%cl, (%rsp,%rax)
                	incq	%rax
                	cmpl	$0x10, %eax
                	jl	<addr>
@@ -189,12 +189,12 @@ Disassembly of section .text:
                	callq	<addr>
                	movsd	%xmm0, -0x10(%rbp)
                	xorl	%eax, %eax
-               	movzbq	-0x10(%rbp,%rax), %rdx
-               	movq	-0x8(%rbp), %rsi
-               	addq	$0x8, %rsi
-               	addq	%rax, %rsi
-               	andq	$0xff, %rsi
-               	cmpl	%esi, %edx
+               	movzbq	-0x10(%rbp,%rax), %rsi
+               	movq	-0x8(%rbp), %rcx
+               	addq	$0x8, %rcx
+               	addq	%rax, %rcx
+               	andq	$0xff, %rcx
+               	cmpl	%ecx, %esi
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x8, %eax

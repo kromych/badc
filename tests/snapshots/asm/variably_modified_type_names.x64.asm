@@ -3,7 +3,7 @@ variably_modified_type_names.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,12 +26,10 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x38, %rsp
                	leaq	0x2(%rdi), %rax
                	movslq	%eax, %rcx
-               	leaq	-0x30(%rbp), %rax
+               	leaq	(%rsp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
                	movups	%xmm14, 0x10(%rax)
@@ -43,18 +41,16 @@ Disassembly of section .text:
                	cmpq	%rcx, %rdx
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq
-               	movl	$0x7, -0x18(%rbp)
+               	movl	$0x7, 0x18(%rsp)
                	leaq	0x10(%rax), %rcx
                	subq	%rax, %rcx
                	cmpq	$0x10, %rcx
                	je	<addr>
                	movl	$0x6, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	xorl	%eax, %eax
-               	movl	%eax, -0x8(%rbp)
-               	movl	$0x1, -0x8(%rbp)
-               	leave
+               	addq	$0x38, %rsp
                	retq

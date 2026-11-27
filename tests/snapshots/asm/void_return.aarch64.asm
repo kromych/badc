@@ -3,7 +3,7 @@ void_return.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -78,18 +78,13 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #-0x1               // =-1
                	stur	w0, [x29, #-0x8]
-               	sub	x1, x29, #0x8
                	stur	wzr, [x29, #-0x8]
                	mov	x0, #0x1                // =1
                	stur	w0, [x29, #-0x8]
                	stur	w0, [x29, #-0x8]
-               	mov	x0, #0x2                // =2
-               	stur	w0, [x29, #-0x8]
-               	mov	x0, #0x3                // =3
-               	stur	w0, [x29, #-0x8]
                	mov	x0, #0x4                // =4
                	stur	w0, [x29, #-0x8]
-               	mov	x0, x1
+               	sub	x0, x29, #0x8
                	bl	<addr>
                	mov	x0, #0x3                // =3
                	sub	x1, x29, #0x8

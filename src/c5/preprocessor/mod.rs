@@ -165,6 +165,8 @@ pub(crate) struct Preprocessor {
     // source identifier, where a tree walk's log-N string-prefix
     // compares measured as the frontend's hot spot.
     macros: HashMap<String, String>,
+    /// `-fgnuc-version=`: the GNU C version the identity claims.
+    gnuc_version: Option<[u32; 3]>,
     /// Compilation target; Windows include resolution is
     /// case-insensitive, matching its filesystems.
     target: Target,
@@ -215,6 +217,11 @@ pub(crate) struct Preprocessor {
     /// there first, so a foreign header whose spelling collides with a
     /// bundled name keeps `-I` order -- and resumes `#include_next` past it.
     include_stack: Vec<include::IncludeFrame>,
+    /// The names of the files being read, the primary source first.
+    open_files: Vec<String>,
+    /// cl's quoted-include search (`--msvc`): after the including file's
+    /// directory, those of the files that include it, innermost first.
+    msvc_include_search: bool,
     /// `#include` search paths (the CLI's `-I` plus the driver's
     /// overlays), probed in order before the bundled in-binary headers,
     /// so an on-disk copy of a bundled header overrides it. Read only
@@ -278,6 +285,9 @@ pub(crate) struct Preprocessor {
     /// (via [`IncludeRecord::trace_line`]) and supplies the `-M`
     /// family's prerequisite list, so both read one list.
     pub include_records: Vec<IncludeRecord>,
+    /// Where text the output does not copy verbatim from its source stands
+    /// there, in output order: [`crate::c5::lexer::ColumnPlace`].
+    pub column_places: Vec<crate::c5::lexer::ColumnPlace>,
     /// The headers the bundled set or a system directory supplied, named
     /// as their line markers name them.
     pub system_headers: BTreeSet<String>,
@@ -487,6 +497,7 @@ pub(crate) struct PpReuse {
     warnings: Vec<Diagnostic>,
     unresolved_intrinsics: Vec<(String, Loc)>,
     include_records: Vec<IncludeRecord>,
+    column_places: Vec<crate::c5::lexer::ColumnPlace>,
 }
 
 // Test hook: how many times the source (as opposed to the preamble or
@@ -1095,18 +1106,18 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
     // and attributes on it (`.type`, `.size`, `.symver`, `.hidden`,
     // `@progbits` section types, visibility).
     (PredefOn::Elf, &[("__ELF__", "1")]),
-    // clang's values there, with or without `-fPIC`; on ELF the driver
-    // derives them from the PIC flags.
+    // Off ELF, code is position-independent with or without `-fPIC`; on ELF
+    // the driver derives them from the PIC flags.
     (PredefOn::AlwaysPic, &[("__pic__", "2"), ("__PIC__", "2")]),
     (
         PredefOn::MacOS,
         &[
             ("__APPLE__", "1"),
             ("__MACH__", "1"),
-            // Deployment target, decimal MMmmpp. Matches the 11.0
-            // minimum OS version stamped into LC_BUILD_VERSION;
-            // <AvailabilityMacros.h> derives its version gates from it.
+            // The default deployment target, 11.0, which
+            // `Preprocessor::set_macos_min` moves.
             ("__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__", "110000"),
+            ("__ENVIRONMENT_OS_VERSION_MIN_REQUIRED__", "110000"),
         ],
     ),
     (
@@ -1120,14 +1131,6 @@ static PREDEFINES: &[(PredefOn, &[(&str, &str)])] = &[
             // baseline.
             ("__GLIBC__", "2"),
             ("__GLIBC_MINOR__", "17"),
-            // The feature-test state glibc's <features.h> derives with
-            // no request macro set. The bundled headers stand in for
-            // glibc's, so it has to come from here or a header keying
-            // on it misreads the environment. Installed before the CLI's
-            // lists, so `-D` / `-U` win.
-            ("_DEFAULT_SOURCE", "1"),
-            ("_POSIX_SOURCE", "1"),
-            ("_POSIX_C_SOURCE", "200809L"),
         ],
     ),
     (
@@ -1315,6 +1318,7 @@ impl Preprocessor {
             .map(|(name, id)| (name.to_string(), id))
             .collect();
         Self {
+            gnuc_version: None,
             macros,
             target,
             wchar: target.wchar_type(false),
@@ -1329,6 +1333,8 @@ impl Preprocessor {
             pragma_once_files: BTreeSet::new(),
             include_guards: HashMap::new(),
             include_stack: Vec::new(),
+            open_files: Vec::new(),
+            msvc_include_search: false,
             search_paths: SearchPaths::default(),
             own_header_roots: SearchPaths::default(),
             quote_search_paths: SearchPaths::default(),
@@ -1344,6 +1350,7 @@ impl Preprocessor {
             source_label: "<source>".to_string(),
             sink: Sink::default(),
             include_records: Vec::new(),
+            column_places: Vec::new(),
             system_headers: BTreeSet::new(),
             track_includes: false,
             keep_pragmas: false,
@@ -1387,6 +1394,27 @@ impl Preprocessor {
         install_data_model(&mut self.macros, self.target, class, model, short_wchar);
     }
 
+    /// The macOS deployment target `version`, `xxxx.yy.zz` in nibbles, 11.0
+    /// for none: the `__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__` and
+    /// `__ENVIRONMENT_OS_VERSION_MIN_REQUIRED__` the SDK's availability
+    /// macros read, in the SDK's version-constant form: `MMmmpp` from
+    /// 10.10 on, `MMmp` before, the patch capped at 9.
+    pub fn set_macos_min(&mut self, version: Option<u32>) {
+        let v = version.unwrap_or(11 << 16);
+        let (major, minor, patch) = (v >> 16, (v >> 8) & 0xff, v & 0xff);
+        let spelled = if major > 10 || (major == 10 && minor >= 10) {
+            major * 10000 + minor * 100 + patch
+        } else {
+            major * 100 + minor * 10 + patch.min(9)
+        };
+        for name in [
+            "__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__",
+            "__ENVIRONMENT_OS_VERSION_MIN_REQUIRED__",
+        ] {
+            self.macros.insert(name.to_string(), spelled.to_string());
+        }
+    }
+
     /// `-mno-sse` / `-mgeneral-regs-only`: the SSE feature macros go;
     /// `__MMX__` stays.
     pub fn drop_simd_macros(&mut self) {
@@ -1411,6 +1439,9 @@ impl Preprocessor {
     /// The x86 extensions' feature macros, and `__BIGGEST_ALIGNMENT__`
     /// 32 under AVX, for `-m<ext>` and `-march=`.
     pub fn set_x86_features(&mut self, features: crate::c5::X86Features) {
+        if !features.mmx() {
+            self.macros.remove("__MMX__");
+        }
         for name in features.macros() {
             self.macros.insert(name.into(), "1".into());
         }
@@ -1435,8 +1466,10 @@ impl Preprocessor {
 
     /// The identity cl 19.28 (the first with `/std:c17`) gives a C17 unit:
     /// `_MSC_VER` and its companions and the `_M_*` architecture macro, with
-    /// `__STDC__` undefined, as cl leaves it without `/Zc:__STDC__`.
+    /// `__STDC__` undefined, as cl leaves it without `/Zc:__STDC__`, and
+    /// cl's search for a quoted include.
     pub fn enable_msvc(&mut self, target: Target) {
+        self.msvc_include_search = true;
         self.macros.remove("__STDC__");
         let mut set = |name: &str, value: &str| {
             self.macros.insert(name.to_string(), value.to_string());
@@ -1469,6 +1502,11 @@ impl Preprocessor {
     /// key their inline declarations on. `__STRICT_ANSI__` accompanies
     /// `__GNUC__` as under `-std=c11`, so portable code takes the
     /// standard path for the GNU-only features badc lacks.
+    /// `-fgnuc-version=`: the version [`Self::enable_gnu`] claims.
+    pub fn set_gnuc_version(&mut self, version: [u32; 3]) {
+        self.gnuc_version = Some(version);
+    }
+
     pub fn enable_gnu(&mut self, gnu89_inline: bool, strict_ansi: bool) {
         // `crate::GNU_COMPAT_VERSION` claims 4.3.0, every feature of
         // which is backed. What 4.4 adds and real code selects on the
@@ -1478,9 +1516,13 @@ impl Preprocessor {
         // TODO: raise the claim. That needs a forced-claim measurement
         // over a corpus at each rung above 4.4, not only at the
         // intrinsic surface.
-        let mut compat = crate::GNU_COMPAT_VERSION.split('.');
+        let claim = match self.gnuc_version {
+            Some([major, minor, patch]) => alloc::format!("{major}.{minor}.{patch}"),
+            None => crate::GNU_COMPAT_VERSION.to_string(),
+        };
+        let mut compat = claim.split('.');
         for name in ["__GNUC__", "__GNUC_MINOR__", "__GNUC_PATCHLEVEL__"] {
-            let component = compat.next().expect("GNU_COMPAT_VERSION is x.y.z");
+            let component = compat.next().expect("the claim is x.y.z");
             self.macros.insert(name.to_string(), component.to_string());
         }
         let inline_model_macro = if gnu89_inline {
@@ -1496,7 +1538,7 @@ impl Preprocessor {
             "__VERSION__".to_string(),
             alloc::format!(
                 "\"{} Compatible badc {}\"",
-                crate::GNU_COMPAT_VERSION,
+                claim,
                 env!("CARGO_PKG_VERSION")
             ),
         );
@@ -1900,6 +1942,7 @@ impl Preprocessor {
         let n_warnings = self.sink.diagnostics().len();
         let n_unresolved = self.unresolved_intrinsics.len();
         let n_records = self.include_records.len();
+        let n_places = self.column_places.len();
         let entry_macros = self.macros.clone();
         let entry_fn_macros = self.fn_macros.clone();
         let entry_pushed = self.pushed_macros.clone();
@@ -1935,6 +1978,9 @@ impl Preprocessor {
             warnings: self.sink.diagnostics()[n_warnings..].to_vec(),
             unresolved_intrinsics: self.unresolved_intrinsics[n_unresolved..].to_vec(),
             include_records: self.include_records[n_records..].to_vec(),
+            column_places: (self.column_places[n_places..].iter())
+                .map(|p| p.moved(-(source_start as i64)))
+                .collect(),
         };
         self.fail_on_errors()?;
         Ok((out, cache))
@@ -2029,6 +2075,12 @@ impl Preprocessor {
             .extend((prior.unresolved_intrinsics.iter()).map(|(n, l)| (n.clone(), shift(l))));
         self.include_records
             .extend(prior.include_records.iter().cloned());
+        (self.column_places).extend(
+            prior
+                .column_places
+                .iter()
+                .map(|p| p.moved(out.len() as i64)),
+        );
         out.push_str(&prior.source_text);
         // A replayed diagnostic that resolved to an error has to fail
         // the unit; the caller's full pass reports it.
@@ -2136,11 +2188,18 @@ impl Preprocessor {
         // a surrounding comment. A blank line per consumed continuation
         // preserves the one-for-one line count that `__LINE__` and every
         // diagnostic depend on.
-        let stripped = unfold_and_strip(&source);
-        out.reserve(stripped.len());
-        let mut pass = LinePass::new(self, out, filename, &stripped);
-        pass.run()?;
-        pass.finish()
+        let stripped = unfold_and_strip_placed(&source);
+        let placed = Placed {
+            stripped: &stripped,
+            source: &source,
+        };
+        out.reserve(stripped.text.len());
+        self.open_files.push(filename.to_string());
+        let mut pass = LinePass::new(self, out, filename, &stripped.text);
+        pass.placed = Some(placed);
+        let result = pass.run().and_then(|()| pass.finish());
+        self.open_files.pop();
+        result
     }
 
     /// Install an object-like macro definition.
@@ -2474,6 +2533,57 @@ struct LinePass<'p, 's> {
     /// Watches for the `#ifndef X` / `#endif` wrapper that lets a repeat
     /// `#include` of this file be dropped; see `include_guards`.
     guard: IncludeGuardScan,
+    /// Where the buffer's text stands in its source, for a buffer read
+    /// from one.
+    placed: Option<Placed<'s>>,
+    /// The places of the line being substituted, reused across lines.
+    places: Vec<expand::Place>,
+    /// Where [`Stripped::span_at`] stands in the buffer's spans.
+    span_cursor: usize,
+}
+
+/// Where a logical line stands: its offset in the buffer, the span holding
+/// it, its source offset, and whether it is one physical line no comment or
+/// splice interrupts.
+#[derive(Clone, Copy)]
+struct Stands {
+    start: u32,
+    span: Option<usize>,
+    from: usize,
+    simple: bool,
+}
+
+/// Where the text of a buffer phases 2 and 3 produced stands in its
+/// source: the retained spans, and the source.
+struct Placed<'s> {
+    stripped: &'s Stripped,
+    source: &'s str,
+}
+
+impl<'s> Placed<'s> {
+    /// The source offset of the text at `at`.
+    fn source_at(&self, at: u32) -> usize {
+        (self.stripped.source_offset(at) as usize).min(self.source.len())
+    }
+
+    /// How many source lines the text at `at` stands below the source
+    /// offset `from`, and its column.
+    fn locate(&self, from: usize, at: u32) -> (u32, u32) {
+        let src = self.source_at(at);
+        let bytes = self.source.as_bytes();
+        let line_start = bytes[..src]
+            .iter()
+            .rposition(|&b| b == b'\n')
+            .map_or(0, |p| p + 1);
+        let below = match from <= line_start {
+            true => bytes[from..line_start]
+                .iter()
+                .filter(|&&b| b == b'\n')
+                .count(),
+            false => 0,
+        };
+        (below as u32, (src - line_start + 1) as u32)
+    }
 }
 
 impl<'p, 's> LinePass<'p, 's> {
@@ -2500,6 +2610,9 @@ impl<'p, 's> LinePass<'p, 's> {
             cond: Vec::new(),
             active: true,
             guard: IncludeGuardScan::default(),
+            placed: None,
+            places: Vec::new(),
+            span_cursor: 0,
         }
     }
 
@@ -2891,6 +3004,100 @@ impl<'p, 's> LinePass<'p, 's> {
         );
     }
 
+    /// Where the logical line `buffer` (this buffer's, at `self.idx`)
+    /// stands in the source, for a buffer read from one.
+    fn line_stands(&mut self, buffer: &str) -> Option<Stands> {
+        let placed = self.placed.as_ref()?;
+        let line = self.lines[self.idx];
+        let start = (line.as_ptr() as usize - placed.stripped.text.as_ptr() as usize) as u32;
+        let span = placed.stripped.span_at(start, &mut self.span_cursor);
+        let from = (placed.stripped.offset_in(span, start) as usize).min(placed.source.len());
+        // A physical line no comment or splice interrupts stands at its own
+        // columns: its offsets locate without a search.
+        let simple = (from == 0 || placed.source.as_bytes()[from - 1] == b'\n')
+            && !buffer.contains('\n')
+            && (placed.stripped)
+                .starts_after(span, start + buffer.len() as u32)
+                .next()
+                .is_none();
+        Some(Stands {
+            start,
+            span,
+            from,
+            simple,
+        })
+    }
+
+    /// Record where the line [`Self::line_stands`] placed, written as `len`
+    /// bytes at `out_at`, stands in the source: an expanded line's tokens by
+    /// `places`, another line's text by the retained spans inside it. A
+    /// place is recorded only where the text stops following the last one,
+    /// so a line that stands at its own position records none.
+    fn place_columns(
+        &mut self,
+        stands: Stands,
+        out_at: usize,
+        len: usize,
+        places: Option<&[expand::Place]>,
+    ) {
+        use crate::c5::lexer::ColumnPlace;
+        let Some(placed) = &self.placed else {
+            return;
+        };
+        let Stands {
+            start,
+            span,
+            from,
+            simple,
+        } = stands;
+        let stripped = placed.stripped;
+        let locate = |at: u32| match simple {
+            true => (0, at - start + 1),
+            false => placed.locate(from, at),
+        };
+        // What the output line holds ahead of the text: the space a `#`
+        // an expansion put first takes.
+        let lead = (out_at - self.out[..out_at].rfind('\n').map_or(0, |p| p + 1)) as u32;
+        let column_places = &mut self.pp.column_places;
+        // The last place: its output offset, source line and column, and
+        // whether the text runs on from it.
+        let mut last: Option<(u32, (u32, u32), bool)> = None;
+        let mut put = |rel: u32, at: u32, linear: bool| {
+            let (line, column) = locate(at);
+            // Source text running on, or a replacement at the same place.
+            let follows = |(r, (l, c), lin): (u32, (u32, u32), bool)| match (lin, linear) {
+                (true, true) => l == line && column.checked_sub(c) == rel.checked_sub(r),
+                (false, false) => (l, c) == (line, column),
+                _ => false,
+            };
+            // The output line's own column, where no place precedes.
+            if last.map_or(linear && line == 0 && column == lead + rel + 1, follows) {
+                return;
+            }
+            last = Some((rel, (line, column), linear));
+            column_places.push(ColumnPlace {
+                at: out_at as u32 + rel,
+                line_delta: line,
+                column,
+                linear,
+            });
+        };
+        match places {
+            Some(places) => {
+                for &(rel, origin, own) in places {
+                    put(rel, start + origin, own);
+                }
+            }
+            None if simple && lead == 0 => {}
+            None => {
+                put(0, start, true);
+                for at in stripped.starts_after(span, start + len as u32) {
+                    put(at - start, at, true);
+                }
+            }
+        }
+    }
+
     /// A content line: join what a multi-line macro invocation spans,
     /// substitute, and resolve any `_Pragma` operator (C99 6.10.9).
     fn content(&mut self, line: &str) -> Result<(), C5Error> {
@@ -2909,9 +3116,18 @@ impl<'p, 's> LinePass<'p, 's> {
             // `__LINE__` and `__FILE__` give the presumed position, which a
             // `#line` can retarget (C99 6.10.4, 6.10.8); absent one it is the
             // physical one.
-            let (substituted, tail) =
-                self.pp
-                    .substitute_line(&buffer, &self.current_file, self.presumed);
+            let mut places = core::mem::take(&mut self.places);
+            let stands = self.line_stands(&buffer);
+            let runs = stands.is_some_and(|s| s.simple);
+            let (substituted, tail) = self.pp.substitute_line(
+                &buffer,
+                &self.current_file,
+                self.presumed,
+                expand::Placing {
+                    places: &mut places,
+                    runs,
+                },
+            );
             let more = match tail {
                 Tail::FnName => self
                     .paren_line(consumed)
@@ -2939,7 +3155,17 @@ impl<'p, 's> LinePass<'p, 's> {
             if processed.starts_with('#') && !self.pp.asm_source {
                 self.out.push(' ');
             }
+            let at = self.out.len();
             self.out.push_str(&processed);
+            // `_Pragma` resolved leaves text the places do not describe.
+            if let Some(stands) = stands
+                && matches!(processed, alloc::borrow::Cow::Borrowed(_))
+            {
+                let expanded = matches!(substituted, alloc::borrow::Cow::Owned(_));
+                let places = expanded.then_some(&places[..]);
+                self.place_columns(stands, at, processed.len(), places);
+            }
+            self.places = places;
             break;
         }
         // One newline for the line itself, one per joined continuation,
@@ -3078,4 +3304,4 @@ use directive::{
 use expand::{JoinScan, Tail};
 pub use include::{IncludeOrigin, IncludeRecord, IncludeStatus};
 use pragma::{PragmaDirective, parse_pragma_directive};
-use text::{replace_trigraphs, unfold_and_strip};
+use text::{Stripped, replace_trigraphs, unfold_and_strip_placed};

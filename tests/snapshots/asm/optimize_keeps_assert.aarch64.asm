@@ -3,7 +3,7 @@ optimize_keeps_assert.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -16,13 +16,11 @@ Disassembly of section .text:
 <__c5_assert_fail>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x3, #0x7                // =7
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	mov	x16, x2
                	mov	x2, x1
                	mov	x1, x0
-               	mov	x0, x16
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	mov	x3, #0x7                // =7
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	bl	<addr>

@@ -3,7 +3,7 @@ member_name_space_keeps_object_shape.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -63,12 +63,12 @@ Disassembly of section .text:
                	ret
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x0, #0x0                // =0
+               	mov	x3, #0x0                // =0
                	mov	x2, #0x100000000        // =4294967296
                	str	x2, [x1]
                	mov	x2, #0x2                // =2
                	movk	x2, #0x3, lsl #32
-               	mov	x3, #0x3                // =3
+               	mov	x0, #0x3                // =3
                	str	x2, [x1, #0x8]
                	mov	x2, #0xa                // =10
                	movk	x2, #0xb, lsl #32
@@ -85,7 +85,6 @@ Disassembly of section .text:
                	ldrsw	x2, [x1, #0x4]
                	cmp	w2, #0x1
                	b.eq	<addr>
-               	mov	x0, x3
                	ret
                	add	x2, x1, #0x10
                	sub	x1, x2, x1
@@ -94,6 +93,7 @@ Disassembly of section .text:
                	asr	x1, x1, #2
                	cmp	x1, #0x4
                	b.ne	<addr>
+               	mov	x0, x3
                	ret
                	mov	x0, #0x6                // =6
                	ret

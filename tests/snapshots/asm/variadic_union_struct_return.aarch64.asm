@@ -3,7 +3,7 @@ variadic_union_struct_return.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -103,26 +103,21 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
                	mov	x0, #0x0                // =0
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
                	mov	x3, #0x64               // =100
                	bl	<addr>
-               	stur	x0, [x29, #-0x10]
-               	ldur	w0, [x29, #-0x10]
                	cmp	w0, #0xaf
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	cmp	x1, #0x7
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
@@ -132,21 +127,16 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	mov	x3, #0x1                // =1
                	bl	<addr>
-               	stur	x0, [x29, #-0x10]
-               	ldur	w0, [x29, #-0x10]
                	cmp	w0, #0x42
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	cmp	x1, #0x7
                	b.eq	<addr>
                	mov	x0, #0x4                // =4
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

@@ -3,7 +3,7 @@ xsi_interfaces_reach_the_c_library.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -20,18 +20,18 @@ Disassembly of section .text:
                	mov	x21, x2
                	mov	x20, x3
                	adrp	x1, <page>
-               	ldrsw	x2, [x1, #0x20]
-               	add	x2, x2, #0x1
-               	str	w2, [x1, #0x20]
+               	ldrsw	x3, [x1, #0x20]
+               	add	x3, x3, #0x1
+               	str	w3, [x1, #0x20]
                	ldrsw	x1, [x20]
                	cmp	w1, #0x0
                	b.le	<addr>
-               	add	x2, x0, x1
+               	add	x3, x0, x1
                	ldrsw	x1, [x20, #0x4]
                	cbz	x1, <addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x0, x2
+               	mov	x0, x3
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -52,10 +52,10 @@ Disassembly of section .text:
                	ret
                	mov	x1, x0
                	b	<addr>
+               	str	x3, [sp, #0x18]
                	mov	x1, #0x2f               // =47
-               	str	x2, [sp, #0x18]
                	bl	<addr>
-               	ldr	x2, [sp, #0x18]
+               	ldr	x3, [sp, #0x18]
                	add	x1, x0, #0x1
                	b	<addr>
 
@@ -146,17 +146,17 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x2, x0
-               	cmp	x2, #0x0
+               	mov	x1, x0
+               	cmp	x1, #0x0
                	b.lt	<addr>
+               	str	x1, [sp, #0x8]
+               	mov	x0, x1
                	sub	x1, x29, #0x1a0
-               	str	x2, [sp, #0x8]
-               	mov	x0, x2
                	bl	<addr>
                	sxtw	x0, w0
-               	ldr	x2, [sp, #0x8]
+               	ldr	x1, [sp, #0x8]
                	cbnz	x0, <addr>
-               	mov	x0, x2
+               	mov	x0, x1
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -271,8 +271,8 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbnz	x0, <addr>
                	mov	x0, #0x0                // =0
+               	mov	x1, #0x0                // =0
                	sub	x2, x29, #0x80
-               	mov	x1, x0
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -295,8 +295,8 @@ Disassembly of section .text:
                	sxtw	x0, w0
                	cbnz	x0, <addr>
                	mov	x0, #0x0                // =0
+               	mov	x1, #0x0                // =0
                	sub	x2, x29, #0x80
-               	mov	x1, x0
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
@@ -326,10 +326,9 @@ Disassembly of section .text:
                	b	<addr>
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x22               // =34
                	cmp	x0, #0x0
-               	csel	x0, x1, x2, ne
+               	mov	x17, #0x22              // =34
+               	csel	x0, xzr, x17, ne
                	b	<addr>
                	mov	x0, #0x0                // =0
                	bl	<addr>
@@ -371,9 +370,9 @@ Disassembly of section .text:
                	b.lt	<addr>
                	cmp	w1, #0x14
                	b.gt	<addr>
-               	mov	x0, #0x0                // =0
                	mov	x2, x1
-               	mov	x1, x0
+               	mov	x0, #0x0                // =0
+               	mov	x1, #0x0                // =0
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -443,8 +442,8 @@ Disassembly of section .text:
                	ldr	d1, [x16, #0xa0]
                	fcmpe	d0, d1
                	b.gt	<addr>
-               	mov	x0, #0x2                // =2
                	fmov	d0, #1.00000000
+               	mov	x0, #0x2                // =2
                	bl	<addr>
                	adrp	x16, <page>
                	ldr	d1, [x16, #0xb0]

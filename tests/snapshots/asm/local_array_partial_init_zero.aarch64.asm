@@ -3,7 +3,7 @@ local_array_partial_init_zero.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -19,8 +19,8 @@ Disassembly of section .text:
                	sub	sp, sp, #0xb0
                	mov	x1, #0xbeef             // =48879
                	movk	x1, #0xdead, lsl #16
-               	mov	x0, #0x0                // =0
                	sub	x2, x29, #0xb0
+               	mov	x0, #0x0                // =0
                	str	w1, [x2, x0, lsl #2]
                	add	x0, x0, #0x1
                	cmp	w0, #0x28

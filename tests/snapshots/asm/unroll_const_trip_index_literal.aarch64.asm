@@ -3,7 +3,7 @@ unroll_const_trip_index_literal.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -14,62 +14,62 @@ Disassembly of section .text:
                	brk	#0x1
 
 <bank_init>:
-               	mov	x3, #0x1                // =1
+               	mov	x2, #0x1                // =1
                	str	x1, [x0, #0x20]
-               	str	x3, [x0]
+               	str	x2, [x0]
                	str	xzr, [x0, #0x28]
-               	mov	x3, #0x100000001        // =4294967297
+               	mov	x2, #0x100000001        // =4294967297
                	str	x1, [x0, #0x50]
-               	str	x3, [x0, #0x30]
+               	str	x2, [x0, #0x30]
                	str	xzr, [x0, #0x58]
-               	mov	x3, #0x1                // =1
-               	movk	x3, #0x2, lsl #32
+               	mov	x2, #0x1                // =1
+               	movk	x2, #0x2, lsl #32
                	str	x1, [x0, #0x80]
-               	str	x3, [x0, #0x60]
+               	str	x2, [x0, #0x60]
                	str	xzr, [x0, #0x88]
-               	mov	x3, #0x1                // =1
-               	movk	x3, #0x3, lsl #32
+               	mov	x2, #0x1                // =1
+               	movk	x2, #0x3, lsl #32
                	str	x1, [x0, #0xb0]
-               	str	x3, [x0, #0x90]
+               	str	x2, [x0, #0x90]
                	str	xzr, [x0, #0xb8]
-               	mov	x3, #0x1                // =1
-               	movk	x3, #0x4, lsl #32
+               	mov	x2, #0x1                // =1
+               	movk	x2, #0x4, lsl #32
                	str	x1, [x0, #0xe0]
-               	str	x3, [x0, #0xc0]
+               	str	x2, [x0, #0xc0]
                	str	xzr, [x0, #0xe8]
-               	mov	x3, #0x1                // =1
-               	movk	x3, #0x5, lsl #32
+               	mov	x2, #0x1                // =1
+               	movk	x2, #0x5, lsl #32
                	str	x1, [x0, #0x110]
-               	str	x3, [x0, #0xf0]
+               	str	x2, [x0, #0xf0]
                	str	xzr, [x0, #0x118]
-               	mov	x3, #0x1                // =1
-               	movk	x3, #0x6, lsl #32
+               	mov	x2, #0x1                // =1
+               	movk	x2, #0x6, lsl #32
                	str	x1, [x0, #0x140]
-               	str	x3, [x0, #0x120]
+               	str	x2, [x0, #0x120]
                	str	xzr, [x0, #0x148]
-               	mov	x3, #0x1                // =1
-               	movk	x3, #0x7, lsl #32
+               	mov	x2, #0x1                // =1
+               	movk	x2, #0x7, lsl #32
                	str	x1, [x0, #0x170]
-               	str	x3, [x0, #0x150]
+               	str	x2, [x0, #0x150]
                	str	xzr, [x0, #0x178]
                	mov	x2, #0x2                // =2
                	movk	x2, #0x20, lsl #32
                	str	x1, [x0, #0x1a0]
                	str	x2, [x0, #0x180]
                	str	xzr, [x0, #0x1a8]
-               	mov	x3, #0xb00              // =2816
-               	str	x3, [x0, #0x190]
-               	mov	x3, #0x2                // =2
-               	movk	x3, #0x21, lsl #32
+               	mov	x2, #0xb00              // =2816
+               	str	x2, [x0, #0x190]
+               	mov	x2, #0x2                // =2
+               	movk	x2, #0x21, lsl #32
                	str	x1, [x0, #0x1d0]
-               	str	x3, [x0, #0x1b0]
+               	str	x2, [x0, #0x1b0]
                	str	xzr, [x0, #0x1d8]
-               	mov	x3, #0x1600             // =5632
-               	str	x3, [x0, #0x1c0]
-               	mov	x3, #0x2                // =2
-               	movk	x3, #0x22, lsl #32
+               	mov	x2, #0x1600             // =5632
+               	str	x2, [x0, #0x1c0]
+               	mov	x2, #0x2                // =2
+               	movk	x2, #0x22, lsl #32
                	str	x1, [x0, #0x200]
-               	str	x3, [x0, #0x1e0]
+               	str	x2, [x0, #0x1e0]
                	str	xzr, [x0, #0x208]
                	mov	x1, #0x2100             // =8448
                	str	x1, [x0, #0x1f0]

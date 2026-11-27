@@ -45,6 +45,12 @@
 //! that register's bank: in the register, or past the registers in an
 //! eight-byte stack slot. The pass loads it ahead of the call and passes
 //! the value, so what the call reads of the object is a load in the tape.
+//! An aggregate of more parts, integer or scalar floating-point, is passed
+//! as an `Inst::AggParts` of them, right ahead of the call, which moves each
+//! part into its register; on System V AMD64 also into its eightbyte of the
+//! stack slot where the registers run out, for a few such parts only, as
+//! each holds a register up to the call (`x86_64::emit::call`,
+//! `aarch64::emit::call`).
 //!
 //! Runs after the inliner, whose splices bind a callee's parameter object
 //! to the caller's argument and copy a returned object field by field, and
@@ -190,8 +196,9 @@ fn gap_stores(out: &mut Vec<(u32, u32, StoreKind)>, mut lo: u32, hi: u32) {
 }
 
 /// Whether every use of the object at `slot` is a load or store at a
-/// constant offset or a copy, the uses `sroa` splits an object over; a
-/// `Return` of its address counts as one when the pass rewrites it.
+/// constant offset or a copy between it and another object, the uses
+/// `sroa` splits an object over; a `Return` of its address counts as one
+/// when the pass rewrites it.
 fn splits_by_fields(func: &FunctionSsa, slot: i64, returns_parts: bool) -> bool {
     let n = func.insts.len();
     let mut addrs = alloc::vec![false; n];
@@ -210,7 +217,7 @@ fn splits_by_fields(func: &FunctionSsa, slot: i64, returns_parts: bool) -> bool 
     let escapes = |inst: &Inst| match inst {
         Inst::Load { .. } | Inst::BinopI { .. } => false,
         Inst::Store { value, .. } => names(*value),
-        Inst::Mcpy { dst, src, .. } => !names(*dst) && !names(*src),
+        Inst::Mcpy { dst, src, .. } => names(*dst) && names(*src),
         _ => {
             let mut any = false;
             inst.for_each_operand(|o| any |= names(o));
@@ -509,8 +516,12 @@ fn run_one(func: &mut FunctionSsa, target: Target) {
     for i in taken {
         func.param_local_slots[i] = 0;
     }
-    for (v, k, value, fp) in args {
+    for (v, k, value, kind) in args {
         let value = rewrite.ids[(value - base) as usize];
+        let read: Vec<ValueId> = match &func.insts[value as usize] {
+            Inst::AggParts { parts, .. } => parts.clone(),
+            _ => Vec::new(),
+        };
         match &mut func.insts[rewrite.remap[v as usize] as usize] {
             Inst::Call {
                 args,
@@ -518,6 +529,7 @@ fn run_one(func: &mut FunctionSsa, target: Target) {
                 fp_arg_mask,
                 low_word_args,
                 arg_widths,
+                parts,
                 ..
             }
             | Inst::CallIndirect {
@@ -526,9 +538,14 @@ fn run_one(func: &mut FunctionSsa, target: Target) {
                 fp_arg_mask,
                 low_word_args,
                 arg_widths,
+                parts,
                 ..
             } => {
                 args[k] = value;
+                let ArgValue::Scalar { fp } = kind else {
+                    parts.extend(read);
+                    continue;
+                };
                 arg_aggs[k] = None;
                 if fp {
                     fp_arg_mask.set(k);
@@ -549,43 +566,123 @@ fn run_one(func: &mut FunctionSsa, target: Target) {
     }
 }
 
+/// The parts of a call's aggregates placed on the stack that stand in
+/// registers ahead of it, two 16-byte aggregates': past them the parts
+/// outnumber the registers free there and spill, where the address form
+/// copies memory to memory.
+const STACK_PARTS: usize = 4;
+
+/// What replaces a call argument's address: a scalar loaded from the object,
+/// a floating-point register's when `fp`, or the object's register parts.
+#[derive(Clone, Copy)]
+enum ArgValue {
+    Scalar { fp: bool },
+    Parts,
+}
+
 /// Plan the load of each named argument the callee's convention passes as
 /// one eight-byte register, an aggregate of eight bytes aligned to eight,
-/// right ahead of its call. A library call's binding does not say which of
-/// its arguments are named, so its arguments keep their addresses. Returns the call, the argument's position, the
-/// planned load and whether it is a floating-point register's.
+/// right ahead of its call, and on System V AMD64 the parts of one of more,
+/// the `AggParts` of each call after every load. A library call's binding does not say which
+/// of its arguments are named, so its arguments keep their addresses.
+/// Returns the call, the argument's position and its planned value.
 fn argument_values(
     func: &FunctionSsa,
     target: Target,
     plan: &mut Plan,
-) -> Vec<(ValueId, usize, ValueId, bool)> {
+) -> Vec<(ValueId, usize, ValueId, ArgValue)> {
     let mut out = Vec::new();
     for block in &func.blocks {
         for v in block.inst_range.clone() {
             let inst = &func.insts[v as usize];
-            let (args, arg_aggs, fixed_args) = match inst {
+            let (args, arg_aggs, fixed_args, fp_arg_mask, arg_widths) = match inst {
                 Inst::Call {
                     args,
                     arg_aggs,
                     fixed_args,
+                    fp_arg_mask,
+                    arg_widths,
                     ..
                 }
                 | Inst::CallIndirect {
                     args,
                     arg_aggs,
                     fixed_args,
+                    fp_arg_mask,
+                    arg_widths,
                     ..
-                } => (args, arg_aggs, *fixed_args),
+                } => (args, arg_aggs, *fixed_args, fp_arg_mask, *arg_widths),
                 _ => continue,
             };
             let Some(conv) = inst.call_conv() else {
                 continue;
             };
             let abi = target.abi_row(conv).abi();
+            // Where the call places each argument, as the emitter plans it.
+            // System V AMD64 takes the parts of an aggregate the registers
+            // ran out for into its stack slot, up to `STACK_PARTS` in all,
+            // as each holds a register ahead of the call; AAPCS64 takes those
+            // in registers, of a call with no variadic arguments, outside
+            // Windows, whose variadic callee places its named arguments as
+            // variadic ones.
+            let sysv = target.is_x86_64() && !abi.position_indexed_args;
+            let aapcs =
+                target.is_aarch64() && !abi.win_arm64_variadic() && fixed_args == args.len();
+            let mut stack_parts = 0usize;
+            let placements = (sysv || aapcs).then(|| {
+                let aggs = crate::c5::codegen::ssa::emit_common::build_call_aggs(
+                    func, args, arg_aggs, abi,
+                );
+                let widths = if sysv { Default::default() } else { arg_widths };
+                let n = args.len();
+                crate::c5::codegen::plan_call_args_aggs(
+                    n,
+                    fixed_args,
+                    fp_arg_mask,
+                    abi,
+                    &aggs,
+                    false,
+                    widths,
+                )
+                .placements
+            });
+            let mut bundles: Vec<(usize, Inst)> = Vec::new();
             for (k, agg) in arg_aggs.iter().enumerate().take(fixed_args) {
                 let Some(d) = agg else { continue };
                 let desc = &func.agg_descs[*d as usize];
-                if (desc.size, desc.align) != (8, 8) || desc.vector {
+                if desc.vector {
+                    continue;
+                }
+                if (desc.size, desc.align) != (8, 8) {
+                    let placed = placements.as_ref().and_then(|p| p.get(k).copied());
+                    let on_stack = sysv && matches!(placed, Some(ArgPlacement::StructStack { .. }));
+                    // A scalar part moves as a scalar argument does.
+                    let parts = register_parts(desc, abi, false).filter(|p| {
+                        (matches!(placed, Some(ArgPlacement::StructRegs { .. }))
+                            || (on_stack && stack_parts + p.len() <= STACK_PARTS))
+                            && p.len() > 1
+                            && tape_carries(p, desc.fields.len())
+                            && p.iter()
+                                .all(|p| matches!(p.class, RegClass::Integer | RegClass::Sse))
+                    });
+                    let Some(parts) = parts else { continue };
+                    if on_stack {
+                        stack_parts += parts.len();
+                    }
+                    let mut fp_mask = FpMask::EMPTY;
+                    let mut vals = Vec::with_capacity(parts.len());
+                    for (j, p) in parts.iter().enumerate() {
+                        if p.class != RegClass::Integer {
+                            fp_mask.set(j);
+                        }
+                        vals.push(gather(plan, At::Before(v), args[k], p, desc));
+                    }
+                    let bundle = Inst::AggParts {
+                        desc: *d,
+                        parts: vals,
+                        fp_mask,
+                    };
+                    bundles.push((k, bundle));
                     continue;
                 }
                 let Some([part]) =
@@ -609,7 +706,12 @@ fn argument_values(
                     },
                     false,
                 );
-                out.push((v, k, value, kind == LoadKind::F64));
+                let fp = kind == LoadKind::F64;
+                out.push((v, k, value, ArgValue::Scalar { fp }));
+            }
+            for (k, bundle) in bundles {
+                let value = plan.push(At::Before(v), bundle, false);
+                out.push((v, k, value, ArgValue::Parts));
             }
         }
     }
@@ -952,16 +1054,23 @@ mod tests {
 
     /// An object whose address reaches a call, or that an index reaches,
     /// takes one whole store per register; a copy out of it does not
-    /// count as an escape.
+    /// count as an escape, nor does a copy between two other objects.
     #[test]
     fn escaping_object_takes_whole_register_stores() {
         const SRC: &str = "struct S { char c; int i; };\n\
             int g(const struct S *p);\n\
             int esc(struct S s) { return g(&s); }\n\
             int idx(struct S s, int k) { return ((char *)&s)[k]; }\n\
-            struct S copy(struct S s) { struct S r = s; return r; }";
+            struct S copy(struct S s) { struct S r = s; return r; }\n\
+            struct S beside(struct S s, struct S *p, struct S *q) { *p = *q; struct S r = s; return r; }";
         for target in [Target::LinuxAarch64, Target::LinuxX64] {
-            for (name, whole) in [("esc", true), ("idx", true), ("copy", false)] {
+            let cases = [
+                ("esc", true),
+                ("idx", true),
+                ("copy", false),
+                ("beside", false),
+            ];
+            for (name, whole) in cases {
                 let mut f = walked(SRC, name, target);
                 let slot = f.param_local_slots[0];
                 run(core::slice::from_mut(&mut f), target);

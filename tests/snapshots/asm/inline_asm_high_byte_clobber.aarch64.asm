@@ -3,7 +3,7 @@ inline_asm_high_byte_clobber.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -158,9 +158,9 @@ Disassembly of section .text:
                	mov	x20, x0
                	mov	x1, #0x0                // =0
                	sub	x2, x29, #0x130
-               	add	x2, x2, x1
-               	and	x3, x1, #0x7
-               	strb	w3, [x2]
+               	add	x3, x2, x1
+               	and	x4, x1, #0x7
+               	strb	w4, [x3]
                	add	x1, x1, #0x1
                	cmp	w1, #0x12c
                	b.lt	<addr>
@@ -190,9 +190,9 @@ Disassembly of section .text:
                	cmp	x0, #0x127
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	mov	x1, #0x2a               // =42
                	cmp	x0, #0x0
-               	csel	x0, x0, x1, ne
+               	mov	x17, #0x2a              // =42
+               	csel	x0, x0, x17, ne
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret

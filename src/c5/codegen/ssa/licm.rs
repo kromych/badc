@@ -1,8 +1,9 @@
 //! Hoisting loop-invariant materializations out of loop bodies.
 //!
 //! An operand-free instruction -- a file-scope object's address, a
-//! function address, a TLS base, a wide integer constant -- yields a
-//! link-time or compile-time constant, so a copy of it inside a loop
+//! function address, a TLS base, a wide integer constant, on AArch64 a
+//! frame object's address or a floating constant -- yields a link-time,
+//! compile-time or per-call constant, so a copy of it inside a loop
 //! recomputes the same value every iteration. This pass places one copy
 //! in a block outside the loop that dominates the body and points the
 //! body's uses at it. No memory analysis is involved: the instructions
@@ -16,14 +17,12 @@
 //! binop over a hoisted `Inst::Imm`, which puts it on the path above --
 //! one mechanism covers both shapes.
 //!
-//! Destination: the immediate dominator of the header of the outermost
-//! loop containing the site, taken repeatedly until the destination
-//! itself is in no loop. That block dominates the header, the header
-//! dominates every block of a natural loop, and dominance is
-//! transitive, so it dominates every site and every predecessor an
-//! edge use of a site sits on. After `passes::split_crit_edges` a
-//! single-entry loop's header has a dedicated predecessor, which is
-//! what the immediate dominator resolves to.
+//! Destination: the nearest dominator of the site that lies on no cycle
+//! of the control flow graph. It dominates every site and every
+//! predecessor an edge use of a site sits on, and runs once per entry
+//! into the outermost cycle holding the site: a natural loop, whose
+//! header's immediate dominator it is after `passes::split_crit_edges`,
+//! or a cycle with several entries, such as a computed-goto dispatch.
 //!
 //! Placement is measured, not assumed: a hoist lengthens a live range
 //! across the whole loop, so the function is allocated a second time
@@ -36,14 +35,20 @@
 //! hoisted into one destination is also capped against the register
 //! file, so one loop cannot force the whole plan out.
 //!
-//! A second phase moves loads. In a loop whose body writes no memory --
-//! no store, call, atomic, inline asm or intrinsic -- a load of an
-//! invariant address reads the same value every iteration. The copy
+//! A second phase moves loads. In a loop whose every write is a store
+//! that cannot reach the loaded bytes -- no call, atomic, volatile access,
+//! inline asm or other write of unknown extent ([`super::alias`]) -- a load
+//! of an invariant address reads the same value every iteration. The copy
 //! executes even when the loop runs no iteration, so only a load that
-//! cannot fault moves: one of a frame slot, or one of the unit's data
-//! image within its bounds. It goes before the outermost such loop, and
-//! is kept when the spill traffic it adds does not exceed the loads it
-//! removes.
+//! cannot fault moves: one of a frame slot, one of the unit's data image
+//! within its bounds, or one inside a file-scope object for every value
+//! its index takes there. It goes before the outermost such loop. The
+//! copies before a loop are kept when the spill traffic they add to it
+//! does not exceed the loads they remove from it less their own
+//! executions, and a copy the allocation spills leaves the plan: its
+//! reloads would stand where the loads stood, its store and slot added.
+//! A load x86-64 folds into its reader's memory operand moves too: the
+//! loop still issues it.
 //!
 //! A third phase moves integer arithmetic whose operands are all defined
 //! outside a loop, or moved out of it, before the outermost such loop,
@@ -63,6 +68,7 @@ use hashbrown::HashMap;
 use super::super::ir::{
     BinOp, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, ValueId,
 };
+use super::alias::{Access, Alias, Effect};
 use super::mem2reg::{dominators, predecessors};
 use super::reg_alloc::{Allocation, Place};
 use super::tape::{At, Insertion, Undo};
@@ -70,9 +76,11 @@ use super::{FixedRegs, Target};
 use crate::c5::codegen::passes::drop_redundant_extend::{
     compute_high_clear, compute_high_observed,
 };
-use crate::c5::codegen::passes::layout::{natural_loops, rpo_numbers};
+use crate::c5::codegen::passes::layout::{natural_loops, on_cycles, rpo_numbers};
 
 const NO_BLOCK: BlockId = BlockId::MAX;
+/// Writes a loop may make for a load to still be checked against each.
+const MAX_LOOP_WRITES: usize = 64;
 /// `extern_*_refs` sentinel for an instruction with no bound symbol.
 const NO_SYM: u32 = u32::MAX;
 
@@ -89,6 +97,7 @@ enum Key {
     Code(usize, u32),
     ExtCode(i64),
     Tls(i64, u32),
+    Local(i64),
 }
 
 impl Key {
@@ -99,6 +108,7 @@ impl Key {
             Key::Code(t, _) => Inst::ImmCode(t),
             Key::ExtCode(b) => Inst::ImmExtCode(b),
             Key::Tls(o, _) => Inst::TlsAddr(o),
+            Key::Local(o) => Inst::LocalAddr(o),
         }
     }
 
@@ -199,7 +209,13 @@ pub(super) fn insert_point(func: &FunctionSsa, b: BlockId) -> Option<ValueId> {
     if range.contains(&cond) {
         at = at.min(cond);
     }
-    let blocked = (at..range.end).any(|i| {
+    may_precede(func, b, at).then_some(at)
+}
+
+/// Whether a copy may go ahead of `at` in block `b`, by the rules of
+/// [`insert_point`].
+fn may_precede(func: &FunctionSsa, b: BlockId, at: ValueId) -> bool {
+    !(at..func.blocks[b as usize].inst_range.end).any(|i| {
         matches!(
             func.insts[i as usize],
             Inst::Phi { .. }
@@ -208,51 +224,34 @@ pub(super) fn insert_point(func: &FunctionSsa, b: BlockId) -> Option<ValueId> {
                 | Inst::RetPart { .. }
                 | Inst::AsmOut { .. }
         )
-    });
-    if blocked { None } else { Some(at) }
+    })
 }
 
 /// Destination block per block: where a materialization in it hoists
-/// to, or [`NO_BLOCK`] when it is in no loop or no destination exists.
+/// to, or [`NO_BLOCK`] when it is on no cycle or no destination exists.
 fn destinations(func: &FunctionSsa) -> Vec<BlockId> {
     let n = func.blocks.len();
     let mut dest = vec![NO_BLOCK; n];
     if n < 2 {
         return dest;
     }
-    let idom = dominators(func);
-    let preds = predecessors(func);
-    let rpo = rpo_numbers(func);
-    let loops = natural_loops(func, &idom, &preds, &rpo);
-    if loops.is_empty() {
+    let cyclic = on_cycles(func);
+    if !cyclic.contains(&true) {
         return dest;
     }
-    // Outermost loop containing each block. Two natural loops are
-    // disjoint or nested once loops sharing a header are merged, so the
-    // largest body containing a block is the outermost one.
-    let mut outer = vec![usize::MAX; n];
-    for (li, l) in loops.iter().enumerate() {
-        for &b in &l.body {
-            let cur = outer[b as usize];
-            if cur == usize::MAX || loops[cur].body.len() < l.body.len() {
-                outer[b as usize] = li;
-            }
-        }
-    }
+    let idom = dominators(func);
     for (b, slot) in dest.iter_mut().enumerate() {
         let mut t = b as BlockId;
-        for _ in 0..=n {
-            let li = outer[t as usize];
-            if li == usize::MAX {
-                break;
-            }
-            let up = idom[loops[li].header as usize];
-            if up == NO_BLOCK || up == loops[li].header {
+        while cyclic[t as usize] {
+            let up = idom[t as usize];
+            if up == NO_BLOCK || up == t {
                 break;
             }
             t = up;
         }
-        *slot = if t == b as BlockId { NO_BLOCK } else { t };
+        if t != b as BlockId && !cyclic[t as usize] {
+            *slot = t;
+        }
     }
     debug_assert!(
         dest.iter()
@@ -288,6 +287,14 @@ pub(super) fn sym_of(refs: &[(u32, u32)]) -> HashMap<u32, u32> {
 
 /// Materializations worth hoisting, one entry per destination and key.
 fn plan(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Vec<Hoist> {
+    plan_of(func, target, fixed, false)
+}
+
+/// [`plan`] over the materializations it leaves out (`frame`), or over the
+/// rest: on AArch64 a frame address, which takes an instruction at each
+/// site where x86-64 folds it into the address that reads it, and a
+/// one-instruction constant the allocation places in the FP file.
+fn plan_of(func: &FunctionSsa, target: Target, fixed: FixedRegs, frame: bool) -> Vec<Hoist> {
     // A longjmp restores the callee-saved registers and the stack
     // pointer only, so a value the allocator leaves in a caller-saved
     // register does not survive the second return from a setjmp
@@ -303,6 +310,12 @@ fn plan(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Vec<Hoist> {
     }
     let weights = super::reg_alloc::block_weights(func);
     let uses = super::reg_alloc::compute_use_counts(func);
+    let fp_imm = if frame {
+        let reads = super::reg_alloc::operands_read(func, &uses);
+        super::reg_alloc::fp_constants(func, target, &reads)
+    } else {
+        Vec::new()
+    };
     let data_sym = sym_of(&func.extern_imm_data_refs);
     let code_sym = sym_of(&func.extern_imm_code_refs);
     let tls_sym = sym_of(&func.extern_tls_refs);
@@ -360,16 +373,21 @@ fn plan(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Vec<Hoist> {
                 continue;
             }
             let sym = |m: &HashMap<u32, u32>| m.get(&v).copied().unwrap_or(NO_SYM);
+            let f32 = || func.f32_values.get(v as usize).copied().unwrap_or(false);
             let (key, cost, unfold) = match func.insts[v as usize] {
+                Inst::LocalAddr(o) if frame => (Key::Local(o), 1, false),
+                Inst::Imm(k) if frame && fp_imm.get(v as usize).copied().unwrap_or(false) => {
+                    (Key::Imm(k, f32()), imm_cost(target, k), false)
+                }
+                _ if frame => continue,
                 Inst::ImmData(k) => (Key::Data(k, sym(&data_sym)), addr_cost(target), false),
                 Inst::ImmCode(t) => (Key::Code(t, sym(&code_sym)), addr_cost(target), false),
                 Inst::ImmExtCode(import) => (Key::ExtCode(import), addr_cost(target), false),
                 Inst::TlsAddr(o) => (Key::Tls(o, sym(&tls_sym)), addr_cost(target), false),
-                // A one-instruction constant costs no more at the site
-                // than the register it would occupy across the loop.
+                // A one-instruction integer constant costs no more at the
+                // site than the register it would occupy across the loop.
                 Inst::Imm(k) if imm_cost(target, k) > 1 => {
-                    let f32 = func.f32_values.get(v as usize).copied().unwrap_or(false);
-                    (Key::Imm(k, f32), imm_cost(target, k), false)
+                    (Key::Imm(k, f32()), imm_cost(target, k), false)
                 }
                 Inst::BinopI { op, rhs_imm, .. } if materializes(v, op, rhs_imm) => {
                     (Key::Imm(rhs_imm, false), imm_cost(target, rhs_imm), true)
@@ -397,7 +415,46 @@ fn plan(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Vec<Hoist> {
             }
         }
     }
+    // A site of the same value in the destination itself, up to the
+    // insertion point, would set it twice: the copy goes ahead of the
+    // first such site and serves it too, unless a call lies between, which
+    // the copy's range would then cross.
+    let block_of = block_of(func);
+    for h in &mut out {
+        let to = block_of[h.at as usize];
+        let first = (func.blocks[to as usize].inst_range.start..=h.at).find(|&v| {
+            uses.get(v as usize).copied().unwrap_or(0) != 0
+                && plain_key(func, v, &data_sym, &code_sym, &tls_sym) == Some(h.key)
+        });
+        let call_free = |v: ValueId| {
+            !(v..h.at).any(|i| super::reg_alloc::is_call_site(&func.insts[i as usize], tls_call))
+        };
+        if let Some(v) = first.filter(|&v| may_precede(func, to, v) && call_free(v)) {
+            h.at = v;
+            h.redirect.push(v);
+        }
+    }
     cap_per_destination(func, target, fixed, out)
+}
+
+/// The key of a materialization at `v` that sets its value alone, not
+/// folded into a binop.
+fn plain_key(
+    func: &FunctionSsa,
+    v: ValueId,
+    data_sym: &HashMap<u32, u32>,
+    code_sym: &HashMap<u32, u32>,
+    tls_sym: &HashMap<u32, u32>,
+) -> Option<Key> {
+    let sym = |m: &HashMap<u32, u32>| m.get(&v).copied().unwrap_or(NO_SYM);
+    Some(match func.insts[v as usize] {
+        Inst::ImmData(k) => Key::Data(k, sym(data_sym)),
+        Inst::ImmCode(t) => Key::Code(t, sym(code_sym)),
+        Inst::ImmExtCode(import) => Key::ExtCode(import),
+        Inst::TlsAddr(o) => Key::Tls(o, sym(tls_sym)),
+        Inst::Imm(k) => Key::Imm(k, func.f32_values.get(v as usize).copied().unwrap_or(false)),
+        _ => return None,
+    })
 }
 
 /// Keep the most profitable hoists per destination, bounded by a share
@@ -448,25 +505,32 @@ fn block_of(func: &FunctionSsa) -> Vec<BlockId> {
 }
 
 /// A load placed before the loops that re-read it, with its sites.
+#[derive(Clone)]
 struct LoadHoist {
-    /// Tape index the copy goes ahead of; inside the destination block.
-    at: ValueId,
+    /// Where the copy goes in the destination block.
+    at: At,
     inst: Inst,
     /// The data offset of an address defined inside the loop, which a
     /// copy of its own `ImmData` gives the moved load.
     remat: Option<i64>,
     is_f32: bool,
-    /// Loop-weighted loads the sites stop issuing.
+    /// Loop-weighted loads the sites stop issuing, less the copy's.
     profit: u64,
     redirect: Vec<ValueId>,
+    /// The header of the loop the copy goes before.
+    header: BlockId,
 }
 
 /// Loads worth placing before the loops that hold them: a non-volatile
-/// `LoadLocal`, or a `Load` of an address an unbound `ImmData` gives
-/// within `data_len`, the unit's data image. The destination precedes
-/// the outermost loop of the site's nest whose body writes no memory and
-/// defines no part of the address.
-fn plan_loads(func: &FunctionSsa, data_len: usize) -> Vec<LoadHoist> {
+/// `LoadLocal`, a `Load` of an address an unbound `ImmData` gives within
+/// `data_len`, the unit's data image, or a `Load` whose bytes lie in one of
+/// `objects` for every value its address takes before the loop. The
+/// destination precedes the outermost loop of the site's nest that defines
+/// no part of the address and whose writes are all known and none reaches
+/// the loaded bytes ([`Alias`]), and the copy reads where the loop's reads
+/// would: past the destination's last write, with no write on a way from
+/// there into the loop that does not run the copy again.
+fn plan_loads(func: &FunctionSsa, data_len: usize, objects: &[(i64, i64)]) -> Vec<LoadHoist> {
     if func.has_returns_twice_call || func.blocks.len() < 2 {
         return Vec::new();
     }
@@ -483,17 +547,58 @@ fn plan_loads(func: &FunctionSsa, data_len: usize) -> Vec<LoadHoist> {
             block_of[v as usize] = b as BlockId;
         }
     }
-    let writes: Vec<bool> = (loops.iter())
+    let mut alias = Alias::new(func, objects);
+    // Per loop, the writes its body makes, or `None` when one is unknown or
+    // there are more than a load is checked against.
+    let writes: Vec<Option<Vec<Access>>> = (loops.iter())
         .map(|l| {
-            (l.body.iter()).any(|&b| {
-                (func.blocks[b as usize].inst_range.clone())
-                    .any(|v| func.insts[v as usize].may_write_memory())
-            })
+            let mut out = Vec::new();
+            for &b in &l.body {
+                for v in func.blocks[b as usize].inst_range.clone() {
+                    match alias.effect(func, v, b) {
+                        Effect::None => {}
+                        Effect::Write(a) => out.push(a),
+                        Effect::Unknown => return None,
+                    }
+                }
+            }
+            (out.len() <= MAX_LOOP_WRITES).then_some(out)
         })
         .collect();
     let bound = sym_of(&func.extern_imm_data_refs);
     let weights = super::reg_alloc::block_weights(func);
     let uses = super::reg_alloc::compute_use_counts(func);
+    let succ = super::mem2reg::SuccGraph::new(func);
+    let block_writes = |b: BlockId| {
+        (func.blocks[b as usize].inst_range.clone())
+            .any(|v| func.insts[v as usize].may_write_memory())
+    };
+    // Per loop, where a copy before it goes, or `None` when a write reaches
+    // the loop past every place in its destination.
+    let entries: Vec<Option<At>> = (loops.iter())
+        .map(|l| {
+            let dest = idom[l.header as usize];
+            if dest == NO_BLOCK || dest == l.header {
+                return None;
+            }
+            let at = insert_point(func, dest)?;
+            let range = func.blocks[dest as usize].inst_range.clone();
+            let at = match (at..range.end)
+                .rev()
+                .find(|&v| func.insts[v as usize].may_write_memory())
+            {
+                Some(w) if w + 1 == range.end => At::After(w),
+                Some(w) => At::Before(w + 1),
+                None => At::Before(at),
+            };
+            // The loop's own writes are each checked against the load.
+            let between = blocks_between(func, &succ, &preds, dest, l.header);
+            (!between
+                .into_iter()
+                .any(|b| !l.contains(b) && block_writes(b)))
+            .then_some(at)
+        })
+        .collect();
     let mut out: Vec<LoadHoist> = Vec::new();
     for (b, block) in func.blocks.iter().enumerate() {
         let b = b as BlockId;
@@ -507,12 +612,15 @@ fn plan_loads(func: &FunctionSsa, data_len: usize) -> Vec<LoadHoist> {
             if uses.get(v as usize).copied().unwrap_or(0) == 0 {
                 continue;
             }
-            // The data offset a `Load`'s address names; a constant, so
-            // the address is invariant wherever it is defined.
-            let data = match func.insts[v as usize] {
+            // The data offset a `Load`'s address names, a constant, so the
+            // address is invariant wherever it is defined; or the values the
+            // address is formed of, invariant in a loop they are defined
+            // outside of.
+            let (data, addr) = match func.insts[v as usize] {
                 Inst::LoadLocal {
                     volatile: false, ..
-                } => None,
+                } => (None, None),
+                Inst::LoadIndexed { base, index, .. } => (None, Some([base, index])),
                 Inst::Load {
                     addr,
                     disp,
@@ -526,34 +634,60 @@ fn plan_loads(func: &FunctionSsa, data_len: usize) -> Vec<LoadHoist> {
                                 a >= 0 && a as u64 + kind.bytes() as u64 <= data_len as u64
                             }) =>
                     {
-                        Some((addr, k))
+                        (Some((addr, k)), None)
                     }
-                    _ => continue,
+                    _ => (None, Some([addr, addr])),
                 },
                 _ => continue,
             };
-            let Some(&l) = nest.iter().find(|&&l| !writes[l]) else {
+            let Some(access) = alias.access(func, v, b) else {
+                continue;
+            };
+            // The outermost loop the address is invariant in and no write
+            // of which reaches the bytes; an address value must also keep
+            // the copy inside its object wherever the copy runs.
+            let Some(&l) = nest.iter().find(|&&l| {
+                let dest = idom[loops[l].header as usize];
+                let Some(ws) = writes[l].as_ref().filter(|_| dest != NO_BLOCK) else {
+                    return false;
+                };
+                let access = access.clone().at(dest);
+                if let Some(ops) = addr
+                    && (ops.iter().any(|&a| loops[l].contains(block_of[a as usize]))
+                        || !alias.in_object(func, &access))
+                {
+                    return false;
+                }
+                ws.iter().all(|w| alias.disjoint(func, &access, w))
+            }) else {
+                continue;
+            };
+            let Some(at) = entries[l] else {
                 continue;
             };
             let dest = idom[loops[l].header as usize];
-            if dest == NO_BLOCK || dest == loops[l].header {
+            let pos = match at {
+                At::Before(p) => p,
+                _ => func.blocks[dest as usize].inst_range.end,
+            };
+            if addr.is_some_and(|ops| {
+                ops.iter()
+                    .any(|&a| block_of[a as usize] == dest && a >= pos)
+            }) {
                 continue;
             }
-            let Some(at) = insert_point(func, dest) else {
-                continue;
-            };
             // The address is reused where it precedes the copy outside the
             // loop, and rematerialized beside the copy otherwise.
             let remat = data.and_then(|(a, k)| {
                 let b = block_of[a as usize];
-                (loops[l].contains(b) || (b == dest && a >= at)).then_some(k)
+                (loops[l].contains(b) || (b == dest && a >= pos)).then_some(k)
             });
             let inst = func.insts[v as usize].clone();
             let key = (load_key(&inst), remat);
-            let profit = weights[b as usize];
+            // The sites' executions the copy saves, less its own.
             match (out.iter_mut()).find(|h| h.at == at && (load_key(&h.inst), h.remat) == key) {
                 Some(h) => {
-                    h.profit = h.profit.saturating_add(profit);
+                    h.profit = h.profit.saturating_add(weights[b as usize]);
                     h.redirect.push(v);
                 }
                 None => out.push(LoadHoist {
@@ -561,23 +695,54 @@ fn plan_loads(func: &FunctionSsa, data_len: usize) -> Vec<LoadHoist> {
                     remat,
                     is_f32: func.f32_values.get(v as usize).copied().unwrap_or(false),
                     inst,
-                    profit,
+                    profit: weights[b as usize].saturating_sub(weights[dest as usize]),
                     redirect: alloc::vec![v],
+                    header: loops[l].header,
                 }),
             }
         }
     }
-    out.sort_by_key(|h| h.at);
+    out.retain(|h| h.profit > 0);
+    out.sort_by_key(|h| h.at.order(&func.blocks));
     out
+}
+
+/// The blocks on a way from the end of `dest` into `header` that does not
+/// pass `dest` again: reached from its successors and reaching `header`,
+/// neither walk entering `dest`.
+fn blocks_between(
+    func: &FunctionSsa,
+    succ: &super::mem2reg::SuccGraph,
+    preds: &[Vec<BlockId>],
+    dest: BlockId,
+    header: BlockId,
+) -> Vec<BlockId> {
+    let n = func.blocks.len();
+    let walk = |start: &[BlockId], next: &dyn Fn(BlockId) -> Vec<BlockId>| {
+        let mut seen = vec![false; n];
+        let mut work: Vec<BlockId> = start.iter().copied().filter(|&b| b != dest).collect();
+        while let Some(b) = work.pop() {
+            if core::mem::replace(&mut seen[b as usize], true) {
+                continue;
+            }
+            work.extend(next(b).into_iter().filter(|&s| s != dest));
+        }
+        seen
+    };
+    let ahead = walk(succ.of(dest), &|b| succ.of(b).to_vec());
+    let behind = walk(&[header], &|b| preds[b as usize].clone());
+    (0..n as BlockId)
+        .filter(|&b| ahead[b as usize] && behind[b as usize])
+        .collect()
 }
 
 /// Identity of a load: two with the same key read the same bytes the
 /// same way, so one copy serves both.
-fn load_key(inst: &Inst) -> Option<(i64, ValueId, i32, LoadKind, u8, bool)> {
+fn load_key(inst: &Inst) -> Option<(i64, ValueId, ValueId, i32, LoadKind, u8, bool)> {
     match *inst {
         Inst::LoadLocal {
             off, disp, kind, ..
-        } => Some((off, NO_VALUE, disp, kind, 0, false)),
+        } => Some((off, NO_VALUE, NO_VALUE, disp, kind, 0, false)),
         Inst::Load {
             addr,
             disp,
@@ -585,7 +750,18 @@ fn load_key(inst: &Inst) -> Option<(i64, ValueId, i32, LoadKind, u8, bool)> {
             align,
             pc_rel,
             ..
-        } => Some((0, addr, disp, kind, align, pc_rel)),
+        } => Some((0, addr, NO_VALUE, disp, kind, align, pc_rel)),
+        Inst::LoadIndexed {
+            base,
+            index,
+            index_ext,
+            scale,
+            kind,
+            abs_base,
+        } => {
+            let how = scale as i64 | (index_ext as i64) << 8 | (abs_base as i64) << 16;
+            Some((how, base, index, 0, kind, 0, false))
+        }
         _ => None,
     }
 }
@@ -600,12 +776,12 @@ struct PureHoist {
     profit: u64,
 }
 
-/// Arithmetic whose value depends on its operands alone and which neither
-/// traps nor raises a floating-point exception: integer arithmetic --
-/// division by a register can trap, by a constant only `MIN / -1`, which a
-/// divisor other than 0 and -1 rules out -- a bit move between the
-/// register files, and an integer converted to floating where the result's
-/// precision holds it exactly (C17 6.3.1.4p2), which sets no flag.
+/// Arithmetic whose value depends on its operands alone and which does not
+/// trap: integer arithmetic -- division by a register can trap, by a
+/// constant only `MIN / -1`, which a divisor other than 0 and -1 rules out
+/// -- a bit move between the register files, and, with `FENV_ACCESS` off,
+/// floating arithmetic and every conversion: their flags and the rounding
+/// mode they read are then not the program's to observe (C17 7.6.1p2).
 fn invariant_op(func: &FunctionSsa, v: ValueId) -> bool {
     let inst = &func.insts[v as usize];
     let plain = |op: BinOp| {
@@ -627,7 +803,9 @@ fn invariant_op(func: &FunctionSsa, v: ValueId) -> bool {
         )
     };
     match *inst {
-        Inst::Binop { op, .. } => plain(op),
+        Inst::Binop { op, .. } => {
+            plain(op) || (!func.fenv_access && crate::c5::ir::is_fp_arith_op(op))
+        }
         Inst::BinopI { op, rhs_imm, .. } => {
             plain(op)
                 || (matches!(op, BinOp::Div | BinOp::Mod | BinOp::Divu | BinOp::Modu)
@@ -639,46 +817,8 @@ fn invariant_op(func: &FunctionSsa, v: ValueId) -> bool {
             kind: FpCastKind::FpBits | FpCastKind::BitsFp,
             ..
         } => true,
-        Inst::FpCast {
-            kind: kind @ (FpCastKind::IntToFp | FpCastKind::UIntToFp),
-            value,
-        } => {
-            let single = func.f32_values.get(v as usize).copied().unwrap_or(false);
-            let significand = if single { 24 } else { 53 };
-            // A signed value of `bits` is at most 2^(bits - 1) in magnitude.
-            narrow_integer(func, value).is_some_and(|(bits, signed)| {
-                bits - u32::from(signed) <= significand && (kind == FpCastKind::IntToFp || !signed)
-            })
-        }
+        Inst::FpCast { .. } if !func.fenv_access => true,
         _ => false,
-    }
-}
-
-/// The bits and signedness of an integer `v` holds as the extension of a
-/// narrower one: by an `Extend`, by the load that read it, as a parameter
-/// of that type, or by a mask clearing its upper bits.
-fn narrow_integer(func: &FunctionSsa, v: ValueId) -> Option<(u32, bool)> {
-    let kind = match *func.insts.get(v as usize)? {
-        Inst::Extend { kind, .. }
-        | Inst::Load { kind, .. }
-        | Inst::LoadLocal { kind, .. }
-        | Inst::LoadIndexed { kind, .. }
-        | Inst::ParamRef { kind, .. } => kind,
-        Inst::BinopI {
-            op: BinOp::And,
-            rhs_imm,
-            ..
-        } if rhs_imm >= 0 => return Some((64 - rhs_imm.leading_zeros(), false)),
-        _ => return None,
-    };
-    match kind {
-        LoadKind::I8 => Some((8, true)),
-        LoadKind::U8 => Some((8, false)),
-        LoadKind::I16 => Some((16, true)),
-        LoadKind::U16 => Some((16, false)),
-        LoadKind::I32 => Some((32, true)),
-        LoadKind::U32 => Some((32, false)),
-        _ => None,
     }
 }
 
@@ -904,7 +1044,7 @@ fn losing_copies(
     for (b, block) in func.blocks.iter().enumerate() {
         for v in block.inst_range.clone() {
             let inst = &func.insts[v as usize];
-            if super::emit_common::is_dead_pure_counts(inst, v, &alloc.use_counts) {
+            if super::emit_common::is_dead_pure_counts(func, inst, v, &alloc.use_counts) {
                 continue;
             }
             charge(v, weights[b]);
@@ -947,8 +1087,94 @@ fn without(func: &FunctionSsa, hoists: Vec<PureHoist>, drop: &[bool]) -> Vec<Pur
     kept
 }
 
-/// Place each load's copy and point its sites at it.
-fn apply_loads(func: &mut FunctionSsa, hoists: &[LoadHoist]) -> Undo {
+/// Allocate `func` with the copies of `loads`, then without the losing
+/// ones -- a copy the allocation spills, the copies before a loop whose
+/// spill traffic grows past the loads they remove from it -- while that
+/// costs no more net of the loads removed. `held` is the traffic per block
+/// of `func` as it stands. Returns the undo, the allocation and whether it
+/// costs no more than `base_cost` plus the loads removed.
+fn hoist_loads(
+    func: &mut FunctionSsa,
+    target: Target,
+    fixed: FixedRegs,
+    mut loads: Vec<LoadHoist>,
+    held: &[u64],
+    base_cost: u64,
+) -> Option<(Undo, Allocation, bool)> {
+    if loads.is_empty() {
+        return None;
+    }
+    let bodies = loop_bodies(func);
+    let removed = |l: &[LoadHoist]| (l.iter()).fold(0u64, |s, h| s.saturating_add(h.profit));
+    let (mut undo, mut copies) = apply_loads(func, &loads);
+    let mut alt = super::reg_alloc::allocate(func, target, fixed);
+    let mut cost = placement_cost(func, &alt, target);
+    loop {
+        let losing = losing_loads(func, &alt, &loads, &copies, held, &bodies);
+        let kept: Vec<LoadHoist> = (loads.iter().zip(&losing))
+            .filter(|&(_, &lose)| !lose)
+            .map(|(h, _)| h.clone())
+            .collect();
+        if kept.len() == loads.len() || kept.is_empty() {
+            break;
+        }
+        undo.restore(func);
+        let (fewer, fewer_copies) = apply_loads(func, &kept);
+        let fewer_alt = super::reg_alloc::allocate(func, target, fixed);
+        let fewer_cost = placement_cost(func, &fewer_alt, target);
+        if fewer_cost.saturating_add(removed(&loads)) > cost.saturating_add(removed(&kept)) {
+            fewer.restore(func);
+            undo = apply_loads(func, &loads).0;
+            break;
+        }
+        (loads, undo, copies, alt, cost) = (kept, fewer, fewer_copies, fewer_alt, fewer_cost);
+    }
+    Some((undo, alt, cost <= base_cost.saturating_add(removed(&loads))))
+}
+
+/// Per hoist of `loads`, whether it loses under `alloc` by the rules of
+/// [`hoist_loads`]; `copies` are their copies' ids in `func`.
+fn losing_loads(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    loads: &[LoadHoist],
+    copies: &[ValueId],
+    held: &[u64],
+    bodies: &[crate::c5::codegen::passes::layout::NaturalLoop],
+) -> Vec<bool> {
+    let traffic = super::split_ranges::spill_traffic_by_block(func, alloc);
+    let mut gain: Vec<(BlockId, u64)> = Vec::new();
+    for h in loads {
+        match gain.iter_mut().find(|g| g.0 == h.header) {
+            Some(g) => g.1 = g.1.saturating_add(h.profit),
+            None => gain.push((h.header, h.profit)),
+        }
+    }
+    let losing_loop = |header: BlockId| {
+        let body = bodies.iter().find(|l| l.header == header);
+        let sum = |t: &[u64]| {
+            (body.map_or(&[][..], |l| &l.body[..]).iter())
+                .fold(0u64, |s, &b| s.saturating_add(t[b as usize]))
+        };
+        let removed = gain.iter().find(|g| g.0 == header).map_or(0, |g| g.1);
+        sum(&traffic) > sum(held).saturating_add(removed)
+    };
+    (loads.iter().zip(copies))
+        .map(|(h, &c)| matches!(alloc.places[c as usize], Place::Spill(_)) || losing_loop(h.header))
+        .collect()
+}
+
+/// The natural loops of `func`.
+fn loop_bodies(func: &FunctionSsa) -> Vec<crate::c5::codegen::passes::layout::NaturalLoop> {
+    let idom = dominators(func);
+    let preds = predecessors(func);
+    let rpo = rpo_numbers(func);
+    natural_loops(func, &idom, &preds, &rpo)
+}
+
+/// Place each load's copy and point its sites at it. Returns the copies'
+/// ids with the undo.
+fn apply_loads(func: &mut FunctionSsa, hoists: &[LoadHoist]) -> (Undo, Vec<ValueId>) {
     // A rematerialized address goes just ahead of its load; an operand
     // past the old tape names an insertion.
     let n_old = func.insts.len() as ValueId;
@@ -958,7 +1184,7 @@ fn apply_loads(func: &mut FunctionSsa, hoists: &[LoadHoist]) -> Undo {
         let mut inst = h.inst.clone();
         if let (Some(k), Inst::Load { addr, .. }) = (h.remat, &mut inst) {
             ins.push(Insertion {
-                at: At::Before(h.at),
+                at: h.at,
                 inst: Inst::ImmData(k),
                 is_f32: false,
                 copy_of: None,
@@ -967,7 +1193,7 @@ fn apply_loads(func: &mut FunctionSsa, hoists: &[LoadHoist]) -> Undo {
         }
         copy_at.push(ins.len());
         ins.push(Insertion {
-            at: At::Before(h.at),
+            at: h.at,
             inst,
             is_f32: h.is_f32,
             copy_of: None,
@@ -981,7 +1207,8 @@ fn apply_loads(func: &mut FunctionSsa, hoists: &[LoadHoist]) -> Undo {
         }
     }
     redirect_uses(func, &redirect);
-    undo
+    let copies = copy_at.iter().map(|&k| rewrite.ids[k]).collect();
+    (undo, copies)
 }
 
 /// Point every operand, terminator and `exit_acc` that names a value
@@ -1103,21 +1330,24 @@ pub(crate) fn allocate_hoisted(
     target: Target,
     fixed: FixedRegs,
     data_len: usize,
+    objects: &[(i64, i64)],
 ) -> Allocation {
     let hoists = plan(func, target, fixed);
     // The loads are planned past the materializations, whose copies are
     // what makes an address invariant.
     let early = if hoists.is_empty() {
-        plan_loads(func, data_len)
+        plan_loads(func, data_len, objects)
     } else {
         Vec::new()
     };
     if hoists.is_empty() && early.is_empty() {
-        if plan_pure(func).is_empty() {
+        let frame = target.is_aarch64() && !plan_of(func, target, fixed, true).is_empty();
+        if !frame && plan_pure(func).is_empty() {
             return super::split_ranges::allocate_split(func, target, fixed);
         }
         let base = super::reg_alloc::allocate(func, target, fixed);
-        let picked = hoist_pure(func, target, fixed, base);
+        let picked = hoist_frame_values(func, target, fixed, base);
+        let picked = hoist_pure(func, target, fixed, picked);
         return super::split_ranges::allocate_split_with(func, target, fixed, picked);
     }
     let base = super::reg_alloc::allocate(func, target, fixed);
@@ -1137,15 +1367,14 @@ pub(crate) fn allocate_hoisted(
     let loads = if hoists.is_empty() {
         early
     } else {
-        plan_loads(func, data_len)
+        plan_loads(func, data_len, objects)
     };
     let both = (!loads.is_empty()).then(|| {
-        let removed: u64 = loads.iter().map(|h| h.profit).sum();
-        let undo = apply_loads(func, &loads);
-        let alt = super::reg_alloc::allocate(func, target, fixed);
-        let cost = placement_cost(func, &alt, target);
-        (undo, alt, cost <= base_cost.saturating_add(removed))
+        let now = mat.as_ref().map_or(&base, |(_, alt, _)| alt);
+        let held = super::split_ranges::spill_traffic_by_block(func, now);
+        hoist_loads(func, target, fixed, loads, &held, base_cost)
     });
+    let both = both.flatten();
     let picked = match (mat, both) {
         (_, Some((_, alt, true))) => alt,
         (mat, both) => {
@@ -1162,8 +1391,37 @@ pub(crate) fn allocate_hoisted(
             }
         }
     };
+    let picked = hoist_frame_values(func, target, fixed, picked);
     let picked = hoist_pure(func, target, fixed, picked);
     super::split_ranges::allocate_split_with(func, target, fixed, picked)
+}
+
+/// On AArch64, the copies [`plan_of`] places for frame addresses and
+/// floating constants, past the plans above and kept when the allocation
+/// costs no more than `alloc`: a plan of their own, so they never cost the
+/// others their place, and one the operands of the arithmetic
+/// [`hoist_pure`] moves may then be defined ahead of.
+fn hoist_frame_values(
+    func: &mut FunctionSsa,
+    target: Target,
+    fixed: FixedRegs,
+    alloc: Allocation,
+) -> Allocation {
+    if !target.is_aarch64() {
+        return alloc;
+    }
+    let hoists = plan_of(func, target, fixed, true);
+    if hoists.is_empty() {
+        return alloc;
+    }
+    let cost = placement_cost(func, &alloc, target);
+    let undo = apply(func, &hoists);
+    let alt = super::reg_alloc::allocate(func, target, fixed);
+    if placement_cost(func, &alt, target) <= cost {
+        return alt;
+    }
+    undo.restore(func);
+    alloc
 }
 
 /// With the whole plan rejected, the copies for loops without a call: a
@@ -1200,7 +1458,7 @@ mod tests {
     }
 
     fn allocate_hoisted(func: &mut FunctionSsa, target: Target) -> Allocation {
-        super::allocate_hoisted(func, target, FixedRegs::NONE, 0)
+        super::allocate_hoisted(func, target, FixedRegs::NONE, 0, &[])
     }
 
     /// Tape index of the first body instruction in [`loop_func`].
@@ -1292,6 +1550,94 @@ mod tests {
 
     fn loop_func(body: Vec<Inst>) -> FunctionSsa {
         loop_func_pre(vec![local(2), local(3), local(4)], body)
+    }
+
+    #[test]
+    fn a_cycle_with_two_entries_hoists_to_their_dominator() {
+        // b0: Bnz v0 to b1 or b2 / b1: address, load, store; Jmp b2 /
+        // b2: address, load, store, test; Bnz to b1 or b3 / b3: Return.
+        // The cycle of b1 and b2 is entered at both: no natural loop.
+        let f = func_with(
+            vec![
+                local(2),
+                Inst::ImmData(0x38),
+                load(1),
+                sink(2),
+                Inst::ImmData(0x38),
+                load(4),
+                sink(5),
+                Inst::BinopI {
+                    op: BinOp::Lt,
+                    lhs: 0,
+                    rhs_imm: 7,
+                },
+            ],
+            vec![
+                block(
+                    0..1,
+                    Terminator::Bnz {
+                        cond: 0,
+                        target: 1,
+                        fall_through: 2,
+                    },
+                ),
+                block(1..4, Terminator::Jmp(2)),
+                block(
+                    4..8,
+                    Terminator::Bnz {
+                        cond: 7,
+                        target: 1,
+                        fall_through: 3,
+                    },
+                ),
+                block(8..8, Terminator::Return(NO_VALUE)),
+            ],
+        );
+        let hoists = plan(&f, Target::LinuxAarch64);
+        assert_eq!(hoists.len(), 1);
+        assert_eq!(hoists[0].key, Key::Data(0x38, NO_SYM));
+        assert_eq!(hoists[0].redirect, vec![1, 4]);
+        assert_eq!(hoists[0].at, 0);
+    }
+
+    #[test]
+    fn a_site_in_the_destination_is_the_copy_that_serves_the_loop() {
+        // The preheader reads the address the body reads: one copy, ahead
+        // of the preheader's site, serves both.
+        let pre = vec![local(2), local(3), Inst::ImmData(0x38), load(2), sink(3)];
+        let body = 6;
+        let f = loop_func_pre(pre, vec![Inst::ImmData(0x38), load(body), sink(body + 1)]);
+        let hoists = plan(&f, Target::LinuxAarch64);
+        assert_eq!(hoists.len(), 1);
+        assert_eq!(hoists[0].at, 2);
+        assert_eq!(hoists[0].redirect, vec![body, 2]);
+        // A call past the preheader's site keeps it: the copy stays at the
+        // end, where its range crosses no call.
+        let call = Inst::CallExt {
+            binding_idx: 0,
+            args: vec![2],
+            fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
+            low_word_args: 0,
+            arg_widths: crate::c5::ir::ArgWidths::default(),
+            fp_return: false,
+            arg_aggs: Vec::new(),
+            ret_agg: None,
+            ret_slot_local: 0,
+        };
+        let pre = vec![
+            local(2),
+            Inst::ImmData(0x38),
+            load(1),
+            call,
+            sink(3),
+            local(3),
+        ];
+        let body = 7;
+        let f = loop_func_pre(pre, vec![Inst::ImmData(0x38), load(body), sink(body + 1)]);
+        let hoists = plan(&f, Target::LinuxAarch64);
+        assert_eq!(hoists.len(), 1);
+        assert_eq!(hoists[0].at, 5);
+        assert_eq!(hoists[0].redirect, vec![body]);
     }
 
     #[test]
@@ -1805,7 +2151,7 @@ mod tests {
     #[test]
     fn a_data_load_in_a_loop_that_writes_nothing_moves_out() {
         let mut f = sum_loop(load_at(8), vec![]);
-        let loads = plan_loads(&f, 0x48);
+        let loads = plan_loads(&f, 0x48, &[]);
         assert_eq!(loads.len(), 1);
         assert_eq!(loads[0].redirect, vec![4]);
         apply_loads(&mut f, &loads);
@@ -1820,7 +2166,7 @@ mod tests {
     #[test]
     fn a_frame_slot_load_moves_out() {
         let f = sum_loop(local(-2), vec![]);
-        assert_eq!(plan_loads(&f, 0).len(), 1);
+        assert_eq!(plan_loads(&f, 0, &[]).len(), 1);
     }
 
     /// The copy runs even when the loop runs no iteration, so a load that
@@ -1829,10 +2175,10 @@ mod tests {
     /// store may change stays too.
     #[test]
     fn a_load_that_could_fault_or_change_stays() {
-        assert!(plan_loads(&sum_loop(load_at(8), vec![]), 0x40 + 8 - 1).is_empty());
+        assert!(plan_loads(&sum_loop(load_at(8), vec![]), 0x40 + 8 - 1, &[]).is_empty());
         let mut bound = sum_loop(load_at(8), vec![]);
         bound.extern_imm_data_refs.push((0, 3));
-        assert!(plan_loads(&bound, 0x48).is_empty());
+        assert!(plan_loads(&bound, 0x48, &[]).is_empty());
         let volatile = Inst::Load {
             addr: 0,
             disp: 8,
@@ -1841,17 +2187,203 @@ mod tests {
             align: 0,
             pc_rel: false,
         };
-        assert!(plan_loads(&sum_loop(volatile, vec![]), 0x48).is_empty());
+        assert!(plan_loads(&sum_loop(volatile, vec![]), 0x48, &[]).is_empty());
         let store = Inst::Store {
             addr: 0,
+            disp: 12,
+            value: 1,
+            kind: StoreKind::I32,
+            volatile: false,
+            align: 0,
+            pc_rel: false,
+        };
+        assert!(plan_loads(&sum_loop(load_at(8), vec![store]), 0x48, &[]).is_empty());
+    }
+
+    /// An x86-64 floating add takes the load as its memory operand, a load
+    /// the loop still issues: moving it saves one there as on AArch64.
+    #[test]
+    fn a_load_its_reader_folds_moves_out_on_both_targets() {
+        let mut f = sum_loop(
+            Inst::Load {
+                addr: 0,
+                disp: 8,
+                kind: LoadKind::F64,
+                volatile: false,
+                align: 0,
+                pc_rel: false,
+            },
+            vec![],
+        );
+        let add = f.blocks[2].inst_range.end as usize - 1;
+        f.insts[add] = Inst::Binop {
+            op: BinOp::Fadd,
+            lhs: 2,
+            rhs: add as ValueId - 1,
+        };
+        assert_eq!(plan_loads(&f, 0x48, &[]).len(), 1);
+    }
+
+    /// A store of the loop to other bytes of the same base, or a floating
+    /// intrinsic, leaves the load free to move; a volatile store to other
+    /// bytes keeps it.
+    #[test]
+    fn a_data_load_beside_a_store_to_other_bytes_moves_out() {
+        assert_eq!(
+            plan_loads(&sum_loop(load_at(8), vec![store_at(16)]), 0x48, &[]).len(),
+            1
+        );
+        assert_eq!(
+            plan_loads(&sum_loop(load_at(8), vec![store_at(0)]), 0x48, &[]).len(),
+            1
+        );
+        let sqrt = Inst::Intrinsic {
+            kind: crate::c5::op::Intrinsic::Sqrt as i64,
+            args: vec![1],
+        };
+        assert_eq!(
+            plan_loads(&sum_loop(load_at(8), vec![sqrt]), 0x48, &[]).len(),
+            1
+        );
+        let volatile = Inst::Store {
+            addr: 0,
             disp: 16,
+            value: 1,
+            kind: StoreKind::I64,
+            volatile: true,
+            align: 0,
+            pc_rel: false,
+        };
+        assert!(plan_loads(&sum_loop(load_at(8), vec![volatile]), 0x48, &[]).is_empty());
+    }
+
+    fn store_at(disp: i32) -> Inst {
+        Inst::Store {
+            addr: 0,
+            disp,
             value: 1,
             kind: StoreKind::I64,
             volatile: false,
             align: 0,
             pc_rel: false,
+        }
+    }
+
+    /// `pre (ImmData, Imm 0, pre_tail) -> header -> body -> header`,
+    /// `header -> exit`, the body summing a load at `[v0 + 8]`.
+    fn loop_after(pre_tail: Vec<Inst>) -> FunctionSsa {
+        let mut insts = vec![Inst::ImmData(0x38), Inst::Imm(0)];
+        insts.extend(pre_tail);
+        let h = insts.len() as u32;
+        insts.push(Inst::Phi {
+            incoming: vec![(0, 1), (2, h + 3)],
+            kind: LoadKind::I64,
+        });
+        insts.push(Inst::BinopI {
+            op: BinOp::Lt,
+            lhs: h,
+            rhs_imm: 7,
+        });
+        insts.push(load_at(8));
+        insts.push(Inst::Binop {
+            op: BinOp::Add,
+            lhs: h,
+            rhs: h + 2,
+        });
+        func_with(
+            insts,
+            vec![
+                block(0..h, Terminator::Jmp(1)),
+                block(
+                    h..h + 2,
+                    Terminator::Bz {
+                        cond: h + 1,
+                        target: 3,
+                        fall_through: 2,
+                    },
+                ),
+                block(h + 2..h + 4, Terminator::Jmp(1)),
+                block(h + 4..h + 4, Terminator::Return(h)),
+            ],
+        )
+    }
+
+    /// A store at the end of the destination block -- `p = &x; for (;;)
+    /// ... *p` -- writes what the loop reads, so the copy goes after it.
+    #[test]
+    fn a_copy_follows_the_writes_of_its_destination() {
+        let mut f = loop_after(vec![store_at(8)]);
+        let loads = plan_loads(&f, 0x48, &[]);
+        assert_eq!(loads.len(), 1);
+        assert_eq!(loads[0].at, At::After(2));
+        apply_loads(&mut f, &loads);
+        assert!(
+            matches!(
+                f.insts[3],
+                Inst::Load {
+                    addr: 0,
+                    disp: 8,
+                    ..
+                }
+            ),
+            "{:?}",
+            f.insts
+        );
+        assert_eq!(f.blocks[0].inst_range, 0..4);
+    }
+
+    /// `pre -> (arm ->) header`: an arm between the destination and the
+    /// loop stores what the loop reads, so no copy runs ahead of it; an arm
+    /// writing nothing lets the load move.
+    #[test]
+    fn a_write_on_the_way_into_the_loop_keeps_the_load() {
+        let build = |arm: Vec<Inst>| {
+            let mut insts = vec![Inst::ImmData(0x38), Inst::Imm(0), Inst::Imm(1)];
+            let a = insts.len() as u32;
+            insts.extend(arm);
+            let h = insts.len() as u32;
+            insts.push(Inst::Phi {
+                incoming: vec![(0, 1), (1, 1), (3, h + 3)],
+                kind: LoadKind::I64,
+            });
+            insts.push(Inst::BinopI {
+                op: BinOp::Lt,
+                lhs: h,
+                rhs_imm: 7,
+            });
+            insts.push(load_at(8));
+            insts.push(Inst::Binop {
+                op: BinOp::Add,
+                lhs: h,
+                rhs: h + 2,
+            });
+            func_with(
+                insts,
+                vec![
+                    block(
+                        0..a,
+                        Terminator::Bz {
+                            cond: 2,
+                            target: 2,
+                            fall_through: 1,
+                        },
+                    ),
+                    block(a..h, Terminator::Jmp(2)),
+                    block(
+                        h..h + 2,
+                        Terminator::Bz {
+                            cond: h + 1,
+                            target: 4,
+                            fall_through: 3,
+                        },
+                    ),
+                    block(h + 2..h + 4, Terminator::Jmp(2)),
+                    block(h + 4..h + 4, Terminator::Return(h)),
+                ],
+            )
         };
-        assert!(plan_loads(&sum_loop(load_at(8), vec![store]), 0x48).is_empty());
+        assert!(plan_loads(&build(vec![store_at(8)]), 0x48, &[]).is_empty());
+        assert_eq!(plan_loads(&build(vec![]), 0x48, &[]).len(), 1);
     }
 
     fn mul(lhs: ValueId, rhs: ValueId) -> Inst {

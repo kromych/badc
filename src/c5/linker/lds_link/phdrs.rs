@@ -16,7 +16,7 @@ use super::{
 };
 
 impl<'a> LdsLinker<'a> {
-    /// bfd's `CONSTANT(COMMONPAGESIZE)`: 4 KiB on x86-64, 64 KiB on
+    /// `CONSTANT(COMMONPAGESIZE)`: 4 KiB on x86-64, 64 KiB on
     /// aarch64, and never above the configured maximum.
     pub(super) fn common_page_size(&self) -> u64 {
         let common = if self.machine == EM_AARCH64 {
@@ -50,7 +50,7 @@ impl<'a> LdsLinker<'a> {
         self.script.phdrs().map(|p| p.len()).unwrap_or(self.phdrs)
     }
 
-    /// GNU ld's warnings for a non-empty loaded segment that is readable,
+    /// The warnings for a non-empty loaded segment that is readable,
     /// writable and executable and for an executable thread-local one,
     /// each given once.
     pub(super) fn report_rwx_segments(&mut self, segs: &[(Elf64Phdr, Vec<usize>)]) {
@@ -163,8 +163,7 @@ impl<'a> LdsLinker<'a> {
         Ok(segs)
     }
 
-    /// bfd's default segment assignment
-    /// (`_bfd_elf_map_sections_to_segments`): the PT_LOAD runs, a
+    /// The default segment assignment: the PT_LOAD runs, a
     /// PT_NOTE per run of note sections, the table segments, and
     /// PT_PHDR ahead of an interpreted image.
     fn default_phdrs(&self, emit_order: &[usize]) -> Vec<(Elf64Phdr, Vec<usize>)> {
@@ -216,8 +215,8 @@ impl<'a> LdsLinker<'a> {
             Vec::new(),
         ));
         // An interpreted image needs PT_PHDR ahead of every
-        // loadable entry: a loader takes the load bias from it, and
-        // bfd pairs it with PT_INTERP for that reason. Its extent
+        // loadable entry: a loader takes the load bias from it, so it
+        // pairs with PT_INTERP. Its extent
         // is the header table itself, filled once the count and the
         // first segment's address are known.
         if emit_order
@@ -342,7 +341,7 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// Segment alignment: a `PT_LOAD` pages, raised to its widest section
-    /// (that alone under `-n`); any other takes its widest, as bfd's does.
+    /// (that alone under `-n`); any other takes its widest.
     fn set_phdr_alignments(&self, segs: &mut [(Elf64Phdr, Vec<usize>)]) {
         for (ph, members) in segs.iter_mut() {
             let member_align = members

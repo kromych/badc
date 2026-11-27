@@ -3,7 +3,7 @@ post_inline_import_survives_repack.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,32 +26,31 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	leaq	<rip>, %rdi # <addr>
+               	pushq	%rax
                	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	callq	*%rax
                	cmpq	$0x4, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	leaq	<rip>, %rdi # <addr>
                	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	callq	*%rax
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	leaq	<rip>, %rdi # <addr>
                	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	callq	*%rax
                	movq	%rax, %rsi
-               	leaq	<rip>, %rdx # <addr>
                	leaq	<rip>, %rdi # <addr>
+               	leaq	<rip>, %rdx # <addr>
                	movb	$0x0, %al
                	callq	<addr>
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

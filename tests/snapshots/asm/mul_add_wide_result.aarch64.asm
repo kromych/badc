@@ -3,7 +3,7 @@ mul_add_wide_result.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -44,7 +44,7 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	mov	x2, #0xca00             // =51712
                	movk	x2, #0x3b9a, lsl #16
-               	mov	x3, x1
+               	mov	x3, #0x0                // =0
                	bl	<addr>
                	mov	x17, #-0x2800           // =-10240
                	movk	x17, #0x1194, lsl #16
@@ -78,8 +78,9 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x4240             // =16960
                	movk	x0, #0xf, lsl #16
+               	mov	x1, #0x4240             // =16960
+               	movk	x1, #0xf, lsl #16
                	mov	x2, #0x0                // =0
-               	mov	x1, x0
                	bl	<addr>
                	mov	x17, #-0x1000           // =-4096
                	movk	x17, #0x2b5a, lsl #16

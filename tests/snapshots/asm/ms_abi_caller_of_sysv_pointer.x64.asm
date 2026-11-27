@@ -3,7 +3,7 @@ ms_abi_caller_of_sysv_pointer.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -32,23 +32,17 @@ Disassembly of section .text:
                	retq
 
 <caller>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	pushq	%rax
                	movq	%rdi, %rdx
-               	leaq	-0x10(%rbp), %rdi
-               	movq	%rsi, -0x10(%rbp)
-               	movq	$0x7, -0x8(%rbp)
-               	movq	0x8(%rdi), %rsi
-               	movq	(%rdi), %rdi
+               	movl	$0x7, %eax
+               	movq	%rsi, %rdi
+               	movq	%rax, %rsi
                	callq	*%rdx
-               	leave
+               	popq	%r11
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x28, %rsp
+               	subq	$0x30, %rsp
                	pushq	%rbx
                	movq	<rip>, %rbx # <addr>
                	movq	<rip>, %r10 # <addr>
@@ -57,8 +51,8 @@ Disassembly of section .text:
                	movq	%r10, 0x20(%rsp)
                	movq	<rip>, %r10 # <addr>
                	movq	%r10, 0x18(%rsp)
-               	leaq	-<rip>, %rdi # <addr>
                	movq	%rbx, %rsi
+               	leaq	-<rip>, %rdi # <addr>
                	callq	<addr>
                	cmpq	$0xa, %rax
                	jne	<addr>
@@ -79,7 +73,7 @@ Disassembly of section .text:
                	jne	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
-               	leave
+               	addq	$0x30, %rsp
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>

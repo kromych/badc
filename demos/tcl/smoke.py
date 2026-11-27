@@ -332,10 +332,17 @@ def run_suite(tclsh: Path, tests_set: str, log) -> None:
         sys.exit(f"smoke: {len(errored)} test files exited with errors "
                  f"(working directory {work})")
     if failed > BASELINE_FAILURES:
-        # Surface the failing test names for triage.
+        # Surface each failure's whole tcltest block -- the body, the result
+        # and the expected one -- since CI keeps no working directory.
+        # The opening marker carries the description, the closing one the
+        # name alone.
+        inside = False
         for line in out.splitlines():
-            if "FAILED" in line:
+            marker = line.startswith("==== ") and line.endswith(" FAILED")
+            if marker or inside:
                 print("  " + line)
+            if marker:
+                inside = len(line.split()) > 3
         # interp-36.7 races a 10 ms timer against an idle-time handler, and
         # socket_inet*-2.13 a 5 ms timer against a 720000-byte client write.
         if "==== interp-36.7 " in out:

@@ -139,8 +139,7 @@ pub(crate) enum AssemblerOption {
 /// * `-march=` -- a ceiling on the instructions the assembler admits, not
 ///   a change to how one assembles. badc implements a fixed set and admits
 ///   each member unconditionally, so a ceiling at or above that set selects
-///   nothing. It does not reject an instruction above a lower ceiling, which
-///   is the one direction this diverges from gas.
+///   nothing. It does not reject an instruction above a lower ceiling.
 /// * `-L` / `--keep-locals` -- keeps the local-label temporaries in the
 ///   object's `.symtab`; see [`badc::NativeOptions::keep_local_labels`].
 ///

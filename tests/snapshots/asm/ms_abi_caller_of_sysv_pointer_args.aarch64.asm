@@ -3,7 +3,7 @@ ms_abi_caller_of_sysv_pointer_args.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -41,39 +41,25 @@ Disassembly of section .text:
 <caller>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x40
+               	sub	sp, sp, #0x10
                	mov	x2, x7
-               	add	x3, x3, #0x1
-               	sub	x0, x29, #0x30
-               	stur	x3, [x29, #-0x30]
-               	mov	x3, #0x2                // =2
-               	stur	x3, [x29, #-0x28]
+               	add	x0, x3, #0x1
+               	mov	x8, #0x2                // =2
                	add	x3, x4, x4, lsl #3
                	add	x3, x3, #0x2
-               	add	x5, x1, #0x1
-               	sub	x4, x29, #0x20
-               	stur	x5, [x29, #-0x20]
+               	add	x4, x1, #0x1
                	mov	x5, #0x5                // =5
-               	stur	x5, [x29, #-0x18]
-               	add	x5, x6, #0x1
-               	sub	x6, x29, #0x10
-               	stur	x5, [x29, #-0x10]
-               	mov	x5, #0x6                // =6
-               	stur	x5, [x29, #-0x8]
+               	add	x6, x6, #0x1
+               	mov	x7, #0x6                // =6
                	lsl	x1, x1, #1
                	add	x1, x1, #0x5
                	str	x1, [sp]
                	mov	x16, #0x34ac            // =13484
                	movk	x16, #0x1, lsl #16
                	str	x16, [sp, #0x8]
-               	ldr	x1, [x0, #0x8]
-               	ldr	x0, [x0]
-               	ldr	x5, [x4, #0x8]
-               	ldr	x4, [x4]
-               	ldr	x7, [x6, #0x8]
-               	ldr	x6, [x6]
+               	mov	x1, x8
                	blr	x2
-               	add	sp, sp, #0x40
+               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -97,22 +83,21 @@ Disassembly of section .text:
                	ldr	x3, [x1, #0x20]
                	add	x21, x3, #0x4
                	ldr	x3, [x1, #0x28]
-               	add	x22, x3, #0x5
+               	add	x23, x3, #0x5
                	ldr	x3, [x1, #0x30]
                	add	x5, x3, #0x6
                	ldr	x1, [x1, #0x38]
-               	add	x23, x1, #0x7
+               	add	x22, x1, #0x7
+               	mov	x1, x20
+               	mov	x6, x22
+               	mov	x4, x23
+               	mov	x3, x21
                	adrp	x7, <page>
                	add	x7, x7, <lo12>
-               	mov	x1, x20
-               	mov	x6, x23
-               	mov	x4, x22
-               	mov	x3, x21
                	bl	<addr>
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x0                // =0
                	cmp	x0, #0x8
-               	csel	x1, x1, x2, ne
+               	mov	x16, #0x1               // =1
+               	csel	x1, x16, xzr, ne
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldr	x2, [x0]
@@ -128,7 +113,7 @@ Disassembly of section .text:
                	cmp	x2, x3
                	b.ne	<addr>
                	ldr	x2, [x0, #0x10]
-               	add	x3, x22, x22, lsl #3
+               	add	x3, x23, x23, lsl #3
                	add	x3, x3, #0x2
                	cmp	x2, x3
                	b.eq	<addr>
@@ -141,7 +126,7 @@ Disassembly of section .text:
                	cmp	x4, x2
                	csel	x1, x3, x1, ne
                	ldr	x2, [x0, #0x20]
-               	add	x3, x23, #0x1
+               	add	x3, x22, #0x1
                	add	x3, x3, x3, lsl #1
                	add	x3, x3, #0x6
                	cmp	x2, x3

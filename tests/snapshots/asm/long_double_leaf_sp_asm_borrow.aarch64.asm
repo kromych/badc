@@ -3,7 +3,7 @@ long_double_leaf_sp_asm_borrow.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -149,9 +149,9 @@ Disassembly of section .text:
                	sub	sp, sp, #0x80
                	mov	x0, #0x0                // =0
                	sub	x1, x29, #0x80
-               	add	x1, x1, x0, lsl #3
-               	add	x2, x0, #0xb
-               	str	x2, [x1]
+               	add	x2, x1, x0, lsl #3
+               	add	x3, x0, #0xb
+               	str	x3, [x2]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>
@@ -185,9 +185,9 @@ Disassembly of section .text:
                	sub	sp, sp, #0x80
                	mov	x0, #0x0                // =0
                	sub	x1, x29, #0x80
-               	add	x1, x1, x0, lsl #3
-               	add	x2, x0, #0xb
-               	str	x2, [x1]
+               	add	x2, x1, x0, lsl #3
+               	add	x3, x0, #0xb
+               	str	x3, [x2]
                	add	x0, x0, #0x1
                	cmp	w0, #0x10
                	b.lt	<addr>

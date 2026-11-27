@@ -3,7 +3,7 @@ param_entry_conversion.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -30,32 +30,31 @@ Disassembly of section .text:
                	retq
 
 <across>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
                	subq	$0x18, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
+               	pushq	%rbp
                	pushq	%rbx
                	movsbq	%dil, %rbx
-               	movq	%r9, 0x38(%rsp)
+               	movq	%r9, %rbp
                	movq	%r8, %r15
                	movq	%rcx, %r14
                	movslq	%edx, %r13
                	movswq	%si, %r12
                	movq	%rbx, %rdi
                	callq	<addr>
-               	movq	%rax, 0x30(%rsp)
+               	movq	%rax, 0x38(%rsp)
                	movq	%r12, %rdi
                	callq	<addr>
-               	movq	0x30(%rsp), %r10
+               	movq	0x38(%rsp), %r10
                	addq	%rax, %r10
-               	movq	%r10, 0x30(%rsp)
+               	movq	%r10, 0x38(%rsp)
                	movq	%r13, %rdi
                	callq	<addr>
                	movq	%rax, %r10
-               	movq	0x30(%rsp), %rax
+               	movq	0x38(%rsp), %rax
                	addq	%r10, %rax
                	shlq	%rax
                	addq	%rbx, %rax
@@ -64,15 +63,15 @@ Disassembly of section .text:
                	andq	$0xff, %r14
                	addq	%r14, %rax
                	addq	%r15, %rax
-               	movq	0x38(%rsp), %rcx
-               	andq	$0xffff, %rcx           # imm = 0xFFFF
-               	addq	%rcx, %rax
+               	andq	$0xffff, %rbp           # imm = 0xFFFF
+               	addq	%rbp, %rax
                	popq	%rbx
+               	popq	%rbp
                	popq	%r12
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <leaf>:
@@ -97,8 +96,7 @@ Disassembly of section .text:
                	retq
 
 <permute>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
@@ -121,70 +119,68 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <low>:
-               	imulq	%rdi, %rsi
-               	leaq	0x1(%rsi), %rax
+               	imulq	%rsi, %rdi
+               	leaq	0x1(%rdi), %rax
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x20(%rbp)
+               	movq	%rax, (%rsp)
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x18(%rbp)
+               	movq	%rax, 0x8(%rsp)
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x10(%rbp)
+               	movq	%rax, 0x10(%rsp)
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x8(%rbp)
+               	movq	%rax, 0x18(%rsp)
+               	movq	(%rsp), %rax
                	movabsq	$0x5a5a5a5a5a5a5afb, %rdi # imm = 0x5A5A5A5A5A5A5AFB
                	movabsq	$-0x5a5a5a5a5a5a012c, %rsi # imm = 0xA5A5A5A5A5A5FED4
                	movabsq	$0x5a5a5a5afffffff0, %rdx # imm = 0x5A5A5A5AFFFFFFF0
                	movabsq	$-0x5a5a5a5a5a5a5a38, %rcx # imm = 0xA5A5A5A5A5A5A5C8
                	movq	$-0x3e8, %r8            # imm = 0xFC18
                	movabsq	$0x5a5a5a5a5a5aff00, %r9 # imm = 0x5A5A5A5A5A5AFF00
-               	movq	-0x20(%rbp), %rax
                	callq	*%rax
                	cmpq	$0xf81d, %rax           # imm = 0xF81D
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
+               	movq	0x8(%rsp), %rax
                	movabsq	$-0x5a5a5a5a5a5a5a9c, %rdi # imm = 0xA5A5A5A5A5A5A564
                	movabsq	$0x5a5a5a5a5a5afffe, %rsi # imm = 0x5A5A5A5A5A5AFFFE
                	movabsq	$-0x5a5a5a5af8a432eb, %rdx # imm = 0xA5A5A5A5075BCD15
                	movabsq	$0x5a5a5a5afffffff9, %rcx # imm = 0x5A5A5A5AFFFFFFF9
-               	movq	-0x18(%rbp), %rax
                	callq	*%rax
                	movabsq	$0x5af3266f22b8, %r11   # imm = 0x5AF3266F22B8
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
+               	movq	0x10(%rsp), %rax
                	movabsq	$-0x5a5a5a5a00009c40, %rdi # imm = 0xA5A5A5A5FFFF63C0
                	movabsq	$0x5a5a5a5a5a5a04d2, %rsi # imm = 0x5A5A5A5A5A5A04D2
                	movabsq	$-0x5a5a5a5a5a5a5a80, %rdx # imm = 0xA5A5A5A5A5A5A580
-               	movq	-0x10(%rbp), %rax
                	callq	*%rax
                	cmpq	$-0x10c090e, %rax       # imm = 0xFEF3F6F2
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
+               	movq	0x18(%rsp), %rax
                	movabsq	$0x5a5a5a5a00000003, %rdi # imm = 0x5A5A5A5A00000003
                	movabsq	$-0x5a5a5a5a00000002, %rsi # imm = 0xA5A5A5A5FFFFFFFE
-               	movq	-0x8(%rbp), %rax
                	callq	*%rax
                	cmpl	$-0x5, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq

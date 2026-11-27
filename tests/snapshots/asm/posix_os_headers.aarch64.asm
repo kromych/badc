@@ -3,7 +3,7 @@ posix_os_headers.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -54,12 +54,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	ldursw	x0, [x29, #-0x68]
+               	stur	w0, [x29, #-0x60]
+               	mov	x0, #0x1                // =1
+               	stur	w0, [x29, #-0x5c]
                	sub	x0, x29, #0x60
-               	ldursw	x1, [x29, #-0x68]
-               	stur	w1, [x29, #-0x60]
                	mov	x1, #0x1                // =1
-               	mov	x2, #0x1                // =1
-               	stur	w2, [x29, #-0x5c]
                	mov	x2, #0x3e8              // =1000
                	bl	<addr>
                	cmp	w0, #0x1

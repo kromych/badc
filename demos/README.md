@@ -217,6 +217,13 @@ compiler. All five targets. See [`nuklear/README.md`](./nuklear/README.md).
 Waits on header gaps the build reaches; see
 [`openssl/README.md`](./openssl/README.md).
 
+## symcrypt/
+
+Microsoft's [SymCrypt](https://github.com/microsoft/SymCrypt) 103.13.0
+through its own CMake with badc as the C compiler, checked by its C++ unit
+test against the badc-built library, with SymCrypt's own assembly
+(GNU syntax on aarch64, Intel syntax on x86_64). See [`symcrypt/README.md`](./symcrypt/README.md).
+
 ## gui_hello/
 
 Three "show a window with a label" demos -- Win32 (using the
@@ -355,6 +362,15 @@ hypervisor, built from its upstream sources into a `windows-x64`
 native-subsystem `.sys` whose image and ntoskrnl imports the smoke checks;
 a user-mode harness runs its descriptor and MSR decode logic. The driver is
 never loaded. See [`simplevisor/README.md`](./simplevisor/README.md).
+
+## systeminformer/
+
+[System Informer](https://github.com/winsiderss/systeminformer)
+4.0.26241.138 built from its own CMake lists for windows-x64 and
+windows-arm64: badc compiles its C against the Windows SDK and MSVC headers
+and links the programs, the SDK's and MSVC's tools build the rest. The smoke
+runs phlib's self-test and starts System Informer and its PE viewer, at -O0
+and -O. See [`systeminformer/README.md`](./systeminformer/README.md).
 
 ## nt_loader/
 

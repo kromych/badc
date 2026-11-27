@@ -69,6 +69,7 @@ const WINDOWS_GAPS: &[(&str, &str)] = &[
     ("seh_nested_funclets.c", SEH),
     ("seh_in_named_code_section.c", SEH),
     ("unwind_from_epilogue.c", UNWIND),
+    ("unwind_from_a_fault_in_each_frame_shape.c", UNWIND),
     ("unwind_restores_callee_saved.c", UNWIND),
     ("windows_unwind_api_walks_to_the_caller.c", UNWIND),
     ("inline_asm_section_label.c", ASM_SECTION),
@@ -107,13 +108,13 @@ fn parity() -> Vec<(&'static str, i32)> {
 /// The fixtures calling a name that only the embedded C library defines on
 /// the host. The JIT joins that library through the linker, which is built
 /// only under `full`.
-#[cfg(all(target_os = "macos", not(feature = "full")))]
+#[cfg(all(target_os = "macos", not(feature = "linker")))]
 const EMBEDDED_LIBC_FIXTURES: &[&str] = &[
     "string_gnu_ext.c",
     "copy_file_range_posix.c",
     "c17_library_interfaces.c",
 ];
-#[cfg(not(all(target_os = "macos", not(feature = "full"))))]
+#[cfg(not(all(target_os = "macos", not(feature = "linker"))))]
 const EMBEDDED_LIBC_FIXTURES: &[&str] = &[];
 
 /// Whether the JIT of this build can run fixture `name`.
@@ -127,7 +128,10 @@ pub(super) fn runs_without_linker(name: &str) -> bool {
 /// programs the JIT runs share one process: a program that sets any of them
 /// runs with no other beside it. So does one that starts
 /// a process, which inherits the inheritable handles of every program open
-/// then; on Windows a file a child holds open cannot be removed.
+/// then; on Windows a file a child holds open cannot be removed. A program
+/// that runs alone starts with no signal blocked: the macOS C library saves
+/// and restores the mask around `tmpfile`, `longjmp` and others, and two
+/// programs doing so beside each other can leave every signal blocked.
 static C_LIBRARY_STATE: std::sync::RwLock<()> = std::sync::RwLock::new(());
 
 /// The sources running now. A fixture names its files by process, and the
@@ -187,6 +191,8 @@ pub(super) fn beside_others<R>(src: &str, run: impl FnOnce() -> R) -> R {
     .any(|call| src.contains(call))
     {
         let _alone = C_LIBRARY_STATE.write().unwrap_or_else(|e| e.into_inner());
+        #[cfg(unix)]
+        super::signals::set_process_mask(&super::signals::Set::empty());
         run()
     } else {
         let _shared = C_LIBRARY_STATE.read().unwrap_or_else(|e| e.into_inner());
@@ -219,13 +225,48 @@ fn in_own_process(src: &str) -> bool {
 const CHILD_SRC: &str = "BADC_JIT_CHILD_SRC";
 const CHILD_ARGS: &str = "BADC_JIT_CHILD_ARGS";
 const CHILD_OPTIMIZE: &str = "BADC_JIT_CHILD_OPTIMIZE";
+const CHILD_BARE: &str = "BADC_JIT_CHILD_BARE";
+/// The child blocks every signal before it runs the program; Windows has no
+/// signal mask and ignores it.
+const CHILD_BLOCKED: &str = "BADC_JIT_CHILD_BLOCKED";
 const CHILD_RAN: &str = "jit child ran";
 
 /// The exit status of `src` run by the JIT in a child test process.
 fn jit_exit_in_child(src: &str, args: &[&str], optimize: bool) -> i32 {
+    child_exit(src, args, optimize, false)
+}
+
+/// The exit status of `src`, compiled without the test prelude, run by the
+/// JIT in a child test process, so a fault ends the child and not the run.
+#[cfg(target_arch = "x86_64")]
+pub(super) fn jit_exit_bare_in_child(src: &str, optimize: bool) -> i32 {
+    child_exit(src, &[], optimize, true)
+}
+
+fn child_exit(src: &str, args: &[&str], optimize: bool, bare: bool) -> i32 {
+    let (mut cmd, dir) = child_command(src, args, optimize, bare);
+    let out = cmd.output().expect("spawn the child");
+    let _ = std::fs::remove_dir_all(&dir);
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains(CHILD_RAN),
+        "the child ran no program: {stdout}{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    out.status.code().expect("the child exited")
+}
+
+/// The test binary run as the child that runs `src`, and the directory
+/// holding the source, which the caller removes.
+fn child_command(
+    src: &str,
+    args: &[&str],
+    optimize: bool,
+    bare: bool,
+) -> (std::process::Command, std::path::PathBuf) {
     use std::hash::{Hash, Hasher};
     let mut h = std::collections::hash_map::DefaultHasher::new();
-    (src, optimize).hash(&mut h);
+    (src, optimize, bare).hash(&mut h);
     let dir = std::env::temp_dir().join(format!(
         "badc-jit-child-{}-{:x}",
         std::process::id(),
@@ -242,15 +283,10 @@ fn jit_exit_in_child(src: &str, args: &[&str], optimize: bool) -> i32 {
     if optimize {
         cmd.env(CHILD_OPTIMIZE, "1");
     }
-    let out = cmd.output().expect("spawn the child");
-    let _ = std::fs::remove_dir_all(&dir);
-    let stdout = String::from_utf8_lossy(&out.stdout);
-    assert!(
-        stdout.contains(CHILD_RAN),
-        "the child ran no program: {stdout}{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
-    out.status.code().expect("the child exited")
+    if bare {
+        cmd.env(CHILD_BARE, "1");
+    }
+    (cmd, dir)
 }
 
 /// The child half of [`jit_exit_in_child`].
@@ -263,18 +299,105 @@ fn jit_exit_child() {
     let src = std::fs::read_to_string(path).expect("read the program");
     let args = std::env::var(CHILD_ARGS).unwrap_or_default();
     let argv: Vec<String> = args.split('\u{1f}').map(String::from).collect();
-    let program = Compiler::new(super::with_prelude(&src))
+    let src = if std::env::var_os(CHILD_BARE).is_some() {
+        src
+    } else {
+        super::with_prelude(&src)
+    };
+    #[cfg(unix)]
+    if std::env::var_os(CHILD_BLOCKED).is_some() {
+        super::signals::set_thread_mask(&super::signals::Set::full());
+    }
+    let program = Compiler::new(src.clone())
         .compile()
         .expect("compile failed");
-    let code = if std::env::var_os(CHILD_OPTIMIZE).is_some() {
-        let opts = NativeOptions::new().with_optimize();
-        jit_run_with_options(&program, &argv, opts, &mut |_| {})
-    } else {
-        jit_run(&program, &argv)
-    }
+    let code = beside_others(&src, || {
+        if std::env::var_os(CHILD_OPTIMIZE).is_some() {
+            let opts = NativeOptions::new().with_optimize();
+            jit_run_with_options(&program, &argv, opts, &mut |_| {})
+        } else {
+            jit_run(&program, &argv)
+        }
+    })
     .expect("jit_run failed");
     println!("{CHILD_RAN}");
     std::process::exit(code);
+}
+
+/// A program that runs alone starts with no signal blocked, whatever mask
+/// the programs before it left (see [`C_LIBRARY_STATE`]).
+#[cfg(unix)]
+#[test]
+fn a_program_run_alone_starts_with_no_signal_blocked() {
+    let src = "#include <signal.h>\n\
+        int main(void) {\n\
+            sigset_t now;\n\
+            if (sigprocmask(SIG_BLOCK, 0, &now)) return 1;\n\
+            return sigismember(&now, SIGUSR1) ? 2 : 0;\n\
+        }\n";
+    let (mut cmd, dir) = child_command(src, &[], false, false);
+    let out = cmd
+        .env(CHILD_BLOCKED, "1")
+        .output()
+        .expect("spawn the child");
+    let _ = std::fs::remove_dir_all(&dir);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert_eq!(out.status.code(), Some(0), "{stderr}");
+}
+
+/// A fault in a thread a program starts ends the process by the fault, with
+/// every signal blocked too, the state the C library's save and restore of
+/// the mask can leave when programs run beside each other (see
+/// `fault_delivery`). The program runs in a child test process.
+#[test]
+fn a_fault_in_a_programs_thread_ends_the_process_with_every_signal_blocked() {
+    let src = "#ifdef _WIN32\n\
+        #include <windows.h>\n\
+        static int *volatile target;\n\
+        static DWORD WINAPI fault(void *arg) { *target = 1; return 0; }\n\
+        int main(void) {\n\
+            HANDLE t = CreateThread(0, 0, fault, 0, 0, 0);\n\
+            if (!t) return 1;\n\
+            WaitForSingleObject(t, INFINITE);\n\
+            return 2;\n\
+        }\n\
+        #else\n\
+        #include <pthread.h>\n\
+        static int *volatile target;\n\
+        static void *fault(void *arg) { *target = 1; return arg; }\n\
+        int main(void) {\n\
+            pthread_t t;\n\
+            if (pthread_create(&t, 0, fault, 0)) return 1;\n\
+            pthread_join(t, 0);\n\
+            return 2;\n\
+        }\n\
+        #endif\n";
+    let (mut cmd, dir) = child_command(src, &[], false, false);
+    cmd.env(CHILD_BLOCKED, "1")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null());
+    let mut child = cmd.spawn().expect("spawn the child");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let status = loop {
+        if let Some(status) = child.try_wait().expect("wait for the child") {
+            break Some(status);
+        }
+        if std::time::Instant::now() > deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            break None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    let _ = std::fs::remove_dir_all(&dir);
+    let status = status.expect("the faulting store restarted instead of ending the process");
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        assert_eq!(status.signal(), Some(11), "{status:?}");
+    }
+    #[cfg(windows)]
+    assert_eq!(status.code(), Some(0xC000_0005_u32 as i32), "{status:?}");
 }
 
 /// [`jit_exit`] for a program the caller runs under its own hold on
@@ -318,6 +441,30 @@ fn far_stack_arguments_reach_their_slots() {
     assert_eq!(
         jit_exit_native_optimized(&src, &["jit-far-stack-args-O"]),
         42
+    );
+}
+
+/// Values past the allocator's graph bound share slots only with values
+/// not live beside them, at -O0 and -O. Release-only: the function is
+/// large and its cost is in the allocation.
+#[cfg(not(debug_assertions))]
+#[test]
+fn crowded_values_keep_their_slots() {
+    let src = super::crowded_values_source();
+    assert_eq!(jit_exit(&src, &["jit-crowded"]), 0);
+    assert_eq!(jit_exit_native_optimized(&src, &["jit-crowded-O"]), 0);
+}
+
+/// The frame holds every slot of the vectors past the allocator's graph
+/// bound, the two 8-byte units of the topmost one included, so a call
+/// they live across leaves their lanes alone.
+#[test]
+fn crowded_vectors_live_across_a_call_keep_their_lanes() {
+    let src = super::crowded_vectors_across_a_call_source();
+    assert_eq!(jit_exit(&src, &["jit-crowded-vectors"]), 0);
+    assert_eq!(
+        jit_exit_native_optimized(&src, &["jit-crowded-vectors-O"]),
+        0
     );
 }
 
@@ -506,9 +653,13 @@ fn a_programs_exception_handlers_end_with_its_run() {
             SetUnhandledExceptionFilter(pass);\n\
             return 0;\n\
         }\n";
+    // Reading the filter swaps it out and back: no other program runs
+    // between the reads, so they see only this program's effect.
+    let alone = C_LIBRARY_STATE.write().unwrap_or_else(|e| e.into_inner());
     let before = filter();
-    assert_eq!(jit_exit(src, &["jit-handlers"]), 0);
+    assert_eq!(jit_exit_held(src, &["jit-handlers"]), 0);
     assert_eq!(filter(), before, "the program's filter outlived its run");
+    drop(alone);
     // A panic raises an exception, which the process's vectored handlers see.
     let caught = std::panic::catch_unwind(|| panic!("after the run"));
     assert!(caught.is_err());
@@ -2275,6 +2426,13 @@ fn jit_fixture(name: &str) -> i32 {
     jit_exit(&src, &[name])
 }
 
+/// The zero-filled storage past `.data` is mapped, zeroed and addressed
+/// under the JIT.
+#[test]
+fn zero_filled_static_storage_runs() {
+    assert_eq!(jit_exit(super::zero_filled_storage_source(), &[]), 0);
+}
+
 /// A construct the JIT declines must fail to load with a diagnostic
 /// naming it, on every JIT host. Left undriven, the combination
 /// regressed to a fault in the generated code instead: nothing in the
@@ -2902,4 +3060,47 @@ fn an_address_constant_below_its_object_relocates() {
                static char *one_based = buf - 4096;\n\
                int main(void) { return one_based + 4097 == buf + 1 ? 0 : 1; }\n";
     assert_eq!(jit_exit(src, &[]), 0);
+}
+
+/// A program loaded without running `main` -- it has none -- exposes each
+/// function and object it defines with external linkage: its constructor
+/// ran before `jit_load` returned, a call through a returned address reads
+/// an object the host wrote through another, an internal name is not
+/// listed, and dropping the module runs its destructor.
+#[test]
+fn a_loaded_program_exposes_its_external_definitions() {
+    const SRC: &str = "int bias; int *seen;\n\
+        static int hidden(int x) { return x; }\n\
+        int add(int a, int b) { return hidden(a) + b + bias; }\n\
+        __attribute__((constructor)) static void start(void) { bias = 100; }\n\
+        __attribute__((destructor)) static void stop(void) { if (seen) *seen = 7; }\n";
+    for optimize in [false, true] {
+        let front = crate::CompileOptions::default().with_no_entry_point(true);
+        let program = Compiler::with_options(SRC.into(), crate::Target::host(), front)
+            .compile()
+            .expect("compiles");
+        let options = NativeOptions {
+            optimize,
+            ..NativeOptions::default()
+        };
+        let module = crate::jit_load(&program, options, &mut |_| {}).expect("loads");
+        let names: Vec<&str> = module.symbols().map(|(n, _)| n).collect();
+        assert!(
+            names.contains(&"add") && names.contains(&"bias"),
+            "{names:?}"
+        );
+        assert!(module.symbol("hidden").is_none(), "{names:?}");
+        assert!(!module.code().is_empty());
+        let add: extern "C" fn(i32, i32) -> i32 =
+            unsafe { core::mem::transmute(module.symbol("add").expect("add")) };
+        assert_eq!(add(2, 3), 105, "the constructor set `bias`");
+        let bias = module.symbol("bias").expect("bias") as *mut i32;
+        unsafe { bias.write(1) };
+        assert_eq!(add(2, 3), 6);
+        let mut seen = 0i32;
+        let slot = module.symbol("seen").expect("seen") as *mut *mut i32;
+        unsafe { slot.write(&mut seen) };
+        drop(module);
+        assert_eq!(seen, 7, "dropping the module ran the destructor");
+    }
 }

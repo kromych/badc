@@ -3,7 +3,7 @@ store_forward_local_slot.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -32,14 +32,12 @@ Disassembly of section .text:
                	retq
 
 <volatile_kept>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	leaq	<rip>, %rcx # <addr>
-               	movl	$0x7, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
+               	movl	$0x7, 0x8(%rsp)
+               	movl	0x8(%rsp), %eax
                	jmpq	*%rcx
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <aliased_kept>:
@@ -55,36 +53,35 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x5, %edi
                	callq	<addr>
                	cmpl	$0x1e, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x7, %edi
                	callq	<addr>
                	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x9, %edi
                	callq	<addr>
                	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x6, %edi
                	callq	<addr>
                	cmpl	$0xc, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

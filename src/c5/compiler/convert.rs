@@ -165,7 +165,9 @@ impl Compiler {
             return;
         }
         let common = self.arith_common_ty(lhs_ty, rhs_ty);
-        self.renormalize_overflow(common);
+        // A checked operation's overflow is reported, not assumed away.
+        let checked = self.sanitize_overflow(common);
+        self.renormalize(common, !self.wrapv && !checked);
     }
 
     /// Whether `op` in type `ty` overflows undefined: a `+ - *` without
@@ -185,18 +187,6 @@ impl Compiler {
             && self.size_of_type(ty) >= 4
     }
 
-    /// [`Self::renormalize_to_width`] after `op`, marked per [`Self::overflow_undefined`].
-    pub(super) fn renormalize_after(&mut self, op: crate::c5::ir::BinOp, ty: i64) {
-        self.renormalize(ty, self.overflow_undefined(op, ty));
-    }
-
-    /// [`Self::renormalize_to_width`] after an operation whose signed
-    /// overflow C99 6.5p5 leaves undefined, marked so unless `-fwrapv`
-    /// defines it to wrap.
-    pub(super) fn renormalize_overflow(&mut self, ty: i64) {
-        self.renormalize(ty, !self.wrapv);
-    }
-
     /// Renormalize the 64-bit accumulator to the storage width of an
     /// integer type `ty` after an operation that can overflow that width.
     ///
@@ -211,7 +201,7 @@ impl Compiler {
         self.renormalize(ty, false);
     }
 
-    fn renormalize(&mut self, ty: i64, nsw: bool) {
+    pub(super) fn renormalize(&mut self, ty: i64, nsw: bool) {
         let size = self.size_of_type(ty);
         if !matches!(size, 1 | 2 | 4) {
             return;

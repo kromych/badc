@@ -3,7 +3,7 @@ sizeof_with_write.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -20,12 +20,12 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x1, x0
                	mov	x0, #0x1                // =1
-               	mov	x2, #0x1                // =1
-               	movk	x2, #0x2, lsl #32
-               	str	x2, [x1]
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	str	x2, [x1, #0x8]
+               	movk	x0, #0x2, lsl #32
+               	str	x0, [x1]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	str	x0, [x1, #0x8]
+               	mov	x0, #0x1                // =1
                	mov	x2, #0x10               // =16
                	bl	<addr>
                	mov	x0, #0x10               // =16

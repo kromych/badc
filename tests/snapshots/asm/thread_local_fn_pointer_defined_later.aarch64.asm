@@ -3,7 +3,7 @@ thread_local_fn_pointer_defined_later.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -82,9 +82,9 @@ Disassembly of section .text:
                	cmp	x0, #0x12c
                	cset	x1, eq
                	mov	x0, #0x0                // =0
-               	mov	x2, #0x1                // =1
                	cmp	x1, #0x0
-               	csel	x1, x2, x0, ne
+               	mov	x16, #0x1               // =1
+               	csel	x1, x16, x0, ne
                	cbz	x1, <addr>
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0

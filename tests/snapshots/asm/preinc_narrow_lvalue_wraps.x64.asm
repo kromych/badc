@@ -3,7 +3,7 @@ preinc_narrow_lvalue_wraps.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,16 +26,11 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
-               	pushq	%rbx
-               	xorl	%ebx, %ebx
+               	pushq	%rax
                	leaq	<rip>, %rdi
-               	movq	%rbx, %rsi
+               	xorl	%esi, %esi
                	movb	$0x0, %al
                	callq	<addr>
-               	movq	%rbx, %rax
-               	popq	%rbx
-               	leave
+               	xorl	%eax, %eax
+               	popq	%r11
                	retq

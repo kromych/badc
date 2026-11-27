@@ -3,7 +3,7 @@ declared_object_copied_whole.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -130,12 +130,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, #0x63               // =99
+               	stur	x0, [x29, #-0x48]
+               	stur	w0, [x29, #-0x4]
+               	adrp	x0, <page>
+               	ldrsw	x1, [x0, #0x18]
                	sub	x0, x29, #0x58
-               	mov	x1, #0x63               // =99
-               	stur	x1, [x29, #-0x48]
-               	stur	w1, [x29, #-0x4]
-               	adrp	x1, <page>
-               	ldrsw	x1, [x1, #0x18]
                	bl	<addr>
                	ldur	x0, [x29, #-0x48]
                	cbz	x0, <addr>

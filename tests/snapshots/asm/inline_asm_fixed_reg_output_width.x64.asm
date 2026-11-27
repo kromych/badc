@@ -3,7 +3,7 @@ inline_asm_fixed_reg_output_width.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -38,8 +38,7 @@ Disassembly of section .text:
                	shlq	$0x20, %rdx
                	orq	%rdx, %rax
                	movq	%rax, (%rdi)
-               	movq	-0x10(%rbp), %rax
-               	movq	%rax, %rcx
+               	movq	-0x10(%rbp), %rcx
                	shrq	$0x20, %rcx
                	xorl	%eax, %eax
                	testl	%ecx, %ecx
@@ -56,7 +55,8 @@ Disassembly of section .text:
                	rdtsc
                	shlq	$0x20, %rdx
                	movl	%eax, %eax
-               	orq	%rdx, %rax
+               	orq	%rax, %rdx
+               	movq	%rdx, %rax
                	retq
 
 <long_output_fills_all_bytes>:
@@ -101,19 +101,17 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	$0x0, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rdi
+               	subq	$0x18, %rsp
+               	movq	$0x0, 0x8(%rsp)
+               	leaq	0x8(%rsp), %rdi
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	callq	<addr>
-               	movq	-0x8(%rbp), %rcx
+               	movq	0x8(%rsp), %rcx
                	movq	%rcx, %rdx
                	shrq	$0x30, %rdx
                	movq	%rax, %rsi
@@ -123,20 +121,20 @@ Disassembly of section .text:
                	cmpq	%rcx, %rax
                	jae	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

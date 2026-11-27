@@ -3,7 +3,7 @@ vla_element_types.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -58,24 +58,24 @@ Disassembly of section .text:
                	add	x1, x1, #0x1
                	cmp	w1, w21
                	b.lt	<addr>
-               	lsl	x14, x10, #2
-               	add	x25, x14, x14, lsl #1
+               	lsl	x13, x10, #2
+               	add	x25, x13, x13, lsl #1
                	add	x17, x25, #0xf
                	and	x17, x17, #0xfffffffffffffff0
-               	mov	x13, sp
-               	sub	x13, x13, x17
+               	mov	x14, sp
+               	sub	x14, x14, x17
                	lsr	x17, x17, #12
                	cbz	x17, <addr>
                	sub	sp, sp, #0x1, lsl #12   // =0x1000
                	str	xzr, [sp]
                	subs	x17, x17, #0x1
                	b.ne	<addr>
-               	mov	sp, x13
+               	mov	sp, x14
                	mov	x1, #0x0                // =0
                	mov	x0, #0x0                // =0
                	cmp	w0, w10
                	b.ge	<addr>
-               	madd	x2, x1, x14, x13
+               	madd	x2, x1, x13, x14
                	madd	x4, x1, x12, x11
                	ldrsw	x4, [x4, x0, lsl #2]
                	lsl	x4, x4, #1
@@ -204,7 +204,7 @@ Disassembly of section .text:
                	mov	x9, #0x4d               // =77
                	str	w9, [x0, w1, sxtw #2]
                	lsl	x0, x10, #2
-               	add	x15, x11, x0
+               	add	x26, x11, x0
                	mul	x1, x21, x10
                	lsl	x9, x1, #2
                	cmp	x23, x9
@@ -220,9 +220,9 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp], #0x60
                	ret
                	add	x9, x10, x10, lsl #1
-               	sxtw	x26, w9
-               	lsl	x26, x26, #2
-               	cmp	x25, x26
+               	sxtw	x15, w9
+               	lsl	x15, x15, #2
+               	cmp	x25, x15
                	b.ne	<addr>
                	mul	x1, x1, x3
                	lsl	x1, x1, #3
@@ -260,7 +260,7 @@ Disassembly of section .text:
                	ldrsw	x1, [x1, #0xc]
                	cmp	w1, #0x17
                	b.ne	<addr>
-               	add	x1, x13, x14, lsl #1
+               	add	x1, x14, x13, lsl #1
                	ldrsw	x1, [x1, #0x4]
                	cmp	w1, #0x2a
                	b.ne	<addr>
@@ -270,7 +270,7 @@ Disassembly of section .text:
                	ldr	x1, [x1, #0x8]
                	cmp	x1, #0xe7
                	b.ne	<addr>
-               	add	x0, x15, x0
+               	add	x0, x26, x0
                	ldrsw	x0, [x0, #0x8]
                	cmp	w0, #0x16
                	b.eq	<addr>
@@ -350,7 +350,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	cmp	w0, w10
                	b.ge	<addr>
-               	madd	x5, x2, x4, x13
+               	madd	x5, x2, x4, x14
                	ldrsw	x5, [x5, x0, lsl #2]
                	add	x1, x1, x5
                	add	x0, x0, #0x1

@@ -1,29 +1,26 @@
-// Regression for the Win64 tail-call shadow-space bug. The fixed-up
-// emit path is `emit_tail_call` in ssa_emit_x86_64.rs: a tail-call
-// must clear `plan.scratch_bytes` before `marshal_args`, because
-// regular calls do `sub rsp, scratch_bytes` ahead of the marshal but
-// tail calls do not (the callee re-uses the caller's argument area).
-// Without the clear, the marshal's spill-slot loads add a phantom
-// 32-byte shift and pull from past the caller's saved registers.
+// A tail call reads its arguments from spill slots at their frame
+// offsets. A call moves the stack pointer by its argument window,
+// the 32-byte home area on Win64, before marshaling; a tail call
+// allocates no window, since the callee reuses the caller's, so its
+// slot loads take no shift. With the shift the Win64 marshal read 32
+// bytes past each slot and `forward` returned a wrong sum.
 //
-// On Windows x64 (the only target with a non-zero shadow-space
-// requirement under Win64 ABI) the unfixed emit returned garbage
-// from `forward` and the program exited non-zero. Linux x86_64 and
-// the AArch64 lanes never carried a non-zero `scratch_bytes` on the
-// tail path, so the fixture is a no-op assertion there; the value
-// is to lock the Win64 behavior against regression.
+// `sink` stays out of line so the tail call remains, and the
+// arguments stay live across `stir` so they spill whatever order
+// the body takes. Only Win64 has a home area; the other targets
+// run the same shape with no shift to get wrong.
 
 #include <stdio.h>
 
-static int sink(int a, int b, int c, int d) {
+int acc;
+
+__attribute__((noinline)) static void stir(void) { acc ^= 1; }
+
+__attribute__((noinline)) static int sink(int a, int b, int c, int d) {
     return a * 1 + b * 2 + c * 3 + d * 4;
 }
 
 __attribute__((noinline)) static int forward(int seed) {
-    // Sixteen locals force the allocator to spill at least some
-    // candidates into stack slots; the tail call below then has to
-    // source its argument values from those spill slots, exercising
-    // the `materialize_int_shifted` spill-load arm inside marshal_args.
     int v0  = seed + 0;
     int v1  = seed + 1;
     int v2  = seed + 2;
@@ -40,9 +37,8 @@ __attribute__((noinline)) static int forward(int seed) {
     int v13 = seed + 13;
     int v14 = seed + 14;
     int v15 = seed + 15;
+    stir();
 
-    // Keep v0..v14 live up to the call site so the live-range pressure
-    // is real; the allocator cannot fold any of them away.
     int touch = v0 + v1 + v3 + v4 + v6 + v7 + v8 + v9 + v10 + v11
                 + v12 + v14 + v15;
     if (touch == 0) return -1;

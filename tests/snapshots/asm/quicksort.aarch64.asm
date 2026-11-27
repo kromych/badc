@@ -3,7 +3,7 @@ quicksort.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -51,32 +51,32 @@ Disassembly of section .text:
                	add	x29, sp, #0x20
                	mov	x20, x0
                	mov	x21, x2
-               	sxtw	x4, w1
-               	cmp	w4, w21
+               	sxtw	x0, w1
+               	cmp	w0, w21
                	b.ge	<addr>
-               	ldrsw	x2, [x20, w21, sxtw #2]
-               	sub	x3, x4, #0x1
-               	mov	x1, x4
+               	ldrsw	x4, [x20, w21, sxtw #2]
+               	sub	x3, x0, #0x1
+               	mov	x1, x0
                	b	<addr>
                	add	x1, x1, #0x1
                	cmp	w1, w21
                	b.ge	<addr>
-               	ldrsw	x0, [x20, x1, lsl #2]
-               	cmp	w0, w2
+               	ldrsw	x2, [x20, x1, lsl #2]
+               	cmp	w2, w4
                	b.gt	<addr>
                	add	x3, x3, #0x1
                	ldrsw	x5, [x20, x3, lsl #2]
-               	str	w0, [x20, x3, lsl #2]
+               	str	w2, [x20, x3, lsl #2]
                	str	w5, [x20, x1, lsl #2]
                	b	<addr>
                	add	x22, x3, #0x1
-               	ldrsw	x0, [x20, w22, sxtw #2]
-               	ldrsw	x1, [x20, w21, sxtw #2]
-               	str	w1, [x20, w22, sxtw #2]
-               	str	w0, [x20, w21, sxtw #2]
+               	ldrsw	x1, [x20, w22, sxtw #2]
+               	ldrsw	x2, [x20, w21, sxtw #2]
+               	str	w2, [x20, w22, sxtw #2]
+               	str	w1, [x20, w21, sxtw #2]
                	sub	x2, x22, #0x1
+               	mov	x1, x0
                	mov	x0, x20
-               	mov	x1, x4
                	bl	<addr>
                	add	x1, x22, #0x1
                	mov	x0, x20
@@ -94,10 +94,8 @@ Disassembly of section .text:
                	mov	x0, #0x14               // =20
                	bl	<addr>
                	mov	x20, x0
-               	mov	x1, #0x0                // =0
                	mov	x0, #0xc                // =12
                	movk	x0, #0x7, lsl #32
-               	mov	x2, #0x4                // =4
                	str	x0, [x20]
                	mov	x0, #0xf                // =15
                	movk	x0, #0x5, lsl #32
@@ -105,6 +103,8 @@ Disassembly of section .text:
                	mov	x0, #0xa                // =10
                	str	w0, [x20, #0x10]
                	mov	x0, x20
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x4                // =4
                	bl	<addr>
                	ldrsw	x0, [x20]
                	cmp	w0, #0x5

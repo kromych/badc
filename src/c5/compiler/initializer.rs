@@ -436,6 +436,23 @@ impl Compiler {
         }
     }
 
+    /// Whether the static object `idx` being declared, of type `ty`, takes
+    /// the zero region: no initializer follows, and neither `const` (read-only
+    /// pages hold its bytes) nor a named section (which carves its bytes from
+    /// `.data`) keeps it in the image.
+    pub(super) fn takes_zero_region(&self, idx: usize, ty: i64) -> bool {
+        self.lex.tk != Token::Assign
+            && !self.declared_object_is_const(ty)
+            && self.symbols[idx].section_name.is_none()
+    }
+
+    /// Reserve `bytes` of static storage no initializer names, on `align`,
+    /// in the zero region: its bytes stay out of `.data`, which the unit's
+    /// image places them past.
+    pub(super) fn reserve_zero_bytes(&mut self, align: usize, bytes: usize) -> i64 {
+        self.zero_region.reserve(align, bytes)
+    }
+
     /// Reserve `bytes` zeroed bytes in `.data` for a template a block copy
     /// reads into a frame slot. The copy transfers in units up to 8 bytes,
     /// so the template starts on the same boundary.
@@ -524,14 +541,50 @@ impl Compiler {
         Ok(())
     }
 
+    /// Reserve `bytes` of thread-local storage no initializer names, on
+    /// `align`, in the thread-local zero region the template does not hold.
+    pub(super) fn reserve_thread_local_zero_bytes(&mut self, align: usize, bytes: usize) -> i64 {
+        self.tls_align = self.tls_align.max(align);
+        self.tls_zero_region.reserve(align, bytes)
+    }
+
+    /// Move the thread-local zero region past the template, on the block
+    /// alignment, and name its size: the symbols and the identifiers in
+    /// the parsed functions take its objects' final offsets.
+    pub(super) fn place_thread_local_zero_region(&mut self) -> usize {
+        let region = core::mem::take(&mut self.tls_zero_region);
+        if region.len == 0 {
+            return 0;
+        }
+        let len = self.tls_data.len();
+        let align = crate::c5::layout::tls_image_align(self.tls_align).max(region.align);
+        let base = len.next_multiple_of(align) as i64;
+        let place = |v: &mut i64| {
+            if crate::c5::layout::in_zero_region(*v) {
+                *v = *v - crate::c5::layout::ZERO_REGION_BASE + base;
+            }
+        };
+        for s in &mut self.symbols {
+            if s.is_thread_local {
+                place(&mut s.val);
+            }
+        }
+        for f in &mut self.finished_functions {
+            f.ast.remap_tls_offsets(&mut |v| place(v));
+        }
+        base as usize + region.len - len
+    }
+
     /// Order the thread-local template: the objects whose bytes or
     /// relocations initialize them first, as `.tdata`, then the all-zero
     /// ones, which join the `.tbss` zero fill whatever their declaration
     /// order or initializer. An object's extent runs to the next object's
-    /// start and moves to the placement alignment it was reserved on;
-    /// `.tdata` ends on the block alignment, where the relocatable writer
-    /// and the reader both start `.tbss`. A template with a byte or
-    /// relocation ahead of its first object keeps its layout.
+    /// start and moves to the placement alignment it was reserved on.
+    /// `.tdata` holds the whole extent of each initialized object, as the
+    /// link places every unit's `.tdata` ahead of every `.tbss`, and ends
+    /// on the block alignment, where the relocatable writer and the reader
+    /// both start `.tbss`. Every template byte is reserved for an object,
+    /// the first at 0, so none precedes the first object.
     pub(super) fn lay_out_thread_locals(&mut self) {
         let len = self.tls_data.len();
         // Each object's start and the alignment it was reserved on.
@@ -548,6 +601,10 @@ impl Compiler {
         objects.retain(|&v, _| v <= len);
         let starts: Vec<(usize, usize)> = objects.into_iter().collect();
         let Some(&(first, _)) = starts.first() else {
+            debug_assert_eq!(
+                self.tls_init_size, 0,
+                "initialized thread-local bytes, no object"
+            );
             return;
         };
         let mut patched = alloc::vec![false; len];
@@ -561,9 +618,10 @@ impl Compiler {
         }
         let data = &self.tls_data;
         let significant = |i: usize| data[i] != 0 || patched[i];
-        if (0..first).any(significant) {
-            return;
-        }
+        debug_assert!(
+            !(0..first).any(significant),
+            "an initialized thread-local byte ahead of the first object"
+        );
         let align = crate::c5::layout::tls_image_align(self.tls_align);
         // (old start, old end, new start), initialized objects first.
         let mut moves: Vec<(usize, usize, usize)> = Vec::with_capacity(starts.len());
@@ -583,8 +641,8 @@ impl Compiler {
                 let new = image.len().next_multiple_of(object_align.max(1));
                 image.resize(new, 0);
                 image.extend_from_slice(&data[old..end]);
-                if let Some(last) = last {
-                    init_end = new + last - old + 1;
+                if initialized {
+                    init_end = new + end - old;
                 }
                 moves.push((old, end, new));
             }
@@ -987,10 +1045,7 @@ impl Compiler {
         let whole = span.is_some()
             && if braced {
                 if self.accept(',')? && self.lex.tk != '}' {
-                    return Err(self.compile_err(
-                        Code::INVALID_INITIALIZER,
-                        "excess elements after a string initializer",
-                    ));
+                    self.drop_excess_initializers("char array")?;
                 }
                 self.accept('}')?
             } else {
@@ -1033,6 +1088,33 @@ impl Compiler {
             };
             self.warn_at(Code::EXCESS_INITIALIZERS, at, text);
         }
+    }
+
+    /// Report the elements of a braced initializer from the current one to the
+    /// list's `}`, which provide values for no object of the `what` it
+    /// initializes (C17 6.7.9p2), and drop them unevaluated; the cursor is
+    /// left on the `}`.
+    pub(super) fn drop_excess_initializers(&mut self, what: &str) -> Result<(), C5Error> {
+        let text = format!("excess elements in {what} initializer");
+        self.warn_at(Code::EXCESS_INITIALIZERS, self.site(), text);
+        // A string literal's bytes join the data segment as it is lexed.
+        let data = self.data.len();
+        let mut depth = 0usize;
+        loop {
+            let tk = self.lex.tk;
+            if tk == 0 {
+                return Err(self.compile_err(Code::SYNTAX, "`}` expected in initializer"));
+            } else if tk == '}' && depth == 0 {
+                break;
+            } else if tk == '{' || tk == '(' || tk == '[' {
+                depth += 1;
+            } else if tk == '}' || tk == ')' || tk == ']' {
+                depth -= 1;
+            }
+            self.next()?;
+        }
+        self.truncate_data(data);
+        Ok(())
     }
 
     /// The length a string initializer gives an unsized array of `elem_ty`.
@@ -1357,10 +1439,13 @@ impl Compiler {
     /// `inner_dims.len() + 1` subscripts index dimensions, a further
     /// `[` / `.` step belongs to the element and is left unconsumed
     /// with `element_chain` set. The trailing `=` is consumed
-    /// otherwise. `None` when the entry carries no designator.
+    /// otherwise. `None` when the entry carries no designator. Each
+    /// subscript is held to its dimension, the first to `outer` where that
+    /// is known (above 0).
     pub(super) fn take_chained_array_designator(
         &mut self,
         inner_dims: &[i64],
+        outer: i64,
     ) -> Result<Option<ArrayDesignator>, C5Error> {
         if self.lex.tk != Token::Brak {
             return Ok(None);
@@ -1370,6 +1455,13 @@ impl Compiler {
         let mut depth: usize = 0;
         loop {
             let sub = self.take_designator_subscript(DesignatorRule::Ordered)?;
+            let extent = match depth {
+                0 => outer,
+                d => inner_dims[d - 1],
+            };
+            if extent > 0 {
+                self.check_designator_extent(sub.lo, sub.hi, extent)?;
+            }
             let scale: i64 = inner_dims.iter().skip(depth).product::<i64>().max(1);
             self.expect_designator_close()?;
             base += sub.lo * scale;
@@ -1484,7 +1576,13 @@ impl Compiler {
             // A `.field` step names a member the scalar element does not
             // have.
             let mut entry_designated = false;
-            if let Some(d) = self.take_chained_array_designator(&inner_dims)? {
+            let row: i64 = inner_dims.iter().product::<i64>().max(1);
+            let outer = if target_size > 0 {
+                target_size / row
+            } else {
+                0
+            };
+            if let Some(d) = self.take_chained_array_designator(&inner_dims, outer)? {
                 if d.element_chain {
                     return Err(
                         self.compile_err(Code::SYNTAX, "`=` expected after `[N]` designator")
@@ -1498,6 +1596,10 @@ impl Compiler {
                     None
                 };
                 desig_depth = d.depth;
+            }
+            if !entry_designated && target_size > 0 && cursor >= target_size as usize {
+                self.drop_excess_initializers("array")?;
+                break;
             }
             // The level the entry that follows belongs to: one deeper per
             // extra chained subscript for a designated entry. C99 6.7.8p17
@@ -2522,7 +2624,7 @@ impl Compiler {
         {
             let cp = self.init_checkpoint();
             let data_before = self.data.len();
-            self.restore_lex(snap);
+            self.restore_lex(snap.clone());
             let whole = self.parse_const_expr_cond_val();
             let ends = self.lex.tk == ','
                 || self.lex.tk == '}'
@@ -3170,7 +3272,7 @@ impl Compiler {
         let value = self.lex.snapshot();
         for k in 0..=d.extra {
             if k > 0 {
-                self.restore_lex(value);
+                self.restore_lex(value.clone());
             }
             // A pointer final member stores the address of a compound literal,
             // so keep the cast for the scalar leaf; a value member drops it.
@@ -3245,7 +3347,7 @@ impl Compiler {
         let value = self.lex.snapshot();
         for k in 0..=d.extra {
             if k > 0 {
-                self.restore_lex(value);
+                self.restore_lex(value.clone());
             }
             let off = (d.offset + k * d.stride) as usize;
             // A pointer final member stores the address of a compound literal,
@@ -3646,9 +3748,10 @@ impl Compiler {
                 continue;
             }
             if cursor >= total {
-                return Err(
-                    self.compile_err(Code::INVALID_INITIALIZER, "too many initializers for array")
-                );
+                if braced {
+                    self.drop_excess_initializers("array")?;
+                }
+                break;
             }
             // The rank a positional entry fills: the outermost level whose
             // row boundary the cursor sits on; mid-row it names a deeper
@@ -4208,13 +4311,10 @@ impl Compiler {
             // so a positional initializer after the list's first item
             // names nothing; a designated one overrides (p19).
             if !designated && items > 0 && self.structs[struct_id].is_union {
-                return Err(self.compile_err(
-                    Code::INVALID_INITIALIZER,
-                    format!(
-                        "too many initializers for union {}",
-                        self.structs[struct_id].name
-                    ),
-                ));
+                if braced {
+                    self.drop_excess_initializers("union")?;
+                }
+                break;
             }
             items += 1;
             let field_idx = if self.lex.tk == Token::Dot {
@@ -4273,13 +4373,10 @@ impl Compiler {
                 } else {
                     "struct"
                 };
-                return Err(self.compile_err(
-                    Code::INVALID_INITIALIZER,
-                    format!(
-                        "too many initializers for {kind} {}",
-                        self.structs[struct_id].name
-                    ),
-                ));
+                if braced {
+                    self.drop_excess_initializers(kind)?;
+                }
+                break;
             }
             let field = self.structs[struct_id].fields[field_idx].clone();
             let field_base = (var_offset as usize) + field.offset;
@@ -4640,10 +4737,7 @@ impl Compiler {
             if braced_scalar {
                 self.accept(',')?;
                 if self.lex.tk != '}' {
-                    return Err(self.compile_err(
-                        Code::INVALID_INITIALIZER,
-                        "scalar initializer wrapped in `{ ... }` must hold a single value",
-                    ));
+                    self.drop_excess_initializers("scalar")?;
                 }
                 self.next()?; // consume `}`
             }
@@ -4764,10 +4858,7 @@ impl Compiler {
         if braced_scalar {
             self.accept(',')?;
             if self.lex.tk != '}' {
-                return Err(self.compile_err(
-                    Code::INVALID_INITIALIZER,
-                    "scalar initializer wrapped in `{ ... }` must hold a single value",
-                ));
+                self.drop_excess_initializers("scalar")?;
             }
             self.next()?; // consume `}`
         }
@@ -4854,10 +4945,7 @@ impl Compiler {
         if braced_scalar && r.is_ok() {
             self.accept(',')?;
             if self.lex.tk != '}' {
-                return Err(self.compile_err(
-                    Code::INVALID_INITIALIZER,
-                    "scalar initializer wrapped in `{ ... }` must hold a single value",
-                ));
+                self.drop_excess_initializers("scalar")?;
             }
             self.next()?; // consume `}`
         }
@@ -5088,10 +5176,7 @@ impl Compiler {
             // A trailing `,` before `}` is allowed in C99.
             self.accept(',')?;
             if self.lex.tk != '}' {
-                return Err(self.compile_err(
-                    Code::INVALID_INITIALIZER,
-                    "scalar initializer wrapped in `{ ... }` must hold a single value",
-                ));
+                self.drop_excess_initializers("scalar")?;
             }
             self.next()?; // consume `}`
         }

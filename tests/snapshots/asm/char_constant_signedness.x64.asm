@@ -3,7 +3,7 @@ char_constant_signedness.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -47,47 +47,45 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0x80, -0x8(%rbp)
-               	movl	-0x8(%rbp), %ecx
-               	movsbq	%cl, %rcx
-               	cmpl	$-0x80, %ecx
+               	subq	$0x18, %rsp
+               	movl	$0x80, 0x8(%rsp)
+               	movl	0x8(%rsp), %eax
+               	movsbq	%al, %rax
+               	cmpl	$-0x80, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movl	$0xff, -0x8(%rbp)
-               	movl	-0x8(%rbp), %ecx
-               	movsbq	%cl, %rcx
-               	cmpl	$-0x1, %ecx
+               	movl	$0xff, 0x8(%rsp)
+               	movl	0x8(%rsp), %eax
+               	movsbq	%al, %rax
+               	cmpl	$-0x1, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movl	$0x80, -0x8(%rbp)
-               	leaq	-0x10(%rbp), %rdi
-               	movl	-0x8(%rbp), %eax
-               	movb	%al, -0x10(%rbp)
+               	movl	$0x80, 0x8(%rsp)
+               	movl	0x8(%rsp), %eax
+               	movb	%al, (%rsp)
                	movq	<rip>, %rax # <addr>
+               	leaq	(%rsp), %rdi
                	callq	*%rax
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movl	$0xff, -0x8(%rbp)
-               	leaq	-0x10(%rbp), %rdi
-               	movl	-0x8(%rbp), %eax
-               	movb	%al, -0x10(%rbp)
+               	movl	$0xff, 0x8(%rsp)
+               	movl	0x8(%rsp), %eax
+               	movb	%al, (%rsp)
                	movq	<rip>, %rax # <addr>
+               	leaq	(%rsp), %rdi
                	callq	*%rax
                	cmpl	$0x2, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

@@ -48,7 +48,7 @@ impl ParseError {
     }
 }
 
-/// The highest `-g<level>` / `-ggdb<level>` badc takes, which is gcc's.
+/// The highest `-g<level>` / `-ggdb<level>` badc takes.
 /// Every level above 0 selects the same debug information.
 const DEBUG_LEVEL_MAX: u32 = 3;
 
@@ -91,6 +91,8 @@ pub(crate) struct FrontEnd {
     /// language; any other input's comes from its file name.
     pub(crate) languages: std::collections::BTreeMap<String, SourceKind>,
     pub(crate) gnu: bool,
+    /// `-fgnuc-version=`: the GNU C version `gnu` claims.
+    pub(crate) gnuc_version: Option<[u32; 3]>,
     pub(crate) msvc: bool,
     pub(crate) gnu_dialect: bool,
     /// `-std=`'s edition.
@@ -103,6 +105,8 @@ pub(crate) struct FrontEnd {
     pub(crate) gnu89_inline: Option<bool>,
     pub(crate) strict_flex_arrays: u8,
     pub(crate) short_wchar: bool,
+    /// The macOS deployment target, `xxxx.yy.zz` in nibbles.
+    pub(crate) macos_min: Option<u32>,
     /// The AArch64 extensions `-march=` / `-mcpu=` select, `None` for the
     /// target's default.
     pub(crate) aarch64_features: Option<badc::Aarch64Features>,
@@ -112,6 +116,8 @@ pub(crate) struct FrontEnd {
     /// `-fwrapv` / `-fno-strict-overflow` against `-fno-wrapv` /
     /// `-fstrict-overflow`, the last one given winning.
     pub(crate) wrapv: bool,
+    /// `-fsanitize=` and its `-trap` and `-recover` companions.
+    pub(crate) sanitize: badc::Sanitize,
     pub(crate) auto_var_init: badc::AutoVarInit,
     pub(crate) fp_contract: badc::FpContract,
     /// `-fvisibility=`; `None` is default.
@@ -126,6 +132,9 @@ pub(crate) struct FrontEnd {
     pub(crate) dump_macros: bool,
     pub(crate) no_builtin: bool,
     pub(crate) no_builtin_fns: Vec<String>,
+    /// gcc's `-finline-stringops[=fn,...]`, the last ones given applied in
+    /// order; `-fno-inline-stringops[=fn,...]` takes functions out.
+    pub(crate) inline_stringops: badc::InlineStringOps,
     pub(crate) lax_vectors: Option<badc::LaxVectors>,
     /// `-ffreestanding`, the compile flag; `--freestanding` is the link's.
     pub(crate) freestanding: bool,
@@ -164,6 +173,10 @@ pub(crate) struct Codegen {
     /// `-Wframe-larger-than=<n>`: the bound a function's stack frame is
     /// reported against; `None` reports nothing.
     pub(crate) frame_larger_than: Option<u64>,
+    /// `-f[no-]asynchronous-unwind-tables` and `-f[no-]unwind-tables`: an
+    /// object carries `.eh_frame` when either is on.
+    pub(crate) async_unwind_tables: bool,
+    pub(crate) unwind_tables: bool,
     pub(crate) dump_ssa: bool,
     pub(crate) verify_ssa: bool,
     pub(crate) no_fp_regs: bool,
@@ -173,10 +186,17 @@ pub(crate) struct Codegen {
     pub(crate) conserve_stack: bool,
     pub(crate) zero_init_in_bss: bool,
     pub(crate) sibling_calls: bool,
+    /// `-fomit-frame-pointer` / `-fno-omit-frame-pointer`, `None` for the
+    /// default ([`badc::NativeOptions::omit_frame_pointer`]).
+    pub(crate) omit_frame_pointer: Option<bool>,
+    /// `-mred-zone` / `-mno-red-zone` ([`badc::NativeOptions::red_zone`]).
+    pub(crate) red_zone: bool,
+    pub(crate) no_plt: bool,
+    pub(crate) unroll_loops: bool,
     pub(crate) keep_local_labels: bool,
     pub(crate) min_function_alignment: u32,
     pub(crate) align_functions: u32,
-    pub(crate) branches_within_32b: bool,
+    pub(crate) branches_within_32b: Option<bool>,
     pub(crate) patchable_function_entry: badc::PatchableEntry,
     pub(crate) profiling: badc::Profiling,
     pub(crate) fpic: bool,
@@ -206,6 +226,8 @@ impl Default for Codegen {
             emit_debug_info: false,
             inline_cap: 64,
             frame_larger_than: None,
+            async_unwind_tables: true,
+            unwind_tables: false,
             dump_ssa: false,
             verify_ssa: false,
             no_fp_regs: false,
@@ -215,10 +237,14 @@ impl Default for Codegen {
             conserve_stack: false,
             zero_init_in_bss: true,
             sibling_calls: true,
+            omit_frame_pointer: None,
+            red_zone: true,
+            no_plt: false,
+            unroll_loops: true,
             keep_local_labels: false,
             min_function_alignment: 1,
             align_functions: 1,
-            branches_within_32b: false,
+            branches_within_32b: None,
             patchable_function_entry: badc::PatchableEntry::NONE,
             profiling: badc::Profiling::OFF,
             fpic: false,
@@ -254,8 +280,8 @@ pub(crate) struct Link {
     pub(crate) markers: Vec<(usize, LinkMarker)>,
     /// `--out-implib`: where a PE DLL link writes its import library.
     pub(crate) out_implib: Option<PathBuf>,
-    /// `--stack reserve[,commit]`, link.exe's `/STACK`.
-    pub(crate) stack: Option<(u64, u64)>,
+    /// `--stack` and `--force-integrity`, see [`badc::PeImageOptions`].
+    pub(crate) pe: badc::PeImageOptions,
     /// `--delayload`, link.exe's `/DELAYLOAD`: DLLs loaded on first call.
     pub(crate) delay_load: Vec<String>,
     /// ld64's `-bundle` and `-flat_namespace`.
@@ -283,7 +309,7 @@ pub(crate) struct Link {
     /// `-Bsymbolic`: a shared library binds its references to its own
     /// definitions.
     pub(crate) symbolic: bool,
-    /// `-Bsymbolic-functions`; the later of it and `-Bsymbolic` holds, as in GNU ld.
+    /// `-Bsymbolic-functions`; the later of it and `-Bsymbolic` holds.
     pub(crate) symbolic_functions: bool,
     /// `--emit-relocs`: keep the resolved relocations in the image.
     pub(crate) emit_relocs: bool,
@@ -305,6 +331,12 @@ pub(crate) struct Link {
     pub(crate) pie: Option<bool>,
     /// ld64's `-undefined <treatment>`, the last one given.
     pub(crate) undefined: Option<Undefined>,
+    /// gcc's and GNU ld's `-u <symbol>`: names the link treats as
+    /// referenced, so an archive member defining one is pulled.
+    pub(crate) required: Vec<String>,
+    /// `-fcrash-report` / `-fno-crash-report`, the last one given; `None`
+    /// leaves it to whether a `-fsanitize` check runs.
+    pub(crate) crash_report: Option<bool>,
 }
 
 /// How a Mach-O link treats a reference no input defines, as ld64's
@@ -339,8 +371,8 @@ impl Link {
         })
     }
 
-    /// Group bounds pair up without nesting, as GNU ld requires of the
-    /// command line; a group a linker script opens may sit inside one.
+    /// Group bounds on the command line pair up without nesting; a group a
+    /// linker script opens may sit inside one.
     fn check_groups(&self) -> Result<(), ParseError> {
         let mut open = false;
         for (_, m) in &self.markers {
@@ -369,7 +401,7 @@ impl Default for Link {
         Self {
             markers: Vec::new(),
             out_implib: None,
-            stack: None,
+            pe: badc::PeImageOptions::default(),
             mach_o: badc::MachOImageOptions::default(),
             bundle_loader: None,
             library_paths: Vec::new(),
@@ -397,6 +429,8 @@ impl Default for Link {
             print_map: false,
             pie: None,
             undefined: None,
+            required: Vec::new(),
+            crash_report: None,
         }
     }
 }
@@ -407,6 +441,9 @@ pub(crate) struct Cli {
     pub(crate) target: Target,
     pub(crate) output_path: Option<PathBuf>,
     pub(crate) compile_only: bool,
+    /// `-S`: each unit compiled as for `-c`, its assembly listing written
+    /// in place of the object.
+    pub(crate) assembly: bool,
     /// `-fsyntax-only`: each unit through the front end, nothing written.
     pub(crate) syntax_only: bool,
     /// `--dump-records`: each unit through the front end, its tagged
@@ -490,7 +527,7 @@ impl Cli {
             exec_form: self.exec_form(),
             strip_debug: link.strip_debug,
             discard_temporaries: link.discard_locals,
-            pe_stack: link.stack,
+            pe: link.pe,
             mach_o: link.mach_o,
             elf: badc::ElfImageOptions {
                 build_id: link.build_id,
@@ -503,9 +540,8 @@ impl Cli {
         }
     }
 
-    /// Whether the image exports each default-visibility definition, as GNU ld
-    /// and ld64 do for an ELF or Mach-O shared library; link.exe exports a
-    /// DLL's `dllexport` ones.
+    /// Whether the image exports each default-visibility definition: an ELF
+    /// or Mach-O shared library does, a DLL only its `dllexport` ones.
     pub(crate) fn exports_definitions(&self) -> bool {
         self.mode == Mode::SharedLibrary
             && matches!(
@@ -534,8 +570,8 @@ impl Cli {
     /// [`badc::ZKeyword::in_hosted_link`]). The image without -T keeps
     /// every local symbol of its inputs (`--discard-none`).
     /// Whether a reference no input defines becomes a load-time import
-    /// rather than a link error: in an ELF shared library unless `-z defs`,
-    /// as GNU ld's default; in a Mach-O image under an `-undefined` other
+    /// rather than a link error: in an ELF shared library unless `-z defs`;
+    /// in a Mach-O image under an `-undefined` other
     /// than ld64's default `error`; never in a PE image.
     pub(crate) fn allows_undefined(&self) -> bool {
         match self.target.binary_format() {
@@ -663,6 +699,7 @@ struct Parser {
     link: Link,
     output_path: Option<PathBuf>,
     compile_only: bool,
+    assembly: bool,
     syntax_only: bool,
     dump_records: bool,
     dump_prototypes: bool,
@@ -694,6 +731,11 @@ struct Parser {
     /// `-arch <name>`, checked against the target once it is known.
     arch: Option<String>,
     mcpu: Option<String>,
+    /// `-v`, and the linker's `-v`, which reports its own version.
+    verbose: bool,
+    verbose_ld: bool,
+    /// Options only the AArch64 targets take, checked once the target is known.
+    aarch64_args: Vec<String>,
     /// `-march=`, `-mtune=` and the x86 `-m<ext>` / `-mno-<ext>` options
     /// in command-line order, resolved once the target is known.
     isa_args: Vec<String>,
@@ -706,6 +748,9 @@ struct Parser {
     mcount_modifiers: Vec<String>,
     /// The last `-mbranch-protection=`, an AArch64 option.
     branch_protection_flag: Option<String>,
+    /// The last `-mmacosx-version-min=` or `-mmacos-version-min=`, a macOS
+    /// option.
+    macos_min_flag: Option<String>,
     /// The x86-64 mitigation flags seen, checked against the target.
     x86_mitigation_flags: Vec<String>,
     ssp_guard_kind: Option<&'static str>,
@@ -725,6 +770,19 @@ struct Parser {
 type Args<'a> = dyn Iterator<Item = String> + 'a;
 
 /// The operand of an option that takes a separate argument.
+/// A `major[.minor[.patch]]` version, the omitted parts zero.
+fn gnuc_version(spec: &str) -> Option<[u32; 3]> {
+    let mut out = [0u32; 3];
+    let parts: Vec<&str> = spec.split('.').collect();
+    if parts.len() > 3 {
+        return None;
+    }
+    for (slot, part) in out.iter_mut().zip(&parts) {
+        *slot = part.parse().ok()?;
+    }
+    Some(out)
+}
+
 fn operand(iter: &mut Args<'_>, missing: &str) -> Result<String, ParseError> {
     iter.next().ok_or_else(|| ParseError::diag(missing))
 }
@@ -831,10 +889,12 @@ fn march(cpu: &str) -> Result<badc::X86Features, ParseError> {
         .ok_or_else(|| ParseError::diag(format!("badc: error: unknown CPU `{cpu}` (-march=)")))
 }
 
+/// Whether the host CPU has the x86 extension of option name `ext`; `None`
+/// for a name the map does not know.
 #[cfg(target_arch = "x86_64")]
-fn native_x86_features() -> Option<badc::X86Features> {
+fn host_x86_ext(ext: &str) -> Option<bool> {
     use std::arch::is_x86_feature_detected as has;
-    Some(badc::X86Features::for_host(|ext| match ext {
+    Some(match ext {
         "sse3" => has!("sse3"),
         "ssse3" => has!("ssse3"),
         "sse4.1" => has!("sse4.1"),
@@ -856,7 +916,25 @@ fn native_x86_features() -> Option<badc::X86Features> {
         "lzcnt" => has!("lzcnt"),
         "adx" => has!("adx"),
         "xsave" => has!("xsave"),
-        _ => false,
+        "cx16" => has!("cmpxchg16b"),
+        "sahf" => host_has_lahf_sahf(),
+        _ => return None,
+    })
+}
+
+/// LAHF and SAHF in 64-bit mode: CPUID leaf 0x80000001, ECX bit 0.
+#[cfg(target_arch = "x86_64")]
+#[allow(unused_unsafe)]
+fn host_has_lahf_sahf() -> bool {
+    use std::arch::x86_64::__cpuid;
+    let max = unsafe { __cpuid(0x8000_0000) }.eax;
+    max >= 0x8000_0001 && unsafe { __cpuid(0x8000_0001) }.ecx & 1 != 0
+}
+
+#[cfg(target_arch = "x86_64")]
+fn native_x86_features() -> Option<badc::X86Features> {
+    Some(badc::X86Features::for_host(|ext| {
+        host_x86_ext(ext).unwrap_or(false)
     }))
 }
 
@@ -938,15 +1016,6 @@ impl Parser {
     /// in: no family's prefix match covers a spelling a later family
     /// takes exactly.
     fn option(&mut self, arg: &str, iter: &mut Args<'_>) -> Result<bool, ParseError> {
-        // gcc's `-S` stops after compilation and writes assembly, which badc
-        // does not produce; ld's `-S` is `-Wl,-S` or `--strip-debug` here.
-        if arg == "-S" {
-            return Err(ParseError::diag(
-                "badc: error: `-S` (assembly output) is not implemented: badc writes \
-                 objects (`-c`) and images; the linker's strip-debug is `-Wl,-S` or \
-                 `--strip-debug`",
-            ));
-        }
         Ok(self.mode_option(arg, iter)?
             || self.preprocess_option(arg, iter)?
             || self.assembler_option(arg, iter)?
@@ -1068,8 +1137,8 @@ impl Parser {
             "-w" => self.front.diag.inhibit_warnings(true),
             "-Werror" => self.front.diag.warnings_as_errors(true),
             "-Wno-error" => self.front.diag.warnings_as_errors(false),
-            // gcc 14 in C: the diagnostics that are errors by default for
-            // C99 constraint violations become warnings.
+            // The diagnostics that are errors by default for C99 constraint
+            // violations become warnings.
             "-fpermissive" => self.front.diag.permissive(true),
             "-fno-permissive" => self.front.diag.permissive(false),
             s if s.starts_with("-Werror=") => self.diag_error(&s["-Werror=".len()..], s, true)?,
@@ -1299,6 +1368,12 @@ impl Parser {
             // `-c` emits one relocatable object per source instead of
             // linking through to a native binary.
             "-c" | "--compile-only" => self.compile_only = true,
+            // `-S` compiles as `-c` does and writes the object's assembly
+            // listing; ld's `-S` is `-Wl,-S` or `--strip-debug` here.
+            "-S" => {
+                self.compile_only = true;
+                self.assembly = true;
+            }
             "-fsyntax-only" => self.syntax_only = true,
             "--dump-records" => self.dump_records = true,
             "--dump-prototypes" => {
@@ -1312,7 +1387,10 @@ impl Parser {
             // Silence informational output; errors and warnings stay.
             "-q" | "--quiet" => self.quiet = true,
             "-h" | "--help" => self.print = Some(USAGE),
-            "-v" | "--version" => self.print = Some(badc::BUILD_INFO),
+            // gcc's `-v` reports the version and goes on with the build;
+            // with no input it is all the run does. `--version` is.
+            "-v" => self.verbose = true,
+            "--version" => self.print = Some(badc::BUILD_INFO),
             "-o" => {
                 self.output_path = Some(PathBuf::from(operand(
                     iter,
@@ -1513,6 +1591,18 @@ impl Parser {
             // feature badc lacks on `__GNUC__` keeps compiling unless
             // this is requested.
             "--gnu" => front.gnu = true,
+            // clang's `-fgnuc-version=`: the GNU C version the identity
+            // macros claim, which turns the identity on; `0` turns it off.
+            s if s.starts_with("-fgnuc-version=") => {
+                let spec = &s["-fgnuc-version=".len()..];
+                let version = gnuc_version(spec).ok_or_else(|| {
+                    ParseError::diag(format!(
+                        "badc: error: `{spec}` is not a version (-fgnuc-version=major[.minor[.patch]])"
+                    ))
+                })?;
+                front.gnu = version != [0, 0, 0];
+                front.gnuc_version = front.gnu.then_some(version);
+            }
             // Trigraph replacement (C17 5.2.1.1); otherwise an ISO dialect
             // before C23, which removed them, turns it on.
             "-trigraphs" | "-ftrigraphs" => front.trigraphs = Some(true),
@@ -1523,6 +1613,10 @@ impl Parser {
             // `-fgnu89-inline`: make the GNU89 inline linkage model the
             // unit default in place of C99's.
             "-fgnu89-inline" => front.gnu89_inline = Some(true),
+            // In C, the option enables the unnamed members of a tagged or
+            // typedef'd structure or union type, which badc takes with or
+            // without it.
+            "-fms-extensions" => {}
             "-fno-gnu89-inline" => front.gnu89_inline = Some(false),
             // gcc `-fstrict-flex-arrays[=N]`: which trailing array members
             // `__builtin_object_size` treats as unbounded. The bare form
@@ -1544,6 +1638,20 @@ impl Parser {
             // on every target. It changes the layout of every object
             // holding a `wchar_t` or a wide literal, so it reaches the
             // front end rather than being dropped as a no-op.
+            // The deployment target: the predefined version macros and the
+            // minimum `LC_BUILD_VERSION` records follow it.
+            s if s.starts_with("-mmacosx-version-min=")
+                || s.starts_with("-mmacos-version-min=") =>
+            {
+                let version = &s[s.find('=').unwrap_or(0) + 1..];
+                let Some(v) = super::paths::nibble_version(version) else {
+                    return Err(ParseError::diag(format!(
+                        "badc: error: invalid version number in '{s}'"
+                    )));
+                };
+                front.macos_min = Some(v);
+                self.macos_min_flag = Some(s.to_string());
+            }
             "-fshort-wchar" => front.short_wchar = true,
             "-fno-short-wchar" => front.short_wchar = false,
             // `-ftrivial-auto-var-init=`: the front end supplies the
@@ -1585,11 +1693,17 @@ impl Parser {
             // rather than being dropped.
             "-fsigned-char" | "-fno-unsigned-char" => front.char_signed = Some(true),
             "-funsigned-char" | "-fno-signed-char" => front.char_signed = Some(false),
-            // The signed-overflow pair, the last one given winning: gcc >= 8
-            // spells `-fno-strict-overflow` as `-fwrapv -fwrapv-pointer`, and
+            // The signed-overflow pair, the last one given winning:
+            // `-fno-strict-overflow` means `-fwrapv -fwrapv-pointer`, and
             // badc derives nothing from pointer overflow (C99 6.5p5).
             "-fwrapv" | "-fno-strict-overflow" => front.wrapv = true,
             "-fno-wrapv" | "-fstrict-overflow" => front.wrapv = false,
+            s if s.starts_with("-fsanitize")
+                || s.starts_with("-fno-sanitize")
+                || s == "-fsanitize-undefined-trap-on-error" =>
+            {
+                sanitize_option(&mut front.sanitize, s)?
+            }
             s if s.starts_with("-fvisibility=") => {
                 let spec = &s["-fvisibility=".len()..];
                 front.default_visibility =
@@ -1635,6 +1749,26 @@ impl Parser {
                     .no_builtin_fns
                     .push(s["-fno-builtin-".len()..].to_string());
             }
+            s if s.starts_with("-finline-stringops") || s.starts_with("-fno-inline-stringops") => {
+                let (flag, list) = s.split_once('=').unwrap_or((s, ""));
+                let mut named = badc::InlineStringOps::default();
+                for name in list.split(',').filter(|n| !n.is_empty()) {
+                    named = named.with(badc::InlineStringOps::named(name).ok_or_else(|| {
+                        ParseError::diag(format!(
+                            "badc: error: `{s}`: `{name}` is none of {}",
+                            badc::InlineStringOps::NAMES.join(", ")
+                        ))
+                    })?);
+                }
+                if list.is_empty() {
+                    named = badc::InlineStringOps::ALL;
+                }
+                front.inline_stringops = match flag {
+                    "-finline-stringops" => front.inline_stringops.with(named),
+                    "-fno-inline-stringops" => front.inline_stringops.without(named),
+                    _ => return Err(ParseError::plain(format!("badc: unknown option `{s}`"))),
+                };
+            }
             // gcc's `-flax-vector-conversions` lets any two vector types of
             // one size convert; clang's `=integer` only two integer ones.
             "-flax-vector-conversions" | "-flax-vector-conversions=all" => {
@@ -1659,7 +1793,7 @@ impl Parser {
             // `-std=<dialect>`: the edition, which sets `__STDC_VERSION__`
             // and the C23 keywords, and the GNU dialect, which suppresses
             // `__STRICT_ANSI__`; the GNU extensions stay available either
-            // way. A name gcc does not take is rejected, since a caller
+            // way. Any other name is rejected, since a caller
             // that misspells the dialect gets another one.
             s if s.starts_with("-std=") => {
                 let dialect = &s["-std=".len()..];
@@ -1713,9 +1847,8 @@ impl Parser {
                 self.target_spec = Some(s["--target=".len()..].to_string());
             }
             // The x86 code-mode selectors. `-m16` and `-m32` both put
-            // the object out as ELFCLASS32 / EM_386, matching the
-            // `as --32` gcc hands its assembler for either; the encoding
-            // mode itself comes from `.code16` / `.code32` in the source.
+            // the object out as ELFCLASS32 / EM_386; the encoding mode
+            // itself comes from `.code16` / `.code32` in the source.
             // `-m31` (s390) and `-mx32` name ABIs badc has no encoder or
             // container for.
             "-m64" => {}
@@ -1729,7 +1862,10 @@ impl Parser {
             // register file: `-mno-sse` on x86_64 and `-mgeneral-regs-only`
             // on aarch64. Freestanding environments run with that register
             // file trapped, so any access faults.
-            "-mno-sse" | "-mgeneral-regs-only" => code.no_fp_regs = true,
+            "-mno-sse" | "-mgeneral-regs-only" => {
+                code.no_fp_regs = true;
+                self.isa_args.push(arg.to_string());
+            }
             // Keep a register out of the allocator.
             s if s.starts_with("-ffixed-") => {
                 let name = &s["-ffixed-".len()..];
@@ -1750,10 +1886,10 @@ impl Parser {
             // an alignment fault instead of being fixed up.
             "-mstrict-align" => code.strict_align = true,
             "-mno-strict-align" => code.strict_align = false,
-            // GNU as / clang: no jump or fused compare-and-jump crosses or
-            // ends on a 32-byte boundary.
-            "-mbranches-within-32B-boundaries" => code.branches_within_32b = true,
-            "-mno-branches-within-32B-boundaries" => code.branches_within_32b = false,
+            // No jump or fused compare-and-jump crosses or ends on a
+            // 32-byte boundary.
+            "-mbranches-within-32B-boundaries" => code.branches_within_32b = Some(true),
+            "-mno-branches-within-32B-boundaries" => code.branches_within_32b = Some(false),
             // The x86 baseline, which every x86-64 unit already targets.
             "-mmmx" | "-msse" | "-msse2" => self.isa_args.push(arg.to_string()),
             s if s.starts_with("-march=") || s.starts_with("-mtune=") => {
@@ -1808,6 +1944,21 @@ impl Parser {
             // on the chain.
             "-foptimize-sibling-calls" => code.sibling_calls = true,
             "-fno-optimize-sibling-calls" => code.sibling_calls = false,
+            "-fomit-frame-pointer" => code.omit_frame_pointer = Some(true),
+            "-fno-omit-frame-pointer" => code.omit_frame_pointer = Some(false),
+            "-mred-zone" => code.red_zone = true,
+            "-mno-red-zone" => code.red_zone = false,
+            "-fplt" => code.no_plt = false,
+            "-fno-plt" => code.no_plt = true,
+            "-fasynchronous-unwind-tables" => code.async_unwind_tables = true,
+            "-fno-asynchronous-unwind-tables" => code.async_unwind_tables = false,
+            "-funwind-tables" => code.unwind_tables = true,
+            "-fno-unwind-tables" => code.unwind_tables = false,
+            "-funroll-loops" => code.unroll_loops = true,
+            "-fno-unroll-loops" => code.unroll_loops = false,
+            // badc emits every atomic operation inline and never calls the
+            // `__aarch64_*` helpers `-moutline-atomics` selects.
+            "-mno-outline-atomics" => self.aarch64_args.push(arg.to_string()),
             // gcc `-fmin-function-alignment=N`: every function entry
             // lands on a multiple of N, never skipping a large gap as
             // `-falign-functions` may.
@@ -1824,9 +1975,9 @@ impl Parser {
                 };
             }
             // `-falign-functions=N[:M[:N2[:M2]]]`: function entries on the
-            // power of two at or above N. gcc may leave an entry unaligned
-            // when that pads past M - 1 bytes; badc always aligns, which a
-            // reader of the entry addresses (patch sites aligned for
+            // power of two at or above N. The option lets an entry stay
+            // unaligned when that pads past M - 1 bytes; badc always aligns,
+            // which a reader of the entry addresses (patch sites aligned for
             // `-fpatchable-function-entry`) relies on.
             s if s.starts_with("-falign-functions=") => {
                 let spec = &s["-falign-functions=".len()..];
@@ -1918,6 +2069,19 @@ impl Parser {
         }
         let code = &mut self.codegen;
         match arg {
+            // clang's MinGW `-mguard=`: `cf` checks the image's indirect calls
+            // and links the guard tables, `cf-nochecks` only links them.
+            "-mguard=cf" | "-mguard=cf-nochecks" | "-mguard=none" => {
+                code.hardening.guard_cf = arg == "-mguard=cf";
+                self.link.pe.guard_cf = arg != "-mguard=none";
+            }
+            s if s.starts_with("-mguard=") => {
+                return Err(ParseError::diag(format!(
+                    "badc: error: unsupported argument `{}` to `-mguard=` \
+                     (supported: cf, cf-nochecks, none)",
+                    &s["-mguard=".len()..]
+                )));
+            }
             // Speculative-execution mitigations. An argument that is not
             // implemented is rejected rather than ignored: a hardening
             // flag that compiles but does nothing leaves the caller
@@ -1992,8 +2156,8 @@ impl Parser {
                     }
                 };
             }
-            // A `+`-joined AArch64 feature list. `standard` is gcc's
-            // alias for `bti+pac-ret`; `leaf` modifies the `pac-ret` before
+            // A `+`-joined AArch64 feature list. `standard` stands for
+            // `bti+pac-ret`; `leaf` modifies the `pac-ret` before
             // it. The `b-key` modifier and `gcs` are rejected: an
             // accepted-but-ignored spelling would build an object that
             // claims a protection it does not carry.
@@ -2026,12 +2190,14 @@ impl Parser {
                 }
             }
             // `-fstack-protector*`: which functions carry a stack
-            // canary. The per-function rule is gcc's, applied to the
-            // declared automatic objects.
+            // canary, judged by their declared automatic objects.
             "-fno-stack-protector" => code.stack_protect.mode = badc::StackProtector::Off,
             "-fstack-protector" => code.stack_protect.mode = badc::StackProtector::Basic,
             "-fstack-protector-strong" => code.stack_protect.mode = badc::StackProtector::Strong,
             "-fstack-protector-all" => code.stack_protect.mode = badc::StackProtector::All,
+            // Every stack allocation past a page probes each page it enters,
+            // so the protection is in place whatever the option says.
+            "-fstack-clash-protection" | "-fno-stack-clash-protection" => {}
             // gcc `--param <name>=<value>`, in both the separate-argument
             // and joined spellings. `ssp-buffer-size` is the only name
             // with an effect here; an unrecognized one is rejected rather
@@ -2150,14 +2316,15 @@ impl Parser {
     /// thing.
     fn linker_only_option(&mut self, arg: &str) -> bool {
         match arg {
-            // `-O<n>` sizes the hash tables of a shared object GNU ld
-            // writes; it changes no symbol binding.
+            // `-O<n>` sizes a shared object's hash tables; it changes no
+            // symbol binding.
             s if s.len() > 2
                 && s.starts_with("-O")
                 && s[2..].bytes().all(|b| b.is_ascii_digit()) => {}
             // The link records a `-l` shared library only when it
             // satisfies a reference, which is what `--as-needed` asks for.
             "--as-needed" => {}
+            "-v" => self.verbose_ld = true,
             "-(" | "-)" => self
                 .link
                 .markers
@@ -2178,6 +2345,20 @@ impl Parser {
         let link = &mut self.link;
         match arg {
             "-flat_namespace" => link.mach_o.flat_namespace = true,
+            "-headerpad_max_install_names" => link.mach_o.header_pad_max_install_names = true,
+            // ld64 reads the size as hexadecimal, with or without `0x`.
+            "-headerpad" => {
+                let size = operand(iter, "badc: error: -headerpad requires a size")?;
+                let digits = size.strip_prefix("0x").unwrap_or(&size);
+                link.mach_o.header_pad = u64::from_str_radix(digits, 16).map_err(|_| {
+                    ParseError::diag(format!(
+                        "badc: error: -headerpad size `{size}` is not hexadecimal"
+                    ))
+                })?;
+            }
+            // ld64 searches each directory for the dylib, then the archive,
+            // before the next one; `find_library` keeps that order.
+            "-search_paths_first" => {}
             "-bundle_loader" => {
                 let exe = operand(iter, "badc: error: -bundle_loader requires an executable")?;
                 link.bundle_loader = Some(PathBuf::from(exe));
@@ -2292,11 +2473,17 @@ impl Parser {
             // GNU ld's PE `--stack reserve[,commit]`, link.exe's `/STACK`.
             "--stack" => {
                 let value = operand(iter, "badc: error: --stack requires a size")?;
-                link.stack = Some(parse_stack(&value)?);
+                link.pe.stack = Some(parse_stack(&value)?);
             }
             s if s.starts_with("--stack=") => {
-                link.stack = Some(parse_stack(&s["--stack=".len()..])?)
+                link.pe.stack = Some(parse_stack(&s["--stack=".len()..])?)
             }
+            // GNU ld's PE `--force-integrity`, link.exe's `/INTEGRITYCHECK`.
+            "--force-integrity" => link.pe.force_integrity = true,
+            // lld's MinGW `--guard-cf`, link.exe's `/guard:cf`: the image lists
+            // its valid indirect-call targets for Control Flow Guard.
+            "--guard-cf" => link.pe.guard_cf = true,
+            "--no-guard-cf" => link.pe.guard_cf = false,
             // lld's MinGW `--delayload`, link.exe's `/DELAYLOAD`.
             "--delayload" | "-delayload" => link.delay_load.push(operand(
                 iter,
@@ -2308,7 +2495,7 @@ impl Parser {
             "--export-all" => link.export_all = true,
             "--export-data" => link.export_data = true,
             "--strip-debug" | "-S" => link.strip_debug = true,
-            // The last of `-X` and `--discard-none` holds, as in GNU ld.
+            // The last of `-X` and `--discard-none` holds.
             "-X" | "--discard-locals" => (link.discard_locals, link.discard_none) = (true, false),
             "--discard-none" => (link.discard_locals, link.discard_none) = (false, true),
             "--warn-execstack" => link.warn_execstack = Some(true),
@@ -2353,6 +2540,19 @@ impl Parser {
                 if self.target_spec.is_none() {
                     self.target_spec = Some(spec.to_string());
                 }
+            }
+            "-fcrash-report" => link.crash_report = Some(true),
+            "-fno-crash-report" => link.crash_report = Some(false),
+            "-u" | "--undefined" => {
+                link.required
+                    .push(operand(iter, "badc: error: -u requires a symbol")?);
+            }
+            s if s.starts_with("--undefined=") => {
+                link.required.push(s["--undefined=".len()..].to_string());
+            }
+            // gcc's preprocessor `-undef` is not `-u ndef`.
+            s if s.starts_with("-u") && s.len() > 2 && s != "-undef" => {
+                link.required.push(s[2..].to_string())
             }
             "-m" => {
                 let emu = operand(iter, "badc: error: -m requires an emulation name")?;
@@ -2484,7 +2684,28 @@ impl Parser {
         if let Some(text) = self.catalog_query(mode)? {
             return Ok(Parsed::Diagnostics(text));
         }
-        let diagnostics = self.report_option_requests(mode)?;
+        // `-v` with nothing to build reports the version.
+        if (self.verbose || self.verbose_ld) && self.positional.len() <= 1 {
+            return Ok(Parsed::Print(badc::BUILD_INFO));
+        }
+        // A hosted executable badc links reports a fatal signal it takes
+        // under -fcrash-report, on by default while a -fsanitize check runs:
+        // the runtime's handler joins the link.
+        let crash_report = (self.link.crash_report).unwrap_or(self.front.sanitize.enabled != 0);
+        if crash_report
+            && mode == Mode::NativeExecutable
+            && !self.compile_only
+            && !self.freestanding
+        {
+            self.link.required.push(String::from("__badc_crash_report"));
+        }
+        let mut diagnostics = self.report_option_requests(mode)?;
+        if self.verbose {
+            diagnostics.insert(0, String::from(badc::BUILD_INFO));
+        }
+        if self.verbose_ld {
+            diagnostics.push(badc::ld_identity());
+        }
         let target = Target::parse(self.target_spec.as_deref()).ok_or_else(|| {
             let names = Target::ALL
                 .iter()
@@ -2509,6 +2730,7 @@ impl Parser {
                 target.id_str()
             )));
         }
+        self.front.diag.msvc_levels(self.front.msvc);
         self.check_jit_target(mode, target)?;
         if self.program_args_from.is_some() && !matches!(mode, Mode::Jit | Mode::Interp) {
             return Err(ParseError::diag(
@@ -2517,6 +2739,11 @@ impl Parser {
             ));
         }
         self.check_profiling_and_protection(mode, target)?;
+        // Control Flow Guard's bitmap covers code in 16-byte blocks, and a
+        // listed target off a block's start opens the whole block.
+        if self.link.pe.guard_cf && target.is_windows() {
+            self.codegen.min_function_alignment = self.codegen.min_function_alignment.max(16);
+        }
         self.resolve_stack_guard(target)?;
         self.apply_aarch64_isa(target)?;
         self.apply_x86_isa(target)?;
@@ -2563,16 +2790,6 @@ impl Parser {
                 }
             )));
         }
-        // The map reads the output's ELF section table. TODO(#2002)
-        if (self.link.map_path.is_some() || self.link.print_map)
-            && target.binary_format() != badc::BinaryFormat::Elf
-        {
-            return Err(ParseError::plain(format!(
-                "badc: -Map / --print-map: the link map is produced for ELF output only, \
-                 and the {} output is not ELF",
-                target.id_str()
-            )));
-        }
         // A `-c` object under `-m16` / `-m32` is ELFCLASS32; the flag's
         // remaining restrictions need the classified inputs and are
         // checked once those are known.
@@ -2597,6 +2814,7 @@ impl Parser {
             target,
             output_path: self.output_path,
             compile_only: self.compile_only,
+            assembly: self.assembly,
             syntax_only: self.syntax_only,
             dump_records: self.dump_records,
             dump_prototypes: self.dump_prototypes,
@@ -2702,6 +2920,14 @@ impl Parser {
         // A build asking for return-address signing or landing pads must
         // not get an image without them, so an x86-64 target refuses the
         // request.
+        if let Some(flag) = &self.macos_min_flag
+            && target != Target::MacOSAarch64
+        {
+            return Err(ParseError::diag(format!(
+                "badc: error: `{flag}` is a macOS option; {} has no deployment target",
+                target.id_str()
+            )));
+        }
         if let Some(flag) = &self.branch_protection_flag
             && !target.is_aarch64()
         {
@@ -2726,11 +2952,32 @@ impl Parser {
                 target.id_str()
             )));
         }
+        if h.guard_cf && !target.is_windows() {
+            return Err(ParseError::diag(format!(
+                "badc: error: `-mguard=cf` checks indirect calls through the Windows \
+                 loader's Control Flow Guard; {} has none",
+                target.id_str()
+            )));
+        }
+        if h.guard_cf && h.indirect_branch != badc::IndirectBranch::Keep {
+            return Err(ParseError::diag(
+                "badc: error: `-mguard=cf` and `-mindirect-branch=` both decide how an \
+                 indirect call transfers"
+                    .to_string(),
+            ));
+        }
+        if h.guard_cf && matches!(mode, Mode::Jit | Mode::Interp) {
+            return Err(ParseError::diag(
+                "badc: error: `-mguard=cf` checks calls against the table of an image \
+                 badc links; `--jit` and `--interp` link none"
+                    .to_string(),
+            ));
+        }
         if let Some(flag) = self.mcount_modifiers.first()
             && target.is_aarch64()
         {
             return Err(ParseError::diag(format!(
-                "badc: error: `{flag}` is an x86-64 option; gcc's aarch64 has none"
+                "badc: error: `{flag}` is an x86-64 option; the AArch64 targets take none"
             )));
         }
         if self.codegen.patchable_function_entry != badc::PatchableEntry::NONE && !is_elf_target {
@@ -2762,7 +3009,7 @@ impl Parser {
     /// wrong place would leave the image claiming a protection it does
     /// not have.
     fn resolve_stack_guard(&mut self, target: Target) -> Result<(), ParseError> {
-        // gcc's x86 default for `-mstack-protector-guard=` is `tls`, so a
+        // The x86 default for `-mstack-protector-guard=` is `tls`, so a
         // register, an offset or a symbol named alone selects it, as when
         // a build names only the register and the symbol.
         let kind = self.ssp_guard_kind.or_else(|| {
@@ -2862,12 +3109,20 @@ impl Parser {
                     "badc: error: `-mcpu=` names an AArch64 CPU; the x86-64 targets take none",
                 ));
             }
+            if let Some(arg) = self.aarch64_args.first() {
+                return Err(ParseError::diag(format!(
+                    "badc: error: `{arg}` is an AArch64 option; the x86-64 targets take none"
+                )));
+            }
             return Ok(());
         }
         let mut march = None;
         for arg in &self.isa_args {
             if let Some(spec) = arg.strip_prefix("-march=") {
                 march = Some(spec.to_string());
+            } else if matches!(&arg[..], "-mno-sse" | "-mgeneral-regs-only") {
+                // Each keeps the code off the FP / SIMD registers, set as it
+                // was read; neither names an extension here.
             } else if let Some(cpu) = arg.strip_prefix("-mtune=") {
                 if !(badc::Aarch64Features::is_cpu(cpu) || cpu == "native") {
                     return Err(ParseError::diag(format!(
@@ -2938,12 +3193,16 @@ impl Parser {
     /// [`badc::X86Features`] is refused when enabled. x86-64 code assumes
     /// x86-64-v3, so a CPU without it is refused, and so is `-mno-<ext>`
     /// of an extension of it the code generator emits, unless `-mno-sse`
-    /// keeps the code off the vector registers it uses.
+    /// keeps the code off the vector registers it uses. `-mno-sse` and
+    /// `-mgeneral-regs-only` withdraw the extensions that need SSE; `-msse`,
+    /// `-msse2` and an extension that needs SSE bring the registers back, in
+    /// command-line order.
     fn apply_x86_isa(&mut self, target: Target) -> Result<(), ParseError> {
         if self.isa_args.is_empty() || !target.is_x86_64() {
             return Ok(());
         }
         let mut features = badc::X86Features::NONE;
+        let mut no_fp = false;
         for arg in self.isa_args.iter().rev() {
             if let Some(cpu) = arg.strip_prefix("-march=") {
                 features = march(cpu)?;
@@ -2956,8 +3215,17 @@ impl Parser {
                 break;
             }
         }
+        let cpu = features;
         for arg in &self.isa_args {
-            if let Some(cpu) = arg.strip_prefix("-mtune=") {
+            if matches!(&arg[..], "-mno-sse" | "-mgeneral-regs-only") {
+                no_fp = true;
+                features = features.without_sse(cpu);
+                if arg == "-mgeneral-regs-only" {
+                    features = features.with_mmx(false);
+                }
+            } else if matches!(&arg[..], "-msse" | "-msse2") {
+                no_fp = false;
+            } else if let Some(cpu) = arg.strip_prefix("-mtune=") {
                 if !(badc::X86Features::is_cpu(cpu)
                     || matches!(cpu, "generic" | "intel" | "native"))
                 {
@@ -2967,7 +3235,7 @@ impl Parser {
                 }
             } else if let Some(ext) = arg.strip_prefix("-mno-") {
                 match badc::X86Features::baseline_ext(ext) {
-                    Some(true) if self.codegen.no_fp_regs => {}
+                    Some(true) if no_fp => {}
                     Some(_) => {
                         return Err(ParseError::diag(format!(
                             "badc: error: `{arg}`: x86-64 code assumes x86-64-v3, which \
@@ -2977,8 +3245,9 @@ impl Parser {
                     None => {}
                 }
                 features.disable(ext);
-            } else if arg.starts_with("-march=") || matches!(&arg[..], "-mmmx" | "-msse" | "-msse2")
-            {
+            } else if arg == "-mmmx" {
+                features = features.with_mmx(true);
+            } else if arg.starts_with("-march=") {
             } else if let Some(ext) = arg.strip_prefix("-m") {
                 if matches!(badc::X86Features::classify(ext), badc::X86ExtOption::Absent) {
                     return Err(ParseError::diag(format!(
@@ -2987,9 +3256,11 @@ impl Parser {
                     )));
                 }
                 features.enable(ext);
+                no_fp &= !badc::X86Features::needs_sse(ext);
             }
         }
         self.codegen.x86_features = features;
+        self.codegen.no_fp_regs = no_fp;
         Ok(())
     }
 
@@ -3102,14 +3373,17 @@ impl FrontEnd {
     pub(crate) fn compile_options(&self, label: &str) -> badc::CompileOptions {
         badc::CompileOptions::default()
             .with_gnu(self.gnu)
+            .with_gnuc_version(self.gnuc_version)
             .with_msvc(self.msvc)
             .with_gnu89_inline(self.gnu89_inline.unwrap_or(self.std.gnu89_inline()))
             .with_strict_flex_arrays(self.strict_flex_arrays)
             .with_short_wchar(self.short_wchar)
+            .with_macos_min(self.macos_min)
             .with_aarch64_features(self.aarch64_features)
             .with_prototypes(self.prototypes)
             .with_char_signed(self.char_signed)
             .with_wrapv(self.wrapv)
+            .with_sanitize(self.sanitize)
             .with_fp_contract(self.fp_contract)
             .with_default_visibility(self.default_visibility)
             .with_auto_var_init(self.auto_var_init)
@@ -3118,6 +3392,7 @@ impl FrontEnd {
             .with_compiler_include_dir(self.compiler_include_dir.clone())
             .with_no_builtin(self.no_builtin)
             .with_no_builtin_fns(self.no_builtin_fns.clone())
+            .with_inline_stringops(self.inline_stringops)
             .with_lax_vectors(self.lax_vectors)
             .with_freestanding(self.freestanding)
             .with_gnu_dialect(self.gnu_dialect)
@@ -3172,6 +3447,10 @@ impl Codegen {
         opts.conserve_stack = self.conserve_stack;
         opts.zero_init_in_bss = self.zero_init_in_bss;
         opts.sibling_calls = self.sibling_calls;
+        opts.omit_frame_pointer = self.omit_frame_pointer;
+        opts.red_zone = self.red_zone;
+        opts.no_plt = self.no_plt;
+        opts.unroll_loops = self.unroll_loops;
         opts.min_function_alignment = self.min_function_alignment.max(self.align_functions);
         opts.branches_within_32b = self.branches_within_32b;
         opts.patchable_function_entry = self.patchable_function_entry;
@@ -3185,6 +3464,7 @@ impl Codegen {
         opts.fixed_regs = self.fixed_regs;
         opts.elf_class = self.elf_class;
         opts.keep_local_labels = self.keep_local_labels;
+        opts.unwind_tables = self.async_unwind_tables || self.unwind_tables;
         if optimize {
             opts = opts.with_optimize();
         }
@@ -3216,6 +3496,62 @@ fn parse_stack(value: &str) -> Result<(u64, u64), ParseError> {
             "badc: error: --stack takes reserve[,commit] in bytes, got `{value}`"
         ))),
     }
+}
+
+/// The checks and groups a `-fsanitize=` list names, and where `all` may
+/// stand, for a refusal to show.
+fn sanitize_choices() -> String {
+    let checks: Vec<&str> = (badc::SanitizerCheck::ALL.iter())
+        .map(|c| c.name())
+        .collect();
+    format!(
+        "\n  checks: {}\n  groups: {}\n  `all` (every check): -fno-sanitize=, -fsanitize-trap=, \
+         -fno-sanitize-trap=, -fsanitize-recover=, -fno-sanitize-recover=",
+        checks.join(", "),
+        badc::SanitizerCheck::GROUPS.join(", ")
+    )
+}
+
+/// Apply a `-fsanitize` family option to `s`, a list of checks and groups.
+/// Enabling a name that is neither is refused; disabling one is accepted,
+/// as it is never on. `all`, as an empty list, names every check where
+/// checks are turned off, trapped or recovered; it enables nothing, so
+/// `-fsanitize=all` is refused.
+fn sanitize_option(s: &mut badc::Sanitize, arg: &str) -> Result<(), ParseError> {
+    let (flag, list) = arg.split_once('=').unwrap_or((arg, ""));
+    let every = (badc::SanitizerCheck::ALL.iter()).fold(0, |m, c| m | c.bit());
+    let mut bits = 0;
+    for name in list.split(',').filter(|n| !n.is_empty()) {
+        match badc::SanitizerCheck::named(name) {
+            Some(b) => bits |= b,
+            None if name == "all" && flag == "-fsanitize" => {
+                return Err(ParseError::plain(format!(
+                    "badc: error: -fsanitize=all: `all` enables no check; name the checks or \
+                     a group{}",
+                    sanitize_choices()
+                )));
+            }
+            None if name == "all" => bits |= every,
+            None if flag.starts_with("-fno-") => {}
+            None => {
+                return Err(ParseError::plain(format!(
+                    "badc: error: {flag}={name}: `{name}` is neither a check nor a group{}",
+                    sanitize_choices()
+                )));
+            }
+        }
+    }
+    let some = if list.is_empty() { every } else { bits };
+    match flag {
+        "-fsanitize" if !list.is_empty() => s.enabled |= bits,
+        "-fno-sanitize" => s.enabled &= !some,
+        "-fsanitize-trap" | "-fsanitize-undefined-trap-on-error" => s.trap |= some,
+        "-fno-sanitize-trap" => s.trap &= !some,
+        "-fsanitize-recover" => s.recover |= some,
+        "-fno-sanitize-recover" => s.recover &= !some,
+        _ => return Err(ParseError::plain(format!("badc: unknown option `{arg}`"))),
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -3303,12 +3639,12 @@ mod tests {
         );
     }
 
-    /// The driver's `-S` asks for assembly, which badc does not write, and
-    /// is refused; ld's `-S` is reached through `-Wl,` or `--strip-debug`.
+    /// The driver's `-S` compiles as `-c` does and writes the listing; ld's
+    /// `-S` is reached through `-Wl,` or `--strip-debug`.
     #[test]
-    fn driver_dash_s_is_refused_and_ld_dash_s_strips_debug() {
-        let (message, _) = reject(&["-S", "a.c"]);
-        assert!(message.contains("`-S` (assembly output)"), "{message}");
+    fn driver_dash_s_lists_and_ld_dash_s_strips_debug() {
+        let cli = parse(&["-S", "a.c"]);
+        assert!(cli.assembly && cli.compile_only && !cli.link.strip_debug);
         assert!(parse(&["-Wl,-S", "a.o"]).link.strip_debug);
         assert!(parse(&["--strip-debug", "a.o"]).link.strip_debug);
     }
@@ -3859,6 +4195,32 @@ mod tests {
         }
     }
 
+    /// cl compiles each row gcc 14's `-fpermissive` lowers with a warning, or
+    /// none, so `--msvc` reports them as warnings; `-fno-permissive` and
+    /// `-Werror=<sel>` make them errors again, before or after it.
+    #[test]
+    fn msvc_takes_cls_levels_for_the_permissive_rows() {
+        use badc::diag::Level::{Error, Warning};
+        const WIN: &str = "--target=windows-x64";
+        for row in [
+            "int-conversion",
+            "implicit-int",
+            "return-mismatch",
+            "incompatible-pointer-types",
+        ] {
+            let error = format!("-Werror={row}");
+            assert_eq!(level(&[WIN, "a.c"], row), Error, "{row}");
+            assert_eq!(level(&[WIN, "--msvc", "a.c"], row), Warning, "{row}");
+            for args in [
+                [WIN, "--msvc", "-fno-permissive", "a.c"],
+                [WIN, "-fno-permissive", "--msvc", "a.c"],
+                [WIN, "--msvc", error.as_str(), "a.c"],
+            ] {
+                assert_eq!(level(&args, row), Error, "{args:?}");
+            }
+        }
+    }
+
     #[test]
     fn an_unknown_warning_selector_is_refused() {
         // A name no compiler defines is refused, except in `-Wno-`, which
@@ -4158,6 +4520,23 @@ mod tests {
         assert!(pic.fpic && !pic.fpie);
     }
 
+    /// The last of `-fomit-frame-pointer` and `-fno-omit-frame-pointer`
+    /// wins, as does the last of `-mred-zone` and `-mno-red-zone`.
+    #[test]
+    fn the_frame_pointer_and_red_zone_options_reach_the_emitter() {
+        let x64 = "--target=linux-x64";
+        let c = parse(&[x64, "-fomit-frame-pointer", "-mno-red-zone", "a.c"]).codegen;
+        assert_eq!((c.omit_frame_pointer, c.red_zone), (Some(true), false));
+        let args = [
+            x64,
+            "-fomit-frame-pointer",
+            "-fno-omit-frame-pointer",
+            "-mno-red-zone",
+        ];
+        let c = parse(&[&args[..], &["-mred-zone", "a.c"]].concat()).codegen;
+        assert_eq!((c.omit_frame_pointer, c.red_zone), (Some(false), true));
+    }
+
     #[test]
     fn f_family_reaches_the_front_end_and_the_emitter() {
         let cli = parse(&[
@@ -4181,6 +4560,8 @@ mod tests {
         assert!(cli.codegen.conserve_stack);
         assert!(!cli.codegen.zero_init_in_bss);
         assert!(!cli.codegen.sibling_calls);
+        assert_eq!(cli.codegen.omit_frame_pointer, None);
+        assert!(cli.codegen.red_zone);
         assert_eq!(cli.front.char_signed, Some(true));
         assert!(cli.front.short_wchar);
         assert_eq!(cli.front.strict_flex_arrays, 2);
@@ -4242,6 +4623,39 @@ mod tests {
     /// The x86 extension options combine in order: the last `-march=` is
     /// the base, each `-m<ext>` / `-mno-<ext>` applies on top in order,
     /// and `-mno-` drops the extensions implying the one named.
+    /// `-mno-sse`, `-msse`, `-msse2` and `-mgeneral-regs-only` apply in order:
+    /// the last decides whether the code may use the SSE
+    /// registers, `-mno-sse` withdraws the extensions that need them but the
+    /// CPU's own POPCNT, an extension that needs them brings them back, and
+    /// `-mgeneral-regs-only` withdraws MMX until `-mmmx`.
+    #[test]
+    fn sse_options_apply_in_order_as_gccs() {
+        let parsed = |args: &[&str]| {
+            let mut all = vec![X64];
+            all.extend_from_slice(args);
+            all.extend_from_slice(&["-c", "a.c"]);
+            let cli = parse(&all);
+            (cli.codegen.no_fp_regs, cli.codegen.x86_features)
+        };
+        let macros = |f: badc::X86Features| f.macros().collect::<Vec<_>>();
+        assert!(!parsed(&["-mno-sse", "-msse2"]).0);
+        assert!(!parsed(&["-mgeneral-regs-only", "-msse"]).0);
+        assert!(parsed(&["-msse2", "-mno-sse"]).0);
+        // XSAVE, which `-mavx2` brought, needs no SSE register and stays.
+        let (off, f) = parsed(&["-mavx2", "-mno-sse"]);
+        assert!(off && macros(f) == ["__XSAVE__"], "{f:?}");
+        let (off, f) = parsed(&["-march=haswell", "-mno-sse"]);
+        assert!(
+            off && !f.avx() && macros(f).contains(&"__POPCNT__"),
+            "{f:?}"
+        );
+        let (off, f) = parsed(&["-mno-sse", "-mavx2"]);
+        assert!(!off && f.avx2());
+        assert!(!parsed(&["-mgeneral-regs-only"]).1.mmx());
+        assert!(parsed(&["-mgeneral-regs-only", "-mmmx"]).1.mmx());
+        assert!(parsed(&["-mno-sse"]).1.mmx());
+    }
+
     #[test]
     fn x86_extension_options_combine_as_gccs() {
         let features = |args: &[&str]| {
@@ -4468,6 +4882,35 @@ mod tests {
     }
 
     #[test]
+    fn the_macos_deployment_target_is_a_version_on_macos() {
+        let mac = "--target=macos-aarch64";
+        for flag in ["-mmacosx-version-min=12.3.1", "-mmacos-version-min=12.3.1"] {
+            assert_eq!(
+                parse(&[mac, flag, "-c", "a.c"]).front.macos_min,
+                Some(0x000c_0301)
+            );
+            assert_eq!(
+                reject(&[X64, flag, "-c", "a.c"]).0,
+                format!(
+                    "badc: error: `{flag}` is a macOS option; linux-x64 has no deployment target"
+                )
+            );
+        }
+        assert_eq!(
+            reject(&[mac, "-mmacosx-version-min=12.x", "-c", "a.c"]).0,
+            "badc: error: invalid version number in '-mmacosx-version-min=12.x'"
+        );
+    }
+
+    #[test]
+    fn stack_clash_protection_is_accepted_in_both_senses() {
+        for flag in ["-fstack-clash-protection", "-fno-stack-clash-protection"] {
+            parse(&[X64, flag, "-c", "a.c"]);
+            parse(&["--target=linux-aarch64", flag, "-c", "a.c"]);
+        }
+    }
+
+    #[test]
     fn stack_protector_needs_a_compiled_output_and_a_reachable_guard() {
         let cli = parse(&[
             X64,
@@ -4550,6 +4993,61 @@ mod tests {
         assert_eq!(parse(&["--shared", "a.c"]).mode, Mode::SharedLibrary);
         assert_eq!(parse(&["-shared", "a.c"]).mode, Mode::SharedLibrary);
         assert_eq!(parse(&["a.c"]).mode, Mode::NativeExecutable);
+    }
+
+    /// `-fno-plt` and `-fno-unroll-loops` reach the codegen options, the
+    /// last of a pair winning; `-fms-extensions` is accepted;
+    /// `-mno-outline-atomics` is an AArch64 option.
+    #[test]
+    fn plt_unroll_ms_extensions_and_outline_atomics_options() {
+        let a64 = "--target=linux-aarch64";
+        let cli = parse(&[
+            X64,
+            "-fno-plt",
+            "-fno-unroll-loops",
+            "-fms-extensions",
+            "a.c",
+        ]);
+        assert!(cli.codegen.no_plt && !cli.codegen.unroll_loops);
+        let cli = parse(&[
+            X64,
+            "-fno-plt",
+            "-fplt",
+            "-fno-unroll-loops",
+            "-funroll-loops",
+            "a.c",
+        ]);
+        assert!(!cli.codegen.no_plt && cli.codegen.unroll_loops);
+        parse(&[a64, "-mno-outline-atomics", "a.c"]);
+        assert!(
+            reject(&[X64, "-mno-outline-atomics", "a.c"])
+                .0
+                .contains("AArch64 option")
+        );
+    }
+
+    /// The ld64 options CMake's Darwin platform passes on every link:
+    /// `-search_paths_first` names the search order the link keeps, and
+    /// the header pads size the free space after the load commands.
+    #[test]
+    fn ld64_header_pad_and_search_order_options_parse() {
+        let mac = "--target=macos-aarch64";
+        let cli = parse(&[
+            mac,
+            "-Wl,-search_paths_first",
+            "-Wl,-headerpad_max_install_names",
+            "a.c",
+        ]);
+        assert!(cli.link.mach_o.header_pad_max_install_names);
+        let cli = parse(&[mac, "-Wl,-headerpad,0x2000", "a.c"]);
+        assert_eq!(cli.link.mach_o.header_pad, 0x2000);
+        let cli = parse(&[mac, "-Xlinker", "-headerpad", "-Xlinker", "100", "a.c"]);
+        assert_eq!(cli.link.mach_o.header_pad, 0x100);
+        assert!(
+            reject(&[mac, "-Wl,-headerpad,1k", "a.c"])
+                .0
+                .contains("not hexadecimal")
+        );
     }
 
     /// `-Wl,` and `-Xlinker` hand their arguments to the link options
@@ -4755,17 +5253,6 @@ mod tests {
         );
     }
 
-    /// The map is refused for a non-ELF output before anything is linked,
-    /// so a failed request leaves no image behind.
-    #[test]
-    fn link_map_for_a_non_elf_output_is_refused_before_the_link() {
-        for target in ["windows-x64", "macos-aarch64"] {
-            let (text, code) = reject(&[&format!("--target={target}"), "-Map=x.map", "a.c"]);
-            assert!(text.contains("ELF output only"), "{target}: {text}");
-            assert_eq!(code, 1);
-        }
-    }
-
     #[test]
     fn at_most_one_mode_flag_applies() {
         assert_eq!(
@@ -4783,11 +5270,55 @@ mod tests {
                 other => panic!("{flag}: expected the usage, got {}", outcome(&other)),
             }
         }
-        for flag in ["-v", "--version"] {
-            match parse_args(argv(&[flag, "--no-such-option"])) {
+        match parse_args(argv(&["--version", "--no-such-option"])) {
+            Ok(Parsed::Print(text)) => assert_eq!(text, badc::BUILD_INFO),
+            other => panic!(
+                "--version: expected the build info, got {}",
+                outcome(&other)
+            ),
+        }
+    }
+
+    /// gcc's `-v`: alone it reports the version; with inputs the build
+    /// goes on and reports it first. The linker's `-v` reports the
+    /// linker's own version line.
+    #[test]
+    fn v_reports_the_version_and_the_build_goes_on() {
+        for args in [&["-v"][..], &["-Wl,-v"][..]] {
+            match parse_args(argv(args)) {
                 Ok(Parsed::Print(text)) => assert_eq!(text, badc::BUILD_INFO),
-                other => panic!("{flag}: expected the build info, got {}", outcome(&other)),
+                other => panic!("{args:?}: expected the build info, got {}", outcome(&other)),
             }
+        }
+        let cli = parse(&["-v", "-Wl,-v", "-c", "a.c"]);
+        assert_eq!(
+            cli.diagnostics.first().map(String::as_str),
+            Some(badc::BUILD_INFO)
+        );
+        assert_eq!(cli.diagnostics.last(), Some(&badc::ld_identity()));
+        assert!(
+            reject(&["-v", "--no-such-option", "a.c"])
+                .0
+                .contains("unknown option")
+        );
+    }
+
+    /// clang's `-fgnuc-version=`: the claimed GNU C version, turning the
+    /// identity on; `0` turns it off; the last of it and `--gnu` wins.
+    #[test]
+    fn gnuc_version_sets_the_claimed_version() {
+        let front = parse(&["-fgnuc-version=4.7", "a.c"]).front;
+        assert!(front.gnu && front.gnuc_version == Some([4, 7, 0]));
+        let front = parse(&["--gnu", "-fgnuc-version=0", "a.c"]).front;
+        assert!(!front.gnu);
+        let front = parse(&["-fgnuc-version=0", "--gnu", "a.c"]).front;
+        assert!(front.gnu && front.gnuc_version.is_none());
+        for bad in ["4.x", "1.2.3.4", ""] {
+            let arg = format!("-fgnuc-version={bad}");
+            assert!(
+                reject(&[&arg, "a.c"]).0.contains("is not a version"),
+                "{bad}"
+            );
         }
     }
 
@@ -5211,5 +5742,81 @@ mod tests {
         ] {
             assert!(USAGE.contains(opt), "--help omits `{}`", opt.trim());
         }
+    }
+
+    /// `all` names every check where checks are turned off, trapped or
+    /// recovered, `bounds-strict` included. It turns no check on, so
+    /// `-fsanitize=all` is an error that lists the checks and groups. A bare
+    /// `-fsanitize-trap` is `-fsanitize-trap=all`.
+    #[test]
+    fn sanitize_all_names_every_check_and_enables_none() {
+        let every = (badc::SanitizerCheck::ALL.iter()).fold(0, |m, c| m | c.bit());
+        let strict = badc::SanitizerCheck::named("bounds-strict").unwrap();
+        let (message, _) = reject(&["-fsanitize=all", "a.c"]);
+        assert!(
+            message.starts_with("badc: error: -fsanitize=all"),
+            "{message}"
+        );
+        for name in [
+            "bounds-strict",
+            "returns-nonnull-attribute",
+            "undefined",
+            "integer",
+        ] {
+            assert!(message.contains(name), "{name}: {message}");
+        }
+        let off = parse(&["-fsanitize=bounds-strict", "-fno-sanitize=all", "a.c"]);
+        assert_eq!(off.front.sanitize.enabled, 0);
+        for trap in [
+            "-fsanitize-trap=all",
+            "-fsanitize-trap",
+            "-fsanitize-undefined-trap-on-error",
+        ] {
+            let cli = parse(&["-fsanitize=undefined,bounds-strict", trap, "a.c"]);
+            assert_eq!(cli.front.sanitize.trap & every, every, "{trap}");
+        }
+        let abort = parse(&[
+            "-fsanitize=bounds-strict",
+            "-fno-sanitize-recover=all",
+            "a.c",
+        ]);
+        assert_eq!(abort.front.sanitize.recover & strict, 0);
+    }
+
+    /// `-march=native` reads each extension of the x86-64-v3 baseline from
+    /// the host; one the map does not know reads as absent and the option
+    /// fails on every CPU.
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn the_host_map_reads_every_baseline_extension() {
+        for name in badc::X86Features::baseline_names() {
+            assert!(host_x86_ext(name).is_some(), "{name}");
+        }
+    }
+
+    /// gcc's `-finline-stringops[=fn,...]`: bare, every function; a list,
+    /// those; `-fno-inline-stringops[=fn,...]` takes them out, in order. A
+    /// name outside the four is refused.
+    #[test]
+    fn inline_stringops_takes_gcc_lists() {
+        use badc::InlineStringOps as S;
+        let named = |n| S::named(n).unwrap();
+        let ops = |args: &[&str]| parse(args).front.inline_stringops;
+        assert_eq!(ops(&["-finline-stringops", "a.c"]), S::ALL);
+        assert_eq!(ops(&["-finline-stringops=memset", "a.c"]), named("memset"));
+        assert_eq!(
+            ops(&[
+                "-finline-stringops=memset,memcpy",
+                "-fno-inline-stringops=memset",
+                "a.c"
+            ]),
+            named("memcpy")
+        );
+        assert_eq!(
+            ops(&["-finline-stringops", "-fno-inline-stringops", "a.c"]),
+            S::default()
+        );
+        let (message, _) = reject(&["-finline-stringops=strlen", "a.c"]);
+        assert!(message.contains("strlen"), "{message}");
     }
 }

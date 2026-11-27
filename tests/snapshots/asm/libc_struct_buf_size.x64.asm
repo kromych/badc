@@ -3,7 +3,7 @@ libc_struct_buf_size.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,11 +26,9 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x90, %rsp
+               	subq	$0x98, %rsp
                	leaq	<rip>, %rdi
-               	leaq	-0x90(%rbp), %rsi
+               	leaq	(%rsp), %rsi
                	callq	<addr>
                	movq	%rax, %rsi
                	testl	%esi, %esi
@@ -39,8 +37,8 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x98, %rsp
                	retq
                	movl	$0x2a, %eax
-               	leave
+               	addq	$0x98, %rsp
                	retq

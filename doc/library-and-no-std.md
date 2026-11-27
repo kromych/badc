@@ -15,13 +15,20 @@ with `CompileOptions`. From a `Program`:
 
 * `emit_native` and `emit_native_with_options` return the image as bytes;
 * `jit_run` and `jit_run_with_options` run it in-process on the host;
+* `jit_load` maps it into the process and runs its constructors without
+  running `main`; the `JitModule` it returns gives the address of each
+  function and object the program defines with external linkage
+  (`symbol`, `symbols`) and its machine code (`code`), and dropping it runs
+  the program's destructors and the `atexit` handlers registered on the
+  dropping thread, as `dlclose` does. A program without `main` is compiled
+  with `CompileOptions::with_no_entry_point(true)`;
 * `Vm::new(program).run()` runs it in the interpreter, and
   `with_pointer_tracking`, `with_trace`, `with_args`, and
   `with_sve_vector_bits` (128 bits by default) configure the run.
 
 `NativeOptions::new().with_optimize()` runs the SSA optimizer during
-`emit_native_with_options` or `jit_run_with_options`; there is no separate
-optimization step.
+`emit_native_with_options` or `jit_run_with_options`, in a build with the
+`optimizer` feature; there is no separate optimization step.
 
 A failed `compile` returns `C5Error::Compile`, which holds the diagnostics of
 the phase that failed in the order they were reported, ending with the error
@@ -30,14 +37,24 @@ leaves its warnings in `Program::warnings`. A `Diagnostic` displays as the
 driver prints it, and its `code` names a row of the catalog that
 `badc --list-diagnostics` prints.
 
+`examples/jit_symbols.rs` calls into a program loaded with the default
+features; `examples/emit_image.rs` writes an executable for any target.
+
 ## Features
 
 | feature | adds |
 |---|---|
-| `std` (default) | the lexer, preprocessor, compiler, optimizer, interpreter and in-process JIT; the `StdHost` adapter for files, environment and standard streams |
-| `native-emit` | `emit_native` and the Mach-O, ELF and PE writers; requires `std` |
-| `full` | `native-emit`, plus objects, archives and the linker; the `badc` binary requires it |
-| `codegen_test` | register-allocator limits for tests (`BADC_MAX_GPR`, `BADC_MAX_FPR`) |
+| `std` (default) | the lexer, preprocessor, compiler, interpreter and in-process JIT; the `StdHost` adapter for files, environment and standard streams |
+| `headers` | the bundled C library and compiler headers; without it an `#include` searches the include path alone |
+| `optimizer` | the SSA optimization passes `NativeOptions::optimize` runs; without it a lowering that asks for them fails |
+| `target-aarch64`, `target-x86_64` | the backend of an architecture other than the host's, which is always built; without it a lowering for that architecture fails |
+| `inline-asm` | `asm` statements; without it the compiler refuses one |
+| `assembler` | file-scope `asm`, with the GNU as directives, sections and macros; requires `inline-asm`; without it the compiler refuses file-scope `asm` |
+| `native-emit` | `emit_native` and the Mach-O, ELF and PE writers; requires `std`. A call to a C library function binds through the bundled header that declares it (`headers`), or, with `linker`, by its name |
+| `debuginfo` | the DWARF and PDB writers `NativeOptions::debug_info` runs; requires `native-emit`; without it a lowering that asks for them fails |
+| `linker` | objects, archives, the native object readers and the linker, and the runtime they compile on demand; requires `native-emit` and `headers` |
+| `full` | every feature above; the `badc` binary requires it |
+| `codegen_test` | register-allocator limits for tests (`BADC_MAX_GPR`, `BADC_MAX_FPR`), and the SSA after the passes `BADC_DUMP_AFTER` names, for the functions `BADC_DUMP_FN` names |
 
 ## `no_std`
 

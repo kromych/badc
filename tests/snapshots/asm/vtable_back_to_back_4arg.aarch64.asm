@@ -3,7 +3,7 @@ vtable_back_to_back_4arg.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -42,9 +42,9 @@ Disassembly of section .text:
                	mov	x2, #0x1                // =1
                	mov	x3, #0x64               // =100
                	blr	x4
+               	ldur	x0, [x29, #-0x10]
+               	ldr	x3, [x0, #0x8]
                	sub	x0, x29, #0x10
-               	ldur	x1, [x29, #-0x10]
-               	ldr	x3, [x1, #0x8]
                	sub	x1, x29, #0x18
                	mov	x2, #0x1                // =1
                	blr	x3
@@ -66,9 +66,9 @@ Disassembly of section .text:
                	mov	x2, #0x1                // =1
                	mov	x3, #0x64               // =100
                	blr	x4
+               	ldur	x0, [x29, #-0x10]
+               	ldr	x3, [x0, #0x8]
                	sub	x0, x29, #0x10
-               	ldur	x1, [x29, #-0x10]
-               	ldr	x3, [x1, #0x8]
                	sub	x1, x29, #0x18
                	mov	x2, #0x1                // =1
                	blr	x3

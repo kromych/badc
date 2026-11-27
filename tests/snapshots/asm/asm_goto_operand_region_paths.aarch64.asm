@@ -3,7 +3,7 @@ asm_goto_operand_region_paths.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -105,11 +105,11 @@ Disassembly of section .text:
                	add	x0, x0, x1
                	cmp	w0, #0x2
                	b.ne	<addr>
-               	sub	x1, x29, #0x10
+               	sub	x0, x29, #0x10
                	stur	xzr, [x29, #-0x10]
-               	mov	x0, #0x2                // =2
-               	stur	x0, [x29, #-0x8]
-               	and	x0, x1, #0xf
+               	mov	x1, #0x2                // =2
+               	stur	x1, [x29, #-0x8]
+               	and	x0, x0, #0xf
                	cbnz	w0, <addr>
                	mov	x16, #0x0               // =0
                	cbnz	w16, <addr>

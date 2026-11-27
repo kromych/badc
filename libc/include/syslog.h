@@ -56,6 +56,12 @@
 #endif
 #ifdef __linux__
 #pragma dylib(libc, "libc.so.6")
+// glibc's checking entry points, which an object built against glibc's headers
+// with _FORTIFY_SOURCE calls in place of the functions.
+#pragma binding(libc::__syslog_chk,  "__syslog_chk")
+#pragma binding(libc::__vsyslog_chk, "__vsyslog_chk")
+void __syslog_chk(int, int, const char *, ...);
+void __vsyslog_chk(int, int, const char *, __builtin_va_list);
 #pragma binding(libc::openlog,    "openlog")
 #pragma binding(libc::syslog,     "syslog")
 #pragma binding(libc::closelog,   "closelog")

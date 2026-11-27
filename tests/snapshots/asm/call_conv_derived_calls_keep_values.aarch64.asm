@@ -3,7 +3,7 @@ call_conv_derived_calls_keep_values.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -279,9 +279,9 @@ Disassembly of section .text:
                	ldp	x20, x21, [sp, #0x10]
                	ldp	d8, d9, [sp], #0x30
                	ret
+               	adrp	x0, <page>
+               	ldr	x1, [x0, #0x80]
                	mov	x0, #0x1                // =1
-               	adrp	x1, <page>
-               	ldr	x1, [x1, <lo12>]
                	bl	<addr>
                	fcmp	d0, d8
                	b.eq	<addr>

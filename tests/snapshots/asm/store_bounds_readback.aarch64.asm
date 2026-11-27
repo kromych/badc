@@ -3,7 +3,7 @@ store_bounds_readback.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -64,10 +64,9 @@ Disassembly of section .text:
                	cmn	w1, #0x38
                	cset	x1, eq
                	add	x1, x2, x1, lsl #1
-               	mov	x2, #0x2                // =2
-               	mov	x3, #0x0                // =0
                	cmp	w1, #0x3
-               	csel	x1, x2, x3, ne
+               	mov	x16, #0x2               // =2
+               	csel	x1, x16, xzr, ne
                	ldrsw	x2, [x0, #0xc]
                	and	x2, x2, #0x1ff
                	and	x2, x2, #0xff

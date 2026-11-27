@@ -3,7 +3,7 @@ unnamed_field_tagged_type.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -43,15 +43,15 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x48
-               	ldursw	x1, [x29, #-0x40]
-               	cmp	w1, #0x3
+               	sub	x1, x29, #0x48
+               	ldursw	x0, [x29, #-0x40]
+               	cmp	w0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x6                // =6
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	add	x0, x0, #0x10
+               	add	x0, x1, #0x10
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	ldrb	w2, [x0]

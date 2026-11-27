@@ -3,6 +3,7 @@
 //! segments and the `__LINKEDIT` tables dyld binds from. The CLI shim
 //! signs the result; macOS refuses to exec an unsigned image.
 
+use super::code_signature;
 use crate::c5::codegen::{EhFrameTarget, PointerSlot};
 use crate::c5::diag::Code;
 use alloc::collections::BTreeMap;
@@ -46,6 +47,9 @@ const LC_DYLD_INFO_ONLY: u32 = 0x22 | LC_REQ_DYLD;
 const LC_MAIN: u32 = 0x28 | LC_REQ_DYLD;
 const LC_BUILD_VERSION: u32 = 0x32;
 const LC_UUID: u32 = 0x1b;
+const LC_CODE_SIGNATURE: u32 = 0x1d;
+/// `linkedit_data_command`: cmd, cmdsize, dataoff, datasize.
+const LINKEDIT_DATA_COMMAND_SIZE: u32 = 16;
 const UUID_COMMAND_SIZE: usize = 24;
 
 const VM_PROT_READ: u32 = 1;
@@ -864,6 +868,30 @@ fn dylib_command(cmd: u32, path: &str) -> Vec<u8> {
 }
 
 /// `LC_UUID` -- 16-byte module-identity blob.
+/// The identifier an image's code signature names: a library's install
+/// name, else the driver's default output name.
+fn signature_ident(build: &Build, is_dylib: bool) -> &str {
+    match build.shared_lib_name.as_deref() {
+        Some(name) if is_dylib => name,
+        _ if is_dylib => "c5-output.dylib",
+        _ => "a.out",
+    }
+}
+
+/// `LC_CODE_SIGNATURE` naming `size` bytes of signature at file offset `off`.
+fn code_signature_command(off: u64, size: u64) -> Vec<u8> {
+    let mut lc = Vec::with_capacity(LINKEDIT_DATA_COMMAND_SIZE as usize);
+    for v in [
+        LC_CODE_SIGNATURE,
+        LINKEDIT_DATA_COMMAND_SIZE,
+        off as u32,
+        size as u32,
+    ] {
+        lc.extend_from_slice(&v.to_le_bytes());
+    }
+    lc
+}
+
 fn uuid_command(text: &[u8], data: &[u8], rodata: &crate::c5::codegen::RodataBuild) -> Vec<u8> {
     fn fnv1a128(bytes: &[u8]) -> [u8; 16] {
         let mut h0: u64 = 0xcbf2_9ce4_8422_2325;
@@ -903,7 +931,7 @@ fn uuid_command(text: &[u8], data: &[u8], rodata: &crate::c5::codegen::RodataBui
 }
 
 /// `LC_BUILD_VERSION` -- platform + min OS + SDK.
-fn build_version(sdk: u32) -> Vec<u8> {
+fn build_version(minos: u32, sdk: u32) -> Vec<u8> {
     let mut out = Vec::with_capacity(BUILD_VERSION_COMMAND_SIZE);
     write_struct(
         &mut out,
@@ -911,7 +939,7 @@ fn build_version(sdk: u32) -> Vec<u8> {
             cmd: LC_BUILD_VERSION,
             cmdsize: BUILD_VERSION_COMMAND_SIZE as u32,
             platform: PLATFORM_MACOS,
-            minos: MIN_MACOS,
+            minos,
             sdk,
             ntools: 0,
         },
@@ -1438,6 +1466,8 @@ fn build_strtab(symbols: &[&str]) -> (Vec<u8>, Vec<u32>) {
 }
 
 const CODESIGN_LC_PAD: u64 = 64;
+/// MAXPATHLEN: the longest path `-headerpad_max_install_names` makes room for.
+const MAX_PATH_LEN: u64 = 1024;
 
 /// Byte sizes of the load-command stream and the variable-length commands
 /// that are built to be measured.
@@ -1455,6 +1485,8 @@ struct Commands {
     data_seg_size: u64,
     dwarf_seg_size: u64,
     sizeofcmds: u64,
+    /// Free space after the load commands.
+    header_pad: u64,
 }
 
 /// Where the image's regions land in the file and in memory.
@@ -1642,6 +1674,9 @@ struct LinkEdit {
     linkedit_filesize: u64,
     linkedit_vmaddr: u64,
     linkedit_vmsize: u64,
+    /// The ad-hoc code signature at the end of `__LINKEDIT`.
+    signature_off: u64,
+    signature_size: u64,
 }
 
 /// A function start's encoding, less the personality and LSDA bits the
@@ -1663,14 +1698,19 @@ struct UnwindTables {
     personalities: Vec<PointerSlot>,
     eh_frame: Vec<u8>,
     eh_frame_blocks: Vec<u32>,
+    /// The FDEs of the unit's own functions whose frame no compact encoding
+    /// states, after the inputs' blocks.
+    own: Option<crate::c5::codegen::EhFrameBlock>,
 }
 
 impl UnwindTables {
     fn of(build: &Build) -> Result<Self, C5Error> {
+        let frames = dwarf::lowered_frames(build, super::Target::MacOSAarch64);
+        let own = Self::own_fdes(build, &frames)?;
         let mut eh_frame = Vec::new();
-        let mut eh_frame_blocks = Vec::with_capacity(build.eh_frame.len());
+        let mut eh_frame_blocks = Vec::with_capacity(build.eh_frame.len() + 1);
         let mut fdes: BTreeMap<u64, u32> = BTreeMap::new();
-        for block in &build.eh_frame {
+        for block in build.eh_frame.iter().chain(&own) {
             let start = eh_frame.len();
             eh_frame_blocks.push(start as u32);
             for &(fde, text) in &block.fdes {
@@ -1698,11 +1738,12 @@ impl UnwindTables {
             .filter_map(|&pc| build.pc_to_native.get(pc).filter(|&&n| n != usize::MAX))
             .map(|&n| (n as u64, UnwindFunction::default()))
             .collect();
-        for (offset, frame) in dwarf::lowered_frames(build, super::Target::MacOSAarch64) {
+        for (offset, frame) in frames {
             let encoding = match frame {
                 LoweredFrame::Record => UNWIND_ARM64_MODE_FRAME,
                 LoweredFrame::Leaf => UNWIND_ARM64_MODE_FRAMELESS,
-                LoweredFrame::UndescribedSaves => 0,
+                // `own_fdes` describes it.
+                LoweredFrame::Fde => continue,
             };
             at.insert(
                 offset as u64,
@@ -1765,7 +1806,39 @@ impl UnwindTables {
             personalities,
             eh_frame,
             eh_frame_blocks,
+            own,
         })
+    }
+
+    /// FDEs for the functions whose frame no compact encoding states, from
+    /// the frame the emitter recorded; `None` when there are none.
+    fn own_fdes(
+        build: &Build,
+        frames: &[(usize, LoweredFrame)],
+    ) -> Result<Option<crate::c5::codegen::EhFrameBlock>, C5Error> {
+        use crate::c5::codegen::ssa::cfi;
+        let mut funcs = Vec::new();
+        for &(offset, frame) in frames {
+            if frame != LoweredFrame::Fde {
+                continue;
+            }
+            let Some(u) = build.a64_unwind.iter().find(|u| u.begin as usize == offset) else {
+                return Err(MachOWriter::internal(format!(
+                    "Mach-O writer: the function at {offset:#x} recorded no frame"
+                )));
+            };
+            funcs.push((u.begin, u.end, dwarf::a64_frame_ops(build, u)));
+        }
+        if funcs.is_empty() {
+            return Ok(None);
+        }
+        let t = cfi::CfiTarget {
+            arch: cfi::CfiArch::Aarch64,
+            addr_bytes: 8,
+        };
+        cfi::eh_frame_block(&funcs, t)
+            .map(Some)
+            .map_err(|e| MachOWriter::internal(format!("Mach-O writer: {e}")))
     }
 
     /// `__unwind_info`'s size; 0 for an image with no function.
@@ -1809,7 +1882,12 @@ impl UnwindTables {
     fn eh_frame_at(&self, l: &Layout, build: &Build) -> Result<Vec<u8>, C5Error> {
         let mut bytes = self.eh_frame.clone();
         let section = l.text_base() + l.eh_frame_fileoff;
-        for (block, &start) in build.eh_frame.iter().zip(&self.eh_frame_blocks) {
+        for (block, &start) in build
+            .eh_frame
+            .iter()
+            .chain(&self.own)
+            .zip(&self.eh_frame_blocks)
+        {
             for f in &block.fields {
                 let at = start as usize + f.offset as usize;
                 let target = match f.target {
@@ -1866,7 +1944,7 @@ struct MachOWriter<'a> {
     out: Vec<u8>,
 }
 
-pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error> {
+pub(super) fn write(program: &Program, build: &Build) -> Result<super::NativeImage, C5Error> {
     let mut w = MachOWriter::new(program, build)?;
     w.size_load_commands();
     w.layout_segments()?;
@@ -1878,7 +1956,20 @@ pub(super) fn write(program: &Program, build: &Build) -> Result<Vec<u8>, C5Error
     w.emit_text_segment()?;
     w.emit_data_segments()?;
     w.emit_dwarf_and_linkedit();
-    w.finish()
+    let l = &w.layout;
+    let placement = super::StreamPlacement {
+        format: "mach-o-arm64",
+        text: l.code_vmaddr_base(),
+        stub: None,
+        data: l.data_regions().to_vec(),
+        bss: Some(l.bss_base_vmaddr),
+        tls: w.tls_present.then(|| l.thread_storage_vmaddr()),
+    };
+    Ok(super::NativeImage {
+        image: w.finish()?,
+        pdb: None,
+        placement,
+    })
 }
 
 impl<'a> MachOWriter<'a> {
@@ -1901,7 +1992,7 @@ impl<'a> MachOWriter<'a> {
             is_dylib: build.output_kind == super::OutputKind::SharedLibrary,
             tls_present: !build.macho_tlv_descriptors.is_empty(),
             n_tlv: build.macho_tlv_descriptors.len(),
-            emit_dwarf: build.debug_info,
+            emit_dwarf: cfg!(feature = "debuginfo") && build.debug_info,
             named: build.named_sections.iter().collect(),
             named_out: Vec::new(),
             unwind: UnwindTables::of(build)?,
@@ -2042,7 +2133,8 @@ impl<'a> MachOWriter<'a> {
                 crate::c5::codegen::ResolvedDylib::runtime_default(crate::c5::Target::MacOSAarch64);
             c.dylib_lcs.push(load_dylib(&runtime.path));
         }
-        c.build_version = build_version(build.mach_o.sdk.unwrap_or(SDK_MACOS));
+        let minos = build.mach_o.min_os.map_or(MIN_MACOS, |v| v.max(MIN_MACOS));
+        c.build_version = build_version(minos, build.mach_o.sdk.unwrap_or(SDK_MACOS));
         c.uuid = uuid_command(&build.text, &build.data, &build.rodata);
         // The install name is `@rpath/<name>`, so a consumer linking by
         // name resolves it through its rpath at runtime.
@@ -2054,6 +2146,13 @@ impl<'a> MachOWriter<'a> {
             id_dylib(&install_name)
         });
         let dylibs_total: u64 = c.dylib_lcs.iter().map(|lc| lc.len() as u64).sum();
+        let paths = c.dylib_lcs.len() as u64 + u64::from(c.id_dylib.is_some());
+        c.header_pad = CODESIGN_LC_PAD.max(build.mach_o.header_pad).max(
+            match build.mach_o.header_pad_max_install_names {
+                true => paths * MAX_PATH_LEN,
+                false => 0,
+            },
+        );
         let entry_lc_size = match &c.id_dylib {
             Some(lc) => lc.len() as u64,
             None if self.is_dylib => 0,
@@ -2072,7 +2171,8 @@ impl<'a> MachOWriter<'a> {
             + dylibs_total
             + c.build_version.len() as u64
             + c.uuid.len() as u64
-            + entry_lc_size;
+            + entry_lc_size
+            + LINKEDIT_DATA_COMMAND_SIZE as u64;
     }
 
     /// The file and vmaddr layout; the kernel slides an image by whole pages.
@@ -2081,7 +2181,7 @@ impl<'a> MachOWriter<'a> {
         let l = &mut self.layout;
         l.header_plus_lcs = MACH_HEADER_64_SIZE as u64 + self.commands.sizeofcmds;
         l.text_align = build.text_align.max(16) as u64;
-        l.entry_file_offset = round_up(l.header_plus_lcs + CODESIGN_LC_PAD, l.text_align);
+        l.entry_file_offset = round_up(l.header_plus_lcs + self.commands.header_pad, l.text_align);
         l.lc_pad_bytes = (l.entry_file_offset - l.header_plus_lcs) as usize;
         let code_size = build.text.len() as u64;
         l.ro_align =
@@ -2120,7 +2220,7 @@ impl<'a> MachOWriter<'a> {
         } else {
             0
         };
-        l.thread_storage_size = build.tls_data.len() as u64;
+        l.thread_storage_size = build.tls_len() as u64;
         // dyld copies the template into a per-thread `malloc` block, so
         // the objects' alignment holds up to 16 by the allocation; the
         // section is placed and marked at the image's alignment, as ld64
@@ -2349,6 +2449,24 @@ impl<'a> MachOWriter<'a> {
             .iter()
             .filter(|d| !pragma_export_names.contains(d.name.as_str()))
             .collect();
+        // Every other function is a local, as ld64 keeps them: dladdr and
+        // the profilers name code by the nearest symbol at or below it.
+        let named: alloc::collections::BTreeSet<usize> = (build.exports.iter())
+            .filter_map(|e| build.pc_to_native.get(e.ent_pc).copied())
+            .chain(dyn_exports_emit.iter().filter_map(|d| match d.section {
+                crate::c5::codegen::DynamicExportSection::Text => Some(d.offset as usize),
+                _ => None,
+            }))
+            .collect();
+        let fn_locals: Vec<(String, usize)> = (build.func_ent_pcs.iter().zip(&build.func_names))
+            .filter(|(_, name)| !name.is_empty())
+            .filter_map(|(&pc, name)| {
+                let native = *build.pc_to_native.get(pc)?;
+                (native != usize::MAX && !named.contains(&native))
+                    .then(|| (crate::c5::mach_o_name::spelling(name).into_owned(), native))
+            })
+            .collect();
+        symbol_names.extend(fn_locals.iter().map(|(name, _)| name.as_str()));
         let dyn_export_disk_names: Vec<String> = dyn_exports_emit
             .iter()
             .map(|d| crate::c5::mach_o_name::spelling(&d.name).into_owned())
@@ -2363,8 +2481,10 @@ impl<'a> MachOWriter<'a> {
         }
         let (strtab, str_indices) = build_strtab(&symbol_names);
         let mut symtab = Vec::with_capacity(NLIST_64_SIZE * symbol_names.len());
-        for (i, &(_, tramp_offset)) in plt_locals.iter().enumerate() {
-            let n_value = code_vmaddr_base + tramp_offset as u64;
+        let local_offsets =
+            (plt_locals.iter().map(|&(_, off)| off)).chain(fn_locals.iter().map(|&(_, off)| off));
+        for (i, offset) in local_offsets.enumerate() {
+            let n_value = code_vmaddr_base + offset as u64;
             symtab.extend_from_slice(&nlist_local(str_indices[i], n_value, SECT_INDEX_TEXT));
         }
         let mut export_trie_entries: Vec<(String, u64, u64)> = Vec::new();
@@ -2483,6 +2603,11 @@ impl<'a> MachOWriter<'a> {
             + le.export_trie.len()
             + le.symtab.len()
             + le.strtab.len()) as u64;
+        // The signature covers every byte ahead of it, at a 16-byte offset.
+        le.signature_off = (le.linkedit_fileoff + le.linkedit_filesize).next_multiple_of(16);
+        let ident = signature_ident(self.build, self.is_dylib);
+        le.signature_size = code_signature::size(le.signature_off, ident);
+        le.linkedit_filesize = le.signature_off + le.signature_size - le.linkedit_fileoff;
         le.dwarf_vmaddr = l.data_vmaddr() + l.data_vmsize;
         le.dwarf_vmsize = if self.emit_dwarf {
             round_up(le.dwarf_filesize, PAGE_SIZE)
@@ -2683,6 +2808,7 @@ impl<'a> MachOWriter<'a> {
                 lcs.push(main_command(l.entry_file_offset + entry_native));
             }
         }
+        lcs.push(code_signature_command(le.signature_off, le.signature_size));
         self.lcs = lcs;
         Ok(())
     }
@@ -2754,6 +2880,16 @@ impl<'a> MachOWriter<'a> {
             l.data_vmaddr(),
             &build.got_fixups,
         )?;
+        let slot_base = |f: &crate::c5::codegen::BaseFixup| {
+            matches!(f.base, crate::c5::codegen::ImageAddr::ImportSlot(_))
+        };
+        if build.base_fixups.iter().any(slot_base) {
+            return Err(C5Error::hard(
+                Code::OBJECT_FORMAT,
+                "an `add` takes the address of an import's slot by its `__imp_` name, which \
+                 a Mach-O image does not place where a reference can name it",
+            ));
+        }
         if !build.base_fixups.is_empty() || !build.image_rel_fields.is_empty() {
             return Err(C5Error::hard(
                 Code::OBJECT_FORMAT,
@@ -2912,6 +3048,11 @@ impl<'a> MachOWriter<'a> {
         out.extend_from_slice(&le.export_trie);
         out.extend_from_slice(&le.symtab);
         out.extend_from_slice(&le.strtab);
+        out.resize(le.signature_off as usize, 0);
+        let text = (0, self.layout.text_filesize);
+        let ident = signature_ident(self.build, self.is_dylib);
+        let signature = code_signature::write(out, ident, text, !self.is_dylib);
+        out.extend_from_slice(&signature);
         debug_assert_eq!(out.len() as u64, le.linkedit_fileoff + le.linkedit_filesize);
     }
 
@@ -2977,8 +3118,8 @@ mod tests {
     }
 
     /// Every function start takes an encoding: the frame form for a lowered
-    /// frame, an input's own entry, 0 where nothing describes the function
-    /// or its rules leave out a saved x19, frameless for the stubs.
+    /// frame record, an input's own entry, 0 where nothing describes the
+    /// function, an FDE where it saves x19 and x20, frameless for the stubs.
     #[test]
     fn the_unwind_table_covers_every_function() {
         let mut b = tiny_build();
@@ -2999,7 +3140,26 @@ mod tests {
             lsda: None,
         }];
         b.plt_trampoline_offsets = alloc::vec![Some(0x40)];
-        let bytes = write(&tiny_program(), &b).unwrap();
+        use crate::c5::codegen::{A64Step as S, A64Unwind};
+        let frame = |begin: u32, steps: Vec<S>| A64Unwind {
+            begin,
+            end: begin + 0x10,
+            steps,
+            exits: Vec::new(),
+            saves: Vec::new(),
+        };
+        let pair = S::SaveReg {
+            fp: false,
+            reg: 19,
+            reg2: Some(20),
+            pre: true,
+            bytes: 32,
+        };
+        b.a64_unwind = alloc::vec![
+            frame(0, alloc::vec![S::SaveFpLrX(16), S::SetFp]),
+            frame(0x30, alloc::vec![pair, S::SaveFpLr(16), S::AddFp(16)]),
+        ];
+        let bytes = write(&tiny_program(), &b).unwrap().image;
         let (_, sect_off, _) = section_header(&bytes, "__TEXT", "__unwind_info");
         let (_, code_off, _) = section_header(&bytes, "__TEXT", "__text");
         let section = &bytes[sect_off..];
@@ -3008,7 +3168,17 @@ mod tests {
         assert_eq!(encoding(0x4), Some(UNWIND_ARM64_MODE_FRAME));
         assert_eq!(encoding(0x14), Some(UNWIND_ARM64_MODE_FRAME | 0x10));
         assert_eq!(encoding(0x24), Some(0));
-        assert_eq!(encoding(0x34), Some(0), "x19 and x20 are saved");
+        let fde = encoding(0x34).expect("x19 and x20 are saved");
+        assert_eq!(fde & UNWIND_ARM64_MODE_MASK, UNWIND_ARM64_MODE_DWARF);
+        let (eh_addr, eh_off, _) = section_header(&bytes, "__TEXT", "__eh_frame");
+        let (text_addr, ..) = section_header(&bytes, "__TEXT", "__text");
+        // The FDE's PC-relative `pc_begin` follows its length and CIE pointer.
+        let at = (fde & UNWIND_ARM64_DWARF_SECTION_OFFSET) as usize + 8;
+        let pc_begin = read_u32(&bytes, eh_off + at) as i32;
+        assert_eq!(
+            (eh_addr as i64 + at as i64 + i64::from(pc_begin)) as u64,
+            text_addr + 0x30
+        );
         assert_eq!(encoding(0x44), Some(UNWIND_ARM64_MODE_FRAMELESS));
         assert_eq!(encoding(0x50), None, "the table ends with the text");
     }
@@ -3035,7 +3205,7 @@ mod tests {
                 lsda: None,
             },
         ];
-        let bytes = write(&tiny_program(), &b).unwrap();
+        let bytes = write(&tiny_program(), &b).unwrap().image;
         let (_, sect_off, _) = section_header(&bytes, "__TEXT", "__unwind_info");
         let (_, code_off, _) = section_header(&bytes, "__TEXT", "__text");
         let (got, _, _) = section_header(&bytes, "__DATA", "__got");
@@ -3097,7 +3267,7 @@ mod tests {
             personality: None,
             lsda: None,
         }];
-        let image = write(&tiny_program(), &b).unwrap();
+        let image = write(&tiny_program(), &b).unwrap().image;
         let (eh_addr, eh_off, eh_size) = section_header(&image, "__TEXT", "__eh_frame");
         let (code_addr, code_off, _) = section_header(&image, "__TEXT", "__text");
         let (_, sect_off, _) = section_header(&image, "__TEXT", "__unwind_info");
@@ -3162,7 +3332,7 @@ mod tests {
                 addend,
             })
             .to_vec();
-        let bytes = write(&tiny_program(), &b).unwrap();
+        let bytes = write(&tiny_program(), &b).unwrap().image;
         let (got, _, _) = section_header(&bytes, "__DATA", "__got");
         let (data, _, _) = section_header(&bytes, "__DATA", "__data");
         let (binds, rebases) = dyld_info(&bytes);
@@ -3233,7 +3403,7 @@ mod tests {
 
     #[test]
     fn writes_mh_magic_64() {
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         assert_eq!(read_u32(&bytes, 0), MH_MAGIC_64);
     }
 
@@ -3262,28 +3432,69 @@ mod tests {
 
     #[test]
     fn cpu_type_is_arm64() {
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         assert_eq!(read_u32(&bytes, 4), CPU_TYPE_ARM64);
     }
 
     #[test]
     fn filetype_is_mh_execute() {
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         assert_eq!(read_u32(&bytes, 12), MH_EXECUTE);
     }
 
     #[test]
     fn flags_include_pie_and_dyldlink() {
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         let flags = read_u32(&bytes, 24);
         assert_ne!(flags & MH_PIE, 0, "MH_PIE not set");
         assert_ne!(flags & MH_DYLDLINK, 0, "MH_DYLDLINK not set");
     }
 
     #[test]
-    fn ncmds_baseline_is_twelve_plus_dylibs() {
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
-        assert_eq!(read_u32(&bytes, 16), 13);
+    fn ncmds_baseline_is_thirteen_plus_dylibs() {
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
+        assert_eq!(read_u32(&bytes, 16), 14);
+    }
+
+    /// The last load command is `LC_CODE_SIGNATURE`, naming the end of the
+    /// file, and its CodeDirectory hashes every page ahead of it.
+    #[test]
+    fn an_image_ends_in_an_ad_hoc_signature_over_its_bytes() {
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
+        let (ncmds, mut at) = (read_u32(&bytes, 16), 32usize);
+        for _ in 1..ncmds {
+            at += read_u32(&bytes, at + 4) as usize;
+        }
+        assert_eq!(read_u32(&bytes, at), LC_CODE_SIGNATURE);
+        let (off, size) = (read_u32(&bytes, at + 8) as usize, read_u32(&bytes, at + 12));
+        assert_eq!(off + size as usize, bytes.len());
+        assert_eq!(off % 16, 0);
+        let expected = code_signature::write(&bytes[..off], "a.out", (0, 0), true);
+        let be = |b: &[u8], o: usize| u32::from_be_bytes(b[o..o + 4].try_into().unwrap());
+        let cd = be(&expected, 16) as usize;
+        let hashes = cd + be(&expected, cd + 16) as usize;
+        assert_eq!(&bytes[off + hashes..], &expected[hashes..]);
+    }
+
+    /// `-headerpad` and `-headerpad_max_install_names` leave their space
+    /// free between the load commands and the code: MAXPATHLEN for each
+    /// dylib path, here libSystem's.
+    #[test]
+    fn header_pad_options_leave_room_after_the_load_commands() {
+        let free = |build: &Build| {
+            let bytes = write(&tiny_program(), build).unwrap().image;
+            let (mut p, lc_end) = (32usize, 32 + read_u32(&bytes, 20) as usize);
+            while read_u32(&bytes, p) != LC_MAIN {
+                p += read_u32(&bytes, p + 4) as usize;
+            }
+            u64::from_le_bytes(bytes[p + 8..p + 16].try_into().unwrap()) - lc_end as u64
+        };
+        let mut build = tiny_build();
+        assert!(free(&build) < MAX_PATH_LEN);
+        build.mach_o.header_pad_max_install_names = true;
+        assert!(free(&build) >= MAX_PATH_LEN);
+        build.mach_o.header_pad = 0x3000;
+        assert!(free(&build) >= 0x3000);
     }
 
     #[test]
@@ -3295,7 +3506,7 @@ mod tests {
         // because we leave padding between the LC stream and the code so
         // codesign can grow the LCs in place without overwriting the entry
         // point.
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         let sizeofcmds = read_u32(&bytes, 20) as usize;
         let mut p = 32usize;
         let lc_end = 32 + sizeofcmds;
@@ -3322,7 +3533,7 @@ mod tests {
 
     #[test]
     fn output_alignment_invariants() {
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         // strtab is padded to 8 bytes, so the whole image is too.
         assert_eq!(bytes.len() % 8, 0);
         assert!(
@@ -3537,7 +3748,7 @@ mod tests {
 
     #[test]
     fn bind_stream_contains_symbol_name() {
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         let sizeofcmds = read_u32(&bytes, 20) as usize;
         let mut p = 32usize;
         let lc_end = 32 + sizeofcmds;
@@ -3575,7 +3786,7 @@ mod tests {
             is_object: false,
             weak: false,
         }];
-        let bytes = write(&tiny_program(), &build).unwrap();
+        let bytes = write(&tiny_program(), &build).unwrap().image;
         let sizeofcmds = read_u32(&bytes, 20) as usize;
         let (mut p, mut nsects, mut sect) = (32usize, 0u32, None);
         while p < 32 + sizeofcmds {
@@ -3637,7 +3848,7 @@ mod tests {
                 weak: false,
             },
         ];
-        let bytes = write(&tiny_program(), &build).unwrap();
+        let bytes = write(&tiny_program(), &build).unwrap().image;
 
         let sizeofcmds = read_u32(&bytes, 20) as usize;
         let mut p = 32usize;
@@ -3696,7 +3907,7 @@ mod tests {
 
     #[test]
     fn strtab_starts_with_leading_nul() {
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         let sizeofcmds = read_u32(&bytes, 20) as usize;
         let mut p = 32usize;
         let lc_end = 32 + sizeofcmds;
@@ -3725,7 +3936,7 @@ mod tests {
     fn otool_h_parses_the_image() {
         use std::io::Write;
         use std::process::Command;
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         let path = crate::c5::tests::unique_temp_path("badc-m1-3", "h", ".bin");
         let mut f = std::fs::File::create(&path).unwrap();
         f.write_all(&bytes).unwrap();
@@ -3754,7 +3965,7 @@ mod tests {
     fn dyld_info_imports_lists_write() {
         use std::io::Write;
         use std::process::Command;
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         let path = crate::c5::tests::unique_temp_path("badc-m1-3", "bind", ".bin");
         let mut f = std::fs::File::create(&path).unwrap();
         f.write_all(&bytes).unwrap();
@@ -3799,7 +4010,7 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes = write(&tiny_program(), &build).expect("write Mach-O");
+        let bytes = write(&tiny_program(), &build).expect("write Mach-O").image;
 
         let flags = read_u32(&bytes, 24);
         assert_ne!(
@@ -3820,7 +4031,9 @@ mod tests {
                 let segname = &bytes[p + 8..p + 24];
                 if segname.starts_with(b"__DATA\0") {
                     let nsects = read_u32(&bytes, p + 64) as usize;
-                    assert_eq!(nsects, 4, "__DATA must have 4 sections when TLV present");
+                    // `__bss` joins them when the image has zero-filled storage.
+                    let bss = usize::from(build.bss_size > 0);
+                    assert_eq!(nsects, 4 + bss, "__DATA's sections when TLV present");
                     let mut sect_p = p + 72;
                     for _ in 0..nsects {
                         let sect_name = &bytes[sect_p..sect_p + 16];
@@ -3878,7 +4091,7 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes = write(&tiny_program(), &build).expect("write Mach-O");
+        let bytes = write(&tiny_program(), &build).expect("write Mach-O").image;
         let flags = read_u32(&bytes, 24);
         assert_eq!(
             flags & MH_HAS_TLV_DESCRIPTORS,
@@ -3895,7 +4108,7 @@ mod tests {
     fn nm_reports_write_undefined() {
         use std::io::Write;
         use std::process::Command;
-        let bytes = write(&tiny_program(), &tiny_build()).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build()).unwrap().image;
         let path = crate::c5::tests::unique_temp_path("badc-m1-3", "nm", ".bin");
         let mut f = std::fs::File::create(&path).unwrap();
         f.write_all(&bytes).unwrap();
@@ -3940,7 +4153,7 @@ mod tests {
         .expect("lower");
         build.bss_size = compacted.bss_size;
         assert!(build.bss_size > 0, "the zero array must occupy bss");
-        let bytes = write(&tiny_program(), &build).expect("write Mach-O");
+        let bytes = write(&tiny_program(), &build).expect("write Mach-O").image;
 
         let read_u64 = |o: usize| u64::from_le_bytes(bytes[o..o + 8].try_into().unwrap());
         let lc_end = 32 + read_u32(&bytes, 20) as usize;

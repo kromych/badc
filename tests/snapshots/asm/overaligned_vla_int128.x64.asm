@@ -3,7 +3,7 @@ overaligned_vla_int128.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -29,12 +29,12 @@ Disassembly of section .text:
                	pushq	%rbp
                	movq	%rsp, %rbp
                	subq	$0x20, %rsp
-               	movl	$0xc, %ecx
-               	movq	%rcx, %r11
+               	movl	$0xc, %eax
+               	movq	%rax, %r11
                	addq	$0xf, %r11
                	andq	$-0x10, %r11
-               	movq	%rsp, %rcx
-               	subq	%r11, %rcx
+               	movq	%rsp, %rax
+               	subq	%r11, %rax
                	shrq	$0xc, %r11
                	testq	%r11, %r11
                	je	<addr>
@@ -42,21 +42,21 @@ Disassembly of section .text:
                	movq	$0x0, (%rsp)
                	subq	$0x1, %r11
                	jne	<addr>
-               	movq	%rcx, %rsp
+               	movq	%rax, %rsp
                	movq	$0x3, -0x10(%rbp)
-               	movq	-0x10(%rbp), %rdx
-               	movq	%rdx, %rsi
+               	movq	-0x10(%rbp), %rcx
+               	movq	%rcx, %rsi
                	sarq	$0x3f, %rsi
-               	leaq	-0x20(%rbp), %rdi
-               	movq	%rdx, -0x20(%rbp)
+               	leaq	-0x20(%rbp), %rdx
+               	movq	%rcx, -0x20(%rbp)
                	movq	%rsi, -0x18(%rbp)
-               	testb	$0xf, %dil
+               	testb	$0xf, %dl
                	je	<addr>
-               	movl	<rip>, %edx # <addr>
-               	orq	$0x1, %rdx
-               	movl	%edx, <rip> # <addr>
-               	movl	$0x3, (%rcx)
-               	movl	$0x6, 0x8(%rcx)
+               	movl	<rip>, %ecx # <addr>
+               	orq	$0x1, %rcx
+               	movl	%ecx, <rip> # <addr>
+               	movl	$0x3, (%rax)
+               	movl	$0x6, 0x8(%rax)
                	movq	-0x20(%rbp), %rcx
                	movq	-0x18(%rbp), %rdx
                	leaq	0x9(%rcx), %rax
@@ -101,22 +101,21 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x3, %edi
                	callq	<addr>
                	cmpq	$0xc, %rax
                	je	<addr>
                	movl	$0x10, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x2, %edi
                	callq	<addr>
                	cmpq	$0x8, %rax
                	je	<addr>
                	movl	$0x20, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	<rip>, %eax # <addr>
-               	popq	%rbp
+               	popq	%r11
                	retq

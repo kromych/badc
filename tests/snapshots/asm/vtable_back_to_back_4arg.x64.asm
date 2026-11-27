@@ -3,7 +3,7 @@ vtable_back_to_back_4arg.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -41,10 +41,8 @@ Disassembly of section .text:
                	retq
 
 <driver>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	leaq	-0x10(%rbp), %rdi
+               	subq	$0x28, %rsp
+               	leaq	0x10(%rsp), %rdi
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
                	movq	<rip>, %rax # <addr>
@@ -52,21 +50,19 @@ Disassembly of section .text:
                	movl	$0x1, %edx
                	movl	$0x64, %ecx
                	callq	*%rax
-               	leaq	-0x10(%rbp), %rdi
-               	movq	-0x10(%rbp), %rax
+               	movq	0x10(%rsp), %rax
                	movq	0x8(%rax), %rax
-               	leaq	-0x18(%rbp), %rsi
+               	leaq	0x10(%rsp), %rdi
+               	leaq	0x8(%rsp), %rsi
                	movl	$0x1, %edx
                	callq	*%rax
-               	movl	-0x18(%rbp), %eax
-               	leave
+               	movl	0x8(%rsp), %eax
+               	addq	$0x28, %rsp
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	leaq	-0x10(%rbp), %rdi
+               	subq	$0x28, %rsp
+               	leaq	0x10(%rsp), %rdi
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rdi)
                	movq	<rip>, %rax # <addr>
@@ -74,12 +70,12 @@ Disassembly of section .text:
                	movl	$0x1, %edx
                	movl	$0x64, %ecx
                	callq	*%rax
-               	leaq	-0x10(%rbp), %rdi
-               	movq	-0x10(%rbp), %rax
+               	movq	0x10(%rsp), %rax
                	movq	0x8(%rax), %rax
-               	leaq	-0x18(%rbp), %rsi
+               	leaq	0x10(%rsp), %rdi
+               	leaq	0x8(%rsp), %rsi
                	movl	$0x1, %edx
                	callq	*%rax
-               	movl	-0x18(%rbp), %eax
-               	leave
+               	movl	0x8(%rsp), %eax
+               	addq	$0x28, %rsp
                	retq

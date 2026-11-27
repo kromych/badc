@@ -13,9 +13,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	movq	(%rip), %rax            # <addr>
 		R_X86_64_REX_GOTPCRELX	wobj-0x4
                	movq	(%rax), %rax
@@ -26,7 +24,7 @@ Disassembly of section .text:
                	cmpq	$0xa, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movq	(%rip), %rax            # <addr>
 		R_X86_64_REX_GOTPCRELX	ws-0x4
@@ -34,7 +32,7 @@ Disassembly of section .text:
                	cmpq	$0x2, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movq	(%rip), %rax            # <addr>
 		R_X86_64_PC32	.data+0x24
@@ -48,8 +46,8 @@ Disassembly of section .text:
                	cmpq	$0xe, %rax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

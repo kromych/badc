@@ -40,6 +40,9 @@ struct FileScopeDecl {
     base_fn_ptr_ret_indirection: i64,
     base_is_function_type: bool,
     base_fn_type: Option<crate::c5::symbol::FnType>,
+    /// The base type spelled `void`: a declarator that derives nothing from
+    /// it is bare `void` (C99 6.7.5.3p10).
+    base_was_void: bool,
     /// The attributes and function specifiers among the specifiers, which
     /// each declarator starts from.
     spec_attrs: super::DeclAttrs,
@@ -203,6 +206,7 @@ impl Compiler {
     /// instructions outside a named section are rejected.
     /// TODO: top-level instruction emission.
     fn parse_file_scope_asm(&mut self) -> Result<(), C5Error> {
+        let line = self.lex.line;
         let (template, tstart, _is_volatile, is_goto) = self.parse_asm_head()?;
         self.truncate_data(tstart);
         if is_goto {
@@ -225,12 +229,23 @@ impl Compiler {
                 "file-scope asm template is not valid UTF-8",
             )
         })?;
-        self.ingest_file_scope_asm(text, true)
-            .map_err(|e| self.compile_err(Code::ASSEMBLER, String::from(e)))
+        let (warnings, error) = match self.ingest_file_scope_asm(text, true) {
+            Ok(warnings) => (warnings, None),
+            Err(rows) => {
+                let error = self.compile_err_at(Code::ASSEMBLER, line, String::from(rows.clone()));
+                (rows.0, Some(error))
+            }
+        };
+        // The template's lines are not the source's: each warning is at the
+        // statement's.
+        for w in warnings.into_iter().filter(|w| !w.is_error()) {
+            self.warn_at(w.code, Site::line(line), w.text);
+        }
+        error.map_or(Ok(()), Err)
     }
 
     /// Record a `.set` alias of the unit, a later assignment to the same name
-    /// winning as in GNU as.
+    /// winning.
     fn set_alias(sets: &mut Vec<(String, String, i64)>, name: &str, target: &str, addend: i64) {
         let e = (String::from(name), String::from(target), addend);
         match sets.iter_mut().find(|(n, _, _)| n == name) {
@@ -250,7 +265,10 @@ impl Compiler {
         &mut self,
         text: &str,
         globl_shortcut: bool,
-    ) -> Result<(), crate::c5::asm::AsmErrors> {
+    ) -> Result<Vec<crate::c5::asm::AsmError>, crate::c5::asm::AsmErrors> {
+        if !cfg!(feature = "assembler") {
+            return Err(crate::c5::asm::NO_ASSEMBLER.into());
+        }
         use crate::c5::asm::{AsmError, AsmErrors, AsmSectionItem};
         // Comment stripping, GNU as macro expansion, and the per-definition
         // rename of redefined numeric labels, once; the stored text is the
@@ -368,16 +386,17 @@ impl Compiler {
         // sections under the emit target's conventions. The sink spans the unit
         // so a template resolves the labels its predecessors defined, matching
         // the codegen materialization, which shares one sink per unit.
-        if let Err(e) = crate::c5::codegen::encode_file_asm_section_code(
+        match crate::c5::codegen::encode_file_asm_section_code(
             &mut blocks,
             self.target,
             self.elf_class,
         ) {
-            later.extend(e.0);
+            Ok(warnings) => later.extend(warnings),
+            Err(e) => later.extend(e.0),
         }
         // The layout reads every statement's size: it needs all of them.
-        if errors.is_empty()
-            && later.is_empty()
+        if !errors.iter().any(|(_, e)| e.is_error())
+            && !later.iter().any(AsmError::is_error)
             && let Err(e) = crate::c5::asm::materialize_asm_sections(
                 &blocks,
                 &crate::c5::asm::AsmOperandResolver::NONE,
@@ -389,16 +408,17 @@ impl Compiler {
         {
             later.extend(e.0);
         }
-        // In the order gas reads the statements; an expansion error first on a tie.
+        later.append(&mut self.asm_validate_sink.warnings);
+        // In source statement order; an expansion error first on a tie.
         for mut e in later {
             let read = e.line.checked_sub(1).unwrap_or(u32::MAX);
             origin.place(&mut e);
             errors.push((read, e));
         }
         errors.sort_by_key(|&(read, _)| read);
-        AsmErrors::check(errors.into_iter().map(|(_, e)| e).collect())?;
+        let warnings = AsmErrors::split(errors.into_iter().map(|(_, e)| e).collect())?;
         self.file_asm.push(prepared);
-        Ok(())
+        Ok(warnings)
     }
 
     /// Whether the declared object is itself `const` (C99 6.7.3): as spelled,
@@ -578,6 +598,7 @@ impl Compiler {
             base_fn_ptr_ret_indirection: self.pending.fn_ptr_ret_indirection,
             base_is_function_type: self.pending.base_is_function_type,
             base_fn_type: self.pending.fn_ptr_type.clone(),
+            base_was_void: self.pending.base_was_void,
             spec_attrs: self.pending.attrs.clone(),
         };
         let single_declarator = core::mem::take(&mut self.pending.auto_type_single_declarator);
@@ -642,9 +663,12 @@ impl Compiler {
         // assembler name and the object declaration continues
         // (initializer, attributes, `;` / `,`). A file-scope object
         // always has static storage duration (C99 6.2.4).
-        if let Some(reg) =
-            self.parse_declarator_asm_suffix(id_idx, static_seen || extern_seen, true)?
-        {
+        let (reg, label) =
+            self.parse_declarator_asm_suffix(id_idx, static_seen || extern_seen, true)?;
+        if let Some(label) = label {
+            self.set_asm_label(id_idx, label)?;
+        }
+        if let Some(reg) = reg {
             self.bind_file_scope_register(id_idx, ty, reg)?;
             return Ok(());
         }
@@ -747,18 +771,7 @@ impl Compiler {
         {
             self.symbols[id_idx].fn_type = f.clone();
         }
-        // Carry the bare-`void` side channel onto the
-        // declarator. `pending_base_was_void` was set if
-        // the base type spelled `void`; it stays valid
-        // for the FIRST declarator in a comma-separated
-        // group only. Gate on "no leading `*` added": any
-        // declarator that bumped `ty` by `Ty::Ptr` is no
-        // longer scalar `void` and falls out.
-        let declarator_is_bare_void = self.pending.base_was_void && is_void_ty(ty);
-        // Consume the flag so the next iteration of the
-        // declarator loop (`void *a, b;`) doesn't
-        // re-trigger on a different declarator's shape.
-        self.pending.base_was_void = false;
+        let declarator_is_bare_void = decl.base_was_void && is_void_ty(ty);
         // Function-returning-FP shape: parse_declarator
         // already consumed the outer function's params.
         // Synthesize the function-definition path: bind the
@@ -1057,6 +1070,7 @@ impl Compiler {
             ..
         } = prior;
 
+        self.note_declaration_site(id_idx);
         if !was_sys {
             self.record_function_declaration(id_idx, static_seen, extern_seen);
         }
@@ -1226,6 +1240,20 @@ impl Compiler {
     /// Record one file-scope declaration of a function name: its class and
     /// source position, the census the inline linkage models read (C99
     /// 6.7.4p6-p7 and GNU89), and the linkage that census implies so far.
+    /// Record where the first file-scope declaration of `id_idx` is, an
+    /// object's or a function's, library-bound ones included: its line and
+    /// file feed DW_AT_decl_file / decl_line and the reports about it.
+    fn note_declaration_site(&mut self, id_idx: usize) {
+        if self.symbols[id_idx].binding.decl_line == 0 {
+            let at = self.site();
+            let file = self.intern_source_file() as u32;
+            let in_user = self.in_user_source();
+            let b = &mut self.symbols[id_idx].binding;
+            b.set_decl_site(at);
+            (b.decl_file, b.decl_in_user_source) = (file, in_user);
+        }
+    }
+
     fn record_function_declaration(&mut self, id_idx: usize, static_seen: bool, extern_seen: bool) {
         // C99 5.1.2.2.1: a hosted program's startup calls an external
         // `main`. `-Wmain` flags each `static` declaration of one.
@@ -1239,11 +1267,6 @@ impl Compiler {
             self.warn_at(Code::MAIN, self.site(), text);
         }
         self.symbols[id_idx].class = Token::Fun as i64;
-        if self.symbols[id_idx].binding.decl_line == 0 {
-            let at = self.site();
-            self.symbols[id_idx].binding.set_decl_site(at);
-            self.symbols[id_idx].binding.decl_in_user_source = self.in_user_source();
-        }
         // Census one file-scope declaration of this name for
         // the inline linkage models (C99 6.7.4p6-p7 and
         // GNU89); `resolve_inline_linkage` reads the totals
@@ -1487,8 +1510,9 @@ impl Compiler {
             return Err(self.compile_err(Code::SYNTAX, "bad function definition"));
         }
         // C99 7.12.2: the body is a compound statement, the scope of an
-        // `FP_CONTRACT` pragma within it.
-        let fp_contract = self.lex.fp_contract;
+        // `FP_CONTRACT` or `FENV_ACCESS` pragma within it.
+        let (fp_contract, fenv_access) = (self.lex.fp_contract, self.lex.fenv_access);
+        self.lex.fenv_access_seen = fenv_access;
         self.next()?;
 
         let ent_pc = self.open_function_body(id_idx, &params);
@@ -1515,6 +1539,7 @@ impl Compiler {
         self.object_size_scope = None;
         body?;
         self.lex.fp_contract = fp_contract;
+        self.lex.fenv_access = fenv_access;
         self.tag_scopes.pop();
         self.finish_function_body(ent_pc, &params, arrival)?;
         // The capture runs before the scope unwind restores the outer bindings.
@@ -1715,7 +1740,7 @@ impl Compiler {
                     ),
                 ));
             }
-            self.restore_lex(size.at);
+            self.restore_lex(size.at.clone());
             self.expr(Token::Assign as i64)?;
             let Some(vm) = size.vm.clone() else {
                 items.extend(self.ast_emit_expr_stmt());
@@ -1725,8 +1750,8 @@ impl Compiler {
             // counts these evaluations store.
             let mut dims = Vec::with_capacity(vm.more.len() + 1);
             for at in core::iter::once(None).chain(vm.more.iter().map(Some)) {
-                if let Some(&at) = at {
-                    self.restore_lex(at);
+                if let Some(at) = at {
+                    self.restore_lex(at.clone());
                     self.expr(Token::Assign as i64)?;
                 }
                 if self.is_int128_ty(self.ty) {
@@ -1747,7 +1772,7 @@ impl Compiler {
                 );
             }
             let declared = self.symbols[vm.sym].type_;
-            let quals = declared & (super::types::VOLATILE_BIT | super::types::QUAL_PTR_LVL_MASK);
+            let quals = super::types::ptr_quals_over_array(declared, 0);
             self.symbols[vm.sym].type_ = (vla_ty + vm.levels * Ty::Ptr as i64) | quals;
         }
         self.restore_lex(resume);
@@ -1774,6 +1799,7 @@ impl Compiler {
         self.current_function_name = self.symbols[id_idx].name.clone();
         self.current_func_conv = self.symbols[id_idx].fn_type.conv;
         self.current_func_is_noreturn = self.symbols[id_idx].is_noreturn;
+        self.current_func_returns_nonnull = self.symbols[id_idx].returns_nonnull;
         self.current_func_ret_fn = self.symbols[id_idx].fn_type.ret.clone();
 
         // Callers push right to left, so the i'th declared parameter sits at slot
@@ -1815,6 +1841,11 @@ impl Compiler {
         let ent_pc = self.next_ent_pc;
         self.symbols[id_idx].val = ent_pc as i64;
         self.symbols[id_idx].defined_here = true;
+        if self.sanitize.runs(super::sanitize::Check::Function) {
+            let s = &self.symbols[id_idx];
+            let hash = self.function_type_hash(s.type_, &s.fn_type);
+            self.symbols[id_idx].function_type_hash = hash;
+        }
         self.place_by_segment_pragma(id_idx, crate::c5::segment_pragma::SegKind::Code);
         if !self.current_func_attrs.saw_inline_specifier {
             self.symbols[id_idx].saw_noninline_def = true;
@@ -2554,14 +2585,7 @@ impl Compiler {
         was_tentative_glo: bool,
     ) -> Result<(), C5Error> {
         self.symbols[id_idx].class = Token::Glo as i64;
-        // First declaration wins the source position, as it does
-        // for functions; it feeds DW_AT_decl_file / decl_line.
-        if self.symbols[id_idx].binding.decl_line == 0 {
-            let at = self.site();
-            self.symbols[id_idx].binding.set_decl_site(at);
-            self.symbols[id_idx].binding.decl_file = self.intern_source_file() as u32;
-            self.symbols[id_idx].binding.decl_in_user_source = self.in_user_source();
-        }
+        self.note_declaration_site(id_idx);
         if !was_tentative_glo {
             self.symbols[id_idx].is_thread_local = thread_local;
         }
@@ -2846,6 +2870,7 @@ impl Compiler {
         let off = if was_tentative_glo
             && aligned <= self.symbols[id_idx].reserved_data_bytes
             && self.symbols[id_idx].val % obj_align == 0
+            && !crate::c5::layout::in_zero_region(self.symbols[id_idx].val)
         {
             self.symbols[id_idx].val
         } else {
@@ -2968,6 +2993,7 @@ impl Compiler {
         let off = if was_tentative_glo
             && needed <= self.symbols[id_idx].reserved_data_bytes
             && self.symbols[id_idx].val % obj_align == 0
+            && !crate::c5::layout::in_zero_region(self.symbols[id_idx].val)
         {
             self.symbols[id_idx].val
         } else {
@@ -3057,9 +3083,13 @@ impl Compiler {
         // outgrows. Otherwise the object moves to a fresh slot
         // below, as the deferred-size array paths do, and the
         // references already emitted are rebased onto it.
+        // A zero-region slot serves only an object that still takes the
+        // region: an initializer, `const` or a section puts it in `.data`.
+        let prior_zero = crate::c5::layout::in_zero_region(self.symbols[id_idx].val);
         let reuse_prior_storage = reuse_eligible
             && self.symbols[id_idx].val % obj_align == 0
-            && bytes <= self.symbols[id_idx].reserved_data_bytes;
+            && bytes <= self.symbols[id_idx].reserved_data_bytes
+            && !(prior_zero && !self.takes_zero_region(id_idx, ty));
         // `extern _Thread_local T x;` (no initializer) is a
         // pure reference, not a definition: it must not
         // reserve TLS storage. The defining unit owns the
@@ -3081,15 +3111,24 @@ impl Compiler {
         } else if reuse_prior_storage {
             self.symbols[id_idx].val
         } else if thread_local {
-            let off = self.reserve_data_bytes(DataStore::ThreadLocal, align, bytes as usize);
+            let off = match self.lex.tk == Token::Assign {
+                true => self.reserve_data_bytes(DataStore::ThreadLocal, align, bytes as usize),
+                false => self.reserve_thread_local_zero_bytes(align, bytes as usize),
+            };
             self.symbols[id_idx].val = off;
             self.symbols[id_idx].reserved_data_bytes = bytes;
             off
         } else {
-            let off = self.reserve_data_bytes(DataStore::Static, align, bytes as usize);
+            let off = match self.takes_zero_region(id_idx, ty) {
+                true => self.reserve_zero_bytes(align, bytes as usize),
+                false => self.reserve_data_bytes(DataStore::Static, align, bytes as usize),
+            };
             // The fallback slot of an `extern` declaration is an object of its
             // own, which the image drops when the declaration binds elsewhere.
-            if was_extern_only_decl && !self.symbols[id_idx].defined_here {
+            if was_extern_only_decl
+                && !self.symbols[id_idx].defined_here
+                && !crate::c5::layout::in_zero_region(off)
+            {
                 self.data_object_starts.push(off);
             }
             self.note_global_relocated(id_idx, reuse_eligible, off);
@@ -3101,7 +3140,7 @@ impl Compiler {
             self.symbols[id_idx].reserved_data_bytes = bytes;
             // A move off a misaligned slot keeps the bytes a
             // prior defining declaration wrote there.
-            if reuse_eligible && prior.1 > 0 {
+            if reuse_eligible && prior.1 > 0 && !prior_zero {
                 let n = prior.1.min(bytes) as usize;
                 for k in 0..n {
                     self.data[off as usize + k] = self.data[prior.0 as usize + k];
@@ -3271,9 +3310,13 @@ impl Compiler {
         }
         let fresh = if thread_local {
             self.check_thread_local_align(align, line)?;
-            self.reserve_data_bytes(DataStore::ThreadLocal, align, bytes as usize)
+            self.reserve_thread_local_zero_bytes(align, bytes as usize)
         } else {
-            let off = self.reserve_data_bytes(DataStore::Static, align, bytes as usize);
+            let s = &self.symbols[id_idx];
+            let off = match s.storage_is_const || s.section_name.is_some() {
+                true => self.reserve_data_bytes(DataStore::Static, align, bytes as usize),
+                false => self.reserve_zero_bytes(align, bytes as usize),
+            };
             self.note_global_relocated(id_idx, true, off);
             off
         };
@@ -3456,11 +3499,9 @@ impl Compiler {
     /// copy rather than to an undefined symbol. C99 6.7.4p6 states that
     /// choice outright ("provides an alternative to an external
     /// definition, which a translator may use to implement any call to
-    /// the function in the same translation unit"); gcc leaves an
-    /// external reference instead, which it can because it inlines an
-    /// `always_inline` body at every optimization level. badc's inliner
-    /// runs only under `-O` and declines a body its candidate filter
-    /// rejects, so the copy is what keeps those calls resolvable.
+    /// the function in the same translation unit"). badc's inliner runs
+    /// only under `-O` and declines a body its candidate filter rejects,
+    /// so the copy is what keeps those calls resolvable.
     ///
     /// That license covers calls, not the address. The name keeps
     /// external linkage, so C99 6.2.2p2 requires `&f` to denote one
@@ -3637,6 +3678,17 @@ impl Compiler {
         }
         if let Some(area) = self.pending.attrs.patchable_entry.take() {
             self.symbols[id_idx].patchable_function_entry = Some(area);
+        }
+        // Each declaration's adds to the name's.
+        let nonnull = core::mem::take(&mut self.pending.attrs.nonnull);
+        let sym = &mut self.symbols[id_idx];
+        for n in nonnull {
+            if !sym.nonnull.iter().any(|m| m.0 == n.0) {
+                sym.nonnull.push(n);
+            }
+        }
+        if let Some(at) = self.pending.attrs.returns_nonnull.take() {
+            sym.returns_nonnull.get_or_insert(at);
         }
         if self.pending.attrs.no_instrument {
             self.symbols[id_idx].no_instrument_function = true;

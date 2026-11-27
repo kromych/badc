@@ -3,7 +3,7 @@ struct_return_to_global.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -26,7 +26,6 @@ Disassembly of section .text:
                	add	x4, x4, <lo12>
                	add	x1, x4, x0, lsl #4
                	mul	x5, x0, x3
-               	sxtw	x5, w5
                	str	x5, [x1]
                	str	x2, [x1, #0x8]
                	add	x0, x0, #0x1
@@ -57,8 +56,7 @@ Disassembly of section .text:
                	str	x2, [x0]
                	str	x3, [x0, #0x8]
                	add	x0, x1, #0x7
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x1                // =1
                	cmp	x0, #0x4e
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, eq
                	ret

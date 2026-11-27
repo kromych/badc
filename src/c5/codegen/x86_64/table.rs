@@ -17,6 +17,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 pub(crate) use super::isa_x86_table::Mnem;
+use crate::c5::codegen::ssa::code_buf::CodeBuf;
 
 /// Encoding mode, selected by `.code16` / `.code32` / `.code64`. It fixes the
 /// default operand and address sizes the `66` and `67` prefixes select away
@@ -240,6 +241,73 @@ impl Opnd {
             Opnd::Imm(_) => None,
         }
     }
+}
+
+/// The widths, as a mask of byte counts 1, 2, 4 and 8, the catalog gives a
+/// memory operand of `name` across its forms; none for an operand of no
+/// width (`lgdt`, `clflush`).
+fn memory_widths(name: &str) -> u8 {
+    let mut mask = 0;
+    for p in memory_forms(name).flat_map(|f| f.ops) {
+        if let OpPat::Rm(w) | OpPat::Mem(w) = *p {
+            for opw in [1u8, 2, 4, 8] {
+                mask |= wbytes(w, opw).unwrap_or(0);
+            }
+        }
+    }
+    mask
+}
+
+/// The catalog's and the supplement's forms of `name` that take a memory
+/// operand.
+fn memory_forms(name: &str) -> impl Iterator<Item = &'static Form> + '_ {
+    let forms = super::isa_x86_table::FORMS;
+    let start = forms.partition_point(|f| f.mnemonic < name);
+    let generated = forms[start..]
+        .iter()
+        .take_while(move |f| f.mnemonic == name);
+    let supplemental = FORMS_SUPPLEMENT.iter().filter(move |f| f.mnemonic == name);
+    generated
+        .chain(supplemental)
+        .filter(|f| (f.ops.iter()).any(|p| matches!(p, OpPat::Rm(_) | OpPat::Mem(_))))
+}
+
+/// The width of a memory operand of `name` that neither a suffix nor a
+/// register sizes: the stack and near-branch group's follows the mode; a
+/// sole width is that width; any other takes the mode's default operand
+/// size, the `l` form. `None` for an operand of no width.
+pub(crate) fn unsized_memory_width(name: &str, mode: Mode) -> Option<u8> {
+    let mask = memory_widths(name);
+    if mask == 0 {
+        return None;
+    }
+    if memory_forms(name).any(|f| f.rexw == RexW::Default64) {
+        return Some(mode.stack_opsize());
+    }
+    if mask.is_power_of_two() {
+        return Some(mask);
+    }
+    Some(mode.opsize())
+}
+
+/// Whether [`unsized_memory_width`] picks a width for `name`: more than
+/// one, none of them the stack and near-branch group's.
+pub(crate) fn memory_width_is_defaulted(name: &str) -> bool {
+    memory_widths(name).count_ones() > 1 && !memory_forms(name).any(|f| f.rexw == RexW::Default64)
+}
+
+/// Whether the catalog gives `name` a memory operand of `bytes`.
+pub(crate) fn memory_width_of(name: &str, bytes: u32) -> bool {
+    u32::from(memory_widths(name)) & bytes != 0 && bytes.is_power_of_two() && bytes <= 8
+}
+
+/// The one width the catalog gives a memory operand of `name`, which an
+/// operand written without a size takes. A sole 64-bit
+/// width is the branches' and stack ops', whose operand follows the mode's
+/// default, so it is none here.
+pub(crate) fn sole_memory_width(name: &str) -> Option<u8> {
+    let mask = memory_widths(name);
+    (mask.count_ones() == 1 && mask < 8).then_some(mask)
 }
 
 fn wbytes(w: W, opw: u8) -> Option<u8> {
@@ -645,10 +713,9 @@ fn mode_pat(p: OpPat, f: &Form, opw: u8, mode: Mode) -> OpPat {
 /// Whether the register spelling of a 16-bit descriptor field selects the
 /// encoding. `Free`: `lldt` / `ltr` / `verr` / `verw` read `r/m16` and
 /// `lar` / `lsl` an `r32/m16` source, so the other operand picks the row and
-/// any general register at least 16 bits wide names the same field, as GNU as
-/// encodes it. `Sized`: `sldt` / `str` / `smsw` store into the operand, which
-/// has an `r/m16`, an `r32/m16` and an `r64/m16` row, and `lmsw` admits no
-/// wider spelling in GNU as.
+/// any general register at least 16 bits wide names the same field. `Sized`:
+/// `sldt` / `str` / `smsw` store into the operand, which has an `r/m16`, an
+/// `r32/m16` and an `r64/m16` row, and `lmsw` has only the `r/m16` row.
 #[derive(Clone, Copy, PartialEq)]
 enum FieldRm {
     Free,
@@ -670,7 +737,7 @@ fn field_rm(mnem: Mnem) -> Option<FieldRm> {
 /// `lgdt` / `lidt` address a 16-bit limit followed by a base whose width is
 /// the operation size -- `m16&16`, `m16&32`, `m16&64` -- and the suffix names
 /// that base. The base is 64-bit in long mode, where the SDM gives no other
-/// row, and 16- or 32-bit outside it; GNU as admits exactly that.
+/// row, and 16- or 32-bit outside it.
 fn pseudo_descriptor_widths(mnem: Mnem, mode: Mode) -> Option<&'static [u8]> {
     matches!(mnem, Mnem::Sgdt | Mnem::Sidt | Mnem::Lgdt | Mnem::Lidt).then(|| {
         if mode == Mode::Bits64 {
@@ -728,6 +795,12 @@ fn form_matches(
 }
 
 impl Mnem {
+    /// The catalog's name of the mnemonic.
+    pub(crate) fn name(self) -> &'static str {
+        let forms = super::isa_x86_table::FORMS;
+        forms[forms.partition_point(|f| f.mnem < self)].mnemonic
+    }
+
     /// The mnemonic for a token, or `None`. Used only by the inline-asm parser
     /// (the one place a mnemonic arrives as text); the catalog is sorted by
     /// name, so this binary-searches.
@@ -812,35 +885,43 @@ pub(crate) fn encode_in(
 /// emitter's migrated families use this: the operands are always a form the
 /// catalog covers, so a failure is a codegen invariant violation and panics.
 pub(crate) fn encode_into(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     mnem: Mnem,
     width_override: Option<u8>,
     ops: &[Opnd],
 ) {
     let mode = Mode::Bits64;
+    let at = code.len();
     match encode_best(mnem, width_override, ops, mode, mode.addrsize()).0 {
         Some((b, _)) => code.extend_from_slice(b.as_slice()),
         None => panic!("native emit: no encoding for `{mnem:?}` with these operands"),
     }
+    code.describe(at, || super::text::catalog(mnem, width_override, ops, None));
 }
 
 /// [`encode_into`] for a form whose memory operand ends in a 32-bit
 /// displacement; returns the offset of that field in `code`. Only the
 /// immediate, if any, follows it.
 pub(crate) fn encode_into_disp32(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     mnem: Mnem,
     width_override: Option<u8>,
     ops: &[Opnd],
 ) -> usize {
     let mode = Mode::Bits64;
-    match encode_best(mnem, width_override, ops, mode, mode.addrsize()).0 {
+    let at = code.len();
+    let field = match encode_best(mnem, width_override, ops, mode, mode.addrsize()).0 {
         Some((b, imm)) => {
             code.extend_from_slice(b.as_slice());
             code.len() - imm as usize - 4
         }
         None => panic!("native emit: no encoding for `{mnem:?}` with these operands"),
-    }
+    };
+    let rel = (field - at) as u8;
+    code.describe(at, || {
+        super::text::catalog(mnem, width_override, ops, Some(rel))
+    });
+    field
 }
 
 /// The shortest encoding of `mnem` for `ops` with its immediate's byte count,
@@ -849,10 +930,10 @@ pub(crate) fn encode_into_disp32(
 /// catalog is sorted by mnemonic and `Mnem`'s Ord matches that order, so this
 /// binary-searches on the integer discriminant to the mnemonic's run of forms.
 ///
-/// Forms of equal length are ranked by immediate field width, which is how
-/// GNU as orders its own templates: a 16-bit operand against the accumulator
-/// encodes `add $1, %ax` as either `05 iw` or `83 /0 ib`, both three bytes,
-/// and the sign-extended byte form is the one it picks.
+/// Forms of equal length are ranked by immediate field width, narrowest
+/// first: a 16-bit operand against the accumulator encodes `add $1, %ax` as
+/// either `05 iw` or `83 /0 ib`, both three bytes, and the sign-extended
+/// byte form is the one taken.
 fn encode_best(
     mnem: Mnem,
     width_override: Option<u8>,
@@ -899,7 +980,7 @@ fn encode_best(
 /// operandless spelling, so the explicit-`%rax` form the compilers emit
 /// (`vmsave %rax`) is supplemented, encoding identically since `rax` is not
 /// named in the opcode; `skinit` takes its SLB address in an implicit `eax`,
-/// and GNU as accepts `skinit %eax` the same way, as it accepts `umwait` and
+/// and `skinit %eax` is accepted the same way, as are `umwait` and
 /// `tpause` with their implicit `edx:eax` deadline spelled after the register
 /// (`umwait %ecx, %edx, %eax`, Intel-ordered `eax, edx, ecx` here).
 /// `invlpga` is the two-operand member of the same class:
@@ -917,8 +998,23 @@ fn encode_best(
 /// member that marks it a width class; the supplement spells it with the `66` a
 /// 16-bit-only legacy row carries. The stack-adjusting returns `ret imm16` (C2) and
 /// `retf imm16` (CA) are absent from the generated catalog; the immediate
-/// is 16-bit at every operand size, so each is one form.
+/// is 16-bit at every operand size, so each is one form. So is the
+/// immediate-count `shrd` (0F AC), the counterpart of `shld`'s 0F A4.
 static FORMS_SUPPLEMENT: &[Form] = &[
+    Form {
+        mnem: Mnem::Shrd,
+        mnemonic: "shrd",
+        ops: &[OpPat::Rm(W::V), OpPat::Reg(W::V), OpPat::Imm(ImmC::Ib)],
+        pp: &[],
+        map: Map::Op0F,
+        opcode: &[0xAC],
+        plus_r: false,
+        rexw: RexW::ByWidth,
+        reg: RegField::FromOp(1),
+        rm: 0,
+        imm: Some(ImmC::Ib),
+        imm_op: 2,
+    },
     Form {
         mnem: Mnem::Ret,
         mnemonic: "ret",

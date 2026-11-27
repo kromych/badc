@@ -580,6 +580,13 @@
 #define M_E  2.71828182845904523536
 #endif
 
+// C17 7.12p9: errors are reported through the floating-point exceptions on
+// every target. sqrt, fabs, floor, ceil and trunc are one instruction each,
+// which raises the exceptions and sets no errno.
+#define MATH_ERRNO 1
+#define MATH_ERREXCEPT 2
+#define math_errhandling MATH_ERREXCEPT
+
 // C99 7.12.3.1: floating-point category codes returned by fpclassify, the C
 // library's values, which code built against its headers exchanges.
 #ifndef FP_NAN

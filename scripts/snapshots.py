@@ -184,10 +184,22 @@ ASM_NORMALIZATION_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
 )
 
 
+# The fill that aligns the next function's entry: no-ops after a function's
+# last instruction, a return or an unconditional jump or trap, up to the
+# blank line before the next symbol. It belongs to no function (a symbol's
+# size covers its code only), and its length follows every change to the
+# function's size, so it carries no codegen signal.
+ENTRY_FILL_RE = re.compile(
+    r"(\n[ \t]*(?:retq?|ud2|brk\b[^\n]*|b[r]?\b[^\n]*|jmp[q]?\b[^\n]*)\n)"
+    r"(?:[ \t]*(?:nop[wl]?|data16\b[^\n]*nop[wl]?|xchg[w]?\s+%ax,\s*%ax)\b[^\n]*\n)+"
+    r"(?=\n|\Z)"
+)
+
+
 def normalize_asm(text: str) -> str:
     for pattern, replacement in ASM_NORMALIZATION_RULES:
         text = pattern.sub(replacement, text)
-    return text
+    return ENTRY_FILL_RE.sub(r"\1", text)
 
 
 SNAPSHOT_FLAGS_RE = re.compile(
@@ -857,6 +869,11 @@ def self_test() -> int:
         got = normalize_asm(before)
         assert got == normalize_asm(after) and got.startswith("  <addr>: "), got
     assert normalize_asm("\tmovl\t$0x1, %eax\n") == "\tmovl\t$0x1, %eax\n"
+    # Entry fill after a return goes; a no-op inside a body stays.
+    filled = "<f>:\n\tnop\n\tretq\n\tnop\n\tnopw\t(%rax,%rax)\n\n<g>:\n\tretq\n"
+    assert normalize_asm(filled) == "<f>:\n\tnop\n\tretq\n\n<g>:\n\tretq\n", normalize_asm(filled)
+    tail = "<f>:\n\tret\n\tnop\n\tnop\n"
+    assert normalize_asm(tail) == "<f>:\n\tret\n", normalize_asm(tail)
     assert snapshot_arch("f.aarch64.asm") == "aarch64"
     assert snapshot_arch("f.x64.asm") == "x64"
 

@@ -7,7 +7,10 @@
    program computes, so the result is checked rather than the placement.
 
    `chase` is the counter-example: its address comes from the previous
-   iteration, so nothing about it is loop-invariant. `bump` and
+   iteration, so nothing about it is loop-invariant. `first_set` and
+   `set_on_one_arm` read a pointer the loop does not write but the code
+   ahead of the loop does: a read of it moved out of the loop reads it
+   after that write. `bump` and
    `sample` cover the volatile cases -- the address of a volatile
    object is still a link-time constant and may be hoisted, while the
    accesses themselves must stay inside the loop and keep their count
@@ -105,6 +108,38 @@ static float scaled(int n)
     return sum;
 }
 
+/* The store just ahead of the loop sets the pointer the loop reads, and
+   in `set_on_one_arm` one arm between the store's block and the loop sets
+   it again: a read of `cursor` placed outside the loop follows both. */
+static int cells[2] = {10, 20};
+static int *cursor;
+volatile int pick = 1;
+
+static int first_set(void)
+{
+    int n = 0;
+    cursor = &cells[0];
+    for (;;) {
+        if (*cursor + n++ > 12) {
+            return n;
+        }
+    }
+}
+
+static int set_on_one_arm(int k)
+{
+    int total = 0;
+    int i;
+    cursor = &cells[0];
+    if (pick) {
+        cursor = &cells[1];
+    }
+    for (i = 0; i < k; ++i) {
+        total += *cursor;
+    }
+    return total;
+}
+
 /* A volatile read-modify-write per iteration; the count is observable
    through the object itself. */
 static int bump(int n)
@@ -168,6 +203,11 @@ int main(void)
     if (scaled(16) != 16.03125f || scale[15] != 1.001953125f) {
         printf("scaled: %.6f %.6f\n", (double)scaled(16), (double)scale[15]);
         return 6;
+    }
+
+    if (first_set() != 4 || set_on_one_arm(3) != 60) {
+        printf("cursor: %d %d\n", first_set(), set_on_one_arm(3));
+        return 7;
     }
 
     return 42;

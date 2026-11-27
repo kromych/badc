@@ -3,7 +3,7 @@ string_memmem.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -41,8 +41,9 @@ Disassembly of section .text:
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
                	mov	x1, #0xb                // =11
-               	mov	x2, x0
-               	mov	x3, x1
+               	adrp	x2, <addr>
+               	add	x2, x2, <lo12>
+               	mov	x3, #0xb                // =11
                	bl	<addr>
                	mov	x1, x0
                	adrp	x0, <addr>
@@ -116,12 +117,12 @@ Disassembly of section .text:
                	mov	x0, #0x8                // =8
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	adrp	x0, <addr>
+               	add	x0, x0, <lo12>
                	mov	x1, #0x7                // =7
                	adrp	x2, <addr>
                	add	x2, x2, <lo12>
                	mov	x3, #0x5                // =5
-               	adrp	x0, <addr>
-               	add	x0, x0, <lo12>
                	bl	<addr>
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
@@ -131,12 +132,12 @@ Disassembly of section .text:
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	adrp	x0, <addr>
+               	add	x0, x0, <lo12>
                	mov	x1, #0x4                // =4
                	adrp	x2, <addr>
                	add	x2, x2, <lo12>
                	mov	x3, #0x3                // =3
-               	adrp	x0, <addr>
-               	add	x0, x0, <lo12>
                	bl	<addr>
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
@@ -146,12 +147,12 @@ Disassembly of section .text:
                	mov	x0, #0xa                // =10
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	adrp	x0, <addr>
+               	add	x0, x0, <lo12>
                	mov	x1, #0x4                // =4
                	adrp	x2, <addr>
                	add	x2, x2, <lo12>
                	mov	x3, #0x2                // =2
-               	adrp	x0, <addr>
-               	add	x0, x0, <lo12>
                	bl	<addr>
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
@@ -187,7 +188,7 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	adrp	x2, <addr>
                	add	x2, x2, <lo12>
-               	mov	x3, x1
+               	mov	x3, #0x1                // =1
                	bl	<addr>
                	cbnz	x0, <addr>
                	mov	x0, #0xd                // =13
@@ -198,7 +199,7 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	adrp	x2, <addr>
                	add	x2, x2, <lo12>
-               	mov	x3, x1
+               	mov	x3, #0x1                // =1
                	bl	<addr>
                	cbz	x0, <addr>
                	mov	x0, #0xe                // =14
@@ -222,7 +223,7 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	adrp	x2, <addr>
                	add	x2, x2, <lo12>
-               	mov	x3, x1
+               	mov	x3, #0x0                // =0
                	bl	<addr>
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>

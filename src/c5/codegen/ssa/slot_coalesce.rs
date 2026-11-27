@@ -904,7 +904,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     // Scalar interference. Walk each block backward; `live` starts at
     // live_out[b]. At a StoreLocal def of slot s, s interferes with every
     // other live slot, then leaves the live set; a LoadLocal use adds its
-    // slot.
+    // slot. The walk fills s's row; the columns follow in one pass.
     let mut interfere = alloc::vec![0u64; n * words];
     let mut live = alloc::vec![0u64; words];
     for (b, blk) in f.blocks.iter().enumerate() {
@@ -920,12 +920,6 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
                                 m &= !(1u64 << (bit % 64));
                             }
                             interfere[bit * words + w] |= m;
-                            let mut mm = m;
-                            while mm != 0 {
-                                let t = w * 64 + mm.trailing_zeros() as usize;
-                                interfere[t * words + bit / 64] |= 1u64 << (bit % 64);
-                                mm &= mm - 1;
-                            }
                         }
                         live[bit / 64] &= !(1u64 << (bit % 64));
                     }
@@ -940,33 +934,15 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
         }
     }
 
-    // Greedy coloring: interfering slots get distinct colors. Each
-    // row is walked over its set bits, and the colors its already-
-    // colored neighbors hold are marked in a stamp array refreshed by
-    // bumping the stamp, so the search costs the row's degree rather
-    // than the candidate count times a set insertion.
-    let mut color = alloc::vec![usize::MAX; n];
-    let mut color_used = alloc::vec![0u32; n + 1];
-    let mut ncolors = 0usize;
+    symmetrize(&mut interfere, n, words);
+
+    // Greedy coloring in slot order: interfering slots get distinct colors.
+    let mut greedy = Greedy::new(n);
     for i in 0..n {
-        let stamp = i as u32 + 1;
-        for w in 0..words {
-            let mut bits = interfere[i * words + w];
-            while bits != 0 {
-                let j = w * 64 + bits.trailing_zeros() as usize;
-                bits &= bits - 1;
-                if color[j] != usize::MAX {
-                    color_used[color[j]] = stamp;
-                }
-            }
-        }
-        let mut c = 0;
-        while color_used[c] == stamp {
-            c += 1;
-        }
-        color[i] = c;
-        ncolors = ncolors.max(c + 1);
+        greedy.color(i, &interfere[i * words..(i + 1) * words], |_| true);
     }
+    let ncolors = greedy.size.len();
+    let color = greedy.color;
 
     // Group lifetime: a shareable group is busy from its first event (a
     // store, or the address take that every access data-depends on) to its
@@ -1159,10 +1135,6 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
     // at pc; two groups accessed by the same instruction interfere
     // directly.
     let mut g_interfere = alloc::vec![0u64; nsg * gwords];
-    let mark = |a: usize, b: usize, gi: &mut Vec<u64>| {
-        gi[a * gwords + b / 64] |= 1u64 << (b % 64);
-        gi[b * gwords + a / 64] |= 1u64 << (a % 64);
-    };
     for (b, evs) in block_events.iter().enumerate() {
         if evs.is_empty() {
             continue;
@@ -1210,6 +1182,13 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
             let escaped = x_in[b * gwords + w] | g_escape[b * gwords + w] | e_out[b * gwords + w];
             live[w] |= scoped_mask[w] & !dead_out(&dead_in, b, w) & escaped;
         }
+        // The groups whose first event in the block precedes the pc.
+        let mut before: Vec<u64> = alloc::vec![0; gwords];
+        let mut firsts: Vec<(u32, usize)> = first_ev.iter().map(|(&sg, &pc)| (pc, sg)).collect();
+        firsts.sort_unstable();
+        for &(_, sg) in &firsts {
+            before[sg / 64] |= 1u64 << (sg % 64);
+        }
         let mut i = evs.len();
         while i > 0 {
             let hi = i;
@@ -1217,29 +1196,28 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
             while i > 0 && evs[i - 1].0 == pc {
                 i -= 1;
             }
+            while let Some(&(fp, sg)) = firsts.last()
+                && fp >= pc
+            {
+                before[sg / 64] &= !(1u64 << (sg % 64));
+                firsts.pop();
+            }
             let at_pc = &evs[i..hi];
             for &(_, sg, kind) in at_pc {
                 if kind == START {
                     continue;
                 }
-                for (w, &lw) in live.iter().enumerate().take(gwords) {
-                    let mut m = lw;
+                let row = &mut g_interfere[sg * gwords..(sg + 1) * gwords];
+                for (w, cell) in row.iter_mut().enumerate() {
+                    let mut m = live[w] & (s_in[b * gwords + w] | before[w]);
                     if w == sg / 64 {
                         m &= !(1u64 << (sg % 64));
                     }
-                    while m != 0 {
-                        let h = w * 64 + m.trailing_zeros() as usize;
-                        m &= m - 1;
-                        let started = s_in[b * gwords + h / 64] & (1u64 << (h % 64)) != 0
-                            || first_ev.get(&h).is_some_and(|&fp| fp < pc);
-                        if started {
-                            mark(sg, h, &mut g_interfere);
-                        }
-                    }
+                    *cell |= m;
                 }
                 for &(_, other, okind) in at_pc {
                     if other != sg && okind != START {
-                        mark(sg, other, &mut g_interfere);
+                        row[other / 64] |= 1u64 << (other % 64);
                     }
                 }
             }
@@ -1263,6 +1241,7 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
             }
         }
     }
+    symmetrize(&mut g_interfere, nsg, gwords);
     // Color the shareable groups, widest first, so a color's width is
     // fixed by its first member and later members always fit.
     let mut order: Vec<usize> = (0..nsg).collect();
@@ -1271,36 +1250,21 @@ fn coalesce(f: &mut FunctionSsa, compact: bool, protected: bool) -> BTreeMap<i64
         hi - lo + 1
     };
     order.sort_by_key(|&sg| (-width(sg), groups[sidx[sg]].0));
-    let mut g_color = alloc::vec![usize::MAX; nsg];
-    let mut g_color_used = alloc::vec![0u32; nsg + 1];
-    let mut g_ncolors = 0usize;
+    let mut greedy = Greedy::new(nsg);
     let mut g_color_width: Vec<i64> = Vec::new();
     // Region members and frame storage take separate colors.
     let mut g_color_region: Vec<bool> = Vec::new();
-    for (i, &sg) in order.iter().enumerate() {
-        let stamp = i as u32 + 1;
-        for w in 0..gwords {
-            let mut bits = g_interfere[sg * gwords + w];
-            while bits != 0 {
-                let j = w * 64 + bits.trailing_zeros() as usize;
-                bits &= bits - 1;
-                if g_color[j] != usize::MAX {
-                    g_color_used[g_color[j]] = stamp;
-                }
-            }
-        }
+    for &sg in &order {
         let region = region_group[sidx[sg]];
-        let mut c = 0;
-        while g_color_used[c] == stamp || (c < g_ncolors && g_color_region[c] != region) {
-            c += 1;
-        }
-        g_color[sg] = c;
-        if c == g_ncolors {
-            g_ncolors += 1;
+        let row = &g_interfere[sg * gwords..(sg + 1) * gwords];
+        let c = greedy.color(sg, row, |c| g_color_region[c] == region);
+        if c == g_color_width.len() {
             g_color_width.push(width(sg));
             g_color_region.push(region);
         }
     }
+    let g_ncolors = g_color_width.len();
+    let g_color = greedy.color;
 
     // Compact the movable region. Magnitudes are assigned just past the
     // floor: reserved groups first (each a contiguous block, order
@@ -1639,6 +1603,139 @@ fn store_width(kind: crate::c5::ir::StoreKind) -> i64 {
         V512 => 64,
     }
 }
+
+/// Transpose a 64x64 bit block: bit `k` of `a[i]` moves to bit `i` of `a[k]`.
+fn transpose64(a: &mut [u64; 64]) {
+    let mut j = 32;
+    let mut m: u64 = 0x0000_0000_FFFF_FFFF;
+    while j != 0 {
+        for k in (0..64).filter(|k| k & j == 0) {
+            let t = ((a[k] >> j) ^ a[k + j]) & m;
+            a[k] ^= t << j;
+            a[k + j] ^= t;
+        }
+        j >>= 1;
+        m ^= m << j;
+    }
+}
+
+/// Make the `n`-node relation in `rows` (`words` words a row) symmetric:
+/// each row gains the column of its node, one 64x64 block at a time.
+fn symmetrize(rows: &mut [u64], n: usize, words: usize) {
+    let mut block = [0u64; 64];
+    for bi in 0..words {
+        for bj in bi..words {
+            for (k, slot) in block.iter_mut().enumerate() {
+                let r = bi * 64 + k;
+                *slot = if r < n { rows[r * words + bj] } else { 0 };
+            }
+            transpose64(&mut block);
+            for (k, &bits) in block.iter().enumerate() {
+                let r = bj * 64 + k;
+                if r < n {
+                    rows[r * words + bi] |= bits;
+                }
+            }
+            if bi != bj {
+                for (k, slot) in block.iter_mut().enumerate() {
+                    let r = bj * 64 + k;
+                    *slot = if r < n { rows[r * words + bi] } else { 0 };
+                }
+                transpose64(&mut block);
+                for (k, &bits) in block.iter().enumerate() {
+                    let r = bi * 64 + k;
+                    if r < n {
+                        rows[r * words + bj] |= bits;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Greedy coloring over a symmetric interference relation: each node takes
+/// the lowest color the caller accepts that none of its colored neighbors
+/// holds. A node's colored neighbors or its colored non-neighbors are
+/// walked, whichever are fewer: a color is free exactly when every member
+/// is a non-neighbor, so a dense row costs no more than a sparse one.
+struct Greedy {
+    color: Vec<usize>,
+    colored: Vec<u64>,
+    size: Vec<usize>,
+    seen: Vec<u32>,
+    tally: Vec<usize>,
+    round: u32,
+}
+
+impl Greedy {
+    fn new(n: usize) -> Self {
+        Greedy {
+            color: alloc::vec![usize::MAX; n],
+            colored: alloc::vec![0; n.div_ceil(64)],
+            size: Vec::new(),
+            seen: Vec::new(),
+            tally: Vec::new(),
+            round: 0,
+        }
+    }
+
+    /// Color `node`, whose row is `row`; `ok` admits an existing color.
+    fn color(&mut self, node: usize, row: &[u64], ok: impl Fn(usize) -> bool) -> usize {
+        self.round += 1;
+        let round = self.round;
+        let ncolors = self.size.len();
+        self.seen.resize(ncolors, 0);
+        self.tally.resize(ncolors, 0);
+        let (mut adjacent, mut apart) = (0u32, 0u32);
+        for (&r, &c) in row.iter().zip(&self.colored) {
+            adjacent += (r & c).count_ones();
+            apart += (!r & c).count_ones();
+        }
+        let mut pick = ncolors;
+        if adjacent <= apart {
+            for (w, (&r, &c)) in row.iter().zip(&self.colored).enumerate() {
+                let mut bits = r & c;
+                while bits != 0 {
+                    let j = w * 64 + bits.trailing_zeros() as usize;
+                    bits &= bits - 1;
+                    self.seen[self.color[j]] = round;
+                }
+            }
+            pick = (0..ncolors)
+                .find(|&c| self.seen[c] != round && ok(c))
+                .unwrap_or(ncolors);
+        } else {
+            let mut touched = Vec::new();
+            for (w, (&r, &c)) in row.iter().zip(&self.colored).enumerate() {
+                let mut bits = !r & c;
+                while bits != 0 {
+                    let j = w * 64 + bits.trailing_zeros() as usize;
+                    bits &= bits - 1;
+                    let c = self.color[j];
+                    if self.seen[c] != round {
+                        self.seen[c] = round;
+                        self.tally[c] = 0;
+                        touched.push(c);
+                    }
+                    self.tally[c] += 1;
+                }
+            }
+            for c in touched {
+                if self.tally[c] == self.size[c] && c < pick && ok(c) {
+                    pick = c;
+                }
+            }
+        }
+        self.color[node] = pick;
+        self.colored[node / 64] |= 1 << (node % 64);
+        match self.size.get_mut(pick) {
+            Some(s) => *s += 1,
+            None => self.size.push(1),
+        }
+        pick
+    }
+}
+
 #[cfg(all(test, feature = "std"))]
 mod tests {
     use super::super::super::ir::{Block, LoadKind, NO_VALUE, StoreKind, Terminator};
@@ -2677,5 +2774,72 @@ mod tests {
             "{BLOCKS} blocks took {reads} edge-list reads: the group lifetimes \
              are being iterated rather than swept over the condensation"
         );
+    }
+
+    /// A relation of `n` nodes, each pair related with chance `1/odds`.
+    fn relation(n: usize, odds: u64, seed: u64) -> Vec<u64> {
+        let words = n.div_ceil(64);
+        let mut rows = alloc::vec![0u64; n * words];
+        let mut x = seed;
+        for r in 0..n {
+            for c in 0..n {
+                x = x
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                if r != c && (x >> 33).is_multiple_of(odds) {
+                    rows[r * words + c / 64] |= 1 << (c % 64);
+                }
+            }
+        }
+        rows
+    }
+
+    /// The blocked symmetrization adds exactly the transpose, across a node
+    /// count that leaves a partial block.
+    #[test]
+    fn symmetrize_adds_the_transpose() {
+        let n: usize = 150;
+        let words = n.div_ceil(64);
+        let rows = relation(n, 5, 7);
+        let mut got = rows.clone();
+        symmetrize(&mut got, n, words);
+        let bit = |m: &[u64], r: usize, c: usize| m[r * words + c / 64] >> (c % 64) & 1 == 1;
+        for r in 0..n {
+            for c in 0..n {
+                assert_eq!(
+                    bit(&got, r, c),
+                    bit(&rows, r, c) || bit(&rows, c, r),
+                    "({r}, {c})"
+                );
+            }
+        }
+    }
+
+    /// The greedy coloring picks what marking every colored neighbor picks,
+    /// on sparse, half-dense and dense relations.
+    #[test]
+    fn greedy_coloring_matches_marking_every_neighbor() {
+        for (odds, seed) in [(9, 1), (2, 2), (1, 3)] {
+            let n: usize = 200;
+            let words = n.div_ceil(64);
+            let mut rows = relation(n, odds, seed);
+            symmetrize(&mut rows, n, words);
+            let mut greedy = Greedy::new(n);
+            let mut plain: Vec<usize> = alloc::vec![usize::MAX; n];
+            for i in 0..n {
+                let row = &rows[i * words..(i + 1) * words];
+                let ok = |c: usize| c % 3 != 1;
+                let got = greedy.color(i, row, ok);
+                let used: BTreeSet<usize> = (0..i)
+                    .filter(|&j| row[j / 64] >> (j % 64) & 1 == 1)
+                    .map(|j| plain[j])
+                    .collect();
+                let colors = plain[..i].iter().copied().max().map_or(0, |m| m + 1);
+                plain[i] = (0..colors)
+                    .find(|&c| !used.contains(&c) && ok(c))
+                    .unwrap_or(colors);
+                assert_eq!(got, plain[i], "node {i} at odds {odds}");
+            }
+        }
     }
 }

@@ -3,7 +3,7 @@ hfa_element_count.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -423,7 +423,6 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	bl	<addr>
-               	stur	x0, [x29, #-0x8]
                	fmov	d0, x0
                	fmov	d1, #0.75000000
                	fcmp	d0, d1

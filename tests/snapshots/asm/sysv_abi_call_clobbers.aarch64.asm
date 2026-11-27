@@ -3,7 +3,7 @@ sysv_abi_call_clobbers.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -191,10 +191,9 @@ Disassembly of section .text:
                	ldr	d1, [x0, #0x8]
                	bl	<addr>
                	fmov	d1, #11.00000000
-               	mov	x0, #0x1                // =1
-               	mov	x1, #0x0                // =0
                	fcmp	d0, d1
-               	csel	x20, x0, x1, ne
+               	mov	x16, #0x1               // =1
+               	csel	x20, x16, xzr, ne
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	ldr	x0, [x3]
@@ -217,11 +216,11 @@ Disassembly of section .text:
                	csel	x20, x0, x20, ne
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	ldr	x1, [x3, #0x8]
-               	ldr	x2, [x3, #0x10]
-               	ldr	x3, [x3, #0x20]
+               	ldr	x1, [x0, #0x8]
+               	ldr	x2, [x0, #0x10]
+               	ldr	x3, [x0, #0x20]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
                	bl	<addr>
                	orr	x1, x20, #0x8
                	cmp	x0, #0x23

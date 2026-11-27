@@ -3,7 +3,7 @@ loop_carried_low_words.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -203,69 +203,65 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x12c
                	b.lt	<addr>
-               	sub	x21, x29, #0x148
+               	sub	x22, x29, #0x148
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x21]
+               	stp	x16, x17, [x22]
                	ldr	x16, [x0, #0x10]
-               	str	x16, [x21, #0x10]
+               	str	x16, [x22, #0x10]
                	mov	x20, #0x0               // =0
+               	sub	x21, x29, #0x148
+               	ldr	x0, [x22, x20, lsl #3]
+               	sub	x1, x29, #0x130
+               	mov	x2, #0x12c              // =300
+               	bl	<addr>
+               	mov	x23, x0
+               	ldr	x0, [x22, x20, lsl #3]
+               	sub	x1, x29, #0x130
+               	mov	x2, #0x12c              // =300
+               	bl	<addr>
+               	cmp	w23, w0
+               	b.ne	<addr>
                	ldr	x0, [x21, x20, lsl #3]
-               	sub	x22, x29, #0x130
-               	mov	x2, #0x12c              // =300
-               	mov	x1, x22
+               	sub	x1, x29, #0x130
+               	mov	x2, #0x0                // =0
                	bl	<addr>
                	mov	x23, x0
                	ldr	x0, [x21, x20, lsl #3]
-               	mov	x2, #0x12c              // =300
-               	mov	x1, x22
-               	bl	<addr>
-               	cmp	w23, w0
-               	b.ne	<addr>
-               	sub	x22, x29, #0x148
-               	ldr	x0, [x22, x20, lsl #3]
-               	sub	x1, x29, #0x130
-               	mov	x2, #0x0                // =0
-               	bl	<addr>
-               	mov	x23, x0
-               	ldr	x0, [x22, x20, lsl #3]
                	sub	x1, x29, #0x130
                	mov	x2, #0x0                // =0
                	bl	<addr>
                	cmp	w23, w0
                	b.ne	<addr>
-               	sub	x22, x29, #0x148
-               	ldr	x0, [x22, x20, lsl #3]
+               	ldr	x0, [x21, x20, lsl #3]
                	sub	x1, x29, #0x130
                	mov	x2, #0x12c              // =300
                	bl	<addr>
                	mov	x23, x0
-               	ldr	x0, [x22, x20, lsl #3]
+               	ldr	x0, [x21, x20, lsl #3]
                	sub	x1, x29, #0x130
                	mov	x2, #0x12c              // =300
                	bl	<addr>
                	cmp	w23, w0
                	b.ne	<addr>
-               	sub	x22, x29, #0x148
-               	ldr	x0, [x22, x20, lsl #3]
+               	ldr	x0, [x21, x20, lsl #3]
                	sub	x1, x29, #0x130
                	mov	x2, #0x0                // =0
                	bl	<addr>
                	mov	x23, x0
-               	ldr	x0, [x22, x20, lsl #3]
+               	ldr	x0, [x21, x20, lsl #3]
                	sub	x1, x29, #0x130
                	mov	x2, #0x0                // =0
                	bl	<addr>
                	cmp	w23, w0
                	b.ne	<addr>
-               	sub	x22, x29, #0x148
-               	ldr	x0, [x22, x20, lsl #3]
+               	ldr	x0, [x21, x20, lsl #3]
                	sub	x1, x29, #0x130
                	mov	x2, #0x12c              // =300
                	bl	<addr>
                	mov	x23, x0
-               	ldr	x0, [x22, x20, lsl #3]
+               	ldr	x0, [x21, x20, lsl #3]
                	sub	x1, x29, #0x130
                	mov	x2, #0x12c              // =300
                	bl	<addr>

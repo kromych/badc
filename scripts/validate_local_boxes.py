@@ -94,6 +94,7 @@ def kernel_release() -> str:
 ALL = frozenset({"linux", "windows", "macos"})
 POSIX = frozenset({"linux", "macos"})
 LINUX = frozenset({"linux"})
+WINDOWS = frozenset({"windows"})
 
 # Demos to run at a time per lane. Several drive their own thread pool
 # (demos/qemu takes cpu_count), so the width trades lane wall clock
@@ -133,6 +134,13 @@ GATING_DEMOS = (
     # subsystem-10 header, which no hosted demo reaches. Boots the
     # images where QEMU and firmware are installed.
     ("demos/edk2/smoke.py", ALL),
+    # A library's own CMake with badc as the C compiler, the only demo
+    # where a build system identifies badc and probes its ABI, and its C++
+    # unit test linked against the badc-built library: every algorithm's
+    # known answers, on aarch64 over badc-assembled assembly. 267 s on the
+    # x86_64 box and 279 s on the aarch64 one, inside the phase openssl
+    # sets. Needs cmake and a C++ compiler.
+    ("demos/symcrypt/smoke.py", LINUX),
     # The widest corpus in the tree (1722 units on aarch64, 1518 on
     # x86_64) and the only pure self-link -- badc's own linker over
     # 100%-badc objects, no system linker. The two levels CI's qemu job
@@ -186,6 +194,13 @@ GATING_DEMOS = (
     # PE subsystem bytes (CUI and NATIVE) and the ntdll HANDLE-returning
     # bindings, where a 64-bit return truncation would show.
     ("demos/nt_loader/smoke.py", ALL),
+    # A Windows GUI program of 456 C units built against the SDK's and MSVC's
+    # headers, linked with cl C++ objects, MASM / armasm objects, rc
+    # resources and the static VC runtime, at -O0 and -O, and phlib's
+    # self-test run. An x86-64 flag-reuse miscompile that formatted 1234 as
+    # "1234" at -O was caught only here while the board was green.
+    # 135 s on the x64 box and 217 s on the arm64 one.
+    ("demos/systeminformer/smoke.py", WINDOWS),
     # Fourteen boots of PE32+ EFI kernels under QEMU/OVMF, both arches at
     # -O0 and -O: the only cover for a naked-function ISR and the context
     # switch it performs. A prologue change that used the caller's register

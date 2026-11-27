@@ -3,7 +3,7 @@ enum_type_identity.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,10 +26,8 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rax
+               	subq	$0x18, %rsp
+               	leaq	(%rsp), %rax
                	leaq	<rip>, %rcx
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
@@ -44,10 +42,10 @@ Disassembly of section .text:
                	sarq	$0x2, %rax
                	cmpq	$0x2, %rax
                	jne	<addr>
-               	movl	$0x2, -0xc(%rbp)
+               	movl	$0x2, 0x4(%rsp)
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

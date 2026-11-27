@@ -146,6 +146,13 @@ fn pe_library_spellings(name: &str) -> [String; 7] {
 /// ships only the stub, and where both exist they describe the same
 /// library. PE takes [`pe_library_spellings`].
 pub(crate) fn find_library(name: &str, search_paths: &[String], target: Target) -> Option<String> {
+    // `-l:<file>` names the file itself.
+    if let Some(file) = name.strip_prefix(':') {
+        return (search_paths.iter())
+            .map(|d| std::path::Path::new(d).join(file))
+            .find(|p| p.is_file())
+            .map(|p| p.to_string_lossy().into_owned());
+    }
     let fmt = target.binary_format();
     if fmt == badc::BinaryFormat::Pe {
         let names = pe_library_spellings(name);
@@ -596,6 +603,16 @@ impl Inputs {
             search_paths.extend(sysroot_library_paths(cli.target, root));
         }
         search_paths.extend(super::paths::pe_lib_env_paths(cli.target));
+        // `--jit` and `--interp` run against the process's C library and link
+        // nothing else: a part of it passes, any other library is refused.
+        let in_process = matches!(cli.mode, Mode::Jit | Mode::Interp);
+        let refuse = |what: String| -> ! {
+            eprintln!(
+                "badc: error: {} links no library but the C library's: {what}",
+                cli.mode.flag_name()
+            );
+            std::process::exit(1);
+        };
         for entry in core::mem::take(&mut self.named) {
             let (name, whole) = match entry {
                 Named::Input(input) => {
@@ -603,6 +620,7 @@ impl Inputs {
                     continue;
                 }
                 Named::Lib { name, whole } => (name, whole),
+                Named::SharedPath(path) if in_process => refuse(format!("`{path}`")),
                 Named::SharedPath(path) => {
                     if let Err(e) =
                         ingest_linker_input(self, &path, &search_paths, cli.target, false, 0)
@@ -613,7 +631,11 @@ impl Inputs {
                     continue;
                 }
             };
+            if in_process && !cli.freestanding && c_library_part(&name, cli.target) {
+                continue;
+            }
             match find_library(&name, &search_paths, cli.target) {
+                Some(p) if in_process => refuse(format!("`-l{name}` is `{p}`")),
                 Some(p) => {
                     if let Err(e) =
                         ingest_linker_input(self, &p, &search_paths, cli.target, whole, 0)
@@ -624,19 +646,24 @@ impl Inputs {
                 }
                 None if !cli.freestanding && c_library_part(&name, cli.target) => {}
                 None => {
-                    let spellings: Vec<String> =
-                        if cli.target.binary_format() == badc::BinaryFormat::Pe {
-                            pe_library_spellings(&name).into()
-                        } else {
-                            library_spellings(&name, cli.target).into()
-                        };
-                    let (last, rest) = spellings.split_last().expect("spellings");
-                    let rest: Vec<String> = rest.iter().map(|s| format!("`{s}`")).collect();
+                    let spellings: Vec<String> = if let Some(file) = name.strip_prefix(':') {
+                        vec![file.to_string()]
+                    } else if cli.target.binary_format() == badc::BinaryFormat::Pe {
+                        pe_library_spellings(&name).into()
+                    } else {
+                        library_spellings(&name, cli.target).into()
+                    };
+                    let names: Vec<String> = spellings.iter().map(|s| format!("`{s}`")).collect();
+                    let listed = match names.as_slice() {
+                        [one] => one.clone(),
+                        [a, b] => format!("{a} or {b}"),
+                        [rest @ .., last] => format!("{}, or {last}", rest.join(", ")),
+                        [] => unreachable!("a library has a spelling"),
+                    };
                     eprintln!(
-                        "badc: cannot find {} or `{last}` on any search path \
+                        "badc: cannot find {listed} on any search path \
                          ({} probed; -L<dir> names a directory, --sysroot=<dir> the \
                          root of the target's standard ones)",
-                        rest.join(", "),
                         search_paths.len()
                     );
                     std::process::exit(1);

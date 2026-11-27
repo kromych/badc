@@ -3,7 +3,7 @@ float_literal_f_suffix.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -72,6 +72,7 @@ Disassembly of section .text:
                	vaddsd	(%rcx), %xmm0, %xmm0
                	incq	%rax
                	movl	-0xd0(%rbp), %ecx
+               	nopl	(%rax)
                	cmpl	%ecx, %eax
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
@@ -79,31 +80,28 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x2, %edi
+               	pushq	%rax
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
+               	movl	$0x2, %edi
                	movb	$0x2, %al
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0xe, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	movl	$0x1, %edi
                	movsd	<rip>, %xmm0
+               	movl	$0x1, %edi
                	movb	$0x1, %al
                	callq	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x10, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

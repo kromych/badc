@@ -84,14 +84,14 @@ pub(super) fn embedded_header(
     from_bundled: bool,
 ) -> Option<&'static str> {
     let &(_, ts, body) = registry_entry(name)?;
-    (from_bundled || ts.contains(target)).then_some(body)
+    (EMBEDDED && (from_bundled || ts.contains(target))).then_some(body)
 }
 
 /// Whether the registry carries `name` and does not serve it on `target`:
 /// the program's `#include` of it is not part of the compiler's set
 /// there, whichever header root holds a copy.
 pub(super) fn withheld(name: &str, target: Target) -> bool {
-    registry_entry(name).is_some_and(|&(_, ts, _)| !ts.contains(target))
+    EMBEDDED && registry_entry(name).is_some_and(|&(_, ts, _)| !ts.contains(target))
 }
 
 /// The headers served on targets whose reference toolchain lacks them,
@@ -130,6 +130,38 @@ pub(super) const BEYOND_REFERENCE: &[(&str, TargetSet, &str)] = &[
     ),
 ];
 
+/// Extension headers the references ship only for inclusion behind
+/// `<immintrin.h>` (an `#error` alone, the table's `f`); badc's include
+/// `<x86intrin.h>`, so each also compiles alone.
+#[cfg(test)]
+const UMBRELLA_ONLY: &[&str] = &[
+    "avxintrin.h",
+    "avx2intrin.h",
+    "fmaintrin.h",
+    "f16cintrin.h",
+    "shaintrin.h",
+    "vaesintrin.h",
+    "vpclmulqdqintrin.h",
+    "rdseedintrin.h",
+    "bmiintrin.h",
+    "bmi2intrin.h",
+    "lzcntintrin.h",
+    "adxintrin.h",
+    "xsaveintrin.h",
+    "clflushoptintrin.h",
+    "clwbintrin.h",
+    "prfchwintrin.h",
+    "avx512fintrin.h",
+    "avx512bwintrin.h",
+    "avx512dqintrin.h",
+    "avx512vlintrin.h",
+    "avx512cdintrin.h",
+    "avx512vnniintrin.h",
+    "avx512vlbwintrin.h",
+    "avx512vldqintrin.h",
+    "ia32intrin.h",
+];
+
 /// The intrinsic wrappers, built on badc's own builtins and inline-asm
 /// encoders. Another compiler's copy is written against that compiler's
 /// builtins and can never compile here, so where a search directory
@@ -153,6 +185,32 @@ pub(super) const INTRINSIC_HEADERS: &[&str] = &[
     "smmintrin.h",
     "nmmintrin.h",
     "wmmintrin.h",
+    "avxintrin.h",
+    "avx2intrin.h",
+    "fmaintrin.h",
+    "f16cintrin.h",
+    "shaintrin.h",
+    "vaesintrin.h",
+    "vpclmulqdqintrin.h",
+    "rdseedintrin.h",
+    "bmiintrin.h",
+    "bmi2intrin.h",
+    "lzcntintrin.h",
+    "adxintrin.h",
+    "xsaveintrin.h",
+    "clflushoptintrin.h",
+    "clwbintrin.h",
+    "prfchwintrin.h",
+    "avx512fintrin.h",
+    "avx512bwintrin.h",
+    "avx512dqintrin.h",
+    "avx512vlintrin.h",
+    "avx512cdintrin.h",
+    "avx512vnniintrin.h",
+    "avx512vlbwintrin.h",
+    "avx512vldqintrin.h",
+    "x86gprintrin.h",
+    "ia32intrin.h",
 ];
 
 /// The rest of the headers that live in the compiler's own include
@@ -174,6 +232,16 @@ const COMPILER_HEADERS: &[&str] = &[
     "mm_malloc.h",
     "cpuid.h",
 ];
+
+/// Whether `name` is a C library header the registry carries, other than
+/// `<features.h>`: on Linux each is entered after `<features.h>`, as the GNU
+/// C library's headers include it first.
+pub(crate) fn follows_features(name: &str) -> bool {
+    name != "features.h"
+        && !INTRINSIC_HEADERS.contains(&name)
+        && !COMPILER_HEADERS.contains(&name)
+        && registry_entry(name).is_some()
+}
 
 /// Whether `name` is an intrinsic header ([`INTRINSIC_HEADERS`]).
 pub(crate) fn intrinsic_header(name: &str) -> bool {
@@ -200,12 +268,13 @@ pub(super) fn compiler_header(name: &str) -> bool {
 /// `--dump-headers` and `--install` can write the registry out, for every
 /// target, without reaching into the preprocessor.
 pub fn embedded_headers() -> &'static [(&'static str, TargetSet, &'static str)] {
-    EMBEDDED_HEADERS
+    if EMBEDDED { EMBEDDED_HEADERS } else { &[] }
 }
 
 /// A registry entry: the name, the targets it is served on and the body
 /// of `libc/include/<file>`, `<file>` being the name unless given, or of
 /// `libc/compiler/include/<name>` for one of the compiler's own headers.
+#[cfg(feature = "headers")]
 macro_rules! header {
     ($name:literal, $targets:expr) => {
         header!($name => $name, $targets)
@@ -217,6 +286,22 @@ macro_rules! header {
         ($name, $targets, include_str!(concat!("../../libc/include/", $file)))
     };
 }
+
+/// Without the `headers` feature the registry keeps the names and targets
+/// and no body: no header is embedded, and an `#include` searches the
+/// include path alone.
+#[cfg(not(feature = "headers"))]
+macro_rules! header {
+    ($name:literal, $targets:expr $(, compiler)?) => {
+        ($name, $targets, "")
+    };
+    ($name:literal => $file:literal, $targets:expr) => {
+        ($name, $targets, "")
+    };
+}
+
+/// Whether the header bodies are embedded.
+const EMBEDDED: bool = cfg!(feature = "headers");
 
 /// Every header the registry knows about, with the targets it is served
 /// on.
@@ -239,6 +324,32 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("smmintrin.h", X86_64, compiler),
     header!("nmmintrin.h", X86_64, compiler),
     header!("wmmintrin.h", X86_64, compiler),
+    header!("avxintrin.h", X86_64, compiler),
+    header!("avx2intrin.h", X86_64, compiler),
+    header!("fmaintrin.h", X86_64, compiler),
+    header!("f16cintrin.h", X86_64, compiler),
+    header!("shaintrin.h", X86_64, compiler),
+    header!("vaesintrin.h", X86_64, compiler),
+    header!("vpclmulqdqintrin.h", X86_64, compiler),
+    header!("rdseedintrin.h", X86_64, compiler),
+    header!("bmiintrin.h", X86_64, compiler),
+    header!("bmi2intrin.h", X86_64, compiler),
+    header!("lzcntintrin.h", X86_64, compiler),
+    header!("adxintrin.h", X86_64, compiler),
+    header!("xsaveintrin.h", X86_64, compiler),
+    header!("clflushoptintrin.h", X86_64, compiler),
+    header!("clwbintrin.h", X86_64, compiler),
+    header!("prfchwintrin.h", X86_64, compiler),
+    header!("avx512fintrin.h", X86_64, compiler),
+    header!("avx512bwintrin.h", X86_64, compiler),
+    header!("avx512dqintrin.h", X86_64, compiler),
+    header!("avx512vlintrin.h", X86_64, compiler),
+    header!("avx512cdintrin.h", X86_64, compiler),
+    header!("avx512vnniintrin.h", X86_64, compiler),
+    header!("avx512vlbwintrin.h", X86_64, compiler),
+    header!("avx512vldqintrin.h", X86_64, compiler),
+    header!("x86gprintrin.h", X86_64, compiler),
+    header!("ia32intrin.h", X86_64, compiler),
     header!(
         "mm_malloc.h",
         MACOS.or(TargetSet::of(Target::LinuxX64)).or(WINDOWS),
@@ -280,6 +391,7 @@ pub(super) static EMBEDDED_HEADERS: &[(&str, TargetSet, &str)] = &[
     header!("sys/utime.h", WINDOWS),
     header!("netdb.h", POSIX),
     header!("err.h", POSIX),
+    header!("features.h", LINUX),
     header!("ucontext.h", POSIX),
     header!("sys/ucontext.h", POSIX),
     header!("sys/prctl.h", LINUX),
@@ -664,6 +776,154 @@ pub(super) fn headers_declaring(name: &str) -> &'static [&'static str] {
 mod tests {
     use super::*;
 
+    /// The build-time index against the parse of the headers on every
+    /// target, with and without `_UNICODE`, `_MBCS` and the Annex K and GNU
+    /// extensions: each name the index lists for a header is a function or
+    /// object the parse of the header declares, and each function the parse
+    /// first declares in the header or a block it includes, through a
+    /// declarator its file-scope text spells, is listed. A header a target
+    /// withholds is parsed through the headers that include it. What a
+    /// macro's expansion declares has no declarator in the text.
+    /// Release-only: it parses each header up to fifteen times.
+    #[test]
+    #[cfg(not(debug_assertions))]
+    fn the_header_index_lists_the_declarations_each_header_parses_to() {
+        use crate::c5::token::Token;
+        use alloc::collections::{BTreeMap, BTreeSet};
+        use alloc::vec::Vec;
+        let text = |h: &str| {
+            embedded_headers()
+                .iter()
+                .find(|e| e.0 == h)
+                .map_or("", |e| e.2)
+        };
+        let mut indexed: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
+        for (name, hs) in BINDING_TO_HEADER {
+            for h in *hs {
+                indexed.entry(h).or_default().insert(name);
+            }
+        }
+        let configs = ["", "#define _UNICODE 1\n", "#define _MBCS 1\n"];
+        let mut wrong = Vec::new();
+        for (&h, names) in &indexed {
+            let mut files = alloc::vec![h];
+            let mut i = 0;
+            while i < files.len() {
+                for inc in included_blocks(text(files[i])) {
+                    if !files.contains(&inc) {
+                        files.push(inc);
+                    }
+                }
+                i += 1;
+            }
+            let spelled: BTreeSet<String> = files
+                .iter()
+                .flat_map(|f| declarator_words(text(f)))
+                .collect();
+            let (mut declared, mut listed) = (BTreeSet::new(), BTreeSet::new());
+            for target in Target::ALL {
+                let mut units = alloc::vec![h];
+                let mut j = 0;
+                while j < units.len() && withheld(units[j], target) {
+                    for &u in header_includers(units[j]) {
+                        if !units.contains(&u) {
+                            units.push(u);
+                        }
+                    }
+                    j += 1;
+                }
+                for unit in units.iter().filter(|u| !withheld(u, target)) {
+                    for config in configs {
+                        let src = alloc::format!(
+                            "#define _GNU_SOURCE 1\n#define __STDC_WANT_LIB_EXT1__ 1\n{config}#include <{unit}>\n"
+                        );
+                        let opts = crate::CompileOptions::default().with_no_entry_point(true);
+                        let program = crate::Compiler::with_options(src, target, opts).compile();
+                        let Ok(p) = program else { continue };
+                        for s in &p.symbols {
+                            let function = s.is_fun_entity() || s.class == Token::Sys as i64;
+                            if function || s.class == Token::Glo as i64 {
+                                declared.insert(s.name.clone());
+                            }
+                            let file = p.source_files.get(s.binding.decl_file as usize);
+                            let here = file.is_some_and(|f| files.contains(&f.as_str()));
+                            if function && here && spelled.contains(&s.name) {
+                                listed.insert(s.name.clone());
+                            }
+                        }
+                    }
+                }
+            }
+            let phantom = names.iter().filter(|n| !declared.contains(**n));
+            let missing = listed.iter().filter(|n| !names.contains(n.as_str()));
+            wrong.extend(phantom.map(|n| alloc::format!("{h}: {n} is listed")));
+            wrong.extend(missing.map(|n| alloc::format!("{h}: {n} is not listed")));
+        }
+        assert!(wrong.is_empty(), "{wrong:#?}");
+    }
+
+    /// The `__badc_*` blocks `body` includes.
+    #[cfg(not(debug_assertions))]
+    fn included_blocks(body: &str) -> impl Iterator<Item = &str> {
+        body.lines().filter_map(|line| {
+            let rest = line.trim_start().strip_prefix('#')?.trim_start();
+            let rest = rest
+                .strip_prefix("include")?
+                .trim_start()
+                .strip_prefix('<')?;
+            rest.split_once('>')
+                .map(|(name, _)| name)
+                .filter(|n| n.starts_with("__badc_"))
+        })
+    }
+
+    /// The identifiers a `(` follows in `body` at file scope, outside
+    /// comments and directives.
+    #[cfg(not(debug_assertions))]
+    fn declarator_words(body: &str) -> alloc::vec::Vec<String> {
+        let (mut code, mut in_comment, mut directive) = (String::new(), false, false);
+        for line in body.lines() {
+            // A directive runs on through its continuation lines.
+            let skip = directive || (!in_comment && line.trim_start().starts_with('#'));
+            directive = skip && line.ends_with('\\');
+            if skip {
+                continue;
+            }
+            let mut rest = line;
+            while !rest.is_empty() {
+                if in_comment {
+                    let Some(end) = rest.find("*/") else { break };
+                    (rest, in_comment) = (&rest[end + 2..], false);
+                } else if let Some(start) = rest.find("/*") {
+                    code.push_str(&rest[..start]);
+                    (rest, in_comment) = (&rest[start + 2..], true);
+                } else {
+                    code.push_str(rest.split("//").next().unwrap_or(""));
+                    break;
+                }
+            }
+            code.push('\n');
+        }
+        let (bytes, mut out, mut i, mut braces) = (code.as_bytes(), alloc::vec::Vec::new(), 0, 0);
+        while i < bytes.len() {
+            match bytes[i] {
+                b'{' => braces += 1,
+                b'}' => braces -= 1,
+                b'_' | b'a'..=b'z' | b'A'..=b'Z' => {
+                    let end = word_end(bytes, i);
+                    if braces == 0 && code[end..].trim_start().starts_with('(') {
+                        out.push(String::from(&code[i..end]));
+                    }
+                    i = end;
+                    continue;
+                }
+                _ => {}
+            }
+            i = word_end(bytes, i).max(i + 1);
+        }
+        out
+    }
+
     #[test]
     fn every_compiler_header_is_in_the_registry() {
         for name in INTRINSIC_HEADERS.iter().chain(COMPILER_HEADERS) {
@@ -930,7 +1190,12 @@ mod tests {
                 continue;
             };
             let beyond = (BEYOND_REFERENCE.iter().filter(|e| e.0 == name))
-                .fold(TargetSet(0), |set, e| set.or(e.1));
+                .fold(TargetSet(0), |set, e| set.or(e.1))
+                .or(if UMBRELLA_ONLY.contains(&name) {
+                    X86_64
+                } else {
+                    TargetSet(0)
+                });
             if beyond.0 & measured.0 != 0 {
                 failures.push(alloc::format!(
                     "{name}: a reason recorded where the reference ships it"

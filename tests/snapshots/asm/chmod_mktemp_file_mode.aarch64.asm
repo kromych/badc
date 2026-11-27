@@ -3,7 +3,7 @@ chmod_mktemp_file_mode.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -91,10 +91,9 @@ Disassembly of section .text:
                	sub	x0, x29, #0x90
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x1, #0x5                // =5
-               	mov	x2, #0x0                // =0
                	cmp	x0, #0x0
-               	csel	x0, x1, x2, ne
+               	mov	x16, #0x5               // =5
+               	csel	x0, x16, xzr, ne
                	add	sp, sp, #0x90
                	ldp	x29, x30, [sp], #0x10
                	ret

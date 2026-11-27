@@ -332,9 +332,9 @@ object is the same without it. A flag on no list fails the unit and names itself
 in the manifest. Silently discarding what the shim does not recognize is what
 let `-fno-jump-tables` reach no compiler while every `.o.cmd` recorded it: the
 probe behind it is delegated to the reference compiler, so nothing in the
-build's own artifacts disagreed. On the pinned `defconfig` the unsupported set
-is `-fasynchronous-unwind-tables`: that property is not in the built image
-whatever the configuration says. The ftrace patch sites are forwarded:
+build's own artifacts disagreed. On `defconfig` no unit reports one: the
+vDSO's `-fasynchronous-unwind-tables`, the last such flag, is forwarded, and
+badc emits `.eh_frame` for it as gcc does. The ftrace patch sites are forwarded:
 `-fpatchable-function-entry=N,M` gives every function its NOP area and its
 `__patchable_function_entries` record, and on x86_64
 `-pg -mfentry -mrecord-mcount` gives it the `__fentry__` call and the

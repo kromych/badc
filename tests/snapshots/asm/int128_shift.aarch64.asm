@@ -3,7 +3,7 @@ int128_shift.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -41,17 +41,17 @@ Disassembly of section .text:
                	and	x13, x7, x2
                	and	x12, x12, x2
                	and	x7, x7, x6
-               	orr	x12, x12, x7
+               	orr	x14, x12, x7
                	adrp	x7, <addr>
                	add	x7, x7, <lo12>
-               	ldr	x14, [x7, x0, lsl #3]
+               	ldr	x12, [x7, x0, lsl #3]
                	adrp	x7, <addr>
                	add	x7, x7, <lo12>
                	ldr	x15, [x7, x0, lsl #3]
                	add	x7, x0, #0x14
-               	cmp	x13, x14
+               	cmp	x13, x12
                	b.ne	<addr>
-               	cmp	x12, x15
+               	cmp	x14, x15
                	b.eq	<addr>
                	cbnz	x7, <addr>
                	lsr	x7, x4, x1
@@ -61,17 +61,17 @@ Disassembly of section .text:
                	and	x9, x9, x2
                	and	x6, x7, x6
                	orr	x6, x9, x6
-               	and	x7, x7, x2
+               	and	x9, x7, x2
                	adrp	x2, <addr>
                	add	x2, x2, <lo12>
-               	ldr	x9, [x2, x0, lsl #3]
+               	ldr	x7, [x2, x0, lsl #3]
                	adrp	x2, <addr>
                	add	x2, x2, <lo12>
                	ldr	x12, [x2, x0, lsl #3]
                	add	x2, x0, #0x1e
-               	cmp	x6, x9
+               	cmp	x6, x7
                	b.ne	<addr>
-               	cmp	x7, x12
+               	cmp	x9, x12
                	b.eq	<addr>
                	cbnz	x2, <addr>
                	mov	x2, #0x3f               // =63
@@ -86,17 +86,17 @@ Disassembly of section .text:
                	and	x9, x7, x2
                	orr	x9, x1, x9
                	and	x1, x7, x6
-               	orr	x2, x1, x2
+               	orr	x6, x1, x2
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
-               	ldr	x6, [x1, x0, lsl #3]
+               	ldr	x2, [x1, x0, lsl #3]
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	ldr	x7, [x1, x0, lsl #3]
                	add	x1, x0, #0x28
-               	cmp	x9, x6
+               	cmp	x9, x2
                	b.ne	<addr>
-               	cmp	x2, x7
+               	cmp	x6, x7
                	b.eq	<addr>
                	cbz	x1, <addr>
                	b	<addr>
@@ -126,7 +126,7 @@ Disassembly of section .text:
                	ret
                	lsl	x1, x3, #1
                	lsl	x0, x4, #1
-               	orr	x0, x0, x3, lsr #63
+               	orr	x2, x0, x3, lsr #63
                	mov	x17, #0xccee            // =52462
                	movk	x17, #0x88aa, lsl #16
                	movk	x17, #0x4466, lsl #32
@@ -137,7 +137,7 @@ Disassembly of section .text:
                	movk	x17, #0x99bb, lsl #16
                	movk	x17, #0x5577, lsl #32
                	movk	x17, #0x1133, lsl #48
-               	cmp	x0, x17
+               	cmp	x2, x17
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	cbz	x0, <addr>
@@ -181,7 +181,7 @@ Disassembly of section .text:
                	mov	x0, #0x6                // =6
                	cbz	x0, <addr>
                	ret
-               	lsr	x0, x4, #1
+               	lsr	x1, x4, #1
                	mov	x17, #0xb33b            // =45883
                	movk	x17, #0xa22a, lsl #16
                	movk	x17, #0x9119, lsl #32
@@ -192,7 +192,7 @@ Disassembly of section .text:
                	movk	x17, #0xe66e, lsl #16
                	movk	x17, #0xd55d, lsl #32
                	movk	x17, #0x444c, lsl #48
-               	cmp	x0, x17
+               	cmp	x1, x17
                	b.eq	<addr>
                	mov	x0, #0x7                // =7
                	cbz	x0, <addr>

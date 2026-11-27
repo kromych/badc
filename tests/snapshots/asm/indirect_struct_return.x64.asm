@@ -3,7 +3,7 @@ indirect_struct_return.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,17 +26,15 @@ Disassembly of section .text:
                	int3
 
 <make>:
-               	movq	%rdi, %rax
-               	shlq	%rax
-               	movl	%edi, %ecx
-               	shlq	$0x20, %rax
+               	movq	%rdi, %rcx
+               	shlq	%rcx
+               	movl	%edi, %eax
+               	shlq	$0x20, %rcx
                	orq	%rcx, %rax
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	pushq	%rax
                	movl	$0xa, %edi
                	callq	<addr>
                	movq	%rax, %rcx
@@ -46,18 +44,17 @@ Disassembly of section .text:
                	cmpl	$0x14, %ecx
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	popq	%r11
                	retq
                	movl	$0x3, %edi
                	callq	<addr>
-               	movq	%rax, -0x8(%rbp)
-               	movl	-0x4(%rbp), %eax
+               	shrq	$0x20, %rax
                	addq	$0x3, %rax
                	cmpl	$0x9, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	leave
+               	popq	%r11
                	retq

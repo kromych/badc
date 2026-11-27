@@ -161,7 +161,7 @@ pub(crate) fn drop_encoded_reads(func: &FunctionSsa, use_counts: &mut [u32]) {
             if taken.contains(&Some(k)) {
                 imm[o] -= 1;
             }
-            if func.insts[o].is_pure() && use_counts[o] == imm[o] {
+            if func.is_pure(&func.insts[o]) && use_counts[o] == imm[o] {
                 work.push(o);
             }
         }
@@ -330,6 +330,12 @@ fn vector_slots(c: Colored<'_>, facts: &Facts<'_>) -> u32 {
             .chain(c.loop_saves.stores.iter().flat_map(|(_, s)| s.iter()))
             .chain(
                 c.loop_saves
+                    .stores_at_start
+                    .iter()
+                    .flat_map(|(_, s)| s.iter()),
+            )
+            .chain(
+                c.loop_saves
                     .loads_at_start
                     .iter()
                     .flat_map(|(_, s)| s.iter()),
@@ -388,6 +394,7 @@ fn vector_slots(c: Colored<'_>, facts: &Facts<'_>) -> u32 {
     }
     let lists = (c.call_saves.iter_mut().map(|(_, s)| s))
         .chain(c.loop_saves.stores.iter_mut().map(|(_, s)| s))
+        .chain(c.loop_saves.stores_at_start.iter_mut().map(|(_, s)| s))
         .chain(c.loop_saves.loads_at_start.iter_mut().map(|(_, s)| s))
         .chain(c.loop_saves.loads_at_end.iter_mut().map(|(_, s)| s));
     for save in lists.flatten() {

@@ -3,7 +3,7 @@ struct_conditional_reads_its_arm.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -14,10 +14,10 @@ Disassembly of section .text:
                	brk	#0x1
 
 <pick>:
-               	mov	x0, #0x8                // =8
-               	mov	x2, #0x9                // =9
                	cmp	w1, #0x0
-               	csel	x0, x2, x0, ne
+               	mov	x16, #0x9               // =9
+               	mov	x17, #0x8               // =8
+               	csel	x0, x16, x17, ne
                	ret
 
 <sum>:

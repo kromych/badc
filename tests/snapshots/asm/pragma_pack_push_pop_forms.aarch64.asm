@@ -3,7 +3,7 @@ pragma_pack_push_pop_forms.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -45,12 +45,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x1, x29, #0x18
                	stur	xzr, [x29, #-0x18]
                	stur	xzr, [x29, #-0x10]
                	stur	xzr, [x29, #-0x8]
-               	mov	x2, #0x38               // =56
-               	sturb	w2, [x29, #-0x10]
+               	mov	x1, #0x38               // =56
+               	sturb	w1, [x29, #-0x10]
+               	sub	x1, x29, #0x18
                	mov	x2, #0x18               // =24
                	bl	<addr>
                	sxtw	x0, w0

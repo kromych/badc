@@ -114,15 +114,13 @@ struct Memory {
     /// return. Each frame's locals + params occupy
     /// `(locals + n_params) * 8` bytes starting at this offset.
     stack_top: usize,
-    /// First byte of the heap region (`data_end + STACK_BYTES`).
+    /// First byte of the heap region, `data_end + STACK_BYTES` rounded up
+    /// to [`Memory::MAX_ALIGN`].
     /// Fixed at construction; `malloc` allocations start here
     /// and grow upward. Retained so a future `free`/`realloc`
     /// can resolve a pointer back to its allocator origin.
     heap_base: usize,
-    /// Next free byte in the heap. C99 7.20.3.3 leaves `malloc`'s
-    /// alignment unspecified except that it must suffice for any
-    /// object; we round each allocation up to 16 bytes to match
-    /// what host malloc implementations typically guarantee.
+    /// Next free byte in the heap, a multiple of [`Memory::MAX_ALIGN`].
     heap_top: usize,
     /// First byte of the stack region (= `data_end`). Stack
     /// addresses are exempt from the allocations check since
@@ -199,11 +197,11 @@ impl Memory {
         const STACK_BYTES: usize = 256 * 1024;
         const HEAP_BYTES: usize = 256 * 1024;
         let data_end = data.len();
-        let total = data_end + STACK_BYTES + HEAP_BYTES;
+        let heap_base = (data_end + STACK_BYTES).next_multiple_of(Self::MAX_ALIGN);
+        let total = heap_base + HEAP_BYTES;
         let mut bytes = Vec::with_capacity(total);
         bytes.extend_from_slice(data);
         bytes.resize(total, 0);
-        let heap_base = data_end + STACK_BYTES;
         let mut mem = Self {
             bytes,
             sve_vl_bytes: SVE_DEFAULT_VL_BYTES,
@@ -350,14 +348,20 @@ impl Memory {
     /// the allocation functions return a null pointer (C99 7.20.3).
     const LIMIT: u64 = 4 << 30;
 
+    /// The greatest fundamental alignment of the targets, `max_align_t`'s
+    /// (C17 7.19p2), which every allocation's address is a multiple of
+    /// (C17 7.22.3p1).
+    const MAX_ALIGN: usize = 16;
+
     /// Bump-pointer `malloc`: the base of `n` fresh bytes, or 0 when the
-    /// memory cannot grow to hold them. A zero-size request takes 16
-    /// bytes, so each pointer returned is distinct (C99 7.20.3p1).
+    /// memory cannot grow to hold them. A zero-size request takes
+    /// [`Self::MAX_ALIGN`] bytes, so each pointer returned is distinct
+    /// (C99 7.20.3p1).
     fn heap_alloc(&mut self, n: u64) -> usize {
         let base = self.heap_top;
         let next = n
             .max(1)
-            .checked_next_multiple_of(16)
+            .checked_next_multiple_of(Self::MAX_ALIGN as u64)
             .and_then(|size| (base as u64).checked_add(size))
             .filter(|&end| end <= Self::LIMIT)
             .and_then(|end| usize::try_from(end).ok());
@@ -1134,10 +1138,14 @@ fn run_func<H: Host>(
                 ));
             }
             Terminator::Unreachable => {
-                // Sealed after a noreturn call; reaching it means the call
-                // returned when it should not have.
+                // Native code executes a trap instruction here: the seal of
+                // `__builtin_trap`, of a trapping `-fsanitize` check, of
+                // `__builtin_unreachable`, and of a noreturn call that
+                // returned.
                 break Err(C5Error::Runtime(
-                    "vm_ssa: reached Terminator::Unreachable".to_string(),
+                    "vm_ssa: the program trapped (`__builtin_trap`, a trapping check, or \
+                     an unreachable point reached)"
+                        .to_string(),
                 ));
             }
         }
@@ -1232,6 +1240,19 @@ fn function_at(prog: &Program<'_>, raw: i64) -> Result<usize, C5Error> {
         C5Error::Runtime(format!(
             "vm_ssa: CallIndirect: no function at ent_pc {target_pc}",
         ))
+    })
+}
+
+/// The `-fsanitize=function` prefix of the function `raw` designates, as
+/// native code reads it ahead of the entry: the signature and the type hash
+/// the function was compiled with, or 0 for an address that is no function
+/// or one compiled without.
+fn function_prefix(prog: &Program<'_>, raw: i64) -> i64 {
+    let hash = function_at(prog, raw)
+        .ok()
+        .and_then(|i| prog.funcs[i].type_hash);
+    hash.map_or(0, |h| {
+        (u64::from(h) << 32 | u64::from(crate::c5::op::FUNCTION_PREFIX_SIGNATURE)) as i64
     })
 }
 
@@ -1812,6 +1833,13 @@ fn run_inst<H: Host>(
             return Ok(());
         }
         Inst::TailExt(_) => "TailExt",
+        Inst::Intrinsic { kind, args }
+            if *kind == crate::c5::op::Intrinsic::FunctionPrefix as i64 =>
+        {
+            let raw = args.first().map_or(0, |&a| frame.regs[a as usize]);
+            frame.regs[v as usize] = function_prefix(prog, raw);
+            return Ok(());
+        }
         Inst::Intrinsic { kind, args } => {
             run_intrinsic(mem, frame, v, *kind, args)?;
             return Ok(());
@@ -2011,6 +2039,7 @@ pub(super) fn interp_supplies(name: &str) -> bool {
         || matches!(
             name,
             "exit"
+                | "abort"
                 | "memcpy"
                 | "memmove"
                 | "memset"
@@ -2193,6 +2222,11 @@ fn dispatch_callext<H: Host>(
             let code = args.first().copied().unwrap_or(0);
             Err(exit_signal(code))
         }
+        // `abort()` ends the program abnormally (C17 7.22.4.1), with the
+        // status a shell reports for a process SIGABRT ends (128 + 6) and
+        // the C runtime's on Windows (3). The interpreter's own process
+        // goes on: it may be a library's.
+        "abort" => Err(exit_signal(if mem.target.is_windows() { 3 } else { 134 })),
         // `void *memcpy(void *dst, const void *src, size_t n)`.
         // c5's cdecl pushes args right-to-left; the walker
         // delivers them to `Inst::CallExt::args` in declared
@@ -3704,6 +3738,16 @@ fn run_inline_asm(
             // an ahead-of-time / JIT construct, executed natively there.
             // The interpreter is single-threaded: a fence orders nothing.
             Mnemonic::Table("mfence" | "lfence" | "sfence") => {}
+            Mnemonic::Table(name @ ("shld" | "shrd")) => {
+                let (count, _) = value_of(&ops[0], &xregs);
+                let (src, _) = value_of(&ops[1], &xregs);
+                let (dst, dsz) = value_of(&ops[2], &xregs);
+                let w = insn.suffix.unwrap_or(dsz);
+                let res = double_shift(name == "shld", dst, src, count, w);
+                if let Some(r) = dst_reg(&ops[2]) {
+                    xregs[r] = merge_width(xregs[r], res, w);
+                }
+            }
             Mnemonic::Table(name) | Mnemonic::ExtMov { name, .. } => {
                 return Err(C5Error::Runtime(alloc::format!(
                     "inline asm: `{name}` is not supported under --interp"
@@ -3747,6 +3791,7 @@ fn run_inline_asm(
             | Mnemonic::VexMov { .. }
             | Mnemonic::VexMovd { .. }
             | Mnemonic::Vex2 { .. }
+            | Mnemonic::VexNarrow { .. }
             | Mnemonic::VexImm3 { .. }
             | Mnemonic::VexImm2 { .. }
             | Mnemonic::VexShiftImm { .. }
@@ -3851,9 +3896,8 @@ fn run_inline_asm(
             // forms have no register-model equivalent. Rejecting keeps the VM
             // from silently skipping a memory effect the caller depends on.
             Mnemonic::Fixed(_)
-            | Mnemonic::Fsubp
+            | Mnemonic::X87 { .. }
             | Mnemonic::StringOp { .. }
-            | Mnemonic::MemExt { .. }
             | Mnemonic::MemExt0F { .. }
             | Mnemonic::FarBranch { .. }
             | Mnemonic::InvMem { .. } => {
@@ -3898,16 +3942,6 @@ fn run_inline_asm(
                     }
                 } else {
                     xregs[0] = merge_width(xregs[0], dst, w);
-                }
-            }
-            Mnemonic::Shld | Mnemonic::Shrd => {
-                let (count, _) = value_of(&ops[0], &xregs);
-                let (src, _) = value_of(&ops[1], &xregs);
-                let (dst, dsz) = value_of(&ops[2], &xregs);
-                let w = insn.suffix.unwrap_or(dsz);
-                let res = double_shift(insn.mnemonic == Mnemonic::Shld, dst, src, count, w);
-                if let Some(r) = dst_reg(&ops[2]) {
-                    xregs[r] = merge_width(xregs[r], res, w);
                 }
             }
             Mnemonic::Shl | Mnemonic::Shr | Mnemonic::Sar => {
@@ -4395,6 +4429,9 @@ fn run_intrinsic(
         C5Error::Runtime(format!("vm_ssa: unknown Intrinsic discriminant {kind}"))
     })?;
     match intr {
+        Intrinsic::FunctionPrefix => Err(C5Error::Runtime(
+            "vm_ssa: FunctionPrefix is answered where the program is in reach".to_string(),
+        )),
         Intrinsic::Alloca => {
             let n_raw = args
                 .first()
@@ -5891,6 +5928,7 @@ mod tests {
         let mut mem = Memory::with_stdio(&[0u8; 64], crate::c5::codegen::Target::LinuxX64);
         let names = [
             "exit",
+            "abort",
             "memcpy",
             "memmove",
             "memset",

@@ -20,8 +20,8 @@
 //!   * the destination of an `Mcpy` starting at the object's first byte
 //!     (a template initializer or a whole-object assignment), or
 //!   * the source of an `Mcpy` whose span lies inside the object and
-//!     whose destination is no candidate that splits, or both ends of one
-//!     onto the same bytes,
+//!     whose destination is no candidate that splits or one naming the
+//!     same fields in the span, or both ends of one onto the same bytes,
 //!
 //! and the accessed ranges partition the object: two accesses are the
 //! same `(offset, width)` field or disjoint, so no field's storage is
@@ -34,8 +34,9 @@
 //! defining something.
 //!
 //! A copy out of a split object stores each field in its span, bytes a block
-//! write defined included, through its destination; an object holding an
-//! array, or of more cells than the usable GPR file, keeps its block copies.
+//! write defined included, through its destination, or into the field's slot
+//! when the destination splits too; an object holding an array, or of more
+//! cells than the usable GPR file, keeps its block copies.
 //!
 //! An aggregate passed by value is read whole by the call's ABI transfer.
 //! The call reads a copy made just ahead of it in a temporary of its own,
@@ -352,6 +353,13 @@ pub(crate) struct Budget {
     pub caller: usize,
 }
 
+// Entries the search for objects nothing reads examines on this thread, so
+// a test can bound it by count rather than by wall clock.
+#[cfg(test)]
+std::thread_local! {
+    pub(crate) static UNREAD_SCAN: core::cell::Cell<u64> = const { core::cell::Cell::new(0) };
+}
+
 /// Split local aggregates into per-field scalar slots and re-run mem2reg
 /// to promote them. Returns the base slots of objects that were fully
 /// promoted (every field lifted to a register), for the debug-info
@@ -363,8 +371,8 @@ pub(crate) fn run(func: &mut FunctionSsa, budget: Budget, footprints: &Footprint
     // the source becomes splittable on the next round. An object already
     // split is out of the next round's view -- its fields have their
     // slots -- so each round splits an object no earlier one did and the
-    // finite object count ends the iteration. Rounds a copy or the budget
-    // chains need no promotion between them and share one mem2reg re-run.
+    // finite object count ends the iteration. Rounds a copy chains need no
+    // promotion between them and share one mem2reg re-run.
     //
     // A batch whose fields mem2reg leaves in fresh slots take no fewer cells
     // than their object had is redone with those fields kept in the object.
@@ -626,7 +634,7 @@ fn stranded(func: &FunctionSsa, split: &[Split]) -> BTreeMap<i64, BTreeSet<(i64,
 }
 
 /// The objects one round split, and whether an object it left unsplit waits
-/// only on a copy this round decomposed or on the round's register budget.
+/// only on a copy this round decomposed.
 #[derive(Default)]
 struct Round {
     splits: Vec<Split>,
@@ -687,13 +695,15 @@ struct CopyOut {
 }
 
 /// One field a [`BlockInit`] or [`CopyOut`] decomposes into: bytes moved
-/// between `slot` and the other end at `off`, or `imm` written to `slot`.
+/// between `slot` and the other end at `off` -- the other end's own field
+/// slot `from` when that object splits too -- or `imm` written to `slot`.
 struct CopyField {
     off: i64,
     slot: i64,
     load: LoadKind,
     store: StoreKind,
     imm: Option<i64>,
+    from: Option<i64>,
 }
 
 /// How a candidate object's field is accessed: `fp` / `int` when an access
@@ -709,13 +719,10 @@ struct FieldUse {
 /// Rewrite every splittable object's accesses to per-field slots,
 /// decompose its block initializer, and neutralize the dead
 /// base-address instructions. Returns one [`Split`] per object actually
-/// split. `budget` is the target's usable GPR file: a round admits
-/// objects greedily under it, largest register demand first, so the
-/// object paying for the most memory traffic is never displaced by a
-/// smaller one. An object that does not fit stays memory-resident this
-/// round -- the mem2reg re-run would spill the loop-carried phis back to
-/// the frame at a net loss -- and is reconsidered next round, once this
-/// round's promotions have collapsed into their consumers.
+/// split. `budget` is the target's usable GPR file: an object whose
+/// fields alone take more registers stays memory-resident -- the mem2reg
+/// re-run would spill its loop-carried phis back to the frame at a net
+/// loss -- and is reconsidered after the next promotion.
 fn split_objects(
     func: &mut FunctionSsa,
     regs: Budget,
@@ -773,7 +780,7 @@ fn split_objects(
     let mut accesses: Vec<Access> = Vec::new();
     let mut inits: Vec<BlockInit> = Vec::new();
     let mut copies: Vec<CopyOut> = Vec::new();
-    let mut waiting: Vec<(i64, i64)> = Vec::new();
+    let mut waiting: Vec<(i64, i64, usize)> = Vec::new();
     // Loads nothing reads, by object: no field is observed through them.
     let mut dead_reads: Vec<(u32, i64)> = Vec::new();
     // Objects a same-unit call reaches through an argument that is their
@@ -887,7 +894,7 @@ fn split_objects(
                         declined.insert(base);
                     } else {
                         if let Some((to, _)) = into.filter(|&(to, _)| to != base) {
-                            waiting.push((base, to));
+                            waiting.push((base, to, copies.len()));
                         }
                         copies.push(CopyOut {
                             id: i as u32,
@@ -1109,14 +1116,18 @@ fn split_objects(
 
     // A copy out reads every field in its span, `gap_fields` included, and
     // must decompose as a block initializer does.
+    let mut inits_of: BTreeMap<i64, Vec<&BlockInit>> = BTreeMap::new();
+    for w in &inits {
+        inits_of.entry(w.base).or_default().push(w);
+    }
     for c in copies.iter().filter(|c| !c.nop) {
         if declined.contains(&c.base) {
             continue;
         }
-        let writes: Vec<&BlockInit> = inits.iter().filter(|w| w.base == c.base).collect();
+        let writes: &[&BlockInit] = inits_of.get(&c.base).map_or(&[], Vec::as_slice);
         let empty = BTreeMap::new();
         let known = fields_of.get(&c.base).unwrap_or(&empty);
-        let Some(gaps) = gap_fields(known, &writes, c, budget) else {
+        let Some(gaps) = gap_fields(known, writes, c, budget) else {
             declined.insert(c.base);
             continue;
         };
@@ -1229,45 +1240,38 @@ fn split_objects(
     }
 
     // A copy into a candidate no rule declines waits for that object to
-    // decompose it; one into a declined candidate stores into its memory.
+    // decompose it, unless the two name the same fields in its span and can
+    // split together; one into a declined candidate stores into its memory.
     let waits: Vec<(i64, i64)> = waiting
         .iter()
-        .filter(|&&(_, to)| !declined.contains(&to))
-        .copied()
+        .filter(|&&(_, to, _)| !declined.contains(&to))
+        .filter(|&&(_, to, k)| !same_fields(&fields_of, &address_live, &copies[k], to))
+        .map(|&(from, to, _)| (from, to))
         .collect();
     declined.extend(waits.iter().map(|&(from, _)| from));
     // Only a field some load reads occupies a register: one that is
     // written and never read becomes a dead def the store elimination
     // removes, so counting it would decline the split for a demand the
-    // split does not create. Rank the surviving objects by that demand,
-    // largest first (ties by base for determinism), and admit each that
-    // still fits the remaining budget.
-    let mut ranked: Vec<(usize, i64)> = fields_of
-        .iter()
-        .filter(|(b, _)| !declined.contains(b))
-        .map(|(&b, fields)| (fields.values().filter(|u| u.loads > 0).count(), b))
+    // split does not create.
+    let mut order: Vec<i64> = (fields_of.iter())
+        .filter(|(b, fields)| {
+            !declined.contains(b) && fields.values().filter(|u| u.loads > 0).count() <= budget
+        })
+        .map(|(&b, _)| b)
         .collect();
-    ranked.sort_by_key(|&(demand, base)| (core::cmp::Reverse(demand), base));
-    let mut remaining = budget;
-    let mut order: Vec<i64> = Vec::new();
-    let mut more = false;
-    for (demand, base) in ranked {
-        if demand <= remaining {
-            remaining -= demand;
-            order.push(base);
-        } else {
-            more |= demand <= budget;
-        }
-    }
-    more |= waits.iter().any(|(_, to)| order.contains(to));
+    let more = (waits.iter()).any(|(_, to)| order.binary_search(to).is_ok());
     // An object no access, copy or call reads gives up its storage, with its
     // address expressions and the block writes to it.
+    let copied: BTreeSet<i64> = copies.iter().map(|c| c.base).collect();
+    let named: BTreeSet<i64> = resolved.iter().flatten().map(|&(b, _)| b).collect();
+    #[cfg(test)]
+    UNREAD_SCAN.with(|n| n.set(n.get() + (copies.len() + resolved.len() + cells_of.len()) as u64));
     for &base in cells_of.keys() {
         if !declined.contains(&base)
             && !fields_of.contains_key(&base)
             && !address_live.contains(&base)
-            && !copies.iter().any(|c| c.base == base)
-            && resolved.iter().flatten().any(|&(b, _)| b == base)
+            && !copied.contains(&base)
+            && named.contains(&base)
         {
             order.push(base);
         }
@@ -1306,12 +1310,23 @@ fn split_objects(
         slots_of.insert(base, assigned);
     }
 
+    // A copy between two objects that both split moves each field from the
+    // source's slot to the destination's; `same_fields` matched them.
+    let split_source: BTreeMap<u32, (i64, i64)> = (copies.iter())
+        .filter(|c| !c.nop && slots_of.contains_key(&c.base))
+        .map(|c| (c.id, (c.off, c.base)))
+        .collect();
+    let split_into: BTreeSet<u32> = (inits.iter())
+        .filter(|w| slots_of.contains_key(&w.base))
+        .map(|w| w.id)
+        .collect();
     let mut expand: BTreeMap<u32, Expansion> = BTreeMap::new();
     for init in &inits {
         let Some(assigned) = slots_of.get(&init.base) else {
             continue;
         };
         let end = init.off + init.size;
+        let source = split_source.get(&init.id);
         let copies = assigned
             .iter()
             .filter(|((off, width), _)| *off >= init.off && *off + *width <= end)
@@ -1331,6 +1346,7 @@ fn split_objects(
                         InitSource::Copy => None,
                         InitSource::Fill(k) => Some(sub_word(k, off - init.off, width)),
                     },
+                    from: source.map(|&(at, from)| slots_of[&from][&(at + off - init.off, width)]),
                 }
             })
             .collect();
@@ -1348,6 +1364,9 @@ fn split_objects(
         let Some(assigned) = slots_of.get(&c.base) else {
             continue;
         };
+        if split_into.contains(&c.id) {
+            continue;
+        }
         let end = c.off + c.size;
         let outs = assigned
             .iter()
@@ -1360,6 +1379,7 @@ fn split_objects(
                     load,
                     store,
                     imm: None,
+                    from: None,
                 }
             })
             .collect();
@@ -1844,9 +1864,15 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
                     for c in &e.copies {
                         let (addr, disp) = (src, c.off as i32);
                         let loaded = new_insts.len() as ValueId;
-                        new_insts.push(match c.imm {
-                            Some(k) => Inst::Imm(k),
-                            None => Inst::Load {
+                        new_insts.push(match (c.imm, c.from) {
+                            (Some(k), _) => Inst::Imm(k),
+                            (None, Some(off)) => Inst::LoadLocal {
+                                off,
+                                disp: 0,
+                                kind: c.load,
+                                volatile: false,
+                            },
+                            (None, None) => Inst::Load {
                                 addr,
                                 disp,
                                 kind: c.load,
@@ -1964,6 +1990,25 @@ fn field_is_fp(
         .get(&base)
         .and_then(|fields| fields.get(&(off, width)))
         .is_some_and(|u| u.fp && !u.int)
+}
+
+/// Whether copy `c` into `to` can move field slot to field slot: neither end
+/// keeps its storage for a call, and the fields of both inside the copied span
+/// match in relative offset, width and register class.
+fn same_fields(
+    fields_of: &BTreeMap<i64, BTreeMap<(i64, i64), FieldUse>>,
+    address_live: &BTreeSet<i64>,
+    c: &CopyOut,
+    to: i64,
+) -> bool {
+    let inside = |base: i64, from: i64| {
+        (fields_of.get(&base).into_iter().flatten())
+            .filter(move |((off, width), _)| *off >= from && off + width <= from + c.size)
+            .map(move |(&(off, width), u)| (off - from, width, u.fp && !u.int))
+    };
+    !address_live.contains(&c.base)
+        && !address_live.contains(&to)
+        && inside(c.base, c.off).eq(inside(to, 0))
 }
 
 fn load_width(kind: LoadKind) -> i64 {
@@ -2312,11 +2357,10 @@ mod tests {
         assert_eq!(before, alloc::format!("{:?}", f.insts), "tape unchanged");
     }
 
-    /// Two objects whose joint demand exceeds the budget: the one with
-    /// the larger demand splits, the other stays memory-resident, so a
-    /// small newcomer never turns a fitting split into no split at all.
+    /// Two objects whose joint demand exceeds the budget while each fits it
+    /// split in one round: the budget bounds what one object's fields take.
     #[test]
-    fn budget_admits_largest_demand_first() {
+    fn budget_bounds_each_object_not_the_round() {
         let mut insts = two_elem_array().insts;
         let k = insts.len() as ValueId;
         // One-cell object at -3: store then load one 8-byte field.
@@ -2341,12 +2385,8 @@ mod tests {
                 .iter()
                 .map(|s| (s.base, s.slots.clone()))
                 .collect::<Vec<_>>(),
-            alloc::vec![(-2, alloc::vec![-2, -1])],
-            "only the two-field array fits the budget"
-        );
-        assert!(
-            matches!(f.insts[14], Inst::LocalAddr(-3)),
-            "the skipped object keeps its address expressions"
+            alloc::vec![(-3, alloc::vec![-3]), (-2, alloc::vec![-2, -1])],
+            "each object fits the budget on its own"
         );
     }
 
@@ -3361,30 +3401,95 @@ mod tests {
         assert_eq!(before, alloc::format!("{:?}", f.insts), "tape unchanged");
     }
 
-    /// A copy into another candidate keeps its source in memory: the
-    /// destination splits first and decomposes the copy into its loads.
+    /// A copy into another candidate whose fields in the copied span differ
+    /// from its source's keeps the source in memory: the destination splits
+    /// first and decomposes the copy into its loads.
     #[test]
     fn copy_into_another_candidate_keeps_its_source_this_round() {
         let insts = alloc::vec![
             Inst::Imm(5),        // v0
             Inst::LocalAddr(-2), // v1
-            store(1, 0),         // v2 source field
-            Inst::LocalAddr(-4), // v3
+            store32(1, 0, 0),    // v2 source fields
+            store32(1, 4, 0),    // v3
+            Inst::LocalAddr(-4), // v4
             Inst::Mcpy {
-                dst: 3,
+                dst: 4,
                 src: 1,
                 size: 8,
                 align: 8
-            }, // v4
-            load(3),             // v5 destination field
+            }, // v5
+            load(4),             // v6 destination field
         ];
-        let mut f = func(insts, Terminator::Return(5), alloc::vec![(-2, 1), (-4, 1)]);
+        let mut f = func(insts, Terminator::Return(6), alloc::vec![(-2, 1), (-4, 1)]);
         let split = split_objects(&mut f, 64);
         assert_eq!(
             split.iter().map(|s| s.base).collect::<Vec<_>>(),
             alloc::vec![-4],
             "only the destination splits this round"
         );
+    }
+
+    /// Two objects copied into each other with the same fields split in one
+    /// round, and each copy moves the field from slot to slot: the objects
+    /// of a swap through a temporary wait on no one.
+    #[test]
+    fn copies_between_objects_of_the_same_fields_move_slot_to_slot() {
+        let swap = || {
+            let insts = alloc::vec![
+                Inst::Imm(5),        // v0
+                Inst::LocalAddr(-2), // v1
+                store(1, 0),         // v2
+                Inst::LocalAddr(-4), // v3
+                Inst::Mcpy {
+                    dst: 3,
+                    src: 1,
+                    size: 8,
+                    align: 8
+                }, // v4 -4 = -2
+                Inst::Mcpy {
+                    dst: 1,
+                    src: 3,
+                    size: 8,
+                    align: 8
+                }, // v5 -2 = -4
+                load(1),             // v6
+                load(3),             // v7
+                Inst::Binop {
+                    op: BinOp::Add,
+                    lhs: 6,
+                    rhs: 7,
+                }, // v8
+            ];
+            func(insts, Terminator::Return(8), alloc::vec![(-2, 1), (-4, 1)])
+        };
+        let mut f = swap();
+        let split = split_objects(&mut f, 64);
+        assert_eq!(
+            split.iter().map(|s| s.base).collect::<Vec<_>>(),
+            alloc::vec![-4, -2],
+            "both objects split"
+        );
+        let moves: Vec<(i64, i64)> = (1..f.insts.len())
+            .filter_map(|i| match (&f.insts[i - 1], &f.insts[i]) {
+                (Inst::LoadLocal { off: from, .. }, Inst::StoreLocal { off: to, value, .. })
+                    if *value as usize == i - 1 =>
+                {
+                    Some((*from, *to))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(moves, alloc::vec![(-2, -4), (-4, -2)], "{:?}", f.insts);
+        assert!(
+            !(f.insts.iter()).any(|i| matches!(
+                i,
+                Inst::Mcpy { .. } | Inst::Load { .. } | Inst::Store { .. } | Inst::LocalAddr(_)
+            )),
+            "no access reaches memory: {:?}",
+            f.insts
+        );
+        let mut f = swap();
+        assert_eq!(run(&mut f, 64), alloc::vec![-4, -2], "both promote");
     }
 
     /// A copy into a candidate declined for its own use (its address reaches
@@ -3482,8 +3587,8 @@ mod tests {
     }
 
     /// A round asks for another before promotion when an object it left waits
-    /// on a copy the round decomposed, or did not fit the register budget, and
-    /// not when nothing it declined can split without promotion.
+    /// on a copy the round decomposed, and not when nothing it declined can
+    /// split without promotion.
     #[test]
     fn round_reports_work_left_for_the_next_round() {
         let more = |f: &mut FunctionSsa, budget: usize| {
@@ -3500,17 +3605,18 @@ mod tests {
             let insts = alloc::vec![
                 Inst::Imm(5),        // v0
                 Inst::LocalAddr(-2), // v1
-                store(1, 0),         // v2 source field
-                Inst::LocalAddr(-4), // v3
+                store32(1, 0, 0),    // v2 source fields
+                store32(1, 4, 0),    // v3
+                Inst::LocalAddr(-4), // v4
                 Inst::Mcpy {
-                    dst: 3,
+                    dst: 4,
                     src: 1,
                     size: 8,
                     align: 8
-                }, // v4
-                load(3),             // v5 destination field
+                }, // v5
+                load(4),             // v6 destination field
             ];
-            func(insts, Terminator::Return(5), alloc::vec![(-2, 1), (-4, 1)])
+            func(insts, Terminator::Return(6), alloc::vec![(-2, 1), (-4, 1)])
         };
         assert!(more(&mut chain(), 64), "the source waits on the copy");
         let mut f = two_elem_array();
@@ -3528,7 +3634,10 @@ mod tests {
             Terminator::Return(k + 2),
             alloc::vec![(-2, 2), (-3, 1)],
         );
-        assert!(more(&mut f, 2), "the second object waits on the budget");
+        assert!(
+            !more(&mut f, 2),
+            "an object within the budget splits at once"
+        );
         assert!(!more(&mut two_elem_array(), 64), "nothing is left");
     }
 
@@ -3749,6 +3858,7 @@ mod tests {
                 arg_aggs: Vec::new(),
                 ret_agg: Some(0),
                 ret_slot_local: -2,
+                parts: Vec::new(),
             }, // v0
             Inst::LocalAddr(-2), // v1
             load(1),             // v2
@@ -3903,6 +4013,7 @@ mod tests {
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
+            parts: Vec::new(),
         }
     }
 

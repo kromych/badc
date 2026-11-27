@@ -20,11 +20,12 @@
 //! availability and is left out.
 //!
 //! Aliasing is tracked conservatively. Two locations are known distinct
-//! only when they share the same address value and their byte ranges do
-//! not overlap; any other store clears the entries it cannot prove
-//! disjoint. A call, an indexed or local store, a block copy, or an
-//! alloca clears the whole table, since each can write through a pointer
-//! the pass does not model.
+//! when they share the same address value and their byte ranges do not
+//! overlap, or when the alias query ([`Alias`]) keeps a non-volatile store
+//! apart from the entry's access; any other store clears the entries it
+//! cannot prove disjoint. A call, an indexed or local store, a block copy,
+//! or an alloca clears the whole table, since each can write through a
+//! pointer the pass does not model.
 //!
 //! An indexed access is one location per `(base, index, scale)` of value
 //! ids and index extension, and forwards on an exact match. Two index values can hold the same
@@ -66,6 +67,7 @@
 //! nor seeds on either discipline.
 
 use super::value_range;
+use crate::c5::codegen::ssa::alias::{Access, Alias};
 use crate::c5::codegen::ssa::mem2reg::address_free_slots;
 use crate::c5::ir::{
     BinOp, BlockId, FpCastKind, FunctionSsa, IndexExt, Inst, LoadKind, NO_VALUE, StoreKind, ValueId,
@@ -196,7 +198,7 @@ fn emitted_span(func: &FunctionSsa, preds: &[Vec<BlockId>]) -> impl Fn(u32, usiz
                 break;
             };
             at[i as usize] = n;
-            n += u32::from(!inst.is_lifetime_marker() && (used || !inst.is_pure()));
+            n += u32::from(!inst.is_lifetime_marker() && (used || !func.is_pure(inst)));
         }
         ends.push(n);
     }
@@ -423,14 +425,14 @@ fn store_bits_directly(func: &mut FunctionSsa) {
     }
 }
 
-pub(crate) fn run(funcs: &mut [FunctionSsa]) {
+pub(crate) fn run(funcs: &mut [FunctionSsa], objects: &[(i64, i64)]) {
     // A `__try` region's stores are the handler's to read.
     for func in funcs.iter_mut().filter(|f| !f.has_seh()) {
-        run_one(func);
+        run_one(func, objects);
     }
 }
 
-fn run_one(func: &mut FunctionSsa) {
+fn run_one(func: &mut FunctionSsa, objects: &[(i64, i64)]) {
     let n = func.insts.len();
     if n == 0 {
         return;
@@ -443,6 +445,16 @@ fn run_one(func: &mut FunctionSsa) {
     let mut any = false;
     let slots = forwardable_slots(func);
     let exposed = exposed_slots(func, &slots);
+    let mut alias = Alias::new(func, objects);
+    // Per instruction, its access once asked for: an entry's source is
+    // never rewritten after it seeds the entry.
+    let mut accesses: Vec<Option<Option<Access>>> = alloc::vec![None; n];
+    let mut block_of: Vec<BlockId> = alloc::vec![0; n];
+    for (b, block) in func.blocks.iter().enumerate() {
+        for v in block.inst_range.clone() {
+            block_of[v as usize] = b as BlockId;
+        }
+    }
     // A block one predecessor alone reaches starts from what that block
     // ended with: the predecessor dominates it, and no other path enters.
     let preds = crate::c5::codegen::ssa::mem2reg::predecessors(func);
@@ -641,9 +653,21 @@ fn run_one(func: &mut FunctionSsa) {
                         continue;
                     }
                     // Drop every entry not provably disjoint from the
-                    // written range. An exposed slot's address is a value,
-                    // so the write can reach it, off its own address the bytes named.
-                    table.retain(|e| e.addr == addr && !overlaps(e.disp, e.width, disp, w));
+                    // written range: other bytes of the same address, or bytes
+                    // [`Alias`] keeps apart. An exposed slot's address is a
+                    // value, so the write can reach it, off its own address
+                    // the bytes named.
+                    let written = alias.access(func, idx, b as BlockId);
+                    table.retain(|e| {
+                        (e.addr == addr && !overlaps(e.disp, e.width, disp, w))
+                            || written.as_ref().is_some_and(|s| {
+                                let v = e.src_idx as usize;
+                                let at = block_of[v];
+                                let a = accesses[v]
+                                    .get_or_insert_with(|| alias.access(func, v as ValueId, at));
+                                a.as_ref().is_some_and(|a| alias.disjoint(func, a, s))
+                            })
+                    });
                     indexed.clear();
                     match slot_bytes(func, addr, disp) {
                         Some(at) => slot_table
@@ -783,11 +807,13 @@ fn run_one(func: &mut FunctionSsa) {
                     let value = *value;
                     let kind = *kind;
                     let volatile = *volatile;
-                    // A frame write can alias a tracked pointer entry
-                    // (the pointer can be a `LocalAddr` of this slot),
-                    // so the pointer table clears as before.
-                    table.clear();
-                    indexed.clear();
+                    // A frame write aliases a tracked pointer entry only
+                    // where a `LocalAddr` of its slot is read: a slot no
+                    // pointer reaches keeps the pointer tables.
+                    if !slots.contains(&off) {
+                        table.clear();
+                        indexed.clear();
+                    }
                     let at = off * 8 + i64::from(disp);
                     let w = store_width(kind);
                     slot_table
@@ -1185,15 +1211,15 @@ fn writes_memory(inst: &Inst) -> bool {
 
 /// Drop each store or zero fill a later one in its block overwrites, with
 /// no access between that may read the bytes: nothing reads what it
-/// writes. Two writes through one base ([`base_disp`]) compare by their
-/// byte ranges. A load through that base keeps the stores whose bytes it
-/// reads; any other read of memory -- a load through another base or of a
-/// slot, a call, an asm statement, a copy, a volatile or atomic access --
-/// keeps every earlier store, and a store between, which only writes,
-/// keeps none. A store whose value something reads through its id stays.
+/// writes. Two writes through one base ([`base_disp`]), or with `slots`
+/// to one frame slot, compare by their byte ranges. A load through that base or of that
+/// slot keeps the stores whose bytes it reads; any other read of memory --
+/// a load through another base or of another slot, a call, an asm
+/// statement, a copy, a volatile or atomic access -- keeps every earlier
+/// store, and a store between, which only writes, keeps none. A store whose value something reads through its id stays.
 /// A function with a `__try` region, whose handlers may read memory a
 /// fault between the stores leaves, keeps its stores.
-pub(crate) fn drop_overwritten_stores(func: &mut FunctionSsa) {
+pub(crate) fn drop_overwritten_stores(func: &mut FunctionSsa, slots: bool) {
     if func.has_seh() {
         return;
     }
@@ -1212,12 +1238,22 @@ pub(crate) fn drop_overwritten_stores(func: &mut FunctionSsa) {
                 | Inst::SegLoad { .. }
         )
     };
+    // A location: a pointer base, or a frame slot by its offset.
+    #[derive(Clone, Copy, PartialEq)]
+    enum At {
+        Base(ValueId),
+        Slot(i64),
+    }
+    let through = |addr: ValueId, disp: i32| {
+        let (base, at) = base_disp(func, addr, disp);
+        (At::Base(base), at)
+    };
     let mut dead = Vec::new();
     for block in &func.blocks {
-        // The byte ranges the block's later stores write, by base.
-        let mut written: Vec<(ValueId, i64, i64)> = Vec::new();
+        // The byte ranges the block's later stores write, by location.
+        let mut written: Vec<(At, i64, i64)> = Vec::new();
         for i in block.inst_range.clone().rev() {
-            let (addr, disp, w, used) = match func.insts[i as usize] {
+            let store = match func.insts[i as usize] {
                 Inst::Store {
                     addr,
                     disp,
@@ -1225,17 +1261,26 @@ pub(crate) fn drop_overwritten_stores(func: &mut FunctionSsa) {
                     volatile: false,
                     pc_rel: false,
                     ..
-                } => (
-                    addr,
-                    disp,
+                } => Some((
+                    through(addr, disp),
                     i64::from(store_width(kind)),
                     uses[i as usize] > 0,
-                ),
-                Inst::Mzero { dst, size, .. } => (dst, 0, size, false),
-                _ => (NO_VALUE, 0, 0, false),
+                )),
+                Inst::StoreLocal {
+                    off,
+                    disp,
+                    kind,
+                    volatile: false,
+                    ..
+                } if slots => Some((
+                    (At::Slot(off), i64::from(disp)),
+                    i64::from(store_width(kind)),
+                    uses[i as usize] > 0,
+                )),
+                Inst::Mzero { dst, size, .. } => Some((through(dst, 0), size, false)),
+                _ => None,
             };
-            if addr != NO_VALUE {
-                let (base, at) = base_disp(func, addr, disp);
+            if let Some(((base, at), w, used)) = store {
                 if written
                     .iter()
                     .any(|&(b, a, aw)| b == base && a <= at && at + w <= a + aw)
@@ -1248,13 +1293,7 @@ pub(crate) fn drop_overwritten_stores(func: &mut FunctionSsa) {
                 }
                 continue;
             }
-            match func.insts[i as usize] {
-                Inst::Store {
-                    volatile: false, ..
-                }
-                | Inst::StoreLocal {
-                    volatile: false, ..
-                } => {}
+            let read = match func.insts[i as usize] {
                 Inst::Load {
                     addr,
                     disp,
@@ -1262,15 +1301,31 @@ pub(crate) fn drop_overwritten_stores(func: &mut FunctionSsa) {
                     volatile: false,
                     pc_rel: false,
                     ..
-                } if uses[i as usize] > 0 => {
-                    let (base, at) = base_disp(func, addr, disp);
-                    let w = i64::from(load_width(kind));
-                    written.retain(|&(b, a, aw)| b == base && !(a < at + w && at < a + aw));
+                } if uses[i as usize] > 0 => Some((through(addr, disp), kind)),
+                Inst::LoadLocal {
+                    off,
+                    disp,
+                    kind,
+                    volatile: false,
+                } if uses[i as usize] > 0 => Some(((At::Slot(off), i64::from(disp)), kind)),
+                _ => None,
+            };
+            if let Some(((base, at), kind)) = read {
+                let w = i64::from(load_width(kind));
+                written.retain(|&(b, a, aw)| b == base && !(a < at + w && at < a + aw));
+                continue;
+            }
+            match func.insts[i as usize] {
+                Inst::Store {
+                    volatile: false, ..
                 }
+                | Inst::StoreLocal {
+                    volatile: false, ..
+                } => {}
                 // A plain load nothing reads is not emitted.
                 ref inst
                     if !writes_memory(inst)
-                        && (!reads(inst) || (uses[i as usize] == 0 && inst.is_pure())) => {}
+                        && (!reads(inst) || (uses[i as usize] == 0 && func.is_pure(inst))) => {}
                 _ => written.clear(),
             }
         }
@@ -1560,6 +1615,7 @@ mod tests {
             tls_dynamic: false,
             section: None,
             patchable_entry: None,
+            type_hash: None,
             no_instrument: false,
             no_stack_protector: false,
             is_weak: false,
@@ -1594,6 +1650,9 @@ mod tests {
             has_returns_twice_call: false,
             did_unroll: false,
             did_inline: false,
+            frees_rbp: false,
+            fenv_access: false,
+            ret_low_word: false,
             insts,
             blocks: alloc::vec![Block {
                 start_pc: 0,
@@ -1638,7 +1697,7 @@ mod tests {
                 Terminator::Return(3),
                 3,
             );
-            run_one(&mut f);
+            run_one(&mut f, &[]);
             let ret = if forwarded { 1 } else { 3 };
             assert!(
                 matches!(f.blocks[0].terminator, Terminator::Return(r) if r == ret),
@@ -1684,7 +1743,7 @@ mod tests {
                 Terminator::Return(3),
                 3,
             );
-            run_one(&mut f);
+            run_one(&mut f, &[]);
             let ret = if forwarded { 1 } else { 3 };
             assert!(
                 matches!(f.blocks[0].terminator, Terminator::Return(r) if r == ret),
@@ -1745,7 +1804,7 @@ mod tests {
                 Terminator::Return(4),
                 4,
             );
-            run_one(&mut f);
+            run_one(&mut f, &[]);
             let ret = if forwarded { 0 } else { 4 };
             assert!(
                 matches!(f.blocks[0].terminator, Terminator::Return(r) if r == ret),
@@ -1786,7 +1845,7 @@ mod tests {
             Terminator::Return(4),
             4,
         );
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         assert!(
             matches!(f.blocks[0].terminator, Terminator::Return(2)),
             "{:?}",
@@ -1829,7 +1888,7 @@ mod tests {
             Terminator::Return(3),
             3,
         );
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         assert!(
             matches!(f.blocks[0].terminator, Terminator::Return(1)),
             "the I64 load should redirect to the stored value v1",
@@ -1871,7 +1930,7 @@ mod tests {
             Terminator::Return(3),
             3,
         );
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         assert!(
             matches!(
                 f.insts[3],
@@ -1928,7 +1987,7 @@ mod tests {
                 Terminator::Return(3),
                 3,
             );
-            run_one(&mut f);
+            run_one(&mut f, &[]);
             assert!(
                 matches!(f.insts[3], Inst::BinopI { op: BinOp::And, lhs: 1, rhs_imm } if rhs_imm == mask),
                 "{load:?}: {:?}",
@@ -1953,7 +2012,7 @@ mod tests {
             Terminator::Return(3),
             3,
         );
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         assert!(
             matches!(
                 f.insts[3],
@@ -1976,7 +2035,7 @@ mod tests {
             Terminator::Return(3),
             3,
         );
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         assert!(
             matches!(
                 f.insts[3],
@@ -2014,7 +2073,7 @@ mod tests {
             Terminator::Return(6),
             6,
         );
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         assert!(
             matches!(f.insts[6], Inst::Binop { lhs: 2, rhs: 2, .. }),
             "{:?}",
@@ -2068,7 +2127,7 @@ mod tests {
             insts.extend(between);
             insts.push(store(at, 3, last));
             let mut f = fresh(insts, Terminator::Return(ret), NO_VALUE);
-            super::drop_overwritten_stores(&mut f);
+            super::drop_overwritten_stores(&mut f, false);
             matches!(f.insts[4], Inst::Store { .. })
         };
         assert!(!survives(None, 0, StoreKind::I64, NO_VALUE));
@@ -2126,7 +2185,7 @@ mod tests {
             let mut insts = params();
             insts.extend([first, last]);
             let mut f = fresh(insts, Terminator::Return(NO_VALUE), NO_VALUE);
-            super::drop_overwritten_stores(&mut f);
+            super::drop_overwritten_stores(&mut f, false);
             matches!(f.insts[2], Inst::Imm(0))
         };
         assert!(first_goes(zero(8), store(StoreKind::I64)));
@@ -2169,7 +2228,7 @@ mod tests {
                 Terminator::Return(3),
                 3,
             );
-            run_one(&mut f);
+            run_one(&mut f, &[]);
             f
         };
         let f = copy_of(4);
@@ -2225,7 +2284,7 @@ mod tests {
             Terminator::Return(5),
             5,
         );
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         assert!(
             matches!(
                 f.insts[4],
@@ -2240,6 +2299,92 @@ mod tests {
             f.insts[4]
         );
         assert!(matches!(f.blocks[0].terminator, Terminator::Return(1)));
+    }
+
+    /// A store to another field of a 56-byte row leaves a load of row `j`'s
+    /// field to forward when the row indices are bounded; unbounded, the
+    /// rows' difference wraps onto any multiple of 8 and the store may reach
+    /// it.
+    #[test]
+    fn a_store_to_another_row_field_keeps_the_load_entry() {
+        let rows = |mask: i64| {
+            let load = Inst::Load {
+                addr: 8,
+                disp: 48,
+                kind: LoadKind::I64,
+                volatile: false,
+                align: 0,
+                pc_rel: false,
+            };
+            let mut f = fresh(
+                alloc::vec![
+                    Inst::ParamRef {
+                        idx: 0,
+                        kind: LoadKind::I64
+                    },
+                    Inst::ParamRef {
+                        idx: 1,
+                        kind: LoadKind::I64
+                    },
+                    Inst::ParamRef {
+                        idx: 2,
+                        kind: LoadKind::I64
+                    },
+                    Inst::BinopI {
+                        op: crate::c5::ir::BinOp::And,
+                        lhs: 1,
+                        rhs_imm: mask
+                    },
+                    Inst::BinopI {
+                        op: crate::c5::ir::BinOp::And,
+                        lhs: 2,
+                        rhs_imm: mask
+                    },
+                    Inst::BinopI {
+                        op: crate::c5::ir::BinOp::Mul,
+                        lhs: 3,
+                        rhs_imm: 56
+                    },
+                    Inst::Binop {
+                        op: crate::c5::ir::BinOp::Add,
+                        lhs: 0,
+                        rhs: 5
+                    },
+                    Inst::BinopI {
+                        op: crate::c5::ir::BinOp::Mul,
+                        lhs: 4,
+                        rhs_imm: 56
+                    },
+                    Inst::Binop {
+                        op: crate::c5::ir::BinOp::Add,
+                        lhs: 0,
+                        rhs: 7
+                    },
+                    load.clone(),
+                    Inst::Store {
+                        addr: 6,
+                        disp: 24,
+                        value: 1,
+                        kind: StoreKind::I64,
+                        volatile: false,
+                        align: 0,
+                        pc_rel: false
+                    },
+                    load,
+                    Inst::Binop {
+                        op: crate::c5::ir::BinOp::Add,
+                        lhs: 9,
+                        rhs: 11
+                    },
+                ],
+                Terminator::Return(12),
+                12,
+            );
+            run_one(&mut f, &[]);
+            f.insts[12].clone()
+        };
+        assert!(matches!(rows(3), Inst::Binop { rhs: 9, .. }));
+        assert!(matches!(rows(-1), Inst::Binop { rhs: 11, .. }));
     }
 
     #[test]
@@ -2281,7 +2426,7 @@ mod tests {
             Terminator::Return(4),
             4,
         );
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         assert!(
             matches!(f.blocks[0].terminator, Terminator::Return(4)),
             "the load past a block copy must not forward",
@@ -2337,7 +2482,7 @@ mod tests {
             Terminator::Return(4),
             4,
         );
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         assert!(
             matches!(f.blocks[0].terminator, Terminator::Return(4)),
             "a load must not forward across an asm barrier",
@@ -2379,7 +2524,7 @@ mod tests {
             Terminator::Return(3),
             3,
         );
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         assert!(
             matches!(f.blocks[0].terminator, Terminator::Return(3)),
             "a load after a volatile store must not forward",
@@ -2435,7 +2580,7 @@ mod tests {
             Terminator::Return(5),
             5,
         );
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         assert!(
             matches!(f.insts[5], Inst::Binop { lhs: 3, rhs: 4, .. }),
             "volatile loads must not forward from the store or each other",
@@ -2470,7 +2615,7 @@ mod tests {
             Terminator::Return(2),
             2,
         );
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         assert!(
             matches!(f.blocks[0].terminator, Terminator::Return(0)),
             "the slot reload should redirect to the stored value v0",
@@ -2514,7 +2659,7 @@ mod tests {
                 Terminator::Return(2),
                 2,
             );
-            run_one(&mut f);
+            run_one(&mut f, &[]);
             let redirected = matches!(f.blocks[0].terminator, Terminator::Return(0));
             assert_eq!(redirected, forwards, "{:?}", f.insts[0]);
         }
@@ -2570,7 +2715,7 @@ mod tests {
             });
             let n = insts.len() as ValueId - 1;
             let mut f = fresh(insts, Terminator::Return(n), n);
-            run_one(&mut f);
+            run_one(&mut f, &[]);
             let forwarded = matches!(f.insts[n as usize], Inst::Binop { rhs: 0, .. });
             assert_eq!(forwarded, forwards, "live arithmetic in between: {live}");
         }
@@ -2653,7 +2798,7 @@ mod tests {
                 Terminator::Return(4),
                 4,
             );
-            run_one(&mut f);
+            run_one(&mut f, &[]);
             assert_eq!(format!("{:?}", f.insts[4]), format!("{want:?}"));
         }
     }
@@ -2686,7 +2831,7 @@ mod tests {
             Terminator::Return(3),
             3,
         );
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         assert_eq!(format!("{:?}", f.insts[3]), format!("{load:?}"));
     }
 
@@ -2721,6 +2866,7 @@ mod tests {
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,
+                    parts: Vec::new(),
                 },
                 Inst::LoadLocal {
                     disp: 0,
@@ -2732,7 +2878,7 @@ mod tests {
             Terminator::Return(3),
             3,
         );
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         assert!(
             matches!(f.blocks[0].terminator, Terminator::Return(3)),
             "a reload after a call must stay a reload",
@@ -2778,7 +2924,7 @@ mod tests {
             Terminator::Return(4),
             4,
         );
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         assert!(
             matches!(f.blocks[0].terminator, Terminator::Return(4)),
             "an address-taken slot must not forward",
@@ -2813,7 +2959,7 @@ mod tests {
             Terminator::Return(2),
             2,
         );
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         assert!(
             matches!(f.blocks[0].terminator, Terminator::Return(2)),
             "a volatile-stored slot must not forward",
@@ -2860,7 +3006,7 @@ mod tests {
             Terminator::Return(4),
             4,
         );
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         assert!(
             matches!(f.blocks[0].terminator, Terminator::Return(1)),
             "the reload should forward to the second store's value",
@@ -2895,7 +3041,7 @@ mod tests {
             Terminator::Return(2),
             2,
         );
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         assert!(
             matches!(
                 f.insts[2],
@@ -2939,6 +3085,7 @@ mod tests {
                     arg_aggs: Vec::new(),
                     ret_agg: Some(0),
                     ret_slot_local: -2,
+                    parts: Vec::new(),
                 },
                 Inst::LoadLocal {
                     disp: 0,
@@ -2950,7 +3097,7 @@ mod tests {
             Terminator::Return(3),
             3,
         );
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         assert!(
             matches!(f.blocks[0].terminator, Terminator::Return(3)),
             "a call result slot must not forward across the call",
@@ -2996,7 +3143,7 @@ mod tests {
             Terminator::Return(4),
             4,
         );
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         // v3 redirects to v2, so the add reads v2 twice.
         assert!(
             matches!(f.insts[4], Inst::Binop { lhs: 2, rhs: 2, .. }),
@@ -3044,7 +3191,7 @@ mod tests {
         let last = insts.len() as u32;
         insts.push(load_indexed(0, 1, 1, kind));
         let mut f = fresh(insts, Terminator::Return(last), last);
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         let Terminator::Return(v) = f.blocks[0].terminator else {
             unreachable!()
         };
@@ -3144,14 +3291,6 @@ mod tests {
             store_indexed(2, 1, 1, 2, StoreKind::I8),
             plain_store(false),
             plain_store(true),
-            Inst::StoreLocal {
-                disp: 0,
-                off: 8,
-                value: 2,
-                kind: StoreKind::I64,
-                volatile: false,
-                nsw: false,
-            },
             Inst::Mcpy {
                 dst: 2,
                 src: 0,
@@ -3191,6 +3330,39 @@ mod tests {
                     matches!(last, Inst::LoadIndexed { .. }),
                     "{first:?} forwarded across {barrier:?}: {last:?}"
                 );
+            }
+        }
+        // A frame store reaches the element only where a `LocalAddr` of its
+        // slot is read.
+        let slot_store = Inst::StoreLocal {
+            disp: 0,
+            off: 8,
+            value: 2,
+            kind: StoreKind::I64,
+            volatile: false,
+            nsw: false,
+        };
+        let addressed = alloc::vec![
+            Inst::LocalAddr(8),
+            Inst::StoreLocal {
+                disp: 0,
+                off: 8,
+                value: 4,
+                kind: StoreKind::I64,
+                volatile: false,
+                nsw: false,
+            },
+        ];
+        for (between, reaches) in [(alloc::vec![slot_store], false), (addressed, true)] {
+            for first in [
+                load_indexed(0, 1, 1, LoadKind::I8),
+                store_indexed(0, 1, 1, 2, StoreKind::I8),
+            ] {
+                // A forward redirects the read or rewrites the load in place.
+                let load = 4 + between.len() as u32;
+                let (v, last) = indexed_reload(first.clone(), between.clone(), LoadKind::I8);
+                let read = v == load && matches!(last, Inst::LoadIndexed { .. });
+                assert_eq!(read, reaches, "{first:?} across {between:?}: {last:?}");
             }
         }
     }
@@ -3242,7 +3414,7 @@ mod tests {
             Terminator::Return(4),
             4,
         );
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         assert!(matches!(f.blocks[0].terminator, Terminator::Return(4)));
     }
 
@@ -3291,7 +3463,7 @@ mod tests {
             rhs: 2,
         };
         let mut f = two_blocks(alloc::vec![param, load_of(0), load_of(0), add], 2, 3);
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         assert!(
             matches!(f.insts[3], Inst::Binop { lhs: 1, rhs: 1, .. }),
             "{:?}",
@@ -3308,7 +3480,7 @@ mod tests {
         let gone = |insts: Vec<Inst>, store: usize| {
             let n = insts.len() as ValueId;
             let mut f = fresh(insts, Terminator::Return(n - 1), n - 1);
-            run_one(&mut f);
+            run_one(&mut f, &[]);
             matches!(f.insts[store], Inst::Imm(_))
         };
         let other = Inst::Store {
@@ -3380,7 +3552,7 @@ mod tests {
             block(2..reload, Terminator::Return(chain)),
             block(reload..n, Terminator::Return(n - 1)),
         ];
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         assert!(
             matches!(f.insts[n as usize - 1], Inst::Binop { lhs: 1, rhs: 1, .. }),
             "{:?}",
@@ -3407,7 +3579,7 @@ mod tests {
         });
         let ret = near + 2;
         let mut f = two_blocks(insts, 2, ret);
-        run_one(&mut f);
+        run_one(&mut f, &[]);
         assert!(
             matches!(f.insts[ret as usize], Inst::Binop { lhs, rhs, .. } if lhs == near && rhs == near),
             "{:?}",
@@ -3485,7 +3657,7 @@ mod tests {
                 Terminator::Return(2),
                 4,
             );
-            run_one(&mut f);
+            run_one(&mut f, &[]);
             assert!(
                 matches!(f.insts[2], Inst::FpCast { kind, value: 0 } if kind == cast),
                 "{cast:?}: {:?}",
@@ -3533,7 +3705,7 @@ mod tests {
                 Terminator::Return(2),
                 2,
             );
-            run_one(&mut f);
+            run_one(&mut f, &[]);
             let ret = match f.blocks[0].terminator {
                 Terminator::Return(r) => r,
                 _ => unreachable!(),
@@ -3589,7 +3761,7 @@ mod tests {
                 Terminator::Return(3),
                 3,
             );
-            run_one(&mut f);
+            run_one(&mut f, &[]);
             assert!(
                 matches!(
                     f.insts[2],

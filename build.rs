@@ -298,6 +298,14 @@ fn emit_version_minimums() -> String {
 fn emit_binding_to_header_index() {
     let out_dir = env::var("OUT_DIR").expect("OUT_DIR set by cargo");
     let dest = Path::new(&out_dir).join("binding_to_header.rs");
+    // Without the `headers` feature no header is embedded, and no name
+    // resolves to one.
+    if env::var_os("CARGO_FEATURE_HEADERS").is_none() {
+        let empty = "pub(super) const BINDING_TO_HEADER: &[(&str, &[&str])] = &[];\n\
+                     pub(super) const HEADER_INCLUDERS: &[(&str, &[&str])] = &[];\n";
+        fs::write(&dest, empty).expect("write binding index");
+        return;
+    }
     let mut headers: Vec<(PathBuf, String)> = Vec::new();
     for root in ["libc/include", "libc/compiler/include"] {
         let root = Path::new(root);
@@ -460,115 +468,204 @@ fn extract_binding_names(body: &str) -> Vec<String> {
     out
 }
 
+/// The identifier of each file-scope function declarator in `body`, of a
+/// declaration or a definition however it is split across lines: an
+/// identifier that a parameter list follows, in a grouped declarator too
+/// (`void (*signal(int, void (*)(int)))(int)`). Comments, directives,
+/// `typedef` declarations, initializers, aggregate and function bodies, the
+/// operands of attributes, `__declspec`, asm labels and `_Static_assert`,
+/// and a macro invocation in place of a declaration name no function. An
+/// `extern "C" { ... }` block is file scope.
 fn extract_prototype_names(body: &str) -> Vec<String> {
-    // Function prototype shape: a file-scope declaration line that
-    // ends with `);`. Walk word-bounded identifiers on the line and
-    // pick the last one immediately followed by `(` -- the lead-in
-    // identifiers are return-type / storage-class / cv-qualifier
-    // tokens (`int`, `void`, `static`, `const`, `extern`, ...). A
-    // `static inline` definition's line names its function first, the
-    // parameter list following on it or on the next lines.
-    //
-    // Track outer-brace depth across lines so call expressions inside
-    // a `static inline` function body (e.g., `buf = malloc(32);` in
-    // `c5io.h`) don't get misread as prototypes -- those sit at
-    // depth > 0 and are skipped.
+    let toks = header_tokens(body);
+    let opens = |i: usize| toks.get(i) == Some(&Tok::Punct(b'('));
     let mut out = Vec::new();
-    let mut brace_depth: i32 = 0;
-    let mut paren_depth: i32 = 0;
-    for raw in body.lines() {
-        let trimmed = raw.trim_start();
-        let directive_or_comment = trimmed.starts_with('#') || trimmed.starts_with("//");
-        if !directive_or_comment && brace_depth == 0 && paren_depth == 0 {
-            let name = if raw.trim_end().ends_with(");") {
-                call_ids(raw).last().copied()
-            } else if is_inline_definition(trimmed) {
-                call_ids(raw).first().copied()
-            } else {
-                None
-            };
-            if let Some(name) = name.filter(|n| !is_c_keyword(n)) {
-                out.push(name.to_string());
+    // `start`: no token of the current declaration read yet.
+    let (mut i, mut parens, mut typedef, mut start) = (0, 0usize, false, true);
+    while i < toks.len() {
+        match toks[i] {
+            Tok::Word(w) if is_operand_keyword(w) && opens(i + 1) => {
+                i = group_end(&toks, i + 1, b'(', b')');
+                continue;
             }
+            // A macro invocation in place of a declaration: what it
+            // declares, the text does not spell.
+            Tok::Word(_) if start && opens(i + 1) => {
+                i = group_end(&toks, i + 1, b'(', b')');
+                continue;
+            }
+            Tok::Word("typedef") => typedef = true,
+            Tok::Word(w) if opens(i + 1) => {
+                if !typedef && !is_c_keyword(w) {
+                    out.push(w.to_string());
+                }
+                i = group_end(&toks, i + 1, b'(', b')');
+                // Attributes and an asm label may stand between the
+                // parameter list and a definition's body.
+                while let Some(&Tok::Word(a)) = toks.get(i)
+                    && is_operand_keyword(a)
+                    && opens(i + 1)
+                {
+                    i = group_end(&toks, i + 1, b'(', b')');
+                }
+                if toks.get(i) == Some(&Tok::Punct(b'{')) {
+                    i = group_end(&toks, i, b'{', b'}');
+                    (typedef, start) = (false, true);
+                }
+                continue;
+            }
+            Tok::Word("extern")
+                if matches!(toks.get(i + 1), Some(Tok::Str))
+                    && toks.get(i + 2) == Some(&Tok::Punct(b'{')) =>
+            {
+                i += 3;
+                continue;
+            }
+            // A list after a grouped declarator is its parameter list.
+            Tok::Punct(b'(') if i > 0 && toks[i - 1] == Tok::Punct(b')') => {
+                i = group_end(&toks, i, b'(', b')');
+                continue;
+            }
+            Tok::Punct(b'(') => parens += 1,
+            Tok::Punct(b')') => parens = parens.saturating_sub(1),
+            Tok::Punct(b'{') => {
+                i = group_end(&toks, i, b'{', b'}');
+                start = false;
+                continue;
+            }
+            Tok::Punct(b'=') if parens == 0 => {
+                while i < toks.len() && !matches!(toks[i], Tok::Punct(b',' | b';')) {
+                    i = match toks[i] {
+                        Tok::Punct(b'(') => group_end(&toks, i, b'(', b')'),
+                        Tok::Punct(b'{') => group_end(&toks, i, b'{', b'}'),
+                        _ => i + 1,
+                    };
+                }
+                continue;
+            }
+            Tok::Punct(b';') => (parens, typedef) = (0, false),
+            _ => {}
         }
-        // Track brace / paren depth for the next line. Skip the body
-        // of `// ...` and `#...` lines; both are line-scoped, so
-        // their braces don't affect the running depth.
-        if !directive_or_comment {
-            update_depth(raw, &mut brace_depth, &mut paren_depth);
-        }
+        // A `;` ends a declaration; a `}` here closes an `extern "C"` block.
+        start = matches!(toks[i], Tok::Punct(b';' | b'}'));
+        i += 1;
     }
     out
 }
 
-/// Whether `line` opens a `static inline` function definition.
-fn is_inline_definition(line: &str) -> bool {
-    line.strip_prefix("static ")
-        .is_some_and(|rest| rest.starts_with("inline ") || rest.starts_with("__inline"))
+/// A token of a header's C text: an identifier or keyword, a literal, or
+/// one punctuator byte.
+#[derive(Clone, Copy, PartialEq)]
+enum Tok<'a> {
+    Word(&'a str),
+    Str,
+    Number,
+    Punct(u8),
 }
 
-/// The identifiers on `line` that a `(` follows, in order.
-fn call_ids(line: &str) -> Vec<&str> {
-    let bytes = line.as_bytes();
-    let mut ids = Vec::new();
-    let mut i = 0;
+/// The tokens of `body` with comments and preprocessing directives
+/// removed. A directive runs to the end of its line, continuations
+/// included.
+fn header_tokens(body: &str) -> Vec<Tok<'_>> {
+    let bytes = body.as_bytes();
+    let mut toks = Vec::new();
+    let (mut i, mut line_start) = (0, true);
     while i < bytes.len() {
         let b = bytes[i];
-        if b.is_ascii_alphabetic() || b == b'_' {
-            let start = i;
-            while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+        if b == b'\n' {
+            (i, line_start) = (i + 1, true);
+            continue;
+        }
+        if b.is_ascii_whitespace() || (b == b'\\' && bytes.get(i + 1) == Some(&b'\n')) {
+            i += if b == b'\\' { 2 } else { 1 };
+            continue;
+        }
+        if body[i..].starts_with("/*") {
+            i = body[i + 2..].find("*/").map_or(bytes.len(), |e| i + e + 4);
+            continue;
+        }
+        if body[i..].starts_with("//") || (line_start && b == b'#') {
+            let directive = b == b'#';
+            while i < bytes.len() && bytes[i] != b'\n' {
+                if directive && bytes[i] == b'\\' && bytes.get(i + 1) == Some(&b'\n') {
+                    i += 1;
+                } else if directive && body[i..].starts_with("/*") {
+                    i = body[i + 2..].find("*/").map_or(bytes.len(), |e| i + e + 3);
+                }
                 i += 1;
             }
-            let mut j = i;
-            while j < bytes.len() && (bytes[j] == b' ' || bytes[j] == b'\t') {
-                j += 1;
+            continue;
+        }
+        line_start = false;
+        let start = i;
+        if b == b'_' || b.is_ascii_alphanumeric() {
+            while i < bytes.len() && (bytes[i] == b'_' || bytes[i].is_ascii_alphanumeric()) {
+                i += 1;
             }
-            if j < bytes.len() && bytes[j] == b'(' {
-                ids.push(&line[start..i]);
+            let word = &body[start..i];
+            let prefixed = matches!(word, "L" | "u" | "U" | "u8")
+                && matches!(bytes.get(i), Some(b'"' | b'\''));
+            if !prefixed {
+                toks.push(if b.is_ascii_digit() {
+                    Tok::Number
+                } else {
+                    Tok::Word(word)
+                });
             }
+        } else if b == b'"' || b == b'\'' {
+            i += 1;
+            while i < bytes.len() && bytes[i] != b && bytes[i] != b'\n' {
+                i += if bytes[i] == b'\\' { 2 } else { 1 };
+            }
+            i += 1;
+            toks.push(Tok::Str);
         } else {
+            toks.push(Tok::Punct(b));
             i += 1;
         }
     }
-    ids
+    toks
 }
 
-fn update_depth(line: &str, brace: &mut i32, paren: &mut i32) {
-    let bytes = line.as_bytes();
-    let mut in_str = false;
-    let mut in_chr = false;
-    let mut i = 0;
-    while i < bytes.len() {
-        let b = bytes[i];
-        if in_str {
-            if b == b'\\' && i + 1 < bytes.len() {
-                i += 2;
-                continue;
+/// The index past the group that opens at `toks[at]` and closes at its
+/// matching `close`.
+fn group_end(toks: &[Tok<'_>], at: usize, open: u8, close: u8) -> usize {
+    let mut depth = 0usize;
+    for (i, t) in toks.iter().enumerate().skip(at) {
+        match *t {
+            Tok::Punct(c) if c == open => depth += 1,
+            Tok::Punct(c) if c == close => {
+                depth -= 1;
+                if depth == 0 {
+                    return i + 1;
+                }
             }
-            if b == b'"' {
-                in_str = false;
-            }
-        } else if in_chr {
-            if b == b'\\' && i + 1 < bytes.len() {
-                i += 2;
-                continue;
-            }
-            if b == b'\'' {
-                in_chr = false;
-            }
-        } else {
-            match b {
-                b'"' => in_str = true,
-                b'\'' => in_chr = true,
-                b'{' => *brace += 1,
-                b'}' => *brace = brace.saturating_sub(1).max(0),
-                b'(' => *paren += 1,
-                b')' => *paren = paren.saturating_sub(1).max(0),
-                _ => {}
-            }
+            _ => {}
         }
-        i += 1;
     }
+    toks.len()
+}
+
+/// A keyword whose parenthesized operand names no declarator.
+fn is_operand_keyword(w: &str) -> bool {
+    matches!(
+        w,
+        "__attribute__"
+            | "__attribute"
+            | "__declspec"
+            | "__asm__"
+            | "__asm"
+            | "asm"
+            | "_Alignas"
+            | "alignas"
+            | "_Static_assert"
+            | "static_assert"
+            | "__typeof__"
+            | "__typeof"
+            | "typeof"
+            | "_Pragma"
+            | "__pragma"
+    )
 }
 
 fn is_c_keyword(s: &str) -> bool {

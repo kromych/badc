@@ -3,7 +3,7 @@ thread_local_library_function_slot.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -18,30 +18,30 @@ Disassembly of section .text:
                	mov	x29, sp
                	adrp	x3, <page>
                	ldr	x3, [x3, <lo12>]
-               	mrs	x1, TPIDR_EL0
-               	add	x1, x1, #0x0, lsl #12   // =0x0
-               	add	x1, x1, #0x10
-               	ldr	x2, [x1]
+               	mrs	x2, TPIDR_EL0
+               	add	x2, x2, #0x0, lsl #12   // =0x0
+               	add	x2, x2, #0x10
+               	ldr	x1, [x2]
                	adrp	x0, <page>
                	ldr	x4, [x0, #0x10]
                	mov	x0, #0x0                // =0
-               	cmp	x2, x3
+               	cmp	x1, x3
                	cset	x3, eq
-               	cmp	x2, x4
-               	csel	x2, x3, x0, eq
-               	cbz	x2, <addr>
+               	cmp	x1, x4
+               	csel	x1, x3, x0, eq
+               	cbz	x1, <addr>
+               	ldr	x1, [x2]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	x1, [x1]
                	blr	x1
                	cmp	x0, #0x3
                	cset	x0, eq
                	mov	x1, #0x0                // =0
                	cbz	x0, <addr>
                	adrp	x0, <page>
+               	ldr	x1, [x0, #0x10]
+               	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	adrp	x1, <page>
-               	ldr	x1, [x1, <lo12>]
                	blr	x1
                	cmp	x0, #0x2
                	cset	x1, eq

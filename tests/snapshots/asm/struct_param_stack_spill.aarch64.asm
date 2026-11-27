@@ -3,7 +3,7 @@ struct_param_stack_spill.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -79,25 +79,25 @@ Disassembly of section .text:
                	stur	x0, [x29, #-0x10]
                	mov	x1, #0x2                // =2
                	stur	w1, [x29, #-0x8]
-               	sub	x8, x29, #0x20
+               	sub	x2, x29, #0x20
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x8]
+               	stp	x16, x17, [x2]
                	ldur	x0, [x29, #-0x10]
+               	adrp	x3, <page>
+               	ldr	x9, [x3, #0x10]
+               	mov	x16, x2
+               	ldr	x17, [x16]
+               	str	x17, [sp]
+               	ldr	x17, [x16, #0x8]
+               	str	x17, [sp, #0x8]
                	mov	x2, #0x3                // =3
                	mov	x3, #0x4                // =4
                	mov	x4, #0x5                // =5
                	mov	x5, #0x6                // =6
                	mov	x6, #0x7                // =7
                	mov	x7, #0x8                // =8
-               	adrp	x9, <page>
-               	ldr	x9, [x9, <lo12>]
-               	mov	x16, x8
-               	ldr	x17, [x16]
-               	str	x17, [sp]
-               	ldr	x17, [x16, #0x8]
-               	str	x17, [sp, #0x8]
                	blr	x9
                	cmp	x0, #0xbe0
                	b.eq	<addr>
@@ -106,21 +106,16 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	ldursw	x0, [x29, #-0x8]
-               	sub	x8, x29, #0x20
+               	sub	x1, x29, #0x20
                	stur	w0, [x29, #-0x20]
                	mov	x2, #0x3                // =3
                	stur	w2, [x29, #-0x1c]
                	mov	x3, #0x4                // =4
                	stur	w3, [x29, #-0x18]
                	ldur	x0, [x29, #-0x10]
-               	mov	x1, #0x2                // =2
-               	mov	x4, #0x5                // =5
-               	mov	x5, #0x6                // =6
-               	mov	x6, #0x7                // =7
-               	mov	x7, #0x8                // =8
-               	adrp	x9, <page>
-               	ldr	x9, [x9, <lo12>]
-               	mov	x16, x8
+               	adrp	x4, <page>
+               	ldr	x9, [x4, #0x18]
+               	mov	x16, x1
                	ldr	x17, [x16]
                	str	x17, [sp]
                	ldrb	w17, [x16, #0x8]
@@ -131,6 +126,11 @@ Disassembly of section .text:
                	strb	w17, [sp, #0xa]
                	ldrb	w17, [x16, #0xb]
                	strb	w17, [sp, #0xb]
+               	mov	x1, #0x2                // =2
+               	mov	x4, #0x5                // =5
+               	mov	x5, #0x6                // =6
+               	mov	x6, #0x7                // =7
+               	mov	x7, #0x8                // =8
                	blr	x9
                	cmp	x0, #0x10e
                	b.eq	<addr>

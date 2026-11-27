@@ -3,7 +3,7 @@ struct_member_copy_from_global.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -18,10 +18,10 @@ Disassembly of section .text:
                	ldr	w1, [x0, #0x10]
                	mov	x2, #0x9                // =9
                	str	w2, [x0, #0x10]
-               	mov	x0, #0x1                // =1
-               	mov	x2, #-0x64              // =-100
                	cmn	w1, #0x1
-               	csel	x0, x0, x2, ge
+               	mov	x16, #0x1               // =1
+               	mov	x17, #-0x64             // =-100
+               	csel	x0, x16, x17, ge
                	add	x0, x0, #0x1
                	add	x0, x0, #0x1
                	ret

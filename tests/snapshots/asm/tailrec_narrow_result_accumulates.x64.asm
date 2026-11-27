@@ -3,7 +3,7 @@ tailrec_narrow_result_accumulates.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -28,8 +28,7 @@ Disassembly of section .text:
 <fib_int>:
                	cmpl	$0x2, %edi
                	jl	<addr>
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	pushq	%r12
                	pushq	%rbx
                	movq	%rdi, %rbx
@@ -43,9 +42,9 @@ Disassembly of section .text:
                	leaq	(%r12,%rbx), %rax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	movslq	%edi, %rax
+               	movq	%rdi, %rax
                	retq
 
 <golden_sum>:
@@ -79,9 +78,6 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
                	pushq	%rbx
                	xorl	%eax, %eax
                	movl	$0x9e3779b9, %ecx       # imm = 0x9E3779B9
@@ -96,7 +92,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
-               	leave
                	retq
                	movl	$0x64, %edi
                	callq	<addr>
@@ -104,7 +99,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x2, %eax
                	popq	%rbx
-               	leave
                	retq
                	movl	$0xa, %edi
                	callq	<addr>
@@ -112,7 +106,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	popq	%rbx
-               	leave
                	retq
                	movl	$0xc, %edi
                	callq	<addr>
@@ -121,9 +114,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x4, %eax
                	popq	%rbx
-               	leave
                	retq
                	xorl	%eax, %eax
                	popq	%rbx
-               	leave
                	retq

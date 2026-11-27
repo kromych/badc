@@ -192,7 +192,7 @@ pub(super) fn emit_va_arg_cursor(
 }
 
 /// Deliver the address `va_arg` computed in `src` to its result `dst`.
-fn va_arg_result(code: &mut Vec<u8>, dst: Place, src: Reg, frame: Frame) -> Emit {
+fn va_arg_result(code: &mut CodeBuf, dst: Place, src: Reg, frame: Frame) -> Emit {
     match dst {
         Place::IntReg(r) if r != src.0 => emit_mov_reg(code, Reg(r), src),
         Place::IntReg(_) | Place::None => {}
@@ -409,10 +409,9 @@ pub(super) fn emit_va_arg_aapcs64(
     // --- overflow-stack path ---
     let stack_lbl = code.len();
     let delta = ((stack_lbl - to_stack) / 4) as i32;
-    code[to_stack..to_stack + 4].copy_from_slice(&enc_b_cond(Cond::Ge, delta).to_le_bytes());
+    patch(code, to_stack, enc_b_cond(Cond::Ge, delta));
     let delta = ((stack_lbl - to_stack_straddle) / 4) as i32;
-    code[to_stack_straddle..to_stack_straddle + 4]
-        .copy_from_slice(&enc_b_cond(Cond::Gt, delta).to_le_bytes());
+    patch(code, to_stack_straddle, enc_b_cond(Cond::Gt, delta));
     // x16 = __stack, rounded up to the argument's alignment ; borrow =
     // that + advance (the next cursor) ; write both back.
     emit(code, enc_ldr_imm(scratch.primary, ap, 0));
@@ -431,7 +430,7 @@ pub(super) fn emit_va_arg_aapcs64(
     // --- done: x16 holds the argument address. ---
     let done_lbl = code.len();
     let delta = ((done_lbl - to_done) / 4) as i32;
-    code[to_done..to_done + 4].copy_from_slice(&enc_b(delta).to_le_bytes());
+    patch(code, to_done, enc_b(delta));
     if desc.by_ref {
         emit(code, enc_ldr_imm(scratch.primary, scratch.primary, 0));
     }
@@ -575,19 +574,19 @@ pub(super) fn emit_call_ext(
 
 /// The sub-word sign / zero extension of a call result in x0;
 /// `ReturnExt::None` is a no-op.
-fn emit_extend_x0_for_return(code: &mut Vec<u8>, ext: super::ReturnExt) {
+fn emit_extend_x0_for_return(code: &mut CodeBuf, ext: super::ReturnExt) {
     use super::ReturnExt;
-    // sxtb / sxth / sxtw x0, w0; uxtb / uxth / mov w0, w0.
-    let word = match ext {
+    let x0 = Reg::X0;
+    let insn = match ext {
         ReturnExt::None => return,
-        ReturnExt::Sign8 => 0x93401C00,
-        ReturnExt::Sign16 => 0x93403C00,
-        ReturnExt::Sign32 => 0x93407C00,
-        ReturnExt::Zero8 => 0x53001C00,
-        ReturnExt::Zero16 => 0x53003C00,
-        ReturnExt::Zero32 => 0x2A0003E0,
+        ReturnExt::Sign8 => super::encode::enc_sxtb(x0, x0),
+        ReturnExt::Sign16 => super::encode::enc_sxth(x0, x0),
+        ReturnExt::Sign32 => super::encode::enc_sxtw(x0, x0),
+        ReturnExt::Zero8 => super::encode::enc_uxt_w(x0, x0, 8),
+        ReturnExt::Zero16 => super::encode::enc_uxt_w(x0, x0, 16),
+        ReturnExt::Zero32 => super::encode::enc_mov_w_w(x0, x0),
     };
-    emit(code, word);
+    emit(code, insn);
 }
 
 /// A direct call to a c5 function at `target_pc`: marshal through the
@@ -614,8 +613,8 @@ pub(super) struct TailCall<'a> {
 /// `detect_tail_call` states: the arguments fit the argument registers, no
 /// aggregate rides the call, neither function is variadic, both are on one
 /// convention and agree on the result's extension, and nothing addresses
-/// the frame. Windows on Arm describes each epilogue in its unwind data,
-/// which records the one a return ends, so it takes none.
+/// the frame. Windows on Arm describes a tail call's epilogue in its unwind
+/// data as it does a return's.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn detect_tail_call<'a>(
     func: &'a FunctionSsa,
@@ -628,11 +627,7 @@ pub(super) fn detect_tail_call<'a>(
     target: Target,
 ) -> Option<TailCall<'a>> {
     // A callee of another standard may change what the SVE PCS preserves.
-    if !abi.sibling_calls
-        || target == Target::WindowsAarch64
-        || func.is_variadic
-        || func.sve_pcs.is_some()
-    {
+    if !abi.sibling_calls || func.is_variadic || func.sve_pcs.is_some() {
         return None;
     }
     let (v, void) = super::ssa::emit_common::tail_call_site(func, alloc, block)?;
@@ -731,7 +726,8 @@ pub(super) fn detect_tail_call<'a>(
 /// A tail call: `marshal_args`, the epilogue without the return, and `b` to
 /// the callee, whose own return reaches this function's caller. The
 /// epilogue restores only registers the convention preserves, none of
-/// which carries an argument, and its canary check takes x16 / x17.
+/// which carries an argument, and its canary check takes x16 / x17. Returns
+/// where the epilogue's steps, pushed to `uw`, start.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_tail_call(
     code: &mut CodeBuf,
@@ -741,7 +737,8 @@ pub(super) fn emit_tail_call(
     plt_call_fixups: &mut Vec<PltCallFixup>,
     extern_sites: &mut Vec<super::UserExternCallSite>,
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
-) -> Emit {
+    uw: Option<&mut Vec<super::A64Step>>,
+) -> Result<usize, Unsupported> {
     let FnCtx {
         func,
         alloc,
@@ -763,7 +760,7 @@ pub(super) fn emit_tail_call(
         func,
         abi,
     )?;
-    emit_frame_exit(
+    let start = emit_frame_exit(
         code,
         alloc,
         frame,
@@ -771,7 +768,7 @@ pub(super) fn emit_tail_call(
         abi,
         extern_sites,
         extern_data_refs,
-        None,
+        uw,
     );
     match tail.target {
         TailTarget::Local(target_pc) => fixups.push(Fixup {
@@ -787,7 +784,7 @@ pub(super) fn emit_tail_call(
         }),
     }
     emit(code, enc_b(0));
-    Ok(())
+    Ok(start)
 }
 
 pub(super) fn emit_call(
@@ -891,7 +888,7 @@ fn setup_indirect_result(
 /// return uses the standard register bridge.
 #[allow(clippy::too_many_arguments)]
 fn finish_call_result(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     ret_agg: Option<u32>,
     ret_slot_off: i64,
     agg_descs: &[super::super::ir::AggDesc],
@@ -967,7 +964,7 @@ fn finish_call_result(
 /// x0 (AAPCS64 6.4.1), a floating-point one from d0 (6.4.2; an f32 is
 /// its s0 half), copied or reinterpreted into the destination's
 /// register file.
-fn move_call_result(code: &mut Vec<u8>, dst: Place, frame: Frame, fp_return: bool) {
+fn move_call_result(code: &mut CodeBuf, dst: Place, frame: Frame, fp_return: bool) {
     if fp_return {
         match dst {
             Place::FpReg(r) => {
@@ -1050,6 +1047,7 @@ pub(super) fn emit_call_indirect(
     callee_variadic: bool,
     fixed_args: usize,
     fp_return: bool,
+    extern_data_refs: &mut Vec<UserExternDataRef>,
 ) -> Emit {
     let FnCtx {
         func,
@@ -1072,7 +1070,12 @@ pub(super) fn emit_call_indirect(
     // source may sit in one; the target must avoid those while the marshal
     // reads them.
     let mut arg_source_regs: alloc::vec::Vec<u8> = alloc::vec::Vec::with_capacity(args.len());
-    for &a in args {
+    // An aggregate given as its parts reads them from their places.
+    let parts = |a: u32| match func.insts.get(a as usize) {
+        Some(Inst::AggParts { parts, .. }) => parts.as_slice(),
+        _ => &[],
+    };
+    for &a in args.iter().chain(args.iter().flat_map(|&a| parts(a))) {
         if let Some(Place::IntReg(r)) = alloc.places.get(a as usize) {
             arg_source_regs.push(*r);
         }
@@ -1150,7 +1153,12 @@ pub(super) fn emit_call_indirect(
         }
         None => target_reg,
     };
-    emit(code, enc_blr(call_reg));
+    if abi.hardening.guard_cf {
+        emit_guard_check(code, call_reg, extern_data_refs);
+        emit(code, enc_blr(Reg(15)));
+    } else {
+        emit(code, enc_blr(call_reg));
+    }
     if ops.ends_path {
         return Ok(());
     }
@@ -1170,11 +1178,35 @@ pub(super) fn emit_call_indirect(
     Ok(())
 }
 
+/// The pointer `-mguard=cf` checks an indirect call's target through.
+const GUARD_CHECK: &str = "__guard_check_icall_fptr";
+
+/// `-mguard=cf`: check `target` through `__guard_check_icall_fptr`, which
+/// takes it in x15 and keeps x0-x15 and the vector registers -- so the
+/// argument registers, the indirect-result register and the target survive
+/// it -- while x16 carries the pointer. The call then goes through x15.
+fn emit_guard_check(code: &mut CodeBuf, target: Reg, refs: &mut Vec<UserExternDataRef>) {
+    if target.0 != 15 {
+        emit_mov_reg(code, Reg(15), target);
+    }
+    refs.push(UserExternDataRef {
+        instr_offset: code.len(),
+        symbol_name: GUARD_CHECK.into(),
+        direct_pcrel: None,
+        import_slot: false,
+    });
+    emit(code, super::encode::enc_adrp(Reg(16), 0));
+    emit(code, super::encode::enc_add_imm(Reg(16), Reg(16), 0));
+    emit(code, super::encode::enc_ldr_imm(Reg(16), Reg(16), 0));
+    emit(code, enc_blr(Reg(16)));
+}
+
 /// The argument values of one call, for the marshalling passes.
 struct CallArgs<'a> {
     plan: &'a super::CallPlan,
     args: &'a [u32],
     alloc: &'a Allocation,
+    func: &'a FunctionSsa,
     scratch: &'a ScratchPool,
     frame: Frame,
     arg_aggs: &'a [Option<u32>],
@@ -1309,10 +1341,25 @@ impl CallArgs<'_> {
     /// Argument `i`'s value in an integer register, reloaded into `into`
     /// when spilled, with the call's sp lowering applied.
     fn arg_int(&self, code: &mut CodeBuf, i: usize, into: Reg) -> Option<Reg> {
-        // A constant the allocator left to the call (`Allocation::stack_imm`).
-        if let Some(&k) = self.alloc.stack_imm.get(&self.args[i]) {
-            load_imm64(code, into, k as u64);
-            return Some(into);
+        // A value the allocator left to the call (`Allocation::call_set`),
+        // an sp-based address reaching over the call's sp lowering.
+        match self.alloc.call_set.get(&self.args[i]) {
+            Some(&ArgSet::Imm(k)) => {
+                load_imm64(code, into, k as u64);
+                return Some(into);
+            }
+            Some(&ArgSet::Local(off)) => {
+                let loc = local_slot(off, self.func, self.frame).sp_lowered(self.sp_shift());
+                emit_frame_addr(code, Place::IntReg(into.0), loc, self.frame).ok()?;
+                return Some(into);
+            }
+            // An `adrp` / `add` pair, relocated as the walker records.
+            Some(&set @ (ArgSet::Data(_) | ArgSet::Code(_))) => {
+                code.note_address(code.len(), self.args[i], set);
+                emit_adrp_add(code, into);
+                return Some(into);
+            }
+            None => {}
         }
         // A frame load it left to the call (`Allocation::stack_load`): an
         // ordinary local, read while sp stands lowered for the call.
@@ -1361,7 +1408,7 @@ impl CallArgs<'_> {
                 emit_mem(code, op, dn, Reg(31), off.into(), self.scratch.primary);
             } else {
                 // A zero constant the call sets is stored from xzr / wzr.
-                let zero = self.alloc.stack_imm.get(&self.args[i]) == Some(&0);
+                let zero = self.alloc.call_set.get(&self.args[i]) == Some(&ArgSet::Imm(0));
                 let src = if zero {
                     Reg(31)
                 } else {
@@ -1578,7 +1625,7 @@ impl CallArgs<'_> {
     /// `regs[0]`. The high eightbytes load first; `regs[0]` (the base) is
     /// read last, overwritten by its own eightbyte -- a composed one
     /// accumulates in scratch first.
-    fn load_struct_eightbytes(&self, code: &mut Vec<u8>) -> Emit {
+    fn load_struct_eightbytes(&self, code: &mut CodeBuf) -> Emit {
         let strict = self.abi.strict_align;
         for (i, &placement) in self.plan.placements.iter().enumerate() {
             match placement.register_part() {
@@ -1636,6 +1683,55 @@ impl CallArgs<'_> {
 /// slots, stack aggregates, FP and SVE registers, HFA members, integer
 /// registers, aggregate eightbytes, the copies' addresses.
 #[allow(clippy::too_many_arguments)]
+/// The call with each aggregate argument given as an `Inst::AggParts`
+/// (`passes::agg_parts`) as one scalar per part, in the part's register;
+/// `None` when no argument is one.
+#[allow(clippy::type_complexity)]
+fn expand_parts(
+    plan: &super::CallPlan,
+    args: &[u32],
+    arg_aggs: &[Option<u32>],
+    insts: &[Inst],
+) -> Emit<Option<(super::CallPlan, Vec<u32>, Vec<Option<u32>>)>> {
+    let parts_of = |v: u32| match insts.get(v as usize) {
+        Some(Inst::AggParts { parts, .. }) => Some(parts),
+        _ => None,
+    };
+    if !args.iter().any(|&v| parts_of(v).is_some()) {
+        return Ok(None);
+    }
+    let mut out = plan.clone();
+    out.placements.clear();
+    // The positions move, and a stack argument's width with its own.
+    out.stack_widths = crate::c5::ir::ArgWidths::default();
+    let (mut values, mut aggs) = (Vec::new(), Vec::new());
+    for (i, (&v, &placement)) in args.iter().zip(&plan.placements).enumerate() {
+        let Some(parts) = parts_of(v) else {
+            out.stack_widths
+                .set(values.len(), plan.stack_widths.bytes(i));
+            values.push(v);
+            aggs.push(arg_aggs.get(i).copied().flatten());
+            out.placements.push(placement);
+            continue;
+        };
+        let super::ArgPlacement::StructRegs { regs, n, .. } = placement else {
+            return fail("AggParts argument: placement takes no parts");
+        };
+        if parts.len() != n as usize {
+            return fail("AggParts argument: parts do not match its registers");
+        }
+        for (&part, cr) in parts.iter().zip(regs.iter()) {
+            out.placements.push(match cr.is_fp {
+                true => super::ArgPlacement::FpReg(cr.reg),
+                false => super::ArgPlacement::IntReg(cr.reg),
+            });
+            values.push(part);
+            aggs.push(None);
+        }
+    }
+    Ok(Some((out, values, aggs)))
+}
+
 pub(super) fn marshal_args(
     code: &mut CodeBuf,
     plan: &super::CallPlan,
@@ -1647,10 +1743,16 @@ pub(super) fn marshal_args(
     func: &FunctionSsa,
     abi: super::Abi,
 ) -> Emit {
+    let expanded = expand_parts(plan, args, arg_aggs, &func.insts)?;
+    let (plan, args, arg_aggs) = match &expanded {
+        Some((p, a, g)) => (p, a.as_slice(), g.as_slice()),
+        None => (plan, args, arg_aggs),
+    };
     let call = CallArgs {
         plan,
         args,
         alloc,
+        func,
         scratch,
         frame,
         arg_aggs,

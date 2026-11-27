@@ -3,7 +3,7 @@ mmap_anonymous.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -16,12 +16,12 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x1, #0x4000             // =16384
                	mov	x0, #0x0                // =0
+               	mov	x1, #0x4000             // =16384
                	mov	x2, #0x3                // =3
                	mov	x3, #0x22               // =34
                	mov	x4, #-0x1               // =-1
-               	mov	x5, x0
+               	mov	x5, #0x0                // =0
                	bl	<addr>
                	cmn	x0, #0x1
                	b.ne	<addr>

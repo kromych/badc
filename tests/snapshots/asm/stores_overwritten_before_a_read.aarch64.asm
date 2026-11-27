@@ -3,7 +3,7 @@ stores_overwritten_before_a_read.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -79,7 +79,7 @@ Disassembly of section .text:
                	sub	sp, sp, #0x20
                	stur	wzr, [x29, #-0x20]
                	sub	x0, x29, #0x20
-               	mov	x1, x0
+               	sub	x1, x29, #0x20
                	bl	<addr>
                	cmp	w0, #0x1
                	b.ne	<addr>

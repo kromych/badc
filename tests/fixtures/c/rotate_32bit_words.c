@@ -2,7 +2,9 @@
 // form, with constant and runtime counts: each is the rotate of the low
 // word, its result zero-extended, wherever the value is read. Shapes that
 // are not a 32-bit rotate -- counts that do not sum to 32, an arithmetic
-// right shift, a 64-bit operand -- keep their shifts. Returns 0 when every
+// right shift, a 64-bit operand -- keep their shifts. A word an add and an
+// xor produce, rotated in the ChaCha quarter-round shape and stored, is one
+// too. Returns 0 when every
 // case matches a bit-walk reference; each failure returns a distinct code.
 
 typedef unsigned u32;
@@ -25,6 +27,11 @@ __attribute__((noinline)) static u64 widened(u32 x) { return (u64)(x << 30 | x >
 __attribute__((noinline)) static u32 not_rot(u32 x) { return (x >> 3) | (x << 30); }
 __attribute__((noinline)) static int arith(int x) { return (x >> 2) | (int)((u32)x << 30); }
 __attribute__((noinline)) static u64 wide(u64 y) { return (y >> 7) | (y << 25); }
+#define ROTL(a, b) (((a) << (b)) | ((a) >> (32 - (b))))
+__attribute__((noinline)) static void quarter(u32 *s) {
+    s[0] += s[1], s[3] ^= s[0], s[3] = ROTL(s[3], 16);
+    s[2] += s[3], s[1] ^= s[2], s[1] = ROTL(s[1], 12);
+}
 
 int main(void) {
     static const u32 xs[] = {0u, 1u, 0x80000000u, 0x01234567u, 0xffffffffu, 0xdeadbeefu, 0x9e3779b9u};
@@ -41,6 +48,10 @@ int main(void) {
         if (not_rot(x) != ((x >> 3) | (u32)(x << 30))) return 7;
         if (arith((int)x) != (int)(((u32)((int)x >> 2)) | (x << 30))) return 8;
     }
+    u32 s[4] = {0x61707865u, 0xdeadbeefu, 0x9e3779b9u, 0xffffffffu};
+    u32 a = s[0] + s[1], d = ref_ror(s[3] ^ a, 16), c = s[2] + d, b = ref_ror(s[1] ^ c, 20);
+    quarter(s);
+    if (s[0] != a || s[1] != b || s[2] != c || s[3] != d) return 11;
     volatile u64 y = 0x0123456789abcdefULL;
     if (wide(y) != ((y >> 7) | (y << 25))) return 9;
     if (wide(y) == ((u64)ref_ror((u32)y, 7))) return 10;

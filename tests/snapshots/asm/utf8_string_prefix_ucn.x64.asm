@@ -3,7 +3,7 @@ utf8_string_prefix_ucn.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,112 +26,119 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	<rip>, %rdx # <addr>
+               	leaq	<rip>, %rsi # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
-               	movsbq	(%rcx,%rax), %rsi
-               	andq	$0xff, %rsi
-               	movsbq	(%rdx,%rax), %rdi
-               	andq	$0xff, %rdi
-               	cmpl	%edi, %esi
+               	movsbq	(%rsi,%rax), %rcx
+               	andq	$0xff, %rcx
+               	movsbq	(%rdi,%rax), %rdx
+               	andq	$0xff, %rdx
+               	cmpl	%edx, %ecx
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x2, %eax
                	jb	<addr>
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	<rip>, %rdx # <addr>
+               	leaq	<rip>, %rsi # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
-               	movsbq	(%rcx,%rax), %rsi
-               	andq	$0xff, %rsi
-               	movsbq	(%rdx,%rax), %rdi
-               	andq	$0xff, %rdi
-               	cmpl	%edi, %esi
+               	movsbq	(%rsi,%rax), %rcx
+               	andq	$0xff, %rcx
+               	movsbq	(%rdi,%rax), %rdx
+               	andq	$0xff, %rdx
+               	cmpl	%edx, %ecx
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x4, %eax
                	jb	<addr>
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	<rip>, %rdx # <addr>
+               	leaq	<rip>, %rsi # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
-               	movsbq	(%rcx,%rax), %rsi
-               	andq	$0xff, %rsi
-               	movsbq	(%rdx,%rax), %rdi
-               	andq	$0xff, %rdi
-               	cmpl	%edi, %esi
+               	movsbq	(%rsi,%rax), %rcx
+               	andq	$0xff, %rcx
+               	movsbq	(%rdi,%rax), %rdx
+               	andq	$0xff, %rdx
+               	nopl	(%rax,%rax)
+               	cmpl	%edx, %ecx
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x3, %eax
                	jb	<addr>
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	<rip>, %rdx # <addr>
+               	leaq	<rip>, %rsi # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
-               	movsbq	(%rcx,%rax), %rsi
-               	andq	$0xff, %rsi
-               	movsbq	(%rdx,%rax), %rdi
-               	andq	$0xff, %rdi
-               	cmpl	%edi, %esi
+               	movsbq	(%rsi,%rax), %rcx
+               	andq	$0xff, %rcx
+               	movsbq	(%rdi,%rax), %rdx
+               	andq	$0xff, %rdx
+               	nopl	(%rax,%rax)
+               	cmpl	%edx, %ecx
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x5, %eax
                	jb	<addr>
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	<rip>, %rdx # <addr>
+               	leaq	<rip>, %rsi # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
-               	movsbq	(%rcx,%rax), %rsi
-               	andq	$0xff, %rsi
-               	movsbq	(%rdx,%rax), %rdi
-               	andq	$0xff, %rdi
-               	cmpl	%edi, %esi
+               	movsbq	(%rsi,%rax), %rcx
+               	andq	$0xff, %rcx
+               	movsbq	(%rdi,%rax), %rdx
+               	andq	$0xff, %rdx
+               	nopl	(%rax,%rax)
+               	cmpl	%edx, %ecx
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x5, %eax
                	jb	<addr>
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	<rip>, %rdx # <addr>
+               	leaq	<rip>, %rsi # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
-               	movsbq	(%rcx,%rax), %rsi
-               	andq	$0xff, %rsi
-               	movsbq	(%rdx,%rax), %rdi
-               	andq	$0xff, %rdi
-               	cmpl	%edi, %esi
+               	movsbq	(%rsi,%rax), %rcx
+               	andq	$0xff, %rcx
+               	movsbq	(%rdi,%rax), %rdx
+               	andq	$0xff, %rdx
+               	nopl	(%rax,%rax)
+               	cmpl	%edx, %ecx
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x5, %eax
                	jb	<addr>
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	<rip>, %rdx # <addr>
+               	leaq	<rip>, %rsi # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
-               	movsbq	(%rcx,%rax), %rsi
-               	andq	$0xff, %rsi
-               	movsbq	(%rdx,%rax), %rdi
-               	andq	$0xff, %rdi
-               	cmpl	%edi, %esi
+               	movsbq	(%rsi,%rax), %rcx
+               	andq	$0xff, %rcx
+               	movsbq	(%rdi,%rax), %rdx
+               	andq	$0xff, %rdx
+               	nopl	(%rax,%rax)
+               	cmpl	%edx, %ecx
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x4, %eax
                	jb	<addr>
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	<rip>, %rdx # <addr>
+               	leaq	<rip>, %rsi # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
-               	movsbq	(%rcx,%rax), %rsi
-               	andq	$0xff, %rsi
-               	movsbq	(%rdx,%rax), %rdi
-               	andq	$0xff, %rdi
-               	cmpl	%edi, %esi
+               	movsbq	(%rsi,%rax), %rcx
+               	andq	$0xff, %rcx
+               	movsbq	(%rdi,%rax), %rdx
+               	andq	$0xff, %rdx
+               	nopl	(%rax,%rax)
+               	cmpl	%edx, %ecx
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x2, %eax
                	jb	<addr>
-               	leaq	<rip>, %rcx # <addr>
-               	leaq	<rip>, %rdx # <addr>
+               	leaq	<rip>, %rsi # <addr>
+               	leaq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
-               	movsbq	(%rcx,%rax), %rsi
-               	andq	$0xff, %rsi
-               	movsbq	(%rdx,%rax), %rdi
-               	andq	$0xff, %rdi
-               	cmpl	%edi, %esi
+               	movsbq	(%rsi,%rax), %rcx
+               	andq	$0xff, %rcx
+               	movsbq	(%rdi,%rax), %rdx
+               	andq	$0xff, %rdx
+               	cmpl	%edx, %ecx
                	jne	<addr>
                	incq	%rax
+               	nopl	(%rax,%rax)
                	cmpl	$0x4, %eax
                	jb	<addr>
                	xorl	%eax, %eax

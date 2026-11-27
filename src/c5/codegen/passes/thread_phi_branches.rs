@@ -28,8 +28,8 @@ use alloc::vec::Vec;
 use super::constfold::imm_through_phis;
 use super::constfold_branch::{block_index, edge_truth};
 use super::merge_blocks::reads_alike;
-use super::unroll::{bind_phis, eval_value};
-use crate::c5::codegen::ssa::mem2reg::predecessors;
+use super::unroll::{bind_phis_of, eval_value};
+use crate::c5::codegen::ssa::mem2reg::{SuccGraph, predecessors};
 use crate::c5::codegen::ssa::repair;
 use crate::c5::ir::{BinOp, BlockId, FunctionSsa, Inst, LoadKind, Terminator, ValueId};
 
@@ -55,17 +55,38 @@ struct Site {
 /// whether any edge moved; the caller prunes a merge left without
 /// predecessors.
 pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
+    let mut pending = repair::Pending::new(func);
+    let changed = thread_all(func, &mut pending);
+    repair::settle(func, pending);
+    changed
+}
+
+/// [`run_one`] with the phis its repairs place held in `pending`, past the
+/// tape's end, so no rethread renumbers the values.
+fn thread_all(func: &mut FunctionSsa, pending: &mut repair::Pending) -> bool {
     let mut block_of = block_index(func);
     let mut readers = repair::Readers::of_function(func);
     let mut preds = predecessors(func);
     let mut succs = successor_lists(&preds);
+    let mut reach = Reach::new(func, &succs);
     let mut changed = false;
-    // Each rethread renumbers the values; the scan then resumes at its
-    // block rather than restarting, bounded by the block count.
+    // Blocks a retired line left unreachable: their edges are gone from
+    // the lists, as the prune that follows the pass removes the blocks.
+    let mut dead = alloc::vec![false; func.blocks.len()];
+    // Blocks no root reaches that are not `dead`: a line retires with them.
+    let mut cut: BTreeSet<BlockId> = (0..func.blocks.len() as BlockId)
+        .filter(|&b| !reach.live[b as usize])
+        .collect();
+    // The scan resumes at a rethread's block rather than restarting,
+    // bounded by the block count.
     let mut rethreads = func.blocks.len();
     let mut b = 0;
     'blocks: while b < func.blocks.len() {
-        let Some(site) = site_of(func, &block_of, &preds, b as BlockId) else {
+        if dead[b] {
+            b += 1;
+            continue;
+        }
+        let Some(site) = site_of(func, pending, &block_of, &preds, b as BlockId) else {
             b += 1;
             continue;
         };
@@ -73,55 +94,79 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
             .iter()
             .filter(|p| !site.chain.contains(p))
             .filter_map(|&p| {
-                decide(func, &site, p).map(|nz| (p, if nz { site.nonzero } else { site.zero }))
+                decide(func, pending, &site, p)
+                    .map(|nz| (p, if nz { site.nonzero } else { site.zero }))
             })
             .collect();
-        if decided.is_empty() || !chain_is_pure(func, &site) {
+        if decided.is_empty() || !chain_is_pure(func, pending, &site) {
             b += 1;
             continue;
         }
-        let escaping = escaping_phis(func, &block_of, &readers, &site);
+        let escaping = escaping_phis(func, pending, &block_of, &readers, &site);
         let contained = escaping.as_ref().is_some_and(BTreeSet::is_empty);
         for (p, succ) in decided {
             if contained {
-                if thread(func, &block_of, &mut readers, &site, p, succ) {
+                if thread(func, pending, &block_of, &mut readers, &site, p, succ) {
+                    cut.extend(reach.moved((&preds, &succs), (p, site.head, succ)));
                     move_edge(&mut preds, &mut succs, p, site.head, succ);
                     changed = true;
                 }
                 continue;
             }
-            let live = live_after(func, &succs, p, site.head, succ);
-            // The line dies: the next round reads the function the prune left.
-            if !live[site.head as usize]
-                && let Some(to) = dying_line(func, &block_of, &site, p, succ, &live)
-                && thread(func, &block_of, &mut readers, &site, p, succ)
-            {
-                forward(func, &to);
-                return true;
-            }
-            let placed = func.insts.len();
-            if let Some(phis) = &escaping
-                && rethread(
+            let died = reach.moved((&preds, &succs), (p, site.head, succ));
+            let dying = || -> Vec<BlockId> {
+                let mut all: Vec<BlockId> = cut.iter().chain(&died).copied().collect();
+                all.sort_unstable();
+                all
+            };
+            // The line dies with the edge: its phis' readers read the values
+            // `p` fed them, and the scan goes on past it.
+            if !reach.live[site.head as usize]
+                && let dying = dying()
+                && let Some(to) = dying_line(
                     func,
-                    (&block_of, &mut readers),
+                    pending,
+                    (&block_of, &readers),
+                    &site,
+                    (p, succ),
+                    (&reach.live, &dying),
+                )
+                && thread(func, pending, &block_of, &mut readers, &site, p, succ)
+            {
+                forward(func, &mut readers, &to);
+                move_edge(&mut preds, &mut succs, p, site.head, succ);
+                for d in dying {
+                    dead[d as usize] = true;
+                    for s in core::mem::take(&mut succs[d as usize]) {
+                        preds[s as usize].retain(|&q| q != d);
+                    }
+                }
+                cut.clear();
+                changed = true;
+                b += 1;
+                continue 'blocks;
+            }
+            if let Some(phis) = &escaping
+                && let Some(homes) = rethread(
+                    func,
+                    (&block_of, &mut readers, &mut *pending),
                     (&mut preds, &mut succs),
-                    &live,
+                    &mut reach,
                     &site,
                     (p, succ),
                     phis,
                 )
             {
+                cut.extend(died);
                 rethreads -= 1;
                 if rethreads == 0 {
                     return true;
                 }
-                // Only a repair that places phis moves values.
-                if func.insts.len() != placed {
-                    block_of = block_index(func);
-                }
+                block_of.extend(homes);
                 changed = true;
                 continue 'blocks;
             }
+            reach.restore(&died);
         }
         b += 1;
     }
@@ -133,27 +178,25 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
 /// `preds` follows the edge when it moves.
 fn rethread(
     func: &mut FunctionSsa,
-    (block_of, readers): (&[BlockId], &mut repair::Readers),
+    (block_of, readers, pending): (&[BlockId], &mut repair::Readers, &mut repair::Pending),
     (preds, succs): (&mut [Vec<BlockId>], &mut [Vec<BlockId>]),
-    live: &[bool],
+    reach: &mut Reach,
     site: &Site,
     (p, succ): (BlockId, BlockId),
     phis: &BTreeSet<ValueId>,
-) -> bool {
+) -> Option<Vec<BlockId>> {
     // A second edge from `p` would give `succ`'s phis two values from it.
     if preds[succ as usize].contains(&p) {
-        return false;
+        return None;
     }
     let mut items = Vec::new();
     for &phi in phis {
         let Inst::Phi { incoming, kind } = &func.insts[phi as usize] else {
-            return false;
+            return None;
         };
-        let Some(&(_, v)) = incoming.iter().find(|&&(q, _)| q == p) else {
-            return false;
-        };
+        let &(_, v) = incoming.iter().find(|&&(q, _)| q == p)?;
         if phis.contains(&v) {
-            return false;
+            return None;
         }
         items.push(repair::Redefined {
             value: phi,
@@ -166,16 +209,16 @@ fn rethread(
     move_edge(preds, succs, p, site.head, succ);
     // An edge into a cycle through the head would enter the loop past its
     // header.
-    let plans = (!reaches(preds, succ, site.head))
-        .then(|| repair::plan(func, (preds, live), (readers, block_of), &items))
+    let plans = (!reach.reaches(preds, succ, site.head))
+        .then(|| repair::plan(func, (preds, &reach.live), (readers, block_of), &items))
         .flatten();
-    let Some(plans) = plans.filter(|_| thread(func, block_of, readers, site, p, succ)) else {
+    let Some(plans) = plans.filter(|_| thread(func, pending, block_of, readers, site, p, succ))
+    else {
         move_edge(preds, succs, p, succ, site.head);
         preds[site.head as usize] = head_preds;
-        return false;
+        return None;
     };
-    repair::apply(func, &items, &plans, readers);
-    true
+    Some(repair::apply(func, &items, &plans, readers, pending))
 }
 
 /// The successor lists the predecessor lists `preds` imply.
@@ -204,42 +247,153 @@ fn move_edge(
     }
 }
 
-/// The blocks reachable once `p`'s edges into `head` lead to `succ`.
-fn live_after(
-    func: &FunctionSsa,
-    succs: &[Vec<BlockId>],
-    p: BlockId,
-    head: BlockId,
-    succ: BlockId,
-) -> Vec<bool> {
-    let mut live = alloc::vec![false; succs.len()];
-    let mut stack: Vec<BlockId> = alloc::vec![0];
-    stack.extend(&func.computed_goto_targets);
-    stack.extend(func.seh_scopes.iter().filter_map(|s| s.target));
-    while let Some(b) = stack.pop() {
-        if core::mem::replace(&mut live[b as usize], true) {
-            continue;
-        }
-        for &s in &succs[b as usize] {
-            stack.push(if b == p && s == head { succ } else { s });
-        }
-    }
-    live
+/// The blocks the roots reach as the pass moves edges. A move sends edges
+/// into a head to a block the head reaches, so reachability only narrows:
+/// a move cuts blocks off one strongly connected component of the starting
+/// graph at a time, in topological order from the head's.
+struct Reach {
+    live: Vec<bool>,
+    root: Vec<bool>,
+    /// The starting graph's components, in reverse topological order.
+    comp: Vec<u32>,
+    offsets: Vec<u32>,
+    members: Vec<BlockId>,
+    seen: Vec<bool>,
 }
 
-/// Whether `from` reaches `to` over the predecessor lists `preds`.
-fn reaches(preds: &[Vec<BlockId>], from: BlockId, to: BlockId) -> bool {
-    let mut seen = alloc::vec![false; preds.len()];
-    let mut stack = alloc::vec![to];
-    while let Some(b) = stack.pop() {
-        if b == from {
-            return true;
+impl Reach {
+    fn new(func: &FunctionSsa, succs: &[Vec<BlockId>]) -> Self {
+        let n = succs.len();
+        let mut root = alloc::vec![false; n];
+        let roots = (func.computed_goto_targets.iter().copied())
+            .chain(func.seh_scopes.iter().filter_map(|s| s.target));
+        for b in core::iter::once(0).chain(roots) {
+            if let Some(r) = root.get_mut(b as usize) {
+                *r = true;
+            }
         }
-        if !core::mem::replace(&mut seen[b as usize], true) {
-            stack.extend(&preds[b as usize]);
+        let mut live = alloc::vec![false; n];
+        let mut stack: Vec<BlockId> = (0..n as BlockId).filter(|&b| root[b as usize]).collect();
+        while let Some(b) = stack.pop() {
+            if !core::mem::replace(&mut live[b as usize], true) {
+                stack.extend(&succs[b as usize]);
+            }
+        }
+        let (comp, count) = SuccGraph::new(func).scc();
+        let (offsets, members) = SuccGraph::blocks_by_comp(&comp, count);
+        Self {
+            live,
+            root,
+            comp,
+            offsets,
+            members,
+            seen: alloc::vec![false; n],
         }
     }
-    false
+
+    /// Cut off what moving `p`'s edges into `head` to `succ` leaves
+    /// unreached, over the lists before the move; the blocks, sorted.
+    fn moved(
+        &mut self,
+        (preds, succs): (&[Vec<BlockId>], &[Vec<BlockId>]),
+        (p, head, succ): (BlockId, BlockId, BlockId),
+    ) -> Vec<BlockId> {
+        let mut died = Vec::new();
+        if !self.live[head as usize] {
+            return died;
+        }
+        let after = |b: BlockId, s: BlockId| if b == p && s == head { succ } else { s };
+        let mut queue = BTreeSet::from([self.comp[head as usize]]);
+        while let Some(c) = queue.pop_last() {
+            let range = self.offsets[c as usize] as usize..self.offsets[c as usize + 1] as usize;
+            let entered = |q: BlockId| self.comp[q as usize] != c && self.live[q as usize];
+            let mut stack: Vec<BlockId> = (self.members[range.clone()].iter().copied())
+                .filter(|&m| {
+                    let mut from = preds[m as usize].iter().filter(|&&q| m != head || q != p);
+                    self.live[m as usize]
+                        && (self.root[m as usize]
+                            || from.any(|&q| entered(q))
+                            || (m == succ && entered(p)))
+                })
+                .collect();
+            while let Some(b) = stack.pop() {
+                if core::mem::replace(&mut self.seen[b as usize], true) {
+                    continue;
+                }
+                for &s in &succs[b as usize] {
+                    let s = after(b, s);
+                    if self.comp[s as usize] == c && self.live[s as usize] {
+                        stack.push(s);
+                    }
+                }
+            }
+            count_visits(range.len());
+            for i in range {
+                let m = self.members[i];
+                if core::mem::take(&mut self.seen[m as usize]) || !self.live[m as usize] {
+                    continue;
+                }
+                self.live[m as usize] = false;
+                died.push(m);
+                for &s in &succs[m as usize] {
+                    let s = after(m, s);
+                    if self.comp[s as usize] != c && self.live[s as usize] {
+                        queue.insert(self.comp[s as usize]);
+                    }
+                }
+            }
+        }
+        died.sort_unstable();
+        died
+    }
+
+    /// Undo a [`Reach::moved`] whose move did not happen.
+    fn restore(&mut self, died: &[BlockId]) {
+        for &d in died {
+            self.live[d as usize] = true;
+        }
+    }
+
+    /// Whether `from` reaches `to`; a path between them stays in their component.
+    fn reaches(&mut self, preds: &[Vec<BlockId>], from: BlockId, to: BlockId) -> bool {
+        let c = self.comp[to as usize];
+        if self.comp[from as usize] != c {
+            return false;
+        }
+        let mut stack = alloc::vec![to];
+        let mut visited = Vec::new();
+        let mut found = false;
+        while let Some(b) = stack.pop() {
+            if b == from {
+                found = true;
+                break;
+            }
+            if !core::mem::replace(&mut self.seen[b as usize], true) {
+                visited.push(b);
+                let within = preds[b as usize]
+                    .iter()
+                    .filter(|&&q| self.comp[q as usize] == c);
+                stack.extend(within);
+            }
+        }
+        count_visits(visited.len());
+        for b in visited {
+            self.seen[b as usize] = false;
+        }
+        found
+    }
+}
+
+// Blocks the reachability updates visit on this thread, so a test can
+// bound their work by count rather than by wall clock.
+#[cfg(test)]
+std::thread_local! {
+    pub(crate) static REACH_VISITS: core::cell::Cell<u64> = const { core::cell::Cell::new(0) };
+}
+
+fn count_visits(_n: usize) {
+    #[cfg(test)]
+    REACH_VISITS.with(|c| c.set(c.get() + _n as u64));
 }
 
 /// The site whose branch block `b` is: a phi, its zero test, or another
@@ -247,6 +401,7 @@ fn reaches(preds: &[Vec<BlockId>], from: BlockId, to: BlockId) -> bool {
 /// phis' block to `b`.
 fn site_of(
     func: &FunctionSsa,
+    pending: &repair::Pending,
     block_of: &[BlockId],
     preds: &[Vec<BlockId>],
     b: BlockId,
@@ -269,7 +424,7 @@ fn site_of(
     }
     let (phi, negate, head) = match phi_condition(func, cond) {
         Some((phi, negate)) => (Some(phi), negate, *block_of.get(phi as usize)?),
-        None if takes_constant(func, b, None) => (None, false, b),
+        None if takes_constant(func, pending, b, None) => (None, false, b),
         None => return None,
     };
     if head == BlockId::MAX {
@@ -304,15 +459,18 @@ fn site_of(
 }
 
 /// Whether a phi of `b` takes an `Imm` from `pred`, or from any predecessor.
-fn takes_constant(func: &FunctionSsa, b: BlockId, pred: Option<BlockId>) -> bool {
-    let phis =
-        func.blocks[b as usize]
-            .inst_range
-            .clone()
-            .map_while(|v| match &func.insts[v as usize] {
-                Inst::Phi { incoming, .. } => Some(incoming),
-                _ => None,
-            });
+fn takes_constant(
+    func: &FunctionSsa,
+    pending: &repair::Pending,
+    b: BlockId,
+    pred: Option<BlockId>,
+) -> bool {
+    let phis = pending
+        .values(func, b)
+        .map_while(|v| match &func.insts[v as usize] {
+            Inst::Phi { incoming, .. } => Some(incoming),
+            _ => None,
+        });
     let imm = |x: ValueId| matches!(func.insts.get(x as usize), Some(Inst::Imm(_)));
     phis.flat_map(|i| i.iter())
         .any(|&(q, x)| pred.is_none_or(|p| p == q) && imm(x))
@@ -320,14 +478,13 @@ fn takes_constant(func: &FunctionSsa, b: BlockId, pred: Option<BlockId>) -> bool
 
 /// Whether the chain holds only phis (in `head`), pure values and lifetime
 /// markers, which a threaded edge skips: their objects stay reserved on it.
-fn chain_is_pure(func: &FunctionSsa, site: &Site) -> bool {
+fn chain_is_pure(func: &FunctionSsa, pending: &repair::Pending, site: &Site) -> bool {
     site.chain.iter().all(|&c| {
-        func.blocks[c as usize]
-            .inst_range
-            .clone()
+        pending
+            .values(func, c)
             .all(|i| match &func.insts[i as usize] {
                 Inst::Phi { .. } => c == site.head,
-                inst => inst.is_pure() || inst.is_lifetime_marker(),
+                inst => func.is_pure(inst) || inst.is_lifetime_marker(),
             })
     })
 }
@@ -372,12 +529,13 @@ fn phi_condition(func: &FunctionSsa, cond: ValueId) -> Option<(ValueId, bool)> {
 /// the branch block's edge, or `None` when another value of the chain is.
 fn escaping_phis(
     func: &FunctionSsa,
+    pending: &repair::Pending,
     block_of: &[BlockId],
     readers: &repair::Readers,
     site: &Site,
 ) -> Option<BTreeSet<ValueId>> {
-    let ranges: Vec<core::ops::Range<ValueId>> = (site.chain.iter())
-        .map(|&c| func.blocks[c as usize].inst_range.clone())
+    let values: Vec<ValueId> = (site.chain.iter())
+        .flat_map(|&c| pending.values(func, c))
         .collect();
     let in_chain = |b: BlockId| site.chain.contains(&b);
     let head_phi = |v: ValueId| {
@@ -386,7 +544,7 @@ fn escaping_phis(
     };
     let mut phis = BTreeSet::new();
     // Each reader of a chain value outside the chain.
-    for v in ranges.iter().flat_map(Clone::clone) {
+    for v in values {
         for &reader in readers.of(v) {
             let outside = match reader {
                 repair::Reader::End(b) if in_chain(b) => false,
@@ -440,13 +598,13 @@ fn escaping_phis(
 /// Whether the branch condition is non-zero on the edge `p -> head`,
 /// when the values `p` feeds the head's phis decide it, at the IR's width
 /// (the compares are narrowed later).
-fn decide(func: &FunctionSsa, site: &Site, p: BlockId) -> Option<bool> {
+fn decide(func: &FunctionSsa, pending: &repair::Pending, site: &Site, p: BlockId) -> Option<bool> {
     let Some(phi) = site.phi else {
-        if !takes_constant(func, site.head, Some(p)) {
+        if !takes_constant(func, pending, site.head, Some(p)) {
             return None;
         }
         let mut bound = BTreeMap::new();
-        bind_phis(func, p, site.head, &mut bound);
+        bind_phis_of(func, p, pending.values(func, site.head), &mut bound);
         if bound.values().all(Option::is_none) {
             return None;
         }
@@ -478,68 +636,86 @@ fn decide(func: &FunctionSsa, site: &Site, p: BlockId) -> Option<bool> {
 /// the dead blocks define is of a head phi, and that value reads alike.
 fn dying_line(
     func: &FunctionSsa,
-    block_of: &[BlockId],
+    pending: &repair::Pending,
+    (block_of, readers): (&[BlockId], &repair::Readers),
     site: &Site,
-    p: BlockId,
-    succ: BlockId,
-    live: &[bool],
+    (p, succ): (BlockId, BlockId),
+    (live, dying): (&[bool], &[BlockId]),
 ) -> Option<Vec<(ValueId, ValueId)>> {
     let mut to = Vec::new();
-    for v in func.blocks[site.head as usize].inst_range.clone() {
+    for v in pending.values(func, site.head) {
         let Inst::Phi { incoming, .. } = &func.insts[v as usize] else {
             break;
         };
         to.push((v, incoming.iter().find(|&&(q, _)| q == p)?.1));
     }
-    let dead = |v: ValueId| {
-        block_of
-            .get(v as usize)
-            .is_some_and(|&b| b != BlockId::MAX && !live[b as usize])
-    };
-    let mut reads: Vec<ValueId> = Vec::new();
-    for (b, block) in func.blocks.iter().enumerate().filter(|&(b, _)| live[b]) {
-        for i in block.inst_range.clone() {
-            match &func.insts[i as usize] {
-                // `succ` takes over the branch block's edge from `p`.
-                Inst::Phi { incoming, .. } => {
-                    reads.extend(incoming.iter().filter_map(|&(q, v)| {
-                        let q = if b as BlockId == succ && q == site.branch {
-                            p
-                        } else {
-                            q
-                        };
-                        live[q as usize].then_some(v)
-                    }))
-                }
-                inst => inst.for_each_operand(|v| reads.push(v)),
-            }
-        }
-        block.terminator.for_each_operand(|v| reads.push(v));
-        reads.push(block.exit_acc);
-    }
+    let lives = |b: BlockId| b != BlockId::MAX && live[b as usize];
     let mut wide = None;
-    for v in reads.into_iter().filter(|&v| dead(v)) {
-        let &(phi, w) = to.iter().find(|&&(phi, _)| phi == v)?;
-        if !reads_alike(func, &mut wide, phi, w) {
-            return None;
+    // The reads, from the blocks that live, of each value the blocks dying
+    // with the edge define; a block dead before reads and is read by none.
+    for &d in dying {
+        for v in pending.values(func, d) {
+            for &reader in readers.of(v) {
+                let reads = match reader {
+                    repair::Reader::End(b) => {
+                        let block = &func.blocks[b as usize];
+                        let mut reads = block.exit_acc == v;
+                        block.terminator.for_each_operand(|w| reads |= w == v);
+                        lives(b) && reads
+                    }
+                    repair::Reader::Inst(i) => {
+                        let b = block_of[i as usize];
+                        match &func.insts[i as usize] {
+                            _ if !lives(b) => false,
+                            // `succ` takes over the branch block's edge from `p`.
+                            Inst::Phi { incoming, .. } => incoming.iter().any(|&(q, w)| {
+                                let q = if b == succ && q == site.branch { p } else { q };
+                                w == v && live[q as usize]
+                            }),
+                            inst => {
+                                let mut reads = false;
+                                inst.for_each_operand(|w| reads |= w == v);
+                                reads
+                            }
+                        }
+                    }
+                };
+                if !reads {
+                    continue;
+                }
+                let &(phi, w) = to.iter().find(|&&(phi, _)| phi == v)?;
+                if !reads_alike(func, &mut wide, phi, w) {
+                    return None;
+                }
+            }
         }
     }
     Some(to)
 }
 
 /// Point every reader of each phi in `to` at its value.
-fn forward(func: &mut FunctionSsa, to: &[(ValueId, ValueId)]) {
+fn forward(func: &mut FunctionSsa, readers: &mut repair::Readers, to: &[(ValueId, ValueId)]) {
     let map = |v: &mut ValueId| {
         if let Some(&(_, w)) = to.iter().find(|&&(phi, _)| phi == *v) {
             *v = w;
         }
     };
-    for inst in func.insts.iter_mut() {
-        inst.for_each_operand_mut(map);
+    let mut at: BTreeSet<repair::Reader> = BTreeSet::new();
+    for &(phi, _) in to {
+        at.extend(readers.of(phi).iter().copied());
     }
-    for block in func.blocks.iter_mut() {
-        map(&mut block.exit_acc);
-        block.terminator.for_each_operand_mut(map);
+    for reader in at {
+        match reader {
+            repair::Reader::Inst(i) => func.insts[i as usize].for_each_operand_mut(map),
+            repair::Reader::End(b) => {
+                let block = &mut func.blocks[b as usize];
+                map(&mut block.exit_acc);
+                block.terminator.for_each_operand_mut(map);
+            }
+        }
+        for &(_, w) in to {
+            readers.add(w, reader);
+        }
     }
 }
 
@@ -549,6 +725,7 @@ fn forward(func: &mut FunctionSsa, to: &[(ValueId, ValueId)]) {
 /// or a phi of `succ` already takes a different value from `p`.
 fn thread(
     func: &mut FunctionSsa,
+    pending: &repair::Pending,
     block_of: &[BlockId],
     readers: &mut repair::Readers,
     site: &Site,
@@ -562,7 +739,7 @@ fn thread(
         incoming.iter().find(|&&(q, _)| q == pred).map(|&(_, v)| v)
     };
     let mut pushes: Vec<(ValueId, ValueId)> = Vec::new();
-    for i in func.blocks[succ as usize].inst_range.clone() {
+    for i in pending.values(func, succ) {
         let Inst::Phi { incoming, .. } = &func.insts[i as usize] else {
             break;
         };
@@ -613,7 +790,7 @@ fn thread(
             readers.add(v, repair::Reader::Inst(phi));
         }
     }
-    for i in func.blocks[site.head as usize].inst_range.clone() {
+    for i in pending.values(func, site.head).collect::<Vec<_>>() {
         if let Inst::Phi { incoming, .. } = &mut func.insts[i as usize] {
             incoming.retain(|&(q, _)| q != p);
         }

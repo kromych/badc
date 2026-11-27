@@ -3,7 +3,7 @@ two_d_float_array_partial_init.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,122 +26,92 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	xorl	%ecx, %ecx
-               	movq	%rcx, %rdx
                	leaq	<rip>, %rsi # <addr>
-               	movq	%rdx, %rax
-               	shlq	$0x4, %rax
-               	addq	%rax, %rsi
-               	movss	(%rsi), %xmm0
                	leaq	<rip>, %rdi # <addr>
-               	addq	%rax, %rdi
-               	movss	(%rdi), %xmm1
+               	movq	%rcx, %rax
+               	movq	%rax, %rdx
+               	shlq	$0x4, %rdx
+               	leaq	(%rdi,%rdx), %r8
+               	movss	(%r8), %xmm0
+               	leaq	(%rsi,%rdx), %r9
+               	movss	(%r9), %xmm1
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movl	$0x1, %r8d
-               	movss	0x4(%rsi), %xmm0
-               	leaq	<rip>, %rsi # <addr>
-               	addq	%rax, %rsi
-               	movss	0x4(%rsi), %xmm1
+               	movl	$0x1, %r10d
+               	movss	0x4(%r8), %xmm0
+               	movss	0x4(%r9), %xmm1
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movl	$0x2, %r8d
-               	leaq	<rip>, %rdi # <addr>
-               	addq	%rax, %rdi
-               	movss	0x8(%rdi), %xmm0
-               	movss	0x8(%rsi), %xmm1
+               	movl	$0x2, %r10d
+               	leaq	(%rdi,%rdx), %r8
+               	movss	0x8(%r8), %xmm0
+               	addq	%rsi, %rdx
+               	movss	0x8(%rdx), %xmm1
+               	nopw	%cs:(%rax,%rax)
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	movl	$0x3, %edi
-               	leaq	<rip>, %rsi # <addr>
-               	addq	%rax, %rsi
-               	movss	0xc(%rsi), %xmm0
-               	leaq	<rip>, %rsi # <addr>
-               	addq	%rsi, %rax
-               	movss	0xc(%rax), %xmm1
+               	movl	$0x3, %r9d
+               	movss	0xc(%r8), %xmm0
+               	movss	0xc(%rdx), %xmm1
                	ucomiss	%xmm1, %xmm0
                	jp	<addr>
                	jne	<addr>
-               	incq	%rdx
-               	cmpl	$0xc, %edx
+               	incq	%rax
+               	cmpl	$0xc, %eax
                	jl	<addr>
                	xorps	%xmm0, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	movss	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
-               	movss	<rip>, %xmm2 # <addr>
-               	addss	%xmm2, %xmm1
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
+               	vaddss	<rip>, %xmm1, %xmm1 # <addr>
                	addss	%xmm1, %xmm0
                	xorps	%xmm1, %xmm1
                	ucomiss	%xmm1, %xmm0
@@ -149,36 +119,37 @@ Disassembly of section .text:
                	je	<addr>
                	movq	<rip>, %rax # <addr>
                	movq	(%rax), %rdi
-               	leaq	<rip>, %rsi # <addr>
                	cvtss2sd	%xmm0, %xmm0
+               	leaq	<rip>, %rsi # <addr>
                	movb	$0x1, %al
                	callq	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	movq	%rdi, %rcx
-               	movq	<rip>, %rax # <addr>
-               	movq	(%rax), %rdi
+               	movq	%r9, %rcx
+               	movq	<rip>, %rdx # <addr>
+               	movq	(%rdx), %rdi
                	leaq	<rip>, %rsi # <addr>
-               	leaq	<rip>, %r8 # <addr>
-               	movq	%rdx, %rax
-               	shlq	$0x4, %rax
-               	addq	%rax, %r8
-               	movss	(%r8,%rcx,4), %xmm0
+               	movq	%rax, %rdx
+               	shlq	$0x4, %rdx
+               	addq	%rdx, %rsi
+               	movss	(%rsi,%rcx,4), %xmm0
                	cvtss2sd	%xmm0, %xmm0
-               	leaq	<rip>, %r8 # <addr>
-               	addq	%r8, %rax
-               	movss	(%rax,%rcx,4), %xmm1
+               	leaq	<rip>, %rsi # <addr>
+               	addq	%rsi, %rdx
+               	movss	(%rdx,%rcx,4), %xmm1
                	cvtss2sd	%xmm1, %xmm1
+               	movq	%rax, %rdx
+               	leaq	<rip>, %rsi # <addr>
                	movb	$0x2, %al
                	callq	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	movq	%r8, %rcx
+               	movq	%r10, %rcx
                	jmp	<addr>
-               	movq	%r8, %rcx
+               	movq	%r10, %rcx
                	jmp	<addr>

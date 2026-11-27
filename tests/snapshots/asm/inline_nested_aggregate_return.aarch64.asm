@@ -3,7 +3,7 @@ inline_nested_aggregate_return.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -65,8 +65,6 @@ Disassembly of section .text:
                	bl	<addr>
                	mov	x20, x0
                	mov	x21, x1
-               	stur	x20, [x29, #-0x10]
-               	stur	x21, [x29, #-0x8]
                	mov	x0, #0x4                // =4
                	sub	x8, x29, #0x30
                	bl	<addr>
@@ -83,16 +81,13 @@ Disassembly of section .text:
                	add	x0, x0, x3
                	add	x0, x0, x4
                	add	x0, x0, x5
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x0                // =0
                	cmp	x0, #0x38
-               	csel	x20, x1, x2, ne
+               	mov	x16, #0x1               // =1
+               	csel	x20, x16, xzr, ne
                	mov	x0, #0x0                // =0
                	bl	<addr>
                	mov	x21, x0
                	mov	x22, x1
-               	stur	x21, [x29, #-0x10]
-               	stur	x22, [x29, #-0x8]
                	mov	x0, #0x0                // =0
                	sub	x8, x29, #0x30
                	bl	<addr>
@@ -115,8 +110,6 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	bl	<addr>
                	mov	x21, x1
-               	stur	x0, [x29, #-0x10]
-               	stur	x21, [x29, #-0x8]
                	sub	x8, x29, #0x30
                	bl	<addr>
                	ldur	x0, [x29, #-0x8]
@@ -127,8 +120,6 @@ Disassembly of section .text:
                	mov	x0, #0x5                // =5
                	bl	<addr>
                	mov	x21, x1
-               	stur	x0, [x29, #-0x10]
-               	stur	x21, [x29, #-0x8]
                	sub	x8, x29, #0x30
                	bl	<addr>
                	ldur	x0, [x29, #-0x8]
@@ -138,8 +129,6 @@ Disassembly of section .text:
                	csel	x20, x1, x20, ne
                	mov	x0, #0x5                // =5
                	bl	<addr>
-               	stur	x0, [x29, #-0x10]
-               	stur	x1, [x29, #-0x8]
                	add	x0, x1, x0, lsl #1
                	orr	x1, x20, #0x10
                	cmp	x0, #0x1a

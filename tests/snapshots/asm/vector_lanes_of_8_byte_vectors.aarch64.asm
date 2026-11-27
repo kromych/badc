@@ -3,7 +3,7 @@ vector_lanes_of_8_byte_vectors.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -52,14 +52,14 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	x16, [x0]
                	str	x16, [x7]
-               	sub	x1, x29, #0x8
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	mov	x0, #0x3                // =3
+               	sub	x0, x29, #0x8
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x16, [x1]
+               	str	x16, [x0]
                	ldr	d0, [x7]
-               	ldr	d1, [x1]
+               	ldr	d1, [x0]
+               	mov	x0, #0x3                // =3
                	bl	<addr>
                	cmp	w0, #0xab
                	b.eq	<addr>
@@ -68,10 +68,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x7, x29, #0x10
-               	sub	x1, x29, #0x8
-               	mov	x0, #0x0                // =0
+               	sub	x0, x29, #0x8
                	ldr	d0, [x7]
-               	ldr	d1, [x1]
+               	ldr	d1, [x0]
+               	mov	x0, #0x0                // =0
                	bl	<addr>
                	cmp	w0, #0x8a
                	b.eq	<addr>
@@ -84,14 +84,14 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldr	x16, [x0]
                	str	x16, [x7]
-               	sub	x1, x29, #0x8
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	mov	x0, #-0x7               // =-7
+               	sub	x0, x29, #0x8
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldr	x16, [x1]
+               	str	x16, [x0]
                	ldr	d0, [x7]
-               	ldr	d1, [x1]
+               	ldr	d1, [x0]
+               	mov	x0, #-0x7               // =-7
                	bl	<addr>
                	smov	x0, v0.h[0]
                	cmp	x0, #0x63

@@ -3,7 +3,7 @@ posix_unix_headers.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -30,12 +30,6 @@ Disassembly of section .text:
                	ldurb	w1, [x29, #-0x7b]
                	orr	x1, x1, #0x1
                	sturb	w1, [x29, #-0x7b]
-               	and	x1, x1, #0xff
-               	tbnz	w1, #0x0, <addr>
-               	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x80
-               	ldp	x29, x30, [sp], #0x10
-               	ret
                	tbz	w0, #0x4, <addr>
                	mov	x0, #0x3                // =3
                	add	sp, sp, #0x80

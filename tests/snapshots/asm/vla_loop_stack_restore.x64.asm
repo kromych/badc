@@ -3,7 +3,7 @@ vla_loop_stack_restore.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -31,21 +31,21 @@ Disassembly of section .text:
                	subq	$0x10, %rsp
                	movl	$0x1, -0x10(%rbp)
                	xorl	%eax, %eax
+               	movq	%rax, %rdi
                	movq	%rax, %rsi
-               	movq	%rax, %rdx
                	jmp	<addr>
-               	movsbq	(%rcx), %r9
-               	movsbq	(%rcx,%rdi), %rcx
-               	addq	%r9, %rcx
-               	addq	%rcx, %rsi
-               	movq	%r8, %rsp
+               	movsbq	(%rcx), %r8
+               	movsbq	(%rcx,%rdx), %rcx
+               	addq	%r8, %rcx
+               	addq	%rcx, %rdi
+               	movq	%r9, %rsp
                	incq	%rax
                	cmpl	$0x40, %eax
                	jge	<addr>
-               	movslq	-0x10(%rbp), %rdi
-               	shlq	$0x12, %rdi
-               	movq	%rsp, %r8
-               	movq	%rdi, %r11
+               	movslq	-0x10(%rbp), %rdx
+               	shlq	$0x12, %rdx
+               	movq	%rsp, %r9
+               	movq	%rdx, %r11
                	addq	$0xf, %r11
                	andq	$-0x10, %r11
                	movq	%rsp, %rcx
@@ -59,21 +59,21 @@ Disassembly of section .text:
                	jne	<addr>
                	movq	%rcx, %rsp
                	movb	%al, (%rcx)
-               	decq	%rdi
-               	leaq	0x1(%rax), %r9
-               	movb	%r9b, (%rcx,%rdi)
+               	decq	%rdx
+               	leaq	0x1(%rax), %r8
+               	movb	%r8b, (%rcx,%rdx)
                	testl	%eax, %eax
                	jne	<addr>
-               	movq	%rcx, %rdx
+               	movq	%rcx, %rsi
                	jmp	<addr>
-               	cmpq	%rdx, %rcx
+               	cmpq	%rsi, %rcx
                	je	<addr>
                	movl	$0x1, %eax
                	leave
                	retq
                	movl	$0x2a, %eax
                	movl	$0x2, %ecx
-               	cmpq	$0x1000, %rsi           # imm = 0x1000
+               	cmpq	$0x1000, %rdi           # imm = 0x1000
                	cmovneq	%rcx, %rax
                	leave
                	retq

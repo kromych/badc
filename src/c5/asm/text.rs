@@ -4,8 +4,8 @@
 
 use super::*;
 
-/// Peel the labels leading a statement from the rest of it. GNU as lets any
-/// number of labels share a statement with the directive or instruction that
+/// Peel the labels leading a statement from the rest of it. Any number of
+/// labels may share a statement with the directive or instruction that
 /// follows (`1: .irp num,...`), so the first token is not always the
 /// directive. Returns the label text, empty when there is none, and the
 /// remainder, empty when the statement is labels only.
@@ -38,8 +38,8 @@ pub(crate) fn split_leading_labels(s: &str) -> (alloc::vec::Vec<&str>, &str) {
 pub(crate) const NAMED_LABEL_BASE: u32 = 1 << 31;
 
 /// Peel one leading label definition off a statement, returning the label
-/// name and the remainder. A name is a GNU as identifier; an all-digit name
-/// is a numeric local.
+/// name and the remainder. A name is a symbol name; an all-digit name is a
+/// numeric local.
 pub(crate) fn split_label_def(piece: &str) -> Option<(&str, &str)> {
     let colon = piece.find(':')?;
     if colon == 0 {
@@ -75,8 +75,8 @@ pub(crate) fn scan_label_names(text: &str) -> alloc::vec::Vec<&str> {
 
 /// Give each definition of a numeric local label the template defines more
 /// than once a number of its own, and rewrite every `Nb` / `Nf` reference to
-/// the definition GNU as binds it to: the nearest one before it, or after it,
-/// in the text. The section blocks and the deferred replacement region look a
+/// the definition it binds to: the nearest one before it, or after it, in
+/// the text. The section blocks and the deferred replacement region look a
 /// label up by number, not by where the reference sits, so after this a
 /// number names one definition wherever it is read. The new numbers lie above
 /// every number the text names. `None` when no numeric label repeats.
@@ -195,8 +195,8 @@ pub(crate) fn number_local_labels_apart(text: &str) -> Option<alloc::string::Str
 }
 
 /// The first named label a template's code text defines twice. A name has
-/// one definition in GNU as, which rejects a second; a numeric local may
-/// repeat, and each reference binds by direction.
+/// one definition and a second is an error; a numeric local may repeat, and
+/// each reference binds by direction.
 pub(crate) fn duplicate_label_name(text: &str) -> Option<&str> {
     let mut seen: alloc::vec::Vec<&str> = alloc::vec::Vec::new();
     for piece in split_asm_statements(text) {
@@ -261,8 +261,8 @@ pub(crate) fn split_first_token(s: &str) -> (&str, &str) {
     }
 }
 
-/// Peel a leading `name:` label from a statement. GNU as terminates a label at
-/// the colon and requires no whitespace before the statement that follows, so
+/// Peel a leading `name:` label from a statement. A label ends at the colon
+/// and needs no whitespace before the statement that follows, so
 /// `name:insn` is a label plus an instruction. Returns the label name and the
 /// remainder (leading whitespace trimmed), or `None` when the statement does
 /// not begin with a label. A colon reached only after other tokens (an
@@ -270,7 +270,7 @@ pub(crate) fn split_first_token(s: &str) -> (&str, &str) {
 /// sigil in the preceding text, which is not a valid label name.
 pub(crate) fn peel_leading_label(stmt: &str) -> Option<(&str, &str)> {
     let colon = stmt.find(':')?;
-    // GNU as allows whitespace between the label and its colon (`0 :`).
+    // Whitespace may separate the label from its colon (`0 :`).
     let name = stmt[..colon].trim_end();
     if !is_asm_symbol_name(name) && !is_numeric_label(name) {
         return None;
@@ -305,17 +305,17 @@ pub(crate) fn asm_sym_offset_expr(expr: &str) -> Option<(&str, i64)> {
     named(sym).then(|| (sym, if rest.starts_with('-') { -v } else { v }))
 }
 
-/// A GNU as local numeric label: all decimal digits (`2`, `14470`). Its
+/// A local numeric label: all decimal digits (`2`, `14470`). Its
 /// definition (`2:`) and references (`2b` / `2f`) are local to one asm
 /// instance, so the materializer renames each to a unique symbol.
 pub(crate) fn is_numeric_label(name: &str) -> bool {
     !name.is_empty() && name.bytes().all(|c| c.is_ascii_digit())
 }
 
-/// GNU as's local label prefix on ELF.
+/// The assembler's local label prefix on ELF.
 pub(crate) const LOCAL_LABEL_PREFIX: &str = ".L";
 
-/// A named label GNU as treats as an assembler temporary: it stays out
+/// A named label that is an assembler temporary: it stays out
 /// of `.symtab` unless `-L` / `--keep-locals` is given, whatever `.type`
 /// and `.size` name it, and references to it reduce to its section plus
 /// an addend.
@@ -330,22 +330,21 @@ pub(crate) const ASMSEC_LABEL_PREFIX: &str = ".Lc5_asmsec_";
 /// label is renamed to.
 pub(crate) const MULTIDEF_LABEL_PREFIX: &str = ".Lc5ll_";
 
-/// A stand-in this module generated for a GNU as numeric label. gas names
-/// its own nothing a source can spell and keeps them out of `.symtab`
-/// even under `-L`, so these follow.
+/// A stand-in this module generated for a numeric label: a name no source
+/// can spell, kept out of `.symtab` even under `-L`.
 pub(crate) fn is_generated_local_label(name: &str) -> bool {
     name.starts_with(ASMSEC_LABEL_PREFIX) || name.starts_with(MULTIDEF_LABEL_PREFIX)
 }
 
 /// Split a numeric-label reference into its digits, dropping a trailing
-/// GNU as direction suffix (`14472b` / `14471f` -> `14472` / `14471`).
+/// direction suffix (`14472b` / `14471f` -> `14472` / `14471`).
 /// Returns `None` when the reference is not a numeric label.
 pub(crate) fn numeric_label_digits(name: &str) -> Option<&str> {
     let digits = name.strip_suffix(['b', 'f']).unwrap_or(name);
     is_numeric_label(digits).then_some(digits)
 }
 
-/// One GNU as local (numeric) label occurrence in a template: a definition
+/// One local (numeric) label occurrence in a template: a definition
 /// (`2:`) or a reference (`2f` / `2b`). `start`..`end` spans the token in the
 /// source text -- the digits for a definition (the `:` stays), the digits and
 /// the direction letter for a reference.
@@ -357,7 +356,7 @@ struct LocalLabelTok<'a> {
     reference: Option<bool>,
 }
 
-/// Scan a template for GNU as local (numeric) label definitions (`2:`) and
+/// Scan a template for local (numeric) label definitions (`2:`) and
 /// references (`2f` / `2b`). A digit run is a label token only at a token
 /// boundary -- so `0x1f`, `sym1`, and a fractional `0.5f` are skipped -- and,
 /// for a reference, only when the direction letter ends the token (`2foo` is a
@@ -397,7 +396,7 @@ fn scan_local_label_tokens(text: &str) -> alloc::vec::Vec<LocalLabelTok<'_>> {
                 continue;
             }
         }
-        // GNU as allows horizontal whitespace between a label and its colon.
+        // Horizontal whitespace may separate a label from its colon.
         let mut c = i;
         while c < n && (b[c] == b' ' || b[c] == b'\t') {
             c += 1;
@@ -414,7 +413,7 @@ fn scan_local_label_tokens(text: &str) -> alloc::vec::Vec<LocalLabelTok<'_>> {
     out
 }
 
-/// Rewrite GNU as local (numeric) labels defined more than once in one asm
+/// Rewrite local (numeric) labels defined more than once in one asm
 /// instance to per-definition unique names, binding each `Nf` / `Nb`
 /// reference to the nearest definition in its direction by source position
 /// (`f` a greater position, `b` a not-greater one). The rest of the pipeline
@@ -502,7 +501,7 @@ pub(crate) enum AsmComments {
 /// Strip assembler comments from an inline-asm template. A block comment
 /// becomes one space so the tokens around it stay separate; a line comment
 /// runs to the newline, which is kept because it separates statements.
-/// A block comment's newlines follow the line it ends on, as gas emits them.
+/// A block comment's newlines follow the line it ends on.
 /// Returns `None` when the template has no comment character.
 ///
 /// Comments go before statement splitting: a line comment swallows any `;`
@@ -626,7 +625,7 @@ pub(crate) fn is_template_label_expr(expr: &str, names: &[&str]) -> bool {
     eval_asm_value(expr, &ctx).is_ok() && all.get()
 }
 
-/// The stream offset a template label reference stands for, under the GNU as
+/// The stream offset a template label reference stands for, under the
 /// local-label rule: `Nb` binds to the nearest definition at or before `at`,
 /// `Nf` to the nearest after it, a name to its single definition. `names` is
 /// the template's intern table.
@@ -732,8 +731,7 @@ mod asm_comment_tests {
         assert_eq!(x86("mov %rax,/* c */%rbx"), "mov %rax, %rbx");
         // A `;` inside a block comment does not split a statement.
         assert_eq!(a64("mov x0, x1 /* a ; b */"), "mov x0, x1  ");
-        // A block comment spanning a newline joins the statements around it,
-        // which GNU as also does (and then rejects the run-on statement).
+        // A block comment spanning a newline joins the statements around it.
         assert_eq!(
             a64("mov x0, x1 /* a\nb */ mov x2, x3"),
             "mov x0, x1   mov x2, x3"
@@ -791,8 +789,8 @@ mod asm_comment_tests {
         assert_eq!(a64("mov x0, #1 ; mov x2, #3"), "mov x0, #1 ; mov x2, #3");
     }
 
-    /// A comment character inside a string literal is data: GNU as keeps it,
-    /// so a quoted section name or `.ascii` payload survives intact.
+    /// A comment character inside a string literal is data, so a quoted
+    /// section name or `.ascii` payload survives intact.
     #[test]
     fn comment_chars_inside_strings_are_kept() {
         assert_eq!(x86(".ascii \"a /* b\""), ".ascii \"a /* b\"");

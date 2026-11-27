@@ -3,7 +3,7 @@ compound_literal_member_operand.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,27 +26,23 @@ Disassembly of section .text:
                	int3
 
 <ne_rhs>:
-               	movq	%rdi, %rax
-               	cmpl	$-0x1, %eax
+               	cmpl	$-0x1, %edi
                	setne	%al
                	movzbq	%al, %rax
                	retq
 
 <eq_rhs>:
-               	movq	%rdi, %rax
-               	cmpl	$-0x1, %eax
+               	cmpl	$-0x1, %edi
                	sete	%al
                	movzbq	%al, %rax
                	retq
 
 <add_rhs>:
-               	movq	%rdi, %rax
-               	decq	%rax
+               	leaq	-0x1(%rdi), %rax
                	retq
 
 <swapped>:
-               	movq	%rdi, %rax
-               	cmpl	$-0x1, %eax
+               	cmpl	$-0x1, %edi
                	setne	%al
                	movzbq	%al, %rax
                	retq

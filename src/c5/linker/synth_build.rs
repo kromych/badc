@@ -105,8 +105,7 @@ pub struct ImageOptions {
     pub strip_debug: bool,
     /// `-X`: no assembler temporary (`.L*`) among the local symbols.
     pub discard_temporaries: bool,
-    /// `--stack reserve[,commit]`: a PE image's initial thread stack.
-    pub pe_stack: Option<(u64, u64)>,
+    pub pe: crate::c5::codegen::PeImageOptions,
     pub elf: ElfImageOptions,
     pub mach_o: crate::c5::codegen::MachOImageOptions,
 }
@@ -319,6 +318,8 @@ fn synth_program_and_build(
         data_liveness: None,
         stopped_at_data_liveness: false,
         ssa_dump: alloc::string::String::new(),
+        #[cfg(feature = "listing")]
+        listing: None,
         asm_sections: Vec::new(),
         asm_section_text_refs: Vec::new(),
         asm_text_abs_refs: Vec::new(),
@@ -397,6 +398,7 @@ fn synth_program_and_build(
         fn_unwind,
         a64_unwind,
         pe_unwind: merged.pe_unwind.clone(),
+        guard_cf: merged.guard_cf.clone(),
         reloc_call_sites: Vec::new(),
         user_extern_call_sites: Vec::new(),
         user_extern_data_refs: Vec::new(),
@@ -405,6 +407,7 @@ fn synth_program_and_build(
         abi: target.abi(),
         tls_data: merged.tls_data.clone(),
         tls_init_size: merged.tls_init_size,
+        tls_zero_fill_len: 0,
         tls_align: merged.tls_align,
         tls_got: merged.tls_got.clone(),
         tls_got_fields: merged.tls_got_fields.clone(),
@@ -468,10 +471,11 @@ fn synth_program_and_build(
         // writers then skip the section emit entirely instead of
         // dumping zero-length placeholders.
         debug_info: !opts.strip_debug && !merged.debug_info.is_empty(),
+        unwind_tables: false,
         merged_dwarf: synth_merged_dwarf(merged).filter(|_| !opts.strip_debug),
         pdb_path: None,
         resources: Vec::new(),
-        stack_size: opts.pe_stack,
+        pe: opts.pe,
         mach_o: opts.mach_o,
         plt_trampoline_offsets,
     };
@@ -516,6 +520,7 @@ fn synth_program(
         notes: Vec::new(),
         tls_data: merged.tls_data.clone(),
         tls_init_size: merged.tls_init_size,
+        tls_zero_fill_len: 0,
         tls_align: merged.tls_align,
         data_relocs: data_relocs.to_vec(),
         extern_data_relocs: Vec::new(),
@@ -524,6 +529,7 @@ fn synth_program(
         bind_trampoline_slots: false,
         weak_refs_by_name: false,
         interposable_refs: false,
+        no_plt_calls: false,
         fp_contract_fast: false,
         tls_data_relocs: Vec::new(),
         tls_extern_data_relocs: Vec::new(),
@@ -684,18 +690,25 @@ fn x86_64_unwind(
     let functions = recorded_unwind(merged, functions, target == Target::WindowsX64)?;
     let mut out = Vec::with_capacity(functions.len());
     for (begin, end, steps) in functions {
-        let (leaf, steps) = match steps {
-            Some(UnwindSteps::X64 { leaf, steps }) => (*leaf, steps.clone()),
+        let (leaf, steps, saves, exits) = match steps {
+            Some(UnwindSteps::X64 {
+                leaf,
+                steps,
+                saves,
+                exits,
+            }) => (*leaf, steps.clone(), saves.clone(), exits.clone()),
             Some(UnwindSteps::A64 { .. }) => {
                 return Err(internal_err(MODULE, "arm64 unwind steps in an x86-64 link"));
             }
-            None => (true, Vec::new()),
+            None => (true, Vec::new(), Vec::new(), Vec::new()),
         };
         out.push(FnUnwind {
             begin,
             end,
             leaf,
             steps,
+            saves,
+            exits,
         });
     }
     Ok(out)
@@ -709,15 +722,17 @@ fn aarch64_unwind(
     functions: &FunctionTable,
 ) -> Result<Vec<crate::c5::codegen::A64Unwind>, C5Error> {
     use crate::c5::codegen::{A64Unwind, UnwindSteps};
-    if target != Target::WindowsAarch64 {
+    if !target.is_aarch64() {
         return Ok(Vec::new());
     }
     let mut out = Vec::new();
     for (begin, end, steps) in recorded_unwind(merged, functions, true)? {
-        let (steps, exits) = match steps {
-            Some(UnwindSteps::A64 { steps, exits }) if !steps.is_empty() => {
-                (steps.clone(), exits.clone())
-            }
+        let (steps, exits, saves) = match steps {
+            Some(UnwindSteps::A64 {
+                steps,
+                exits,
+                saves,
+            }) if !steps.is_empty() => (steps.clone(), exits.clone(), saves.clone()),
             Some(UnwindSteps::X64 { .. }) => {
                 return Err(internal_err(MODULE, "x86-64 unwind steps in an arm64 link"));
             }
@@ -728,6 +743,7 @@ fn aarch64_unwind(
             end,
             steps,
             exits,
+            saves,
         });
     }
     Ok(out)
@@ -739,8 +755,7 @@ fn aarch64_unwind(
 /// precedence over the binding, as on the paths with no link step. A
 /// zero-filled one in an ELF image is the slot a copy relocation fills with
 /// the library's object and binds every reference to (the runtime's
-/// `environ` and `tzname`), as GNU ld resolves a common symbol a shared
-/// library defines; a PE or Mach-O image reaches a library object only
+/// `environ` and `tzname`); a PE or Mach-O image reaches a library object only
 /// through a loader-filled slot, so there the definition would leave the
 /// binding naming a slot nothing fills, and is refused.
 fn synth_copy_relocs(merged: &MergedNative, target: Target) -> Result<Vec<CopyRelocReq>, C5Error> {
@@ -782,8 +797,8 @@ fn synth_copy_relocs(merged: &MergedNative, target: Target) -> Result<Vec<CopyRe
 /// `--export-all` adds functions, `--export-data` adds data globals.
 /// Both gate the export because it widens the global symbol scope. An
 /// ELF executable also exports each definition of a name a linked shared
-/// library defines or references, so the library binds to it, as GNU ld
-/// does; a copy-relocated one is exported by its copy relocation.
+/// library defines or references, so the library binds to it; a
+/// copy-relocated one is exported by its copy relocation.
 /// A shared library exports functions through `exports` and data here.
 fn synth_dynamic_exports(
     merged: &MergedNative,
@@ -1393,6 +1408,19 @@ fn project_aarch64_pending(
     if got_slot && reloc.target_section != NativeSymSection::Undef {
         return Err(declined_reloc(merged, reloc, reloc.rtype, text_abs));
     }
+    // An `add` naming an import's slot by name takes the slot's address.
+    if !got_slot
+        && reloc.target_section == NativeSymSection::Undef
+        && merged.slot_reads.contains(&reloc.text_offset)
+    {
+        base_fixups.push(crate::c5::codegen::BaseFixup {
+            instr_offset: reloc.text_offset as usize,
+            base: crate::c5::codegen::ImageAddr::ImportSlot(reloc.import_index),
+            offset: reloc.addend,
+            part,
+        });
+        return Ok(());
+    }
     match reloc.target_section {
         NativeSymSection::Data | NativeSymSection::Bss => {
             data_fixups.push(DataFixup {
@@ -1457,7 +1485,7 @@ enum TextAbsolute {
     Placed,
     /// ELF `ET_DYN` and Mach-O `MH_PIE`: the loader picks the base and
     /// neither format admits a relocation against an executable
-    /// section. `shared` picks the output kind GNU ld names.
+    /// section. `shared` picks the output kind the diagnostic names.
     RejectedInPie { shared: bool },
 }
 
@@ -2032,6 +2060,7 @@ mod tests {
             compact_unwind: Vec::new(),
             eh_frame: Vec::new(),
             pe_unwind: Vec::new(),
+            guard_cf: None,
         }
     }
 

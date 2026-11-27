@@ -3,7 +3,7 @@ aggregate_built_in_place.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,22 +26,20 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rdx
-               	movq	$0x7, -0x10(%rbp)
-               	movq	$0x8, -0x8(%rbp)
-               	leaq	0x8(%rdx), %rax
+               	subq	$0x18, %rsp
+               	leaq	(%rsp), %rax
+               	movq	$0x7, (%rsp)
+               	movq	$0x8, 0x8(%rsp)
+               	addq	$0x8, %rax
                	movq	%rax, <rip> # <addr>
                	movq	(%rax), %rax
-               	movq	-0x10(%rbp), %rcx
+               	movq	(%rsp), %rcx
                	addq	%rcx, %rax
                	cmpq	$0xf, %rax
                	je	<addr>
                	movl	$0xb, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

@@ -3,7 +3,7 @@ inline_asm_x64_catalog.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -30,28 +30,29 @@ Disassembly of section .text:
                	movq	%rax, %rdx
                	negq	%rdx
                	movq	$-0x8, %rax
-               	movq	%rax, %rsi
-               	notq	%rsi
+               	movq	%rax, %rdi
+               	notq	%rdi
                	movl	$0x64, %eax
                	movl	$0xf, %ecx
                	xchgq	%rcx, %rax
-               	movl	$0x5, %edi
-               	rolq	%rdi
-               	movl	$0x14, %r8d
+               	movl	$0x5, %esi
+               	movq	%rsi, %r8
+               	rolq	%r8
+               	movl	$0x14, %esi
                	movl	$0x16, %r10d
-               	addq	$0x0, %r8
-               	adcq	%r10, %r8
+               	addq	$0x0, %rsi
+               	adcq	%r10, %rsi
                	cmpq	$0x14, %rdx
                	jne	<addr>
-               	cmpq	$0x7, %rsi
+               	cmpq	$0x7, %rdi
                	jne	<addr>
                	cmpq	$0xf, %rax
                	jne	<addr>
                	cmpq	$0x64, %rcx
                	jne	<addr>
-               	cmpq	$0xa, %rdi
+               	cmpq	$0xa, %r8
                	jne	<addr>
-               	cmpq	$0x2a, %r8
+               	cmpq	$0x2a, %rsi
                	jne	<addr>
                	movl	$0x2a, %eax
                	retq

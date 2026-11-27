@@ -3,7 +3,7 @@ param_incoming_reg_constant_clobber.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,17 +26,16 @@ Disassembly of section .text:
                	int3
 
 <func_1>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x5, %esi
+               	pushq	%rax
                	movq	<rip>, %rax # <addr>
                	movl	(%rax), %edi
+               	movl	$0x5, %esi
                	leaq	<rip>, %rdx # <addr>
-               	movq	%rsi, %rcx
-               	movq	%rsi, %r8
+               	movl	$0x5, %ecx
+               	movl	$0x5, %r8d
                	callq	<addr>
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <func_10>:
@@ -60,14 +59,13 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x5, %esi
+               	pushq	%rax
                	movq	<rip>, %rax # <addr>
                	movl	(%rax), %edi
+               	movl	$0x5, %esi
                	leaq	<rip>, %rdx # <addr>
-               	movq	%rsi, %rcx
-               	movq	%rsi, %r8
+               	movl	$0x5, %ecx
+               	movl	$0x5, %r8d
                	callq	<addr>
                	cmpl	$0x0, <rip> # <addr>
                	jne	<addr>
@@ -75,7 +73,7 @@ Disassembly of section .text:
                	cmpl	$0x6, %eax
                	jne	<addr>
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>

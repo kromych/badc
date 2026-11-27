@@ -3,7 +3,7 @@ environ_single_tu.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -32,9 +32,8 @@ Disassembly of section .text:
                	add	x0, x0, #0x8
                	ldr	x2, [x0]
                	cbnz	x2, <addr>
-               	mov	x0, #0x0                // =0
-               	mov	x2, #0x1                // =1
                	cmp	w1, #0x0
-               	csel	x0, x0, x2, gt
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, gt
                	ldp	x29, x30, [sp], #0x10
                	ret

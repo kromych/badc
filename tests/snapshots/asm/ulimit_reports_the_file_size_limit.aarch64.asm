@@ -3,7 +3,7 @@ ulimit_reports_the_file_size_limit.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -27,10 +27,10 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0x40
                	ret
                	ldur	x0, [x29, #-0x10]
-               	mov	x1, #0x7fffffffffffffff // =9223372036854775807
-               	lsr	x2, x0, #9
+               	lsr	x1, x0, #9
                	cmn	x0, #0x1
-               	csel	x20, x1, x2, eq
+               	mov	x16, #0x7fffffffffffffff // =9223372036854775807
+               	csel	x20, x16, x1, eq
                	mov	x0, #0x1                // =1
                	bl	<addr>
                	mov	x1, x0
@@ -43,8 +43,8 @@ Disassembly of section .text:
                	ldur	x0, [x29, #-0x10]
                	cmn	x0, #0x1
                	b.eq	<addr>
-               	mov	x0, #0x2                // =2
                	str	x1, [sp, #0x18]
+               	mov	x0, #0x2                // =2
                	bl	<addr>
                	ldr	x1, [sp, #0x18]
                	cmp	x0, x1

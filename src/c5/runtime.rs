@@ -44,6 +44,11 @@ pub(super) static EMBEDDED_COMPILER_RT: &[(&str, &str)] = &[
         include_str!("../../libc/lib/stack_protector.c"),
     ),
     ("divti3.c", include_str!("../../libc/lib/divti3.c")),
+    ("ubsan.c", include_str!("../../libc/lib/ubsan.c")),
+    (
+        "crash_report.c",
+        include_str!("../../libc/lib/crash_report.c"),
+    ),
     ("atomic.c", include_str!("../../libc/lib/atomic.c")),
     (
         "isa_available.c",
@@ -52,6 +57,10 @@ pub(super) static EMBEDDED_COMPILER_RT: &[(&str, &str)] = &[
     (
         "interlocked.c",
         include_str!("../../libc/lib/interlocked.c"),
+    ),
+    (
+        "load_config.c",
+        include_str!("../../libc/lib/load_config.c"),
     ),
 ];
 

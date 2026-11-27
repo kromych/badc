@@ -900,7 +900,7 @@ fn inline_asm_section_operand_constant_survives_unpromoted_function() {
     // C99 6.5p6: an `"i"` operand is an integer constant expression. A computed
     // goto opts the function out of slot promotion, so the constant reaches the
     // section-data operand as a store + load of a local rather than an
-    // immediate; GNU as folds it. badc must recover the constant by the load's
+    // immediate. badc must recover the constant by the load's
     // reaching definition and emit it, as a table entry written through the
     // operand (`.word %c<flags>`) requires. The `do {} while (0)` adds a
     // macro's dead back edge, which the recovery follows through.
@@ -1352,7 +1352,7 @@ fn cross_tu_thread_local_resolves_by_symbol_windows_aarch64() {
     // (`ldr x16, [x18, #0x58]`, index by `_tls_index`), so the accessor
     // records both a `_tls_index` fixup and an extern TLS-offset fixup
     // (reusing the `elf_tpoff_fixups` channel) keyed by the variable name.
-    // The linker fills the `add x?, x16, #imm12` with the variable's raw
+    // The linker fills the `add` pair off x16 with the variable's raw
     // offset in the merged TLS block -- no thread-pointer bias, unlike the
     // variant-1 ELF path's `+16` -- so the patched immediate equals the
     // merged offset directly.
@@ -1415,19 +1415,20 @@ fn cross_tu_thread_local_resolves_by_symbol_windows_aarch64() {
     let merged = link_native_objects(&[acc, def]).expect("link resolves cross-unit Windows TLS");
 
     // Scan the merged `.text` for the TEB sequence and confirm its closing
-    // `add x?, x16, #imm12` was patched to `other`'s merged offset (8): the
-    // definer is the only TLS contributor (base 0) and `counter` precedes
-    // it. The raw offset (not `8 + 16`) proves the Windows bias.
+    // `add x?, x16, #hi12, lsl 12` / `add x?, x?, #lo12` pair was patched to
+    // `other`'s merged offset (8): the definer is the only TLS contributor
+    // (base 0) and `counter` precedes it. The raw offset (not `8 + 16`)
+    // proves the Windows bias.
     const TEB_LOAD: u32 = 0xF940_2E50; // ldr x16, [x18, #0x58]
     let text = &merged.text;
+    let word = |at: usize| u32::from_le_bytes(text[at..at + 4].try_into().unwrap());
     let mut patched = None;
     let mut i = 0;
-    while i + 20 <= text.len() {
-        let w = u32::from_le_bytes(text[i..i + 4].try_into().unwrap());
-        if w == TEB_LOAD {
-            let a = u32::from_le_bytes(text[i + 16..i + 20].try_into().unwrap());
-            if (a & 0xFF80_0000) == 0x9100_0000 && (a >> 5) & 0x1F == 16 {
-                patched = Some((a >> 10) & 0xFFF);
+    while i + 24 <= text.len() {
+        if word(i) == TEB_LOAD {
+            let (hi, lo) = (word(i + 16), word(i + 20));
+            if (hi & 0xFFC0_0000) == 0x9140_0000 && (hi >> 5) & 0x1F == 16 {
+                patched = Some((hi >> 10 & 0xFFF) << 12 | (lo >> 10 & 0xFFF));
                 break;
             }
         }
@@ -1436,7 +1437,7 @@ fn cross_tu_thread_local_resolves_by_symbol_windows_aarch64() {
     assert_eq!(
         patched,
         Some(off_other as u32),
-        "the TEB `add x?, x16, #imm12` must hold the raw merged offset {off_other} (no +16 bias)"
+        "the TEB `add` pair must hold the raw merged offset {off_other} (no +16 bias)"
     );
 }
 
@@ -1630,8 +1631,8 @@ fn file_scope_asm_globl_gives_external_linkage() {
 fn file_scope_asm_type_size_set_symbol_type_and_size() {
     // A static-call trampoline names its symbol with `.type name,
     // @function` and `.size name, . - name`. badc must emit STT_FUNC with
-    // st_size = the trampoline's byte length, byte-for-byte as gas does
-    // (verified against gas: FUNC / GLOBAL / size 8). Both 64-bit ELF
+    // st_size = the trampoline's byte length (verified against gas: FUNC /
+    // GLOBAL / size 8). Both 64-bit ELF
     // targets share the symbol path, so both are checked.
     use crate::c5::linker::parse_native_elf;
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
@@ -1679,8 +1680,8 @@ int main(void) { return 0; }
 
 #[test]
 fn file_scope_asm_type_space_form_and_set_location_size() {
-    // GNU as makes the comma in `.type name, @type` optional and accepts the
-    // `STT_` spellings, so `.type name STT_FUNC` names the same type. A `.set`
+    // The comma in `.type name, @type` is optional and the `STT_` spellings
+    // are accepted, so `.type name STT_FUNC` names the same type. A `.set`
     // whose value is a location difference takes that value where it is
     // written, and `.size` then consumes the symbol. Verified against gas:
     // FUNC / GLOBAL / size 5 for this section.
@@ -1726,7 +1727,7 @@ int main(void) { return 0; }
 #[test]
 fn file_scope_asm_set_takes_a_location_value() {
     // A `.set` whose value is a location rather than an absolute (`. + 4`)
-    // gives GNU as a section-relative symbol, and a field referencing it
+    // gives a section-relative symbol, and a field referencing it
     // takes a relocation against the section. Verified against gas 2.46:
     // `locptr` local at `.rodata.locval + 6`, the `.long` relocated there.
     use crate::c5::linker::parse_native_elf;
@@ -1892,6 +1893,16 @@ fn unreferenced_static_function_is_dropped_from_object() {
 /// dead-static tests below exercise.
 #[cfg(test)]
 fn reloc_tu(src: &str, target: crate::c5::Target, optimize: bool) -> alloc::vec::Vec<u8> {
+    reloc_tu_with(src, target, optimize, None)
+}
+
+/// [`reloc_tu`] with `-fomit-frame-pointer` set as `omit_frame_pointer` says.
+fn reloc_tu_with(
+    src: &str,
+    target: crate::c5::Target,
+    optimize: bool,
+    omit_frame_pointer: Option<bool>,
+) -> alloc::vec::Vec<u8> {
     use crate::c5::compiler::CompileOptions;
     use crate::c5::{NativeOptions, OutputKind, emit_native_with_options};
     let copts = CompileOptions {
@@ -1904,6 +1915,7 @@ fn reloc_tu(src: &str, target: crate::c5::Target, optimize: bool) -> alloc::vec:
         .expect("compile");
     let opts = NativeOptions {
         optimize,
+        omit_frame_pointer,
         output_kind: OutputKind::Relocatable,
         ..Default::default()
     };
@@ -3196,8 +3208,8 @@ fn asm_main_stream_reference_binds_label_in_pushed_section() {
 fn asm_label_difference_in_a_function_body_stream() {
     // A difference of two template labels is an absolute value wherever the
     // operand grammar takes one, including the main instruction stream of a
-    // function-body asm -- the position a `.pushsection` does not cover. The
-    // field width follows GNU as: a backward difference is a value when the
+    // function-body asm -- the position a `.pushsection` does not cover. A
+    // backward difference is a value when the
     // instruction is assembled and takes the narrow field, a forward one
     // keeps the wide field the encoding chose. Bytes from GNU as 2.46.1 for
     // the same template.
@@ -3395,7 +3407,7 @@ fn asm_label_address_immediate_into_register_relocates_absolute() {
     let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
     let obj = parse_native_elf(&bytes).expect("parse ET_REL");
     // `mov r64, imm32` is `48 C7 C0+r` then a zeroed field the relocation
-    // fills; the imm64 (`movabs`) form is longer and gas does not pick it.
+    // fills; the imm64 (`movabs`) form is longer and is not picked.
     let mov = obj
         .text
         .windows(7)
@@ -3463,8 +3475,8 @@ fn file_scope_asm_variant_pcs_marks_the_symbol() {
 
 /// A function following the SVE PCS -- taking or returning an SVE value,
 /// or declared `aarch64_sve_pcs` -- carries `STO_AARCH64_VARIANT_PCS` in
-/// its symbol, defined or referenced, as gcc's `.variant_pcs` gives the
-/// references too (AAELF64); a function of the base standard does not.
+/// its symbol, defined or referenced (AAELF64); a function of the base
+/// standard does not.
 #[test]
 fn sve_pcs_functions_are_marked_variant_pcs() {
     use crate::c5::compiler::CompileOptions;
@@ -3537,10 +3549,10 @@ fn weak_hidden_undef_addressof_is_pc_relative_direct() {
     // The address of a weak hidden redeclaration:
     //   ({ extern typeof(x) x __attribute__((weak,visibility("hidden"))); &(x); })
     // A block-scope extern redeclaration marks an already-known name weak and
-    // hidden and takes its address. gcc emits the symbol WEAK HIDDEN UND and
+    // hidden and takes its address. The symbol is WEAK HIDDEN UND and
     // the address-of GOT-free -- a RIP-relative `lea` (R_X86_64_PC32) on
     // x86_64, a direct adrp+add pair on aarch64 -- so a static link resolves
-    // the undefined weak to 0 with an empty GOT. Match that reloc form plus
+    // the undefined weak to 0 with an empty GOT. Check that reloc form plus
     // STB_WEAK binding and STV_HIDDEN visibility on both ELF targets.
     use crate::CompileOptions;
     use crate::c5::linker::object::NativeSymSection;
@@ -3685,11 +3697,11 @@ fn pragma_gcc_visibility_extent_sets_symbol_visibility() {
 #[test]
 fn file_scope_asm_assembles_instructions_in_rodata() {
     // A file-scope asm whose `.pushsection .rodata` holds a trampoline body:
-    // GNU as assembles instructions into any section, the flags only setting
+    // instructions assemble into any section, the flags only setting
     // the object section's attributes. The section token classifier rejected a
     // non-directive token unless the section was `"ax"`-flagged, so the `pushq`
     // reported an unsupported directive. A `.rodata` given without explicit
-    // flags is allocatable, as GNU as knows the name.
+    // flags is allocatable, the gABI's attributes for the name.
     use crate::c5::compiler::CompileOptions;
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = r#"asm(
@@ -3734,7 +3746,7 @@ fn file_scope_asm_assembles_instructions_in_rodata() {
 fn file_scope_asm_ignores_debug_line_directives() {
     // `.file` / `.loc` name a source location for the debug line table and
     // deposit no bytes; a hand-written assembly unit may lead with `.file`.
-    // Written case-folded, as GNU as matches directives and mnemonics.
+    // Written case-folded: directives and mnemonics match in any case.
     use crate::c5::compiler::CompileOptions;
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = r#"asm(
@@ -4026,8 +4038,8 @@ fn asm_data_directive_quoted_symbol_matches_bare() {
 fn file_scope_asm_jcc_to_section_label_and_lock_prefix() {
     // `jne .slowpath` inside a pushed section branches to a label defined
     // later in the same section: resolved at assembly with no relocation,
-    // and at the `75` rel8 width the two-byte displacement fits, exactly
-    // as GNU as encodes it. The `lock cmpxchg` line keeps the `f0` prefix.
+    // and at the `75` rel8 width the two-byte displacement fits,
+    // byte-identical to GNU as. The `lock cmpxchg` line keeps the `f0` prefix.
     use crate::c5::linker::parse_native_elf;
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = super::load_fixture("file_scope_asm_local_label_branch.c");
@@ -4147,9 +4159,9 @@ fn elf_section_bytes(bytes: &[u8], want: &[u8]) -> alloc::vec::Vec<u8> {
 
 #[test]
 fn file_scope_asm_reference_to_global_or_weak_keeps_its_relocation() {
-    // GNU as resolves a same-section PC-relative reference in place for a
-    // name local to the unit, and for any non-weak name on a relaxable
-    // branch, which it settles while relaxing. Every other reference keeps
+    // A same-section PC-relative reference resolves in place for a name
+    // local to the unit, and for any non-weak name on a relaxable branch,
+    // which relaxation settles. Every other reference keeps
     // its relocation so the link binds the definition that wins: PC32 for a
     // data-class reference (`lea`), PLT32 for `call`, PC8 for a rel8-only
     // branch (`loop`), which has no relaxable form. Measured against GNU as
@@ -4692,6 +4704,7 @@ fn an_extern_thread_local_is_read_from_a_got_slot_unless_the_link_defines_it() {
             soname: "libtl.so".to_string(),
             machine: reader.machine,
             exports: ["counter".to_string()].into_iter().collect(),
+            slot_exports: Default::default(),
             data_exports: Default::default(),
             tls_exports: ["counter".to_string()].into_iter().collect(),
             object_sizes: Default::default(),
@@ -4784,6 +4797,54 @@ fn an_extern_thread_local_is_read_from_a_got_slot_unless_the_link_defines_it() {
                 .any(|w| u32::from_le_bytes(*w) & 0x9f00_001f == 0x9000_0011),
         };
         assert!(!initial_exec, "{target:?}: rewritten to local-exec");
+    }
+}
+
+/// A thread-local whose initializer sets only its first byte is
+/// initialized data as a whole: the object's `.tdata` (`__thread_data`)
+/// holds all of it, so the link, which places every unit's `.tdata` ahead
+/// of every `.tbss`, keeps it in one piece and the next unit's block past
+/// its end, on every target.
+#[test]
+fn a_partly_initialized_thread_local_is_initialized_data_whole() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{link_native_objects, parse_native_elf};
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    for target in [
+        Target::LinuxX64,
+        Target::LinuxAarch64,
+        Target::WindowsX64,
+        Target::WindowsAarch64,
+        Target::MacOSAarch64,
+    ] {
+        let unit = |src: &str| {
+            let prog = Compiler::with_options(
+                alloc::format!("{TEST_PRELUDE}{src}"),
+                target,
+                CompileOptions::default().with_no_entry_point(true),
+            )
+            .compile()
+            .expect("compile");
+            let opts = NativeOptions {
+                output_kind: OutputKind::Relocatable,
+                ..Default::default()
+            };
+            let bytes = emit_native_with_options(&prog, target, opts).expect("emit");
+            parse_native_elf(&bytes).expect("parse")
+        };
+        let pad = unit(super::PARTIAL_TLS_PAD);
+        assert!(
+            pad.tls_data.len() >= 5000 && pad.tls_bss_size == 0,
+            "{target:?}: `pad` is split, {} initialized bytes and {} zero-fill",
+            pad.tls_data.len(),
+            pad.tls_bss_size
+        );
+        let merged = link_native_objects(&[pad, unit(super::PARTIAL_TLS_T)]).expect("link");
+        let t_base = (merged.section_map.tls.iter())
+            .find(|c| c.input == Some(1) && c.name == ".tdata")
+            .map(|c| c.offset)
+            .expect("the second unit's .tdata is in the TLS map");
+        assert!(t_base >= 5000, "{target:?}: `t` at {t_base}, inside `pad`");
     }
 }
 
@@ -5470,12 +5531,11 @@ fn a_shared_librarys_exported_definitions_bind_through_its_dynamic_symbols() {
     }
 }
 
-/// The bounds a link defines take GNU ld's visibility: the init and fini
-/// array bounds hidden, as its default script provides them, a section's
-/// `__start_` and `__stop_` protected, `-z start-stop-visibility`'s default.
-/// An image exporting every definition publishes the protected ones, as
-/// GNU ld under `-rdynamic` does, and a shared library's references to them
-/// bind to its own.
+/// The bounds a link defines: the init and fini array bounds hidden, a
+/// section's `__start_` and `__stop_` protected, the
+/// `-z start-stop-visibility` default. An image exporting every
+/// definition (`-rdynamic`) publishes the protected ones, and a shared
+/// library's references to them bind to its own.
 #[cfg(feature = "native-emit")]
 #[test]
 fn link_defined_bounds_are_hidden_or_protected() {
@@ -5780,6 +5840,7 @@ fn an_import_only_addressed_keeps_its_function_type() {
             soname: "libfns.so".to_string(),
             machine,
             exports: core::iter::once("lib_fn".to_string()).collect(),
+            slot_exports: Default::default(),
             data_exports: Default::default(),
             tls_exports: Default::default(),
             object_sizes: Default::default(),
@@ -6232,7 +6293,7 @@ fn thread_local_address_initializer_survives_the_object_round_trip() {
 #[test]
 fn a_local_exec_thread_local_access_is_refused_in_a_shared_object() {
     // An offset from the thread pointer holds only in the executable's
-    // static block; GNU ld refuses it in a shared object and advises -fPIC.
+    // static block, so a shared object refuses it and the error advises -fPIC.
     use crate::c5::linker::{LinkOptions, link_native_objects_with, parse_native_elf};
     use crate::c5::{CompileOptions, NativeOptions, OutputKind, Target, emit_native_with_options};
     let program = Compiler::with_options(
@@ -7209,7 +7270,7 @@ fn same_named_statics_keep_their_own_prologue_anchor() {
 
 #[test]
 fn assembler_local_labels_stay_out_of_the_symbol_table() {
-    // gas keeps a `.L`-prefixed label out of `.symtab`: it is an assembler
+    // A `.L`-prefixed label stays out of `.symtab`: it is an assembler
     // temporary, and every reference to one reduces to its section plus an
     // addend. An object that carries them exports them to whatever reads the
     // table -- a downstream `objcopy --prefix-symbols` renames them into the
@@ -7255,41 +7316,55 @@ fn assembler_local_labels_stay_out_of_the_symbol_table() {
     }
 }
 
-/// The test of an early return moves `push rbp` off the entry; the note
-/// carries where it went and where the return is, so the merged-image
-/// decoder reads the frame the lowering built.
+/// The test of an early return moves the frame's first instruction --
+/// `push rbp`, or with no frame pointer the `push rax` pad, a `sub rsp` or
+/// a register's push -- off the entry; the note carries where it went and
+/// where the return is, so the merged-image decoder reads the frame the
+/// lowering built.
 #[test]
 fn a_frame_past_an_early_return_decodes_from_its_anchor() {
     use crate::c5::linker::{link_native_objects, parse_native_elf};
     let src = "long fib(int n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); }\n";
-    let obj = parse_native_elf(&reloc_tu(src, crate::c5::Target::LinuxX64, true)).expect("parse");
-    assert_eq!(obj.early_returns.len(), 1, "{:x?}", obj.early_returns);
-    let merged = link_native_objects(&[obj]).expect("link");
-    let entry = merged.defined.get("fib").expect("fib is defined").value;
-    let (at, exit) = merged.early_returns[&entry];
-    assert_eq!(
-        merged.text[exit as usize..].first(),
-        Some(&0x48),
-        "`movsxd rax, edi`"
-    );
-    let post = merged.prologue_ends[&entry];
-    let text = &merged.text;
-    assert_eq!(text[at as usize..at as usize + 4], [0x55, 0x48, 0x89, 0xE5]);
-    let n = text.len() as u32;
-    let decode = |frame_start| {
-        crate::c5::codegen::decode_x86_64_prologue_unwind(
-            text,
-            entry as u32,
-            n,
-            post as u32,
-            frame_start,
-        )
-    };
-    let uw = decode(at as u32);
-    assert!(!uw.leaf);
-    assert_eq!(uw.steps[0].0, (at - entry) as u32 + 1);
-    // Without the anchor the entry reads as a frameless leaf.
-    assert!(decode(0).leaf);
+    for omit in [false, true] {
+        let tu = reloc_tu_with(src, crate::c5::Target::LinuxX64, true, Some(omit));
+        let obj = parse_native_elf(&tu).expect("parse");
+        assert_eq!(obj.early_returns.len(), 1, "{:x?}", obj.early_returns);
+        let merged = link_native_objects(&[obj]).expect("link");
+        let entry = merged.defined.get("fib").expect("fib is defined").value;
+        let (at, exit) = merged.early_returns[&entry];
+        assert_eq!(
+            merged.text[exit as usize..].first(),
+            Some(&0x48),
+            "`movsxd rax, edi`"
+        );
+        let post = merged.prologue_ends[&entry];
+        let text = &merged.text;
+        // The frame's first instruction and its length; the banks' caps
+        // decide which one a frame with no pointer opens with.
+        let first = match &text[at as usize..] {
+            [0x55, 0x48, 0x89, 0xE5, ..] if !omit => 1,
+            [0x48, 0x83, 0xEC, ..] if omit => 4,
+            [0x48, 0x81, 0xEC, ..] if omit => 7,
+            [0x41, 0x54..=0x57, ..] if omit => 2,
+            [0x50 | 0x53 | 0x55, ..] if omit => 1,
+            other => panic!("omit={omit}: no frame at the anchor: {:02x?}", &other[..8]),
+        };
+        let n = text.len() as u32;
+        let decode = |frame_start| {
+            crate::c5::codegen::decode_x86_64_prologue_unwind(
+                text,
+                entry as u32,
+                n,
+                post as u32,
+                frame_start,
+            )
+        };
+        let uw = decode(at as u32);
+        assert!(!uw.leaf);
+        assert_eq!(uw.steps[0].0, (at - entry) as u32 + first, "omit={omit}");
+        // Without the anchor the entry reads as a frameless leaf.
+        assert!(decode(0).leaf);
+    }
 }
 
 /// Every kind of unwind step reads back from its note record unchanged,
@@ -7297,6 +7372,7 @@ fn a_frame_past_an_early_return_decodes_from_its_anchor() {
 #[test]
 fn unwind_step_records_round_trip() {
     use crate::c5::codegen::{A64Exit, A64Step, PrologueStep as P, UnwindSteps};
+    use crate::c5::codegen::{X64Exit, X64ExitStep as E, X64Save};
     let records = [
         UnwindSteps::X64 {
             leaf: false,
@@ -7307,10 +7383,28 @@ fn unwind_step_records_round_trip() {
                 (14, P::SaveXmm { xmm: 6, off: 32 }),
                 (19, P::SetFrame(48)),
             ],
+            saves: alloc::vec![X64Save {
+                at: 25,
+                reg: 13,
+                xmm: false,
+                below_fp: 0x10,
+            }],
+            exits: alloc::vec![
+                X64Exit {
+                    steps: alloc::vec![(0x41, E::Pop(13)), (0x42, E::Leave)],
+                    end: 0x43,
+                },
+                X64Exit {
+                    steps: alloc::vec![(0x52, E::Pop(5))],
+                    end: 0x57,
+                },
+            ],
         },
         UnwindSteps::X64 {
             leaf: true,
             steps: alloc::vec::Vec::new(),
+            saves: alloc::vec::Vec::new(),
+            exits: alloc::vec::Vec::new(),
         },
         UnwindSteps::A64 {
             steps: alloc::vec![
@@ -7350,10 +7444,27 @@ fn unwind_step_records_round_trip() {
                     steps: alloc::vec![A64Step::SetFp, A64Step::SaveFpLrX(16)],
                 },
             ],
+            saves: alloc::vec![
+                crate::c5::codegen::A64Save {
+                    at: 24,
+                    fp: false,
+                    reg: 21,
+                    reg2: Some(22),
+                    below_fp: 48,
+                },
+                crate::c5::codegen::A64Save {
+                    at: 28,
+                    fp: true,
+                    reg: 9,
+                    reg2: None,
+                    below_fp: 32,
+                },
+            ],
         },
         UnwindSteps::A64 {
             steps: alloc::vec![A64Step::PacSignLr],
             exits: alloc::vec::Vec::new(),
+            saves: alloc::vec::Vec::new(),
         },
     ];
     for r in &records {
@@ -7371,7 +7482,7 @@ fn unwind_step_records_round_trip() {
 /// as the emitter recorded them, keyed by its entry, on both targets. A
 /// function with a prologue and no recorded steps is an internal error, not
 /// a frameless record.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn the_pe_link_takes_the_recorded_unwind_steps() {
     use crate::c5::codegen::UnwindSteps;
@@ -7393,10 +7504,10 @@ fn the_pe_link_takes_the_recorded_unwind_steps() {
             steps.clone()
         };
         match (steps("f"), target) {
-            (UnwindSteps::X64 { leaf, steps }, crate::Target::WindowsX64) => {
+            (UnwindSteps::X64 { leaf, steps, .. }, crate::Target::WindowsX64) => {
                 assert!(!leaf && steps.len() >= 2, "{steps:?}")
             }
-            (UnwindSteps::A64 { steps, exits }, crate::Target::WindowsAarch64) => {
+            (UnwindSteps::A64 { steps, exits, .. }, crate::Target::WindowsAarch64) => {
                 assert!(steps.len() >= 2 && !exits.is_empty(), "{steps:?} {exits:?}")
             }
             other => panic!("{target:?}: {other:?}"),
@@ -7425,7 +7536,7 @@ fn the_pe_link_takes_the_recorded_unwind_steps() {
 #[test]
 fn typed_local_label_leaves_the_symbol_table_and_its_reference_reduces() {
     // A local label typed `@function` and sized is still kept out of
-    // `.symtab` by GNU as, because the name carries the local-label
+    // `.symtab`, because the name carries the local-label
     // prefix. The reference to it has to reduce to
     // the label's section plus its offset, or dropping the symbol would
     // leave the relocation with nothing to name. `--keep-locals` restores
@@ -7582,6 +7693,7 @@ fn minimal_native_object(
         compact_unwind: alloc::vec::Vec::new(),
         eh_frame: None,
         pe_unwind: alloc::vec::Vec::new(),
+        guard_fids: None,
     }
 }
 
@@ -7757,6 +7869,7 @@ fn weak_undef_binds_against_a_shared_library_export() {
         soname: "libhook.so.1".to_string(),
         machine: NativeMachine::X86_64,
         exports: core::iter::once("hook".to_string()).collect(),
+        slot_exports: Default::default(),
         data_exports: Default::default(),
         tls_exports: Default::default(),
         object_sizes: Default::default(),
@@ -7939,6 +8052,7 @@ fn aarch64_data_ref_object_ex(
         compact_unwind: alloc::vec::Vec::new(),
         eh_frame: None,
         pe_unwind: alloc::vec::Vec::new(),
+        guard_fids: None,
     }
 }
 
@@ -8198,6 +8312,7 @@ fn blank_aarch64_object() -> crate::c5::linker::NativeObject {
         compact_unwind: alloc::vec::Vec::new(),
         eh_frame: None,
         pe_unwind: alloc::vec::Vec::new(),
+        guard_fids: None,
     }
 }
 
@@ -8308,8 +8423,8 @@ fn aarch64_pcrel_relocations_reproduce_gnu_ld_bytes() {
 
 #[test]
 fn aarch64_absolute_text_relocations_take_the_image_base() {
-    // `.word gdata` / `.xword gdata` inside `.text`: GNU ld resolves
-    // both against the symbol's runtime address. The value depends on
+    // `.word gdata` / `.xword gdata` inside `.text`: both resolve
+    // against the symbol's runtime address. The value depends on
     // the load address, so the merge pass parks them and the ET_EXEC
     // writer materializes them.
     use crate::c5::linker::object::{NativeReloc, NativeSymbol};
@@ -9360,7 +9475,7 @@ fn init_and_fini_fragments_form_one_function_each_around_the_arrays() {
     // (`.fini`) is a fragment of one function that crti.o opens and crtn.o
     // closes, in input order. DT_INIT runs before the init array and
     // DT_FINI after the fini array. A `.section .init` without flags is
-    // placed by name, as GNU ld places it.
+    // placed by name.
     use crate::c5::compiler::CompileOptions;
     use crate::c5::linker::link::MergedTarget;
     use crate::c5::linker::{link_native_objects, parse_native_elf};
@@ -10854,7 +10969,7 @@ fn file_scope_asm_weak_and_set_emit_weak_symbols() {
     // in the unit (an optional entry point aliased to a stub): FUNC, WEAK,
     // the target's value and size. `.weak` on a section label binds the label
     // weak; `.weak` of a name the unit neither defines nor references
-    // yields no entry at all, as GNU as 2.46.1 emits none for one.
+    // yields no entry at all (measured against GNU as 2.46.1).
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = "\
         long ni_syscall(void) { return -38; }\n\
@@ -10959,7 +11074,7 @@ fn self_referential_global_stays_defined_in_object() {
 #[test]
 fn file_scope_asm_incbin_embeds_file_bytes() {
     // `.incbin "path"` splices the file's raw bytes at that point in the
-    // section image; the path resolves as GNU as resolves it, against the
+    // section image; the path resolves against the
     // working directory (an absolute path here, so the test is
     // cwd-independent). A missing file is a compile error naming the path.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
@@ -11170,8 +11285,8 @@ fn asm_section_space_and_fill_family() {
 #[test]
 fn asm_section_local_binding_and_elf_type_spelling() {
     // `.local` completes the binding family beside `.globl` / `.weak`, and
-    // GNU as accepts the ELF constant spellings (`STT_OBJECT`) of a `.type`
-    // alongside `@object`. A `.zero`-sized object declared this way must come
+    // `.type` takes the ELF constant spellings (`STT_OBJECT`) alongside
+    // `@object`. A `.zero`-sized object declared this way must come
     // out as a local `STT_OBJECT` symbol of the stated size.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = "\
@@ -11325,7 +11440,7 @@ fn always_inline_trap_accessor_folds_section_operand() {
 
 #[test]
 fn inline_asm_numeric_label_defined_twice_binds_nearest() {
-    // GNU as permits a numeric label many definitions; a reference `Nf`
+    // A numeric label may be defined many times; a reference `Nf`
     // resolves to the nearest definition at a greater source position, `Nb`
     // to the nearest at a not-greater one. Label `1` is defined three times;
     // the two `1f - 1b` differences sit between successive definitions, so
@@ -11381,7 +11496,7 @@ fn inline_asm_multidef_numeric_labels_bind_by_position() {
     // own replacement length, an entry section records each arm's source and
     // replacement lengths, and cross-section references reach each arm's
     // replacement. Every reference must bind to its own arm's definitions by
-    // source position, matching GNU as; a position-agnostic binding would use
+    // source position; a position-agnostic binding would use
     // the last definition for both arms (a silent miscompile).
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = "\
@@ -11494,7 +11609,7 @@ fn asm_section_is_not_duplicated_by_branch_relaxation() {
 
 #[test]
 fn asm_section_numeric_labels_are_per_instance_unique() {
-    // GNU as numeric labels inside a section are local to one asm instance.
+    // Numeric labels inside a section are local to one asm instance.
     // Two expansions of the same trap-table block must not collide:
     // each cross-section `.long 14472b - .` relocates to its own copy of the
     // string in `.bstr`, a distinct per-instance symbol. Without unique
@@ -11763,8 +11878,8 @@ fn asm_section_org_fills_with_the_named_byte() {
 #[test]
 fn inline_asm_label_glued_section_directive_balances() {
     // A section directive may follow a label on the same line in the code
-    // stream (`1:\t.pushsection ...`): GNU as treats the label and the
-    // directive as two statements. The section-stack tracker must recognize
+    // stream (`1:\t.pushsection ...`): the label and the directive are two
+    // statements. The section-stack tracker must recognize
     // the directive after the label; otherwise the matching `.popsection`
     // underflows and is wrongly rejected as unbalanced.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
@@ -11904,8 +12019,7 @@ int main(void) { int x = 0; return f(&x, 1); }
 fn inline_asm_symbol_minus_label_is_pc_relative() {
     // `.long %c0 - 2b` four bytes past `2:` in the section being assembled
     // (a table entry relative to a label): PC-relative against the
-    // operand's symbol, the field's distance from the label its addend, as
-    // GNU as emits it.
+    // operand's symbol, the field's distance from the label its addend.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = r#"
 void f(void) {
@@ -12222,8 +12336,8 @@ fn self_link_operand_symbol_shape(
 fn asm_section_operand_symbol_self_link_matches_ld() {
     // Self-linked counterpart of `asm_section_operand_symbol_relocates_to_data`:
     // the fields of the writable `.optab` fold into the merged data stream and
-    // must resolve to the values GNU ld produces from the same object --
-    // `S + A - P` against the operand string and `&key + 4`. The merge used to
+    // must resolve to `S + A - P` against the operand string and
+    // `&key + 4`. The merge used to
     // patch these pc-relative words as 8-byte absolutes, corrupting the fields.
     use crate::c5::Target;
     use crate::c5::linker::NativeSymSection;
@@ -12235,14 +12349,15 @@ fn asm_section_operand_symbol_self_link_matches_ld() {
             "{target:?}: writable .optab joins the data stream"
         );
         let key = merged.defined.get("key").expect("key in merged");
-        let ro_len = merged.data_ro_len as u64;
+        let (ro_len, rw_at) = (merged.data_ro_len as u64, merged.data_relro_len as u64);
         let (rodata_addr, rodata) = elf_image_section(&image, ".rodata").expect("image .rodata");
         let (data_addr, data) = elf_image_section(&image, ".data").expect("image .data");
+        // The stream is the read-only prefix, the relro region, the rest.
         let addr_of = |off: u64| {
             if off < ro_len {
                 rodata_addr + off
             } else {
-                data_addr + (off - ro_len)
+                data_addr + (off - rw_at)
             }
         };
         let str_pos = rodata
@@ -12250,7 +12365,7 @@ fn asm_section_operand_symbol_self_link_matches_ld() {
             .position(|w| w == b"probe9.c\0")
             .expect("operand string in image .rodata") as u64;
         let str_vaddr = rodata_addr + str_pos;
-        let body_at = |off: u64| (off - ro_len) as usize;
+        let body_at = |off: u64| (off - rw_at) as usize;
         assert_eq!(
             &data[body_at(optab.value)..body_at(optab.value) + 8],
             b"OpTaB9mk",
@@ -12291,7 +12406,7 @@ fn asm_section_operand_symbol_self_link_matches_ld() {
 fn asm_section_operand_symbol_in_exec_section_self_links() {
     // Same fields inside an executable `.optab` (`"ax"`): the section joins
     // the merged text, the data-target pc-relative words park, and the image
-    // writer resolves each plain field to `S + A - P` -- GNU ld's values.
+    // writer resolves each plain field to `S + A - P`.
     // These used to be declined as unsupported relocations.
     use crate::c5::Target;
     use crate::c5::linker::NativeSymSection;
@@ -12303,7 +12418,7 @@ fn asm_section_operand_symbol_in_exec_section_self_links() {
             "{target:?}: executable .optab joins the text stream"
         );
         let key = merged.defined.get("key").expect("key in merged");
-        let ro_len = merged.data_ro_len as u64;
+        let rw_at = merged.data_relro_len as u64;
         let (rodata_addr, rodata) = elf_image_section(&image, ".rodata").expect("image .rodata");
         let (data_addr, _) = elf_image_section(&image, ".data").expect("image .data");
         let (text_addr, text) = elf_image_section(&image, ".text").expect("image .text");
@@ -12333,7 +12448,7 @@ fn asm_section_operand_symbol_in_exec_section_self_links() {
             &[0u8; 4],
             "{target:?}: the `.long 0` spacer is untouched"
         );
-        let key_vaddr = (data_addr + (key.value - ro_len)) as i64;
+        let key_vaddr = (data_addr + (key.value - rw_at)) as i64;
         assert_eq!(
             (text_addr + q_idx as u64) as i64 + field_q,
             key_vaddr + 4,
@@ -12476,8 +12591,8 @@ fn text_absolute_field_self_links_into_a_pe_image() {
     // A `.quad sym` word inside an executable section holds `S + A` as
     // a runtime address. The merge parks it -- only the writer knows
     // where the image loads -- and the synthesizer had no carrier for
-    // a plain field, so it was declined as an unsupported relocation
-    // where GNU ld resolves the same object. PE rebases every section
+    // a plain field, so it was declined as an unsupported relocation.
+    // PE rebases every section
     // through `.reloc`, so each field takes its preferred VA plus one
     // `IMAGE_REL_BASED_DIR64` entry.
     use crate::c5::Target;
@@ -12791,7 +12906,7 @@ fn text_absolute_field_stays_refused_in_a_position_independent_image() {
     // The ELF writer sets ET_DYN: the loader picks the base and ELF
     // admits no relocation against an executable section, so `S + A`
     // has no value to write. The reference is declined at the
-    // synthesizer, naming the output kind as GNU ld does.
+    // synthesizer, naming the output kind.
     use crate::c5::Target;
     for target in [Target::LinuxX64, Target::LinuxAarch64] {
         let err = self_link_text_absolute_shape(target, ".quad %c0\\n")
@@ -12865,7 +12980,7 @@ fn asm_section_pcrel_label_minus_operand_const_relocates_like_gas() {
     // PC-relative relocation against the template text label `1b`, with the
     // operand constant `%c2` (`sizeof(long)`, 8) folded into the addend.
     // Contrast a plain `.long 1b - .`: the same PC-relative reloc against the
-    // same text base, its addend lighter by 8 -- exactly as gas folds `- %c2`.
+    // same text base, its addend lighter by 8.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = "\
         unsigned long probe(void) {\n\
@@ -12908,7 +13023,7 @@ fn asm_section_pcrel_label_minus_operand_const_relocates_like_gas() {
     let f0 = (0..2).find(|&k| r_off(k) == 0).expect("field at 0");
     let f1 = (0..2).find(|&k| r_off(k) == 4).expect("field at 4");
     // Both relocate PC-relative against the `.text` section symbol (`1b` is a
-    // local text label), exactly as gas resolves a local-label difference.
+    // local text label).
     let text_sym = elf_section_symbol_index(&bytes, ".text").expect(".text section symbol");
     for k in [f0, f1] {
         assert_eq!(r_info(k) & 0xFFFF_FFFF, 2, "R_X86_64_PC32");
@@ -14230,8 +14345,8 @@ fn x86_file_scope_asm_section_near_return_encodes() {
 
 #[test]
 fn aarch64_subsection_replacement_defers_and_relocates() {
-    // An AArch64 patch site places its replacement in a `.subsection`, which
-    // GNU as appends to `.text` after the function body -- out of the main
+    // An AArch64 patch site places its replacement in a `.subsection`, laid
+    // out in `.text` after the function body -- out of the main
     // sequence's fall-through path. badc encodes the replacement into a
     // deferred region emitted after the body; the table entry's
     // `.word 663f - .` relocates against the replacement's final text offset,
@@ -14312,9 +14427,9 @@ fn aarch64_subsection_replacement_defers_and_relocates() {
 #[test]
 fn aarch64_chained_replacements_defer_each_in_order() {
     // A template chaining two patch sites, each with its own 661..664 and
-    // `.subsection 1` replacement. GNU as binds every numeric reference to
-    // the nearest definition in its direction and lays subsection 1 out
-    // after the body in source order, so each table entry points at its
+    // `.subsection 1` replacement. Every numeric reference binds to the
+    // nearest definition in its direction and subsection 1 lays out after
+    // the body in source order, so each table entry points at its
     // own original and its own replacement, the second replacement right
     // after the first. gcc 16.2.1 (-O2 -c) places this function's `.text` as
     // nop, ldr, ret, dmb osh, ldar and relocates the four PREL32 fields
@@ -14559,8 +14674,8 @@ fn aarch64_replacement_rept_nonconstant_count_is_rejected() {
 #[test]
 fn aarch64_replacement_length_mismatch_is_rejected() {
     // The patch site's `.org` pair asserts the replacement and original are the
-    // same length; GNU as fails with "attempt to move .org backwards" when
-    // they differ. A replacement one instruction longer than the original is
+    // same length, as `.org` cannot move backwards. A replacement one
+    // instruction longer than the original is
     // rejected rather than emitted at the wrong length.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = "\
@@ -15063,6 +15178,7 @@ fn imported_function_called_and_address_taken_links_through_own_linker() {
             exports: [alloc::string::String::from("host_fn")]
                 .into_iter()
                 .collect(),
+            slot_exports: Default::default(),
             data_exports: alloc::collections::BTreeSet::new(),
             tls_exports: Default::default(),
             object_sizes: Default::default(),
@@ -15313,7 +15429,7 @@ fn call_to_weak_definition_resolves_to_the_strong_sibling() {
 
 /// `.text` length of an ET_REL object, used to tell which unit a merged
 /// symbol landed in.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn merged_weak_text_len(bytes: &[u8]) -> usize {
     crate::c5::linker::parse_native_elf(bytes)
         .expect("parse ET_REL")
@@ -15392,7 +15508,7 @@ fn inline_asm_branch_to_undefined_symbol_emits_a_call_relocation() {
 /// The GOT base is linker-defined, not an import: hand-written PIC
 /// names `_GLOBAL_OFFSET_TABLE_` to compute it, so the reference
 /// resolves against the image's own `.got` and the symbol table
-/// carries the sizeless local OBJECT bfd gives it.
+/// carries it as a sizeless local OBJECT.
 #[cfg(feature = "native-emit")]
 #[test]
 fn inline_asm_reads_the_got_base() {
@@ -15402,7 +15518,7 @@ fn inline_asm_reads_the_got_base() {
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     for target in [Target::LinuxX64, Target::LinuxAarch64] {
         // The import gives the image a GOT to name; without one there
-        // is no table and bfd defines no symbol either.
+        // is no table and no symbol either.
         let src = if target == Target::LinuxX64 {
             "#pragma dylib(libc, \"libc.so.6\")\n\
              #pragma binding(libc::printf, \"printf\")\n\
@@ -15897,7 +16013,7 @@ fn elf_section_symbol_index(bytes: &[u8], name: &str) -> Option<usize> {
 #[test]
 fn inline_asm_section_label_defines_a_symbol() {
     // A label written inside a file-scope `asm()` named section defines a
-    // symbol in that section at its offset within it, matching GNU as:
+    // symbol in that section at its offset within it:
     // undecorated labels bind locally, `.globl` promotes to external.
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     let src = r#"int foo = 7;
@@ -15923,7 +16039,7 @@ int main(void) { return 0; }
         };
         let bytes = emit_native_with_options(&program, target, opts).expect("emit");
         let sections = elf_sections(&bytes);
-        // The quoted section name is unquoted, as GNU as spells it.
+        // The quoted section name is unquoted.
         let idx = sections
             .iter()
             .position(|(n, _, _, _)| n == ".export_symbol")
@@ -16651,7 +16767,7 @@ fn x86_rip_relative_lea_with_a_literal_displacement_has_no_reloc() {
 #[test]
 fn c_reference_binds_to_an_asm_defined_label_in_the_same_unit() {
     // A label defined only by the unit's assembly is a definition of the
-    // unit: gas binds a reference within the unit to it and emits no
+    // unit: a reference within the unit binds to it and leaves no
     // undefined entry. gcc on this source emits one local symbol per label
     // and a direct relocation per reference; three definition sites must
     // behave alike -- a pushed section, plain file-scope asm in `.text`, and
@@ -16709,8 +16825,8 @@ fn c_reference_binds_to_an_asm_defined_label_in_the_same_unit() {
                 hits[0].section
             );
             // The C reference relocates to that definition: against the
-            // symbol, or -- as GNU as does for a local `.text` label -- against
-            // the section with the definition's offset as the addend.
+            // symbol, or -- for a local `.text` label -- against the
+            // section with the definition's offset as the addend.
             let idx = obj.symbols.iter().position(|s| s.name == name).unwrap();
             let value = hits[0].value as i64;
             assert!(
@@ -16806,8 +16922,8 @@ fn addr_null_compare_folds_only_for_defined_nonweak() {
 }
 
 /// A relocation whose target is an assembler-local label reduces to the
-/// label's section symbol with the offset folded into the addend, the
-/// form gas emits. Readers of an object's metadata sections walk those
+/// label's section symbol with the offset folded into the addend.
+/// Readers of an object's metadata sections walk those
 /// relocations and reject a symbol that is neither a section nor a
 /// function/object definition, so the reduction is what keeps such a
 /// section consumable. A `.globl` label keeps its own symbol: the
@@ -17270,8 +17386,9 @@ fn relro_stream_separates_relocated_const_from_read_only() {
 #[test]
 #[cfg(feature = "native-emit")]
 fn relro_segment_covers_dynamic_and_got_without_relro_content() {
-    // With no relocated const anywhere the relro stream is empty, but
-    // PT_GNU_RELRO still protects `.dynamic` and `.got`, as ld does.
+    // With no relocated const anywhere, unwind tables included, the relro
+    // stream is empty, but PT_GNU_RELRO still protects `.dynamic` and
+    // `.got`, as ld does.
     use crate::c5::linker::{
         link_native_objects, parse_native_elf, write_native_image_from_merged,
     };
@@ -17280,6 +17397,7 @@ fn relro_segment_covers_dynamic_and_got_without_relro_content() {
     const PT_GNU_RELRO: u32 = 0x6474_E552;
     let opts = NativeOptions {
         output_kind: OutputKind::Relocatable,
+        unwind_tables: false,
         ..Default::default()
     };
     for target in [crate::c5::Target::LinuxX64, crate::c5::Target::LinuxAarch64] {
@@ -17639,7 +17757,6 @@ fn link_map_reports_contributions_symbols_and_archive_members() {
     use crate::c5::compiler::CompileOptions;
     use crate::c5::linker::{
         ArchiveInclusion, emit_x86_64_plt, link_native_objects, parse_native_elf, render_link_map,
-        write_native_image_from_merged,
     };
     use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
     use alloc::string::{String, ToString};
@@ -17684,7 +17801,7 @@ fn link_map_reports_contributions_symbols_and_archive_members() {
     arch_o.source = "liba.a(archmem.o)".to_string();
     let mut merged = link_native_objects(&[main_o, helper_o, arch_o]).expect("link");
     let plt = emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub).expect("plt");
-    let exe = write_native_image_from_merged(
+    let exe = crate::write_native_image_and_pdb(
         &merged,
         &plt,
         "main",
@@ -17692,6 +17809,9 @@ fn link_map_reports_contributions_symbols_and_archive_members() {
         OutputKind::Executable,
         target,
         None,
+        &crate::ImageOptions::default(),
+        None,
+        &[],
     )
     .expect("write executable");
     let pulls = [ArchiveInclusion {
@@ -17732,7 +17852,7 @@ fn link_map_reports_contributions_symbols_and_archive_members() {
 
     // Every output section (bar the symbol/string tables ld omits)
     // appears with the image's own address and size.
-    let sections = map_image_sections(&exe);
+    let sections = map_image_sections(&exe.image);
     let header_line = |name: &str, addr: u64, size: u64| {
         let mut l = String::from(name);
         for _ in 0..16usize.saturating_sub(name.len()) {
@@ -17794,7 +17914,7 @@ fn link_map_reports_contributions_symbols_and_archive_members() {
     }
 
     // The map's symbol rows carry the image's own addresses.
-    let symtab = map_image_symtab(&exe);
+    let symtab = map_image_symtab(&exe.image);
     for f in ["main", "helper", "archfn"] {
         let st_value = symtab
             .iter()
@@ -17807,11 +17927,12 @@ fn link_map_reports_contributions_symbols_and_archive_members() {
             "symbol row for `{f}` at 0x{st_value:x} missing in:\n{map}"
         );
     }
-    // Data-stream symbols: the read-only prefix backs `.rodata`, the
-    // remainder `.data`.
+    // Data-stream symbols: the read-only prefix backs `.rodata`, the part
+    // past the relro region `.data`.
     let sec_addr = |n: &str| sections.iter().find(|(s, _, _)| s == n).unwrap().1;
     let a_msg = merged.defined["a_msg"].value + sec_addr(".rodata");
-    let g_global = merged.defined["g_global"].value - merged.data_ro_len as u64 + sec_addr(".data");
+    let g_global =
+        merged.defined["g_global"].value - merged.data_relro_len as u64 + sec_addr(".data");
     for (sym, addr) in [("a_msg", a_msg), ("g_global", g_global)] {
         let row = alloc::format!("                0x{addr:016x}                {sym}");
         assert!(
@@ -17865,7 +17986,7 @@ fn mapping_symbols(bytes: &[u8]) -> alloc::vec::Vec<(String, u64, String)> {
 /// The system linkers read a missing `.note.GNU-stack` as a request for an
 /// executable stack. A compiled unit's object carries an empty, unflagged
 /// one, and keeps an `"x"` its file-scope asm asks for; an
-/// assembled unit carries only the note its source names, as GNU as does.
+/// assembled unit carries only the note its source names.
 #[test]
 fn a_compiled_object_states_a_non_executable_stack() {
     use crate::c5::Target;
@@ -17985,8 +18106,8 @@ fn mergeable_sections_carry_their_alignment_entsize_and_own_labels() {
     // section symbol's addend as an offset into the merge table -- a
     // local label in such a section keeps its own symbol instead of
     // reducing to `section + addend`, which the pc-relative -4 would
-    // turn into an offset no entry covers. gas does this; a plain
-    // section still takes the reduction. Read off binutils 2.46.
+    // turn into an offset no entry covers. A plain section still takes
+    // the reduction. Read off binutils 2.46.
     use crate::c5::Target;
     let src = "\
         .section .rodata.cst16.k1, \"aM\", @progbits, 16\n\
@@ -18308,7 +18429,7 @@ fn aarch64_mapping_symbols_open_on_the_class_not_the_frag() {
 
 #[test]
 fn aarch64_literal_pool_is_per_subsection_like_gnu_as() {
-    // GNU as keeps one AArch64 literal pool per section and subsection. The
+    // An AArch64 literal pool is kept per section and subsection. The
     // pool is flushed at the end of the content of the subsection its loads
     // were assembled in, so a pool of subsection 0 lands before subsection 1
     // rather than after it, two subsections never share an entry, and a
@@ -18387,9 +18508,9 @@ fn aarch64_literal_pool_is_per_subsection_like_gnu_as() {
 
 #[test]
 fn aarch64_code_section_alignment_matches_gnu_as() {
-    // GNU as pads a code section's alignment gap with the sub-word
-    // remainder as zeros and the rest as whole NOPs, and brings the
-    // location counter to the instruction boundary before an instruction
+    // A code section's alignment gap pads with the sub-word remainder as
+    // zeros and the rest as whole NOPs, and the location counter comes to
+    // the instruction boundary before an instruction
     // whose section is in the data mapping state. Labels keep the offsets
     // they were written at; an alignment directive, `.org` and a dropped
     // max skip leave the counter where they put it, so an instruction
@@ -18611,7 +18732,7 @@ fn aarch64_code_section_alignment_matches_gnu_as() {
 #[test]
 fn aarch64_function_body_asm_realigns_after_data_like_gnu_as() {
     // A function-body `asm` main stream lays its bytes into `.text`, an
-    // executable section, so GNU as's mapping rule applies there as it does
+    // executable section, so the mapping rule applies there as it does
     // to a pushed section: an instruction after a sub-word data run brings
     // the counter to the instruction boundary first, the gap pads with
     // zeros, and the padding belongs to the data run. The block's exit work
@@ -18760,7 +18881,7 @@ fn aarch64_function_body_asm_realigns_after_data_like_gnu_as() {
         "replacement region mapping symbols"
     );
     // A label inside the data run keeps the unaligned offset it was written
-    // at, so a branch to it has no encoding -- the error GNU as reports.
+    // at, so a branch to it has no encoding and is an error.
     let src = "void f(void){ __asm__ volatile(\".byte 1\\n1:\\n\\tnop\\n\\tb 1b\"); }\n";
     let err = crate::Compiler::with_options(
         String::from(src),
@@ -18985,6 +19106,121 @@ fn a_packed_object_behind_carved_const_data_keeps_its_access_alignment() {
         let opts = NativeOptions::new().with_optimize();
         if let Err(e) = super::link_executable_with_runtime(&program, target, opts) {
             panic!("{target:?}: {e}");
+        }
+    }
+}
+
+/// The map of a PE or Mach-O image names the format's sections and places
+/// each input's contribution and each global symbol inside the section that
+/// holds it, by the addresses the writer gave the streams.
+#[test]
+fn link_map_places_pe_and_mach_o_streams_in_their_sections() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::linker::{
+        emit_aarch64_plt, emit_x86_64_plt, link_native_objects, parse_native_object,
+        render_link_map,
+    };
+    use crate::c5::{NativeOptions, OutputKind, Target, emit_native_with_options};
+    for (target, format, text) in [
+        (Target::WindowsX64, "pei-x86-64", ".text"),
+        (Target::WindowsAarch64, "pei-aarch64-little", ".text"),
+        (Target::MacOSAarch64, "mach-o-arm64", "__TEXT,__text"),
+    ] {
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..Default::default()
+        };
+        let compile = |src: &str, no_entry: bool, label: &str| {
+            let front = CompileOptions::default().with_no_entry_point(no_entry);
+            let program = Compiler::with_options(src.into(), target, front)
+                .compile()
+                .expect("compile");
+            let bytes = emit_native_with_options(&program, target, opts.clone()).expect("emit");
+            let mut o = parse_native_object(&bytes).expect("parse");
+            o.source = label.into();
+            o
+        };
+        let a = compile(
+            "int counter = 3; int zeroed[16]; const char msg[] = \"hi\";\n\
+             int helper(int x) { return x + counter + zeroed[x] + msg[0]; }\n",
+            true,
+            "a.o",
+        );
+        let b = compile(
+            "int helper(int);\nint main(void) { return helper(1); }\n\
+             void __c5_entry(void) { main(); }\n",
+            false,
+            "b.o",
+        );
+        let mut merged = link_native_objects(&[a, b]).expect("link");
+        let plt = if target.is_aarch64() {
+            emit_aarch64_plt(&mut merged, crate::DataImportSlots::Stub)
+        } else {
+            emit_x86_64_plt(&mut merged, crate::DataImportSlots::Stub)
+        }
+        .expect("plt");
+        let image = crate::write_native_image_and_pdb(
+            &merged,
+            &plt,
+            "main",
+            None,
+            OutputKind::Executable,
+            target,
+            None,
+            &crate::ImageOptions::default(),
+            None,
+            &[],
+        )
+        .expect("write image");
+        let map = render_link_map(&merged, &image, &[], "prog").expect("render map");
+        assert!(
+            map.ends_with(&alloc::format!("OUTPUT(prog {format})\n")),
+            "{map}"
+        );
+        let hex = |s: &str| u64::from_str_radix(s.trim_start_matches("0x"), 16).unwrap();
+        let mut section: Option<(&str, u64, u64)> = None;
+        // A name too long for its column puts the address and size on the
+        // next line.
+        let mut wrapped: Option<&str> = None;
+        let mut seen = alloc::vec::Vec::new();
+        for line in map.lines().skip_while(|l| !l.starts_with("Linker script")) {
+            let cols: alloc::vec::Vec<&str> = line.split_whitespace().collect();
+            match cols.as_slice() {
+                [name, addr, size] if !line.starts_with(' ') && addr.starts_with("0x") => {
+                    section = Some((name, hex(addr), hex(size)));
+                }
+                [name] if !line.starts_with(' ') && name.contains("__") => wrapped = Some(name),
+                [addr, size] if size.starts_with("0x") && wrapped.is_some() => {
+                    section = Some((wrapped.take().unwrap(), hex(addr), hex(size)));
+                }
+                [addr, sym] if line.starts_with(' ') && addr.starts_with("0x") => {
+                    let (sec, start, size) = section.expect("a symbol row follows a section");
+                    let at = hex(addr);
+                    assert!(
+                        at >= start && at < start + size,
+                        "`{sym}` outside {sec}:\n{map}"
+                    );
+                    seen.push((*sym, sec));
+                }
+                [name, addr, size, ..] if line.starts_with(' ') && addr.starts_with("0x") => {
+                    let (sec, start, end) = section.map(|(n, s, z)| (n, s, s + z)).unwrap();
+                    let (at, len) = (hex(addr), hex(size));
+                    assert!(
+                        at >= start && at + len <= end,
+                        "{name} outside {sec}:\n{map}"
+                    );
+                }
+                _ => {}
+            }
+        }
+        for (sym, sec) in [("helper", text), ("main", text)] {
+            assert!(seen.contains(&(sym, sec)), "`{sym}` not in {sec}:\n{map}");
+        }
+        for sym in ["counter", "zeroed", "msg"] {
+            assert!(
+                seen.iter().any(|&(s, _)| s == sym),
+                "`{sym}` missing:\n{map}"
+            );
         }
     }
 }

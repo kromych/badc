@@ -3,7 +3,7 @@ two_d_stride_no_leak_across_exprs.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -18,11 +18,11 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x100
                	mov	x0, #0x0                // =0
+               	fmov	s0, #0.25000000
                	sub	x1, x29, #0x100
-               	scvtf	s0, x0
-               	fmov	s1, #0.25000000
-               	fmul	s0, s0, s1
-               	str	s0, [x1, x0, lsl #2]
+               	scvtf	s1, x0
+               	fmul	s1, s1, s0
+               	str	s1, [x1, x0, lsl #2]
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>

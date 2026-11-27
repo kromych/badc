@@ -3,7 +3,7 @@ logical_immediate_masks.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -179,10 +179,9 @@ Disassembly of section .text:
                	ret
 
 <classify>:
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x1                // =1
                	tst	x0, #0x40
-               	csel	x1, x2, x1, ne
+               	mov	x16, #0x1               // =1
+               	csel	x1, x16, xzr, ne
                	and	x2, x0, #0xf0
                	orr	x3, x1, #0x2
                	cmp	w2, #0x30
@@ -226,16 +225,16 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	mov	x22, x0
-               	mov	x1, #0xff               // =255
                	mov	x0, x20
+               	mov	x1, #0xff               // =255
                	bl	<addr>
                	cmp	x22, x0
                	b.ne	<addr>
                	mov	x0, x20
                	bl	<addr>
                	mov	x22, x0
-               	mov	x1, #-0xf0f0f0f0f0f0f10 // =-1085102592571150096
                	mov	x0, x20
+               	mov	x1, #-0xf0f0f0f0f0f0f10 // =-1085102592571150096
                	bl	<addr>
                	cmp	x22, x0
                	b.ne	<addr>
@@ -251,133 +250,133 @@ Disassembly of section .text:
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
+               	mov	x0, x20
                	mov	x1, #-0x10              // =-16
-               	mov	x0, x20
                	bl	<addr>
                	cmp	x23, x0
                	b.ne	<addr>
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
+               	mov	x0, x20
                	mov	x1, #-0xffffffffffff01  // =-72057594037927681
-               	mov	x0, x20
                	bl	<addr>
                	cmp	x23, x0
                	b.ne	<addr>
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
+               	mov	x0, x20
                	mov	x1, #0x5555555555555555 // =6148914691236517205
-               	mov	x0, x20
                	bl	<addr>
                	cmp	x23, x0
                	b.ne	<addr>
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
+               	mov	x0, x20
                	mov	x1, #0x7777777777777777 // =8608480567731124087
-               	mov	x0, x20
                	bl	<addr>
                	cmp	x23, x0
                	b.ne	<addr>
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
+               	mov	x0, x20
                	mov	x1, #0xff00ff00ff00ff   // =71777214294589695
-               	mov	x0, x20
                	bl	<addr>
                	cmp	x23, x0
                	b.ne	<addr>
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
+               	mov	x0, x20
                	mov	x1, #0xffff0000ffff     // =281470681808895
-               	mov	x0, x20
                	bl	<addr>
                	cmp	x23, x0
                	b.ne	<addr>
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
+               	mov	x0, x20
                	mov	x1, #0xffffff00000      // =17592184995840
-               	mov	x0, x20
                	bl	<addr>
                	cmp	x23, x0
                	b.ne	<addr>
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
+               	mov	x0, x20
                	mov	x1, #0xf0f              // =3855
                	movk	x1, #0xf0f, lsl #16
-               	mov	x0, x20
                	bl	<addr>
                	cmp	w23, w0
                	b.ne	<addr>
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
+               	mov	x0, x20
                	mov	x1, #0x80000000         // =2147483648
-               	mov	x0, x20
                	bl	<addr>
                	cmp	w23, w0
                	b.ne	<addr>
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
+               	mov	x0, x20
                	mov	x1, #0xff               // =255
                	movk	x1, #0xff, lsl #16
-               	mov	x0, x20
                	bl	<addr>
                	cmp	w23, w0
                	b.ne	<addr>
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
+               	mov	x0, x20
                	mov	x1, #0xffffff00         // =4294967040
-               	mov	x0, x20
                	bl	<addr>
                	cmp	w23, w0
                	b.ne	<addr>
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
+               	mov	x0, x20
                	mov	x1, #0x5555             // =21845
                	movk	x1, #0x5555, lsl #16
-               	mov	x0, x20
                	bl	<addr>
                	cmp	w23, w0
                	b.ne	<addr>
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
+               	mov	x0, x20
                	mov	x1, #0x3333             // =13107
                	movk	x1, #0x3333, lsl #16
-               	mov	x0, x20
                	bl	<addr>
                	cmp	w23, w0
                	b.ne	<addr>
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
-               	mov	x1, #0x1234             // =4660
                	mov	x0, x20
+               	mov	x1, #0x1234             // =4660
                	bl	<addr>
                	cmp	x23, x0
                	b.ne	<addr>
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
+               	mov	x0, x20
                	mov	x1, #0x5678             // =22136
                	movk	x1, #0x1234, lsl #16
-               	mov	x0, x20
                	bl	<addr>
                	cmp	x23, x0
                	b.ne	<addr>
                	mov	x0, x20
                	bl	<addr>
                	mov	x23, x0
-               	mov	x1, #0x5                // =5
                	mov	x0, x20
+               	mov	x1, #0x5                // =5
                	bl	<addr>
                	cmp	x23, x0
                	b.ne	<addr>
@@ -391,12 +390,11 @@ Disassembly of section .text:
                	mov	x1, #0xf0f              // =3855
                	movk	x1, #0xf0f, lsl #16
                	stur	w1, [x29, #-0x8]
-               	mov	x1, #0x0                // =0
-               	ldur	x2, [x29, #-0x20]
-               	and	x2, x20, x2
-               	mov	x3, #0x1                // =1
-               	cmp	x2, #0x0
-               	csel	x1, x3, x1, ne
+               	ldur	x1, [x29, #-0x20]
+               	and	x1, x20, x1
+               	cmp	x1, #0x0
+               	mov	x16, #0x1               // =1
+               	csel	x1, x16, xzr, ne
                	ldur	x2, [x29, #-0x18]
                	and	x2, x20, x2
                	orr	x3, x1, #0x2

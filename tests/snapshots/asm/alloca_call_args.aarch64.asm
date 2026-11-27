@@ -3,7 +3,7 @@ alloca_call_args.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -34,8 +34,8 @@ Disassembly of section .text:
                	str	x20, [sp, #-0x30]!
                	stp	x29, x30, [sp, #0x20]
                	add	x29, sp, #0x20
-               	mov	x0, #0x100000           // =1048576
-               	add	x17, x0, #0xf
+               	mov	x2, #0x100000           // =1048576
+               	add	x17, x2, #0xf
                	and	x17, x17, #0xfffffffffffffff0
                	mov	x1, sp
                	sub	x1, x1, x17
@@ -46,7 +46,6 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x1
-               	mov	x2, #0x100000           // =1048576
                	mov	x0, #0x0                // =0
                	mov	x3, #0x7                // =7
                	strb	w3, [x1, x0]
@@ -59,6 +58,13 @@ Disassembly of section .text:
                	strb	w7, [x0]
                	ldrb	w0, [x1]
                	add	x20, x0, #0x8
+               	adrp	x0, <page>
+               	ldr	x9, [x0, #0x10]
+               	sub	sp, sp, #0x10
+               	mov	x16, #0x9               // =9
+               	str	x16, [sp]
+               	mov	x16, #0xa               // =10
+               	str	x16, [sp, #0x8]
                	mov	x0, #0x1                // =1
                	mov	x1, #0x2                // =2
                	mov	x2, #0x3                // =3
@@ -66,13 +72,6 @@ Disassembly of section .text:
                	mov	x4, #0x5                // =5
                	mov	x5, #0x6                // =6
                	mov	x6, #0x7                // =7
-               	adrp	x8, <page>
-               	ldr	x9, [x8, #0x10]
-               	sub	sp, sp, #0x10
-               	mov	x16, #0x9               // =9
-               	str	x16, [sp]
-               	mov	x16, #0xa               // =10
-               	str	x16, [sp, #0x8]
                	blr	x9
                	add	sp, sp, #0x10
                	cmp	w20, #0xf

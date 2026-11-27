@@ -3,7 +3,7 @@ asm_pcrel_words_name_text_and_data.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -20,13 +20,13 @@ Disassembly of section .text:
 <main>:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldrsw	x3, [x0]
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
+               	ldrsw	x3, [x0]
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
                	add	x3, x0, x3
-               	sub	x3, x3, x2
+               	sub	x3, x3, x1
                	cbz	x3, <addr>
                	mov	x0, #0x1                // =1
                	cbz	x0, <addr>
@@ -35,47 +35,22 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	ldrsw	x3, [x0]
                	add	x3, x0, x3
-               	sub	x3, x3, x2
+               	sub	x3, x3, x1
                	cbz	x3, <addr>
                	mov	x0, #0x1                // =1
                	cbz	x0, <addr>
                	add	x0, x0, #0x4
                	ret
-               	ldrsw	x0, [x1]
+               	ldrsw	x0, [x2]
                	add	x0, x0, #0x3
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x9                // =9
                	cmp	w0, #0x7
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x9               // =9
+               	csel	x0, xzr, x17, eq
                	ret
                	add	x3, x0, #0x4
                	ldrsw	x4, [x0, #0x4]
                	add	x3, x3, x4
-               	sub	x3, x3, x1
-               	cbz	x3, <addr>
-               	mov	x0, #0x2                // =2
-               	b	<addr>
-               	add	x3, x0, #0x8
-               	ldrsw	x4, [x0, #0x8]
-               	add	x5, x0, #0x18
-               	add	x3, x3, x4
-               	sub	x3, x3, x5
-               	cbz	x3, <addr>
-               	mov	x0, #0x3                // =3
-               	b	<addr>
-               	add	x0, x0, #0x10
-               	ldr	x3, [x0]
-               	add	x0, x0, x3
-               	sub	x0, x0, x2
-               	cbz	x0, <addr>
-               	mov	x0, #0x4                // =4
-               	b	<addr>
-               	mov	x0, #0x0                // =0
-               	b	<addr>
-               	add	x3, x0, #0x4
-               	ldrsw	x4, [x0, #0x4]
-               	add	x3, x3, x4
-               	sub	x3, x3, x1
+               	sub	x3, x3, x2
                	cbz	x3, <addr>
                	mov	x0, #0x2                // =2
                	b	<addr>
@@ -96,13 +71,38 @@ Disassembly of section .text:
                	b	<addr>
                	mov	x0, #0x0                // =0
                	b	<addr>
+               	add	x3, x0, #0x4
+               	ldrsw	x4, [x0, #0x4]
+               	add	x3, x3, x4
+               	sub	x3, x3, x2
+               	cbz	x3, <addr>
+               	mov	x0, #0x2                // =2
+               	b	<addr>
+               	add	x3, x0, #0x8
+               	ldrsw	x4, [x0, #0x8]
+               	add	x5, x0, #0x18
+               	add	x3, x3, x4
+               	sub	x3, x3, x5
+               	cbz	x3, <addr>
+               	mov	x0, #0x3                // =3
+               	b	<addr>
+               	add	x0, x0, #0x10
+               	ldr	x3, [x0]
+               	add	x0, x0, x3
+               	sub	x0, x0, x2
+               	cbz	x0, <addr>
+               	mov	x0, #0x4                // =4
+               	b	<addr>
+               	mov	x0, #0x0                // =0
+               	b	<addr>
+               	udf	#0x0
 
 <text_tbl>:
   <addr>: c0 fe ff ff  	.word	0xfffffec0
-  <addr>: 78 0a 01 00  	.word	0x00010a78
+  <addr>: 08 0a 02 00  	.word	0x00020a08
   <addr>: 10 00 00 00  	.word	0x00000010
   <addr>: 00 00 00 00  	.word	0x00000000
-  <addr>: 6c 0a 01 00  	.word	0x00010a6c
+  <addr>: fc 09 02 00  	.word	0x000209fc
   <addr>: 00 00 00 00  	.word	0x00000000
 
 <text_end>:

@@ -231,6 +231,10 @@ pub struct SharedLibrary {
     /// bytes are code, so reading the "object" through it returns
     /// instructions.
     pub data_exports: alloc::collections::BTreeSet<String>,
+    /// The subset of `data_exports` a PE import library declares CONST: the
+    /// name is the import's address slot, as `__imp_<name>` is, the binding
+    /// link.exe and lld give `IMPORT_OBJECT_CONST`.
+    pub slot_exports: alloc::collections::BTreeSet<String>,
     /// The subset of `exports` that are thread-locals (`STT_TLS`). The
     /// loader places the library's block, so an executable reaches one
     /// through a GOT slot holding its offset from the thread pointer.
@@ -257,7 +261,7 @@ pub struct SharedLibrary {
     /// the target's manifest states the requirement.
     pub export_versions: alloc::collections::BTreeMap<String, String>,
     /// The names the library's dynamic symbols reference and do not define,
-    /// which an executable defining one exports (GNU ld's `ref_dynamic`).
+    /// which an executable defining one exports.
     pub references: alloc::collections::BTreeSet<String>,
     /// The subset of `exports` of protected visibility (`STV_PROTECTED`):
     /// the library binds its own references to them, so an image may not
@@ -285,6 +289,7 @@ pub fn parse_shared_library(bytes: &[u8]) -> Result<SharedLibrary, C5Error> {
         soname: image.soname,
         machine: elf_machine(image.machine)?,
         exports: image.exports,
+        slot_exports: Default::default(),
         data_exports: image.data_exports,
         tls_exports: image.tls_exports,
         object_sizes: image.object_sizes,
@@ -311,7 +316,7 @@ pub struct DynamicImage {
     /// The exports typed as functions, `STT_FUNC` or `STT_GNU_IFUNC`.
     pub function_exports: alloc::collections::BTreeSet<String>,
     /// Size, alignment and read-only-ness of each data export, which a
-    /// copy of it in an executable takes. The alignment is bfd's: the
+    /// copy of it in an executable takes. The alignment is the
     /// largest power of two up to the defining section's that divides the
     /// object's offset in it.
     pub copy_layout: alloc::collections::BTreeMap<String, (u64, u64, bool)>,
@@ -593,7 +598,7 @@ impl<'a> RelocOrigin<'a> {
     }
 
     /// The name a diagnostic gives `sym`: its own, or for a section
-    /// symbol, which has none, its input section's, as GNU ld reports it.
+    /// symbol, which has none, its input section's.
     pub(crate) fn symbol_name<'s>(&self, sym: &'s NativeSymbol) -> &'s str
     where
         'a: 's,
@@ -665,7 +670,7 @@ pub(crate) struct RelocSite<'a> {
 }
 
 impl RelocSite<'_> {
-    /// `<object>(<section>+<offset>)`, the way GNU ld locates a site.
+    /// `<object>(<section>+<offset>)`, a site's location in a diagnostic.
     pub(crate) fn locate(&self) -> String {
         let obj = if self.origin.source.is_empty() {
             "<merged image>"
@@ -740,9 +745,22 @@ impl RelocSite<'_> {
         )
     }
 
-    /// A resolved value the relocation's field cannot hold. GNU ld
-    /// makes this a link error rather than truncating, and so does
-    /// badc: a silently narrowed address is a miscompile.
+    /// A reference to a definition the loader may preempt that reaches it
+    /// through neither the GOT nor the PLT. See [`preemptible_in_shared_body`].
+    pub(crate) fn preempted_in_shared(&self) -> C5Error {
+        C5Error::hard(
+            Code::RELOCATION,
+            preemptible_in_shared_body(
+                &self.locate(),
+                &reloc_desc(self.machine, self.rtype),
+                self.symbol,
+            ),
+        )
+    }
+
+    /// A resolved value the relocation's field cannot hold: a link error
+    /// rather than a truncation, since a silently narrowed address is a
+    /// miscompile.
     pub(crate) fn truncated(&self, value: i64) -> C5Error {
         self.located(&format!(
             "relocation truncated to fit: {} against symbol `{}` ({value:#x})",
@@ -768,7 +786,7 @@ impl RelocSite<'_> {
     }
 }
 
-/// `<object>(<section>+<offset>)`, the way GNU ld locates a site.
+/// `<object>(<section>+<offset>)`, a site's location in a diagnostic.
 pub(crate) fn locate_reloc(source: &str, section: &str, offset: u64) -> String {
     let obj = if source.is_empty() {
         "<merged image>"
@@ -781,8 +799,8 @@ pub(crate) fn locate_reloc(source: &str, section: &str, offset: u64) -> String {
 /// Refusal for an absolute relocation in an image the loader places at
 /// an address of its choosing: the load-time forms (`R_*_RELATIVE`,
 /// Mach-O's rebase opcodes) write an address-width word, so a narrower
-/// field has no dynamic form to carry it. GNU ld declines the same
-/// input, naming the output kind. Both link engines report through
+/// field has no dynamic form to carry it. The refusal names the output
+/// kind. Both link engines report through
 /// this; the body carries no diagnostic prefix, since the script engine
 /// collects several and wraps them once.
 /// The refusal of a PIE's PC-relative field naming an undefined weak
@@ -823,7 +841,7 @@ pub(crate) fn absolute_in_pie_body(
 
 /// Refusal for a field no dynamic relocation fills against a definition
 /// the loader may preempt: the reference would keep the image's own
-/// definition. GNU ld declines the same input.
+/// definition.
 pub(crate) fn preemptible_in_shared_body(location: &str, reloc: &str, symbol: &str) -> String {
     format!(
         "{location}: {reloc} against symbol `{symbol}` can not be used when making a shared \
@@ -1270,6 +1288,11 @@ pub struct NativeObject {
     pub eh_frame: Option<EhFrameInput>,
     /// A COFF object's `.pdata` entries, which replace the writer's.
     pub pe_unwind: Vec<PeUnwindEntry>,
+    /// A COFF object compiled for Control Flow Guard (`@feat.00` bit 11):
+    /// the symbols its `.gfids$y` sections list as the functions whose
+    /// address it takes, by index into [`Self::symbols`]. `None` for any
+    /// other object, whose references are read from its relocations.
+    pub guard_fids: Option<Vec<usize>>,
 }
 
 impl NativeObject {
@@ -1336,6 +1359,7 @@ impl NativeObject {
             compact_unwind: Vec::new(),
             eh_frame: None,
             pe_unwind: Vec::new(),
+            guard_fids: None,
         }
     }
 }
@@ -1604,6 +1628,7 @@ pub fn parse_native_elf(bytes: &[u8]) -> Result<NativeObject, C5Error> {
         compact_unwind: Vec::new(),
         eh_frame: None,
         pe_unwind: Vec::new(),
+        guard_fids: None,
     })
 }
 
@@ -1686,7 +1711,7 @@ fn read_elf_headers(bytes: &[u8]) -> Result<(NativeMachine, Vec<Elf64Shdr>, &[u8
         let off = e_shoff + i * ELF64_SHDR_SIZE;
         let mut sh: Elf64Shdr = read_struct(bytes, off)?;
         // The x86-64 psABI types unwind tables SHT_X86_64_UNWIND, which
-        // clang gives `.eh_frame`; GNU ld and lld read it as SHT_PROGBITS.
+        // clang gives `.eh_frame`; the link reads it as SHT_PROGBITS.
         if machine == NativeMachine::X86_64 && sh.sh_type == SHT_X86_64_UNWIND {
             sh.sh_type = SHT_PROGBITS;
         }
@@ -2082,7 +2107,7 @@ fn concat_families(
 
 /// The `GRP_COMDAT` groups of an object (System V gABI, "Section Groups"),
 /// keyed on the signature symbol's name, or on its section's name for a
-/// section symbol. GNU ld keeps the first group of each signature, which is
+/// section symbol. The first group of each signature is kept, which is
 /// COFF's `IMAGE_COMDAT_SELECT_ANY`; a group without the flag is not
 /// deduplicated.
 fn elf_comdats(
@@ -2242,7 +2267,7 @@ fn decode_symbols(
         } else {
             strtab_str(strtab_bytes, sym.st_name as usize)?.to_string()
         };
-        // GNU ld links an `STB_GNU_UNIQUE` definition as a global one.
+        // An `STB_GNU_UNIQUE` definition links as a global one.
         let binding = match sym.st_info >> 4 {
             10 => {
                 if sym.st_shndx != SHN_UNDEF {
@@ -3034,7 +3059,7 @@ pub fn coff_group_base(name: &str) -> Option<&str> {
 /// `.init` / `.fini`: the gABI's process initialization and termination
 /// code. Each input's section is a fragment of one function, which the
 /// link concatenates in input order between a prologue and an epilogue,
-/// as crti.o and crtn.o bracket them; GNU ld places them by name.
+/// as crti.o and crtn.o bracket them; the name selects the sections.
 pub fn is_init_fini(name: &str) -> bool {
     matches!(name, ".init" | ".fini")
 }

@@ -3,7 +3,7 @@ typedef_fn_ptr_struct_field.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,20 +26,19 @@ Disassembly of section .text:
                	int3
 
 <doer>:
+               	imulq	%rsi, %rdi
                	movq	%rdi, %rax
-               	imulq	%rsi, %rax
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x3, %edi
                	movl	$0x7, %esi
                	callq	<addr>
                	cmpl	$0x15, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x4, %edi
                	movl	$0x5, %esi
@@ -47,7 +46,7 @@ Disassembly of section .text:
                	cmpl	$0x14, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x2, %edi
                	movl	$0x9, %esi
@@ -55,7 +54,7 @@ Disassembly of section .text:
                	cmpl	$0x12, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x6, %edi
                	movl	$0x4, %esi
@@ -63,8 +62,8 @@ Disassembly of section .text:
                	cmpl	$0x18, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

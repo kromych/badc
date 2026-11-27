@@ -192,33 +192,38 @@ impl VmUnit {
 }
 
 /// The on-demand sources a run may join; there are none without the linker.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 pub(super) type Sources<'a> = Option<&'a crate::c5::linker::OnDemandSources>;
-#[cfg(not(feature = "full"))]
+#[cfg(not(feature = "linker"))]
 pub(super) type Sources<'a> = Option<&'a core::convert::Infallible>;
 
 /// The run's units: the program, then the on-demand sources a native link
 /// would join to it, offered once the program leaves a name undefined.
 pub(super) fn join_on_demand(user: VmUnit, sources: Sources<'_>) -> Result<Vec<VmUnit>, C5Error> {
     match sources {
-        #[cfg(feature = "full")]
+        #[cfg(feature = "linker")]
         Some(sources) => pull_members(user, sources),
         _ => Ok(alloc::vec![user]),
     }
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn pull_members(
     user: VmUnit,
     sources: &crate::c5::linker::OnDemandSources,
 ) -> Result<Vec<VmUnit>, C5Error> {
     let mut undefined = user.undefined();
+    let (strong, weak) = user.program.external_definitions();
+    let mut defined: BTreeSet<String> = strong.into_iter().chain(weak).collect();
+    undefined.extend(
+        (sources.required().iter())
+            .filter(|n| !defined.contains(*n))
+            .cloned(),
+    );
     let mut units = alloc::vec![user];
     if undefined.is_empty() {
         return Ok(units);
     }
-    let (strong, weak) = units[0].program.external_definitions();
-    let mut defined: BTreeSet<String> = strong.into_iter().chain(weak).collect();
     let members = sources.members()?;
     crate::c5::linker::on_demand::select(members, &mut defined, &mut undefined, |i| {
         let unit = VmUnit::lift(members[i].program.clone())?;
@@ -298,8 +303,8 @@ pub(super) fn link(units: Vec<VmUnit>) -> Result<Linked, C5Error> {
             binding,
         });
         pc += u.pc_extent();
-        data += u.program.data.len() as u64;
-        tls += u.program.tls_data.len() as u64;
+        data += u.program.image_len() as u64;
+        tls += u.program.tls_len() as u64;
         binding += u.binding_names.len() as i64;
     }
     let mut table = Table::new();

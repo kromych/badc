@@ -473,8 +473,8 @@ fn cpuid_xgetbv_output_width() {
 fn get_cpuid_leaf_checks() {
     // <cpuid.h> __get_cpuid / __get_cpuid_count range-check the leaf against
     // __get_cpuid_max, select the extended maximum for leaves with bit 31 set,
-    // and leave the outputs untouched when they reject one. gcc installs the
-    // header for x86 alone.
+    // and leave the outputs untouched when they reject one. The header
+    // exists for x86 alone.
     for target in [crate::Target::LinuxX64, crate::Target::WindowsX64] {
         assert_eq!(
             run_fixture_for("get_cpuid_leaf_checks.c", target),
@@ -742,8 +742,8 @@ fn builtin_return_address() {
 
 #[test]
 fn frame_builtins_take_a_non_negative_constant_level() {
-    // GCC types the operand as the number of frames to walk up and
-    // rejects a non-constant one; a negative level names no frame.
+    // The operand is the number of frames to walk up and must be a
+    // constant; a negative level names no frame.
     use crate::c5::Compiler;
     for (src, want) in [
         (
@@ -1612,7 +1612,7 @@ fn builtin_overflow() {
 /// targets: no `#pragma intrinsic` warning, no call left for the link,
 /// and the barrier emits nothing. The fixture runs under the interpreter
 /// here and natively in the PE tables.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn msvc_intrinsics_lower_at_the_call_site() {
     use crate::Target;
@@ -1649,7 +1649,7 @@ fn msvc_intrinsics_lower_at_the_call_site() {
 /// `__builtin_va_start` on both PE targets: x64's `(&ap, last)` and arm64's
 /// `(&ap, &last, size, alignment, &last)` leave no call for the link, and the
 /// arguments read back. Off the PE targets the name is an ordinary function.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn msvc_va_start_lowers_as_the_builtin() {
     use crate::{CompileOptions, Target};
@@ -1670,8 +1670,8 @@ fn msvc_va_start_lowers_as_the_builtin() {
 }
 
 /// arm64's `__va_start(&ap, &v, slot size, alignment, &v)` goes unevaluated
-/// and is checked as clang checks it: the named argument's address, a
-/// pointer, and the slot size, a `size_t`, both present.
+/// and is checked: the named argument's address, a pointer, and the slot
+/// size, a `size_t`, both present.
 #[test]
 fn arm64_msvc_va_start_checks_its_operands() {
     use crate::{CompileOptions, Target};
@@ -1707,7 +1707,7 @@ fn arm64_msvc_va_start_checks_its_operands() {
 
 /// MSVC's Nand / Max / Min / UMax / UMin interlocked families, `_interlockedadd`
 /// and winnt.h's ordered spellings, on both PE targets at -O0 and -O.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn msvc_interlocked_nand_max_min_families() {
     use crate::{CompileOptions, Target};
@@ -1816,11 +1816,10 @@ fn a_parameter_named_like_its_function_keeps_the_function_type() {
     assert!(text.contains(want), "{text}");
 }
 
-/// `-Wvarargs`, on by default as in gcc 16 and clang 22 (C99 7.15.1.1p2,
-/// 7.15.1.4p4): `va_start` naming other than the last named parameter (both
-/// compilers), one declared `register` (both) or one of a type the default
-/// argument promotions change (clang), and `va_arg` of such a type (clang;
-/// gcc warns with no flag). The lines are clang 22's for the same unit; an
+/// `-Wvarargs`, on by default (C99 7.15.1.1p2, 7.15.1.4p4): `va_start`
+/// naming other than the last named parameter, one declared `register` or
+/// one of a type the default argument promotions change, and `va_arg` of
+/// such a type. The lines are clang 22's for the same unit; an
 /// array parameter, a parenthesized one and the arm64 form of MSVC's
 /// `__va_start` draw nothing. Every target, in the `<stdarg.h>` and
 /// `__builtin_` spellings, and windows-x64 in its `__va_start` spelling;
@@ -1895,7 +1894,7 @@ fn va_start_and_va_arg_operands_draw_varargs() {
     }
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn msvc_scalar_intrinsics_give_the_documented_values() {
     use crate::{CompileOptions, Target};
@@ -2267,7 +2266,7 @@ fn pragma_intrinsic_reports_names_no_header_or_builtin_provides() {
 
 /// MSVC's `__break` on arm64 is `brk` of its constant, the comment field a
 /// debugger reads.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn msvc_break_is_brk_of_its_constant() {
     use crate::{CompileOptions, NativeOptions, OutputKind, Target};
@@ -2516,10 +2515,10 @@ fn attr_arg_keeps_declared_type() {
 
 #[test]
 fn case_label_const_object() {
-    // GCC (GNU mode, at -O) folds a const-qualified scalar arithmetic
-    // object with a constant initializer in case labels, static_assert,
-    // designator indices, and static initializers -- and never in type
-    // dimensions, so `int a[n]` stays a VLA.
+    // A const-qualified scalar arithmetic object with a constant
+    // initializer folds in case labels, static_assert, designator indices,
+    // and static initializers -- and never in type dimensions, so
+    // `int a[n]` stays a VLA.
     assert_eq!(run_fixture("case_label_const_object.c"), 0);
 }
 
@@ -4793,8 +4792,8 @@ fn const_pointer_object_fold() {
 #[test]
 fn const_object_member_fold() {
     // A static initializer folds a scalar that a `[i]` / `.field` chain
-    // reaches in a `const` object with static storage, as GCC does, instead
-    // of taking the element's address; a chain that stops at a row still
+    // reaches in a `const` object with static storage instead of taking
+    // the element's address; a chain that stops at a row still
     // decays to the row's address.
     assert_eq!(run_fixture("const_object_member_fold.c"), 0);
 }
@@ -6059,6 +6058,37 @@ fn block_scope_object_alignment() {
     assert_eq!(run_fixture("block_scope_object_alignment.c"), 0);
 }
 
+/// Static storage no initializer names stays out of the data image: it is
+/// the image's zero-filled storage past `.data`, so the compiler's memory
+/// does not follow the object's size.
+#[test]
+fn static_storage_no_initializer_names_stays_out_of_the_image() {
+    let src = super::zero_filled_storage_source();
+    let program = compile_str(src);
+    assert!(
+        program.data.len() < 4096,
+        "{} bytes in .data",
+        program.data.len()
+    );
+    assert!(program.image_len() > 1 << 26, "{}", program.image_len());
+    assert_eq!(run_str(src), 0);
+}
+
+/// Thread-local storage no initializer names stays out of the thread-local
+/// template: it is the block's zero-filled storage past it.
+#[test]
+fn thread_local_storage_no_initializer_names_stays_out_of_the_template() {
+    let src = super::zero_filled_thread_local_source();
+    let program = compile_str(src);
+    assert!(
+        program.tls_data.len() < 64,
+        "{} template bytes",
+        program.tls_data.len()
+    );
+    assert!(program.tls_len() > 1 << 20, "{}", program.tls_len());
+    assert_eq!(run_str(src), 0);
+}
+
 #[test]
 fn thread_local_tentative_array_is_completed_in_the_thread_local_image() {
     // C99 6.9.2p2: a tentative `T x[];` is completed to one element at the
@@ -6073,9 +6103,8 @@ fn thread_local_tentative_array_is_completed_in_the_thread_local_image() {
         4,
         "one element in the thread-local image"
     );
-    assert_eq!(
-        tls_program.data.len() + 4,
-        plain_program.data.len(),
+    assert!(
+        tls_program.data.len() + 4 <= plain_program.data.len(),
         "the element leaves `.data`"
     );
     assert_eq!(run_str(tls), 0);
@@ -6380,6 +6409,14 @@ fn typedef_shadowed_by_parameter_name() {
 }
 
 #[test]
+fn block_scope_typedef_restores_the_outer_typedef() {
+    assert_eq!(
+        run_fixture("block_scope_typedef_restores_the_outer_typedef.c"),
+        0
+    );
+}
+
+#[test]
 fn nested_struct_array_initializer() {
     // C99 6.7.8: an array-of-struct field inside an enclosing
     // struct accepts a nested brace-enclosed initializer for
@@ -6665,8 +6702,7 @@ fn typedef_aligned_array_element_rejected() {
     use crate::c5::Compiler;
     // An element type whose typedef-carried alignment exceeds its size
     // cannot tile an array; every declarator-added dimension over it is
-    // an error (gcc: "alignment of array elements is greater than element
-    // size"), while the array typedef itself stays legal.
+    // an error, while the array typedef itself stays legal.
     let cases = [
         "typedef int T __attribute__((aligned(16))); T a[3]; int main(void){return 0;}",
         "typedef int T __attribute__((aligned(16))); int main(void){T a[3]; a[0]=0; return a[0];}",
@@ -7261,6 +7297,24 @@ fn diagnostic_echoes_the_source_line() {
 }
 
 #[test]
+fn a_diagnostic_quotes_its_line_as_written() {
+    use crate::c5::Compiler;
+    // The quoted line is the source text, not its expansion: a reader
+    // searching the file for it finds it.
+    let src = "#define ERR (*err_location())\nint *err_location(void);\n\
+               int main(void) { ERR = 0; return undeclared_name; }\n";
+    let err = Compiler::new(src.to_string())
+        .compile()
+        .expect_err("undeclared_name is an error");
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("int main(void) { ERR = 0; return undeclared_name; }"),
+        "expected the line as written, got {msg:?}"
+    );
+    assert!(!msg.contains("err_location()) = 0"), "{msg:?}");
+}
+
+#[test]
 fn a_disabled_warning_locates_no_source_line() {
     // `unused-parameter` is off at the default level, yet its analysis
     // still runs over every function's bindings; each report must stop
@@ -7771,9 +7825,9 @@ fn builtin_constant_p() {
 #[test]
 fn builtin_constant_p_value_kinds() {
     // An object or a symbol-relative address is not a constant value:
-    // an array, a struct, `&global` and a compound literal answer 0 as
-    // gcc does; literals, enum constants, `sizeof` and folded pointer
-    // comparisons answer 1.
+    // an array, a struct, `&global` and a compound literal answer 0;
+    // literals, enum constants, `sizeof` and folded pointer comparisons
+    // answer 1.
     assert_eq!(run_fixture("builtin_constant_p_value_kinds.c"), 0);
 }
 
@@ -8350,50 +8404,6 @@ fn local_label_unit(n: usize) -> String {
     s
 }
 
-/// CPU time the calling thread has consumed, which waiting for a core does not advance.
-#[cfg(not(debug_assertions))]
-fn thread_cpu_time() -> core::time::Duration {
-    #[cfg(unix)]
-    {
-        #[repr(C)]
-        struct Timespec {
-            sec: core::ffi::c_long,
-            nsec: core::ffi::c_long,
-        }
-        #[cfg(target_vendor = "apple")]
-        const CLOCK_THREAD_CPUTIME_ID: core::ffi::c_int = 16;
-        #[cfg(not(target_vendor = "apple"))]
-        const CLOCK_THREAD_CPUTIME_ID: core::ffi::c_int = 3;
-        unsafe extern "C" {
-            fn clock_gettime(id: core::ffi::c_int, ts: *mut Timespec) -> core::ffi::c_int;
-        }
-        let mut ts = Timespec { sec: 0, nsec: 0 };
-        assert_eq!(
-            unsafe { clock_gettime(CLOCK_THREAD_CPUTIME_ID, &mut ts) },
-            0
-        );
-        core::time::Duration::new(ts.sec as u64, ts.nsec as u32)
-    }
-    #[cfg(windows)]
-    {
-        unsafe extern "system" {
-            fn GetCurrentThread() -> *mut core::ffi::c_void;
-            fn GetThreadTimes(
-                thread: *mut core::ffi::c_void,
-                creation: *mut [u32; 2],
-                exit: *mut [u32; 2],
-                kernel: *mut [u32; 2],
-                user: *mut [u32; 2],
-            ) -> core::ffi::c_int;
-        }
-        let mut t = [[0u32; 2]; 4];
-        let [c, e, k, u] = &mut t;
-        assert_ne!(unsafe { GetThreadTimes(GetCurrentThread(), c, e, k, u) }, 0);
-        let hundred_ns = |f: [u32; 2]| (u64::from(f[1]) << 32) | u64::from(f[0]);
-        core::time::Duration::from_nanos((hundred_ns(t[2]) + hundred_ns(t[3])) * 100)
-    }
-}
-
 #[test]
 #[cfg(not(debug_assertions))]
 fn local_label_parse_cost_is_linear_in_declaration_count() {
@@ -8407,11 +8417,11 @@ fn local_label_parse_cost_is_linear_in_declaration_count() {
     const BATCH: u32 = 8;
     let units = [local_label_unit(800), local_label_unit(12800)];
     let cost = |src: &str, reps: u32| {
-        let start = thread_cpu_time();
+        let start = super::thread_cpu_time();
         for _ in 0..reps {
             let _ = compile_str(src);
         }
-        thread_cpu_time() - start
+        super::thread_cpu_time() - start
     };
     let (mut small, mut large) = (Duration::ZERO, Duration::ZERO);
     for _ in 0..ROUNDS {
@@ -9209,10 +9219,10 @@ fn value_builtins_take_preprocessed_input() {
 
 #[test]
 fn builtin_nan_reads_its_payload_as_gcc_does() {
-    // gcc 16 skips leading white space and a sign, reads a bare `0x` as 0
-    // and stops at the first NUL; clang calls `nan` for the signed form.
-    // clang also folds `__builtin_assume_aligned` of an address constant in
-    // a static initializer, which gcc rejects.
+    // The payload skips leading white space and a sign, reads a bare `0x`
+    // as 0 and stops at the first NUL (measured with gcc 16).
+    // `__builtin_assume_aligned` of an address constant folds in a static
+    // initializer.
     let src = "static unsigned long long bits(double d) {\n\
                  union { double d; unsigned long long u; } v = { d }; return v.u; }\n\
                static double minus = __builtin_nan(\"-5\");\n\

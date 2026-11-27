@@ -3,7 +3,7 @@ large_aggregate_copy.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -38,6 +38,7 @@ Disassembly of section .text:
                	andq	$0x7f, %rdx
                	movb	%dl, -0x2330(%rbp,%rax)
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x2328, %eax           # imm = 0x2328
                	jl	<addr>
                	movl	$0x4d2, -0x8(%rbp)      # imm = 0x4D2

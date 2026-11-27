@@ -3,7 +3,7 @@ static_function_pointer_identity.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -25,10 +25,10 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	adrp	x0, <page>
-               	ldr	x0, [x0, <lo12>]
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	cmp	x0, x1
+               	ldr	x1, [x0, #0x10]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	cmp	x1, x0
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
@@ -45,15 +45,15 @@ Disassembly of section .text:
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
                	ldr	x4, [x3]
-               	cmp	x4, x1
+               	cmp	x4, x0
                	b.ne	<addr>
-               	ldr	x1, [x3, #0x8]
-               	cmp	x1, x2
+               	ldr	x0, [x3, #0x8]
+               	cmp	x0, x2
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	blr	x0
+               	blr	x1
                	cmp	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x4                // =4

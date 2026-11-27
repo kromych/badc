@@ -3,7 +3,7 @@ builtin_va_list_typedef.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -246,7 +246,7 @@ Disassembly of section .text:
                	str	x9, [x17]
                	ldr	x9, [sp], #0x10
                	mov	x0, x16
-               	ldr	x1, [x0]
+               	ldr	x3, [x0]
                	sub	x0, x29, #0x20
                	mov	x17, x0
                	str	x9, [sp, #-0x10]!
@@ -288,12 +288,12 @@ Disassembly of section .text:
                	mov	x0, x16
                	ldrsw	x2, [x0]
                	sub	x0, x29, #0x20
-               	ldr	x3, [x29, #0x10]
+               	ldr	x1, [x29, #0x10]
                	mov	x0, #0x0                // =0
-               	ldrb	w3, [x3]
-               	cmp	w3, #0x74
-               	b.ne	<addr>
                	ldrb	w1, [x1]
+               	cmp	w1, #0x74
+               	b.ne	<addr>
+               	ldrb	w1, [x3]
                	cmp	w1, #0x78
                	cset	x1, eq
                	cbz	x1, <addr>
@@ -476,11 +476,11 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	fmov	d0, #2.50000000
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	fmov	d0, #2.50000000
                	mov	x2, #0x7                // =7
                	bl	<addr>
                	cbnz	w0, <addr>
@@ -491,7 +491,7 @@ Disassembly of section .text:
                	mov	x1, #0x1                // =1
                	mov	x2, #0x2                // =2
                	mov	x3, #0x3                // =3
-               	mov	x4, x0
+               	mov	x4, #0x4                // =4
                	bl	<addr>
                	cmp	w0, #0xa
                	b.eq	<addr>

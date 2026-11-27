@@ -3,7 +3,7 @@ wrap_signed.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -98,6 +98,8 @@ Disassembly of section .text:
                	b.eq	<addr>
                	tbz	w0, #0x0, <addr>
                	add	x2, x2, #0x1
+               	cmp	w2, w1
+               	b.lt	<addr>
                	b	<addr>
                	sxtw	x2, w2
                	add	x4, x4, x2
@@ -114,10 +116,9 @@ Disassembly of section .text:
                	ret
 
 <guard_then_join>:
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x1                // =1
                	cmp	w0, #0x64
-               	csel	x1, x2, x1, lt
+               	mov	x16, #0x1               // =1
+               	csel	x1, x16, xzr, lt
                	add	x0, x0, #0x1
                	sxtw	x0, w0
                	add	x0, x1, x0

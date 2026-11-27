@@ -3,7 +3,7 @@ volatile_struct_assign.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,14 +26,12 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	movabsq	$0x400000003, %rax      # imm = 0x400000003
-               	movq	%rax, -0x10(%rbp)
-               	movl	-0x10(%rbp), %eax
+               	movq	%rax, (%rsp)
+               	movl	(%rsp), %eax
                	movl	%eax, <rip> # <addr>
-               	movl	-0xc(%rbp), %ecx
+               	movl	0x4(%rsp), %ecx
                	movl	%ecx, <rip> # <addr>
                	cmpl	$0x3, %eax
                	jne	<addr>
@@ -41,10 +39,10 @@ Disassembly of section .text:
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movabsq	$0x600000005, %rcx      # imm = 0x600000005
-               	movq	%rcx, <rip> # <addr>
+               	movabsq	$0x600000005, %rax      # imm = 0x600000005
+               	movq	%rax, <rip> # <addr>
                	movl	$0x5, <rip> # <addr>
                	movl	$0x6, <rip> # <addr>
                	movl	<rip>, %eax # <addr>
@@ -54,27 +52,27 @@ Disassembly of section .text:
                	cmpl	$0x6, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	leaq	-0x8(%rbp), %rax
+               	leaq	0x8(%rsp), %rax
                	leaq	<rip>, %rcx
                	movq	(%rcx), %r10
                	movq	%r10, (%rax)
-               	movl	-0x8(%rbp), %eax
-               	movl	-0x4(%rbp), %ecx
+               	movl	0x8(%rsp), %eax
+               	movl	0xc(%rsp), %ecx
                	cmpl	$0x7, %eax
                	jne	<addr>
                	cmpl	$0x8, %ecx
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leaq	<rip>, %rcx # <addr>
-               	imulq	$0x7, %rax, %rdx
-               	incq	%rdx
-               	andq	$0xff, %rdx
-               	movb	%dl, (%rcx,%rax)
+               	leaq	<rip>, %rdx # <addr>
+               	imulq	$0x7, %rax, %rcx
+               	incq	%rcx
+               	andq	$0xff, %rcx
+               	movb	%cl, (%rdx,%rax)
                	incq	%rax
                	cmpl	$0x400, %eax            # imm = 0x400
                	jl	<addr>
@@ -106,51 +104,54 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x400, %eax            # imm = 0x400
                	jb	<addr>
-               	leaq	<rip>, %rsi # <addr>
                	leaq	<rip>, %rdx # <addr>
+               	leaq	<rip>, %rsi # <addr>
                	leaq	<rip>, %rdi # <addr>
                	xorl	%eax, %eax
-               	leaq	(%rsi,%rax), %r8
+               	leaq	(%rdx,%rax), %r8
                	movq	(%r8), %r8
                	leaq	(%rdi,%rax), %r9
                	movq	%r8, (%r9)
                	addq	$0x8, %rax
                	cmpl	$0x800, %eax            # imm = 0x800
                	jb	<addr>
-               	leaq	<rip>, %rsi # <addr>
+               	leaq	<rip>, %rdx # <addr>
                	xorl	%eax, %eax
-               	leaq	(%rsi,%rax), %rdi
+               	leaq	(%rdx,%rax), %rdi
                	movq	(%rdi), %rdi
-               	leaq	(%rdx,%rax), %r8
+               	leaq	(%rsi,%rax), %r8
                	movq	%rdi, (%r8)
                	addq	$0x8, %rax
+               	nopw	%cs:(%rax,%rax)
                	cmpl	$0x800, %eax            # imm = 0x800
                	jb	<addr>
                	xorl	%eax, %eax
-               	movzbq	(%rcx,%rax), %rsi
-               	imulq	$0x7, %rax, %rdi
-               	incq	%rdi
-               	andq	$0xff, %rdi
-               	cmpl	%edi, %esi
+               	movzbq	(%rcx,%rax), %rdi
+               	imulq	$0x7, %rax, %rdx
+               	incq	%rdx
+               	andq	$0xff, %rdx
+               	nop
+               	cmpl	%edx, %edi
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x400, %eax            # imm = 0x400
                	jl	<addr>
                	xorl	%eax, %eax
-               	movq	(%rdx,%rax,8), %rcx
-               	imulq	$0xf4243, %rax, %rsi    # imm = 0xF4243
-               	subq	$0x5, %rsi
-               	cmpq	%rsi, %rcx
+               	movq	(%rsi,%rax,8), %rcx
+               	imulq	$0xf4243, %rax, %rdx    # imm = 0xF4243
+               	subq	$0x5, %rdx
+               	nop
+               	cmpq	%rdx, %rcx
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x100, %eax            # imm = 0x100
                	jl	<addr>
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movl	$0x6, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movl	$0x5, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

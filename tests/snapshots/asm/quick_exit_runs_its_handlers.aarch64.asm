@@ -3,7 +3,7 @@ quick_exit_runs_its_handlers.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -42,11 +42,11 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	adrp	x0, <page>
-               	mov	x1, #0x5                // =5
-               	mov	x2, #0x6                // =6
                	ldrsw	x0, [x0, #0x20]
                	cmp	w0, #0x15
-               	csel	x0, x1, x2, eq
+               	mov	x16, #0x5               // =5
+               	mov	x17, #0x6               // =6
+               	csel	x0, x16, x17, eq
                	bl	<addr>
                	brk	#0x1
 
@@ -56,7 +56,7 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x0                // =0
-               	mov	x2, x1
+               	mov	x2, #0x0                // =0
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

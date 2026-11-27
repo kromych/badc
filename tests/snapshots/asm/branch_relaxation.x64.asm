@@ -3,7 +3,7 @@ branch_relaxation.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -45,6 +45,7 @@ Disassembly of section .text:
                	addq	$0x2, %rcx
                	cmpl	$0x1, %edx
                	cmoveq	%rsi, %rcx
+               	nopl	(%rax,%rax)
                	jmp	<addr>
                	movq	%rcx, %rax
                	retq
@@ -69,6 +70,7 @@ Disassembly of section .text:
                	addq	$0x2, %rcx
                	cmpl	$0x1, %edx
                	cmoveq	%rsi, %rcx
+               	nopl	(%rax)
                	jmp	<addr>
                	movq	%rcx, %rax
                	retq

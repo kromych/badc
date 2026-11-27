@@ -3,7 +3,7 @@ computed_goto_label_only_target.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -70,8 +70,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x5                // =5
                	ldursw	x1, [x29, #-0x8]
+               	mov	x0, #0x5                // =5
                	bl	<addr>
                	cmp	w0, #0x19
                	b.eq	<addr>

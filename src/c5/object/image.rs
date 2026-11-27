@@ -263,7 +263,9 @@ pub(crate) fn image_dwarf(
             start_stub_range,
         )
     };
-    if let Some(md) = &build.merged_dwarf {
+    if cfg!(feature = "debuginfo")
+        && let Some(md) = &build.merged_dwarf
+    {
         let mut debug_info = md.debug_info.clone();
         let mut debug_line = md.debug_line.clone();
         for r in &md.debug_info_text_relocs {
@@ -304,7 +306,7 @@ pub(crate) fn image_dwarf(
             other,
         });
     }
-    Ok(if build.debug_info {
+    Ok(if cfg!(feature = "debuginfo") && build.debug_info {
         fresh()
     } else {
         dwarf::DwarfSections::default()

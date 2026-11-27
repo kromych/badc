@@ -3,7 +3,7 @@ init_subdesignator_multi_dim.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -17,45 +17,45 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldrh	w1, [x0]
-               	ldrh	w2, [x0, #0x2]
-               	ldrh	w3, [x0, #0xa]
-               	ldr	w4, [x0, #0x24]
-               	ldr	w5, [x0, #0x2c]
-               	ldr	w6, [x0, #0x98]
+               	ldrh	w3, [x0, #0x2]
+               	ldrh	w4, [x0, #0xa]
+               	ldr	w5, [x0, #0x24]
+               	ldr	w6, [x0, #0x2c]
+               	ldr	w7, [x0, #0x98]
                	cmp	w1, #0x1
                	b.ne	<addr>
-               	cmp	w2, #0x2
+               	cmp	w3, #0x2
                	b.ne	<addr>
-               	cmp	w3, #0x7
+               	cmp	w4, #0x7
                	b.ne	<addr>
-               	mov	x7, x4
-               	cmp	w7, #0x5
+               	mov	x2, x5
+               	cmp	w2, #0x5
                	b.ne	<addr>
-               	mov	x7, x5
-               	cmp	w7, #0x6
+               	mov	x2, x6
+               	cmp	w2, #0x6
                	b.ne	<addr>
-               	mov	x7, x6
-               	cmp	w7, #0x9
+               	mov	x2, x7
+               	cmp	w2, #0x9
                	b.ne	<addr>
-               	ldrh	w7, [x0, #0x6]
-               	cbnz	w7, <addr>
-               	ldrsw	x7, [x0, #0x18]
-               	cbnz	w7, <addr>
+               	ldrh	w2, [x0, #0x6]
+               	cbnz	w2, <addr>
+               	ldrsw	x2, [x0, #0x18]
+               	cbnz	w2, <addr>
                	ldrsw	x0, [x0, #0x3c]
                	cbz	w0, <addr>
                	mov	x0, #0x1                // =1
                	ret
                	cmp	w1, #0x1
                	b.ne	<addr>
-               	cmp	w2, #0x2
+               	cmp	w3, #0x2
                	b.ne	<addr>
-               	cmp	w3, #0x7
+               	cmp	w4, #0x7
                	b.ne	<addr>
-               	cmp	w4, #0x5
+               	cmp	w5, #0x5
                	b.ne	<addr>
-               	cmp	w5, #0x6
+               	cmp	w6, #0x6
                	b.ne	<addr>
-               	cmp	w6, #0x9
+               	cmp	w7, #0x9
                	b.ne	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

@@ -461,8 +461,23 @@ pub(crate) fn bind_phis(
     b: BlockId,
     state: &mut BTreeMap<ValueId, Option<i64>>,
 ) {
+    bind_phis_of(
+        func,
+        pred,
+        func.blocks[b as usize].inst_range.clone(),
+        state,
+    );
+}
+
+/// [`bind_phis`] over a block's leading values `values`.
+pub(crate) fn bind_phis_of(
+    func: &FunctionSsa,
+    pred: BlockId,
+    values: impl Iterator<Item = ValueId>,
+    state: &mut BTreeMap<ValueId, Option<i64>>,
+) {
     let mut bound: Vec<(ValueId, Option<i64>)> = Vec::new();
-    for v in func.blocks[b as usize].inst_range.clone() {
+    for v in values {
         let Inst::Phi { incoming, kind } = &func.insts[v as usize] else {
             break;
         };
@@ -1805,6 +1820,7 @@ mod tests {
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,
+                    parts: Vec::new(),
                 },
                 Inst::BinopI {
                     op: BinOp::Add,

@@ -3,7 +3,7 @@ utime_sets_times.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -39,13 +39,13 @@ Disassembly of section .text:
                	mov	x21, x0
                	bl	<addr>
                	mov	x5, x0
+               	mov	x3, x20
+               	mov	x4, x21
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	mov	x1, #0x200              // =512
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mov	x3, x20
-               	mov	x4, x21
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

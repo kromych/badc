@@ -3,7 +3,7 @@ archive_format_constants.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,10 +26,8 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x200, %rsp            # imm = 0x200
-               	leaq	-0x200(%rbp), %rax
+               	subq	$0x208, %rsp            # imm = 0x208
+               	leaq	(%rsp), %rax
                	xorps	%xmm14, %xmm14
                	movups	%xmm14, (%rax)
                	movups	%xmm14, 0x10(%rax)
@@ -73,21 +71,21 @@ Disassembly of section .text:
                	leaq	<rip>, %rcx
                	movzwq	(%rcx), %r10
                	movw	%r10w, (%rax)
-               	movb	$0x35, -0x164(%rbp)
+               	movb	$0x35, 0x9c(%rsp)
                	leaq	<rip>, %rsi
                	callq	<addr>
                	movslq	%eax, %rax
                	testq	%rax, %rax
                	jne	<addr>
-               	movsbq	-0xf9(%rbp), %rax
+               	movsbq	0x107(%rsp), %rax
                	cmpl	$0x30, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x208, %rsp            # imm = 0x208
                	retq
-               	movsbq	-0x164(%rbp), %rax
+               	movsbq	0x9c(%rsp), %rax
                	cmpl	$0x35, %eax
                	setne	%al
                	movzbq	%al, %rax
-               	leave
+               	addq	$0x208, %rsp            # imm = 0x208
                	retq

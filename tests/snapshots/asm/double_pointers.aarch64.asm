@@ -3,7 +3,7 @@ double_pointers.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -40,8 +40,8 @@ Disassembly of section .text:
                	mov	x0, #0x8                // =8
                	bl	<addr>
                	mov	x1, x0
-               	mov	x0, #0x4                // =4
                	str	x1, [sp, #0x8]
+               	mov	x0, #0x4                // =4
                	bl	<addr>
                	ldr	x1, [sp, #0x8]
                	str	x0, [x1]

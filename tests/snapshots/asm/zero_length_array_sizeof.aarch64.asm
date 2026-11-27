@@ -3,7 +3,7 @@ zero_length_array_sizeof.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -18,34 +18,36 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	mov	x0, #0x0                // =0
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	mov	x1, x0
-               	cmp	w0, #0x4
-               	cset	x2, eq
-               	cbnz	w2, <addr>
-               	and	x4, x0, #0x7
-               	ldrb	w4, [x3, x4]
-               	sturb	w4, [x29, #-0x8]
-               	add	x0, x0, #0x1
-               	cbnz	w2, <addr>
+               	adrp	x6, <page>
+               	add	x6, x6, <lo12>
                	sub	x4, x29, #0x10
-               	add	x2, x1, #0x1
-               	ldurb	w5, [x29, #-0x8]
-               	strb	w5, [x4, x1]
-               	cmp	w2, #0x4
+               	mov	x2, x0
+               	cmp	w0, #0x4
+               	cset	x3, eq
+               	cbnz	w3, <addr>
+               	and	x1, x0, #0x7
+               	ldrb	w1, [x6, x1]
+               	add	x0, x0, #0x1
+               	cbnz	w3, <addr>
+               	add	x3, x2, #0x1
+               	and	x5, x1, #0xff
+               	strb	w5, [x4, x2]
+               	cmp	w3, #0x4
                	b.ge	<addr>
-               	mov	x1, x2
+               	mov	x2, x3
+               	cmp	w0, #0x4
+               	cset	x3, eq
+               	cbnz	w3, <addr>
                	b	<addr>
-               	mov	x1, x2
-               	adrp	x2, <page>
-               	ldrsw	x2, [x2, #0x30]
-               	cbz	x2, <addr>
+               	mov	x2, x3
+               	adrp	x1, <page>
+               	ldrsw	x1, [x1, #0x30]
+               	cbz	x1, <addr>
                	mov	x0, #0x8                // =8
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	cmp	w1, #0x4
+               	cmp	w2, #0x4
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	add	sp, sp, #0x10

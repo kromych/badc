@@ -3,7 +3,7 @@ block_function_declaration_hides_outer_binding.aarch64:	file format elf64-little
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -52,10 +52,10 @@ Disassembly of section .text:
 <hides_with_variadic>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	mov	x0, #0x3                // =3
                	fmov	d0, #1.50000000
                	fmov	d1, #2.25000000
                	fmov	d2, #4.00000000
+               	mov	x0, #0x3                // =3
                	bl	<addr>
                	fmov	d1, #7.00000000
                	fadd	d0, d0, d1

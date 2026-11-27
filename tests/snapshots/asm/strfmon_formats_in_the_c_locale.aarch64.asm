@@ -3,7 +3,7 @@ strfmon_formats_in_the_c_locale.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -17,16 +17,16 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x60
-               	sub	x0, x29, #0x60
-               	mov	x1, #0x60               // =96
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
                	adrp	x16, <page>
                	ldr	d0, [x16, #0x48]
                	fmov	d1, #7.00000000
                	fmov	d2, #1.00000000
                	adrp	x16, <page>
                	ldr	d3, [x16, #0x50]
+               	sub	x0, x29, #0x60
+               	mov	x1, #0x60               // =96
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
                	bl	<addr>
                	cmp	x0, #0x2a
                	b.eq	<addr>
@@ -44,12 +44,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x60
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	adrp	x16, <page>
+               	ldr	d0, [x16, #0x48]
                	sub	x0, x29, #0x60
                	mov	x1, #0x4                // =4
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	adrp	x16, <page>
-               	ldr	d0, [x16, #0x48]
                	bl	<addr>
                	cmn	x0, #0x1
                	b.eq	<addr>

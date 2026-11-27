@@ -44,7 +44,11 @@ impl<'a> Walker<'a> {
                 if let Expr::Intrinsic { kind, .. } = self.ast.expr(e)
                     && *kind == crate::c5::op::Intrinsic::Trap as i64
                 {
-                    b.unreachable();
+                    // Under `-fsanitize=unreachable`, its handler's call first.
+                    let check = self.ast.checks.get(&e).copied();
+                    if check.is_none_or(|c| self.fail_check(b, c, &[])) {
+                        b.unreachable();
+                    }
                     return Ok(true);
                 }
                 let temps = self.call_temps.len();

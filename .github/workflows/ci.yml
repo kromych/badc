@@ -194,13 +194,15 @@ jobs:
           - windows-latest
           - windows-11-arm
     runs-on: ${{ matrix.os }}
-    # windows-latest takes about 22 minutes and windows-11-arm 18 (measured at
-    # 11d3ec96e); the Linux and macOS lanes finish well inside that. Process
+    # The Windows lanes are the slowest: over the runs for 513ec4e643 to
+    # d931f0c99d, windows-latest took 31 to 45 minutes and windows-11-arm 28
+    # to 40, ubuntu-latest 15 to 22 and macos-latest 18 to 36. Process
     # spawning dominates the per-fixture runs on Windows. The cap is a hang
     # backstop, so it sits above the slowest lane, not at it. Runners vary:
-    # on the run for 00dd3a0ba every lane took 1.35-1.6x its previous time,
-    # rustc's own build included, and windows-latest passed 30 minutes.
-    timeout-minutes: 45
+    # from the run for 96d60b1306 to the one for d931f0c99d the lib suite
+    # took 1.3x as long on windows-latest and 1.6x on ubuntu-latest, while
+    # on a fixed Windows x64 host its debug run went from 634 s to 477 s.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -1041,6 +1043,15 @@ jobs:
         run: cargo build --locked --verbose
       - name: --no-default-features --lib
         run: cargo build --locked --no-default-features --lib --verbose
+      # Each gate alone on top of the default, and the examples the
+      # default builds.
+      - name: each feature alone
+        run: |
+          for f in headers optimizer target-aarch64 target-x86_64 inline-asm assembler native-emit debuginfo linker; do
+            cargo build --locked --lib --features "$f"
+          done
+      - name: examples
+        run: cargo build --locked --examples
       - name: --all-features
         run: cargo build --locked --all-features --verbose
       # `cargo publish` verifies the tarball with default features only;
@@ -1404,6 +1415,68 @@ jobs:
         run: chmod +x target/release/badc*
       - name: openssl smoke (build + make test, -O0 and -O)
         run: python demos/openssl/smoke.py ${{ matrix.impl == 'asm' && '--asm' || '' }}
+
+  # SymCrypt 103.13.0 through its own CMake with badc as the C compiler,
+  # checked by its C++ unit test (symcryptunittest noperftests) linked
+  # against the badc-built static library. The aarch64 build assembles
+  # SymCrypt's own assembly; on x86_64 the portable C code makes RSA, DH
+  # and DSA most of the suite, and the smoke leaves them out. Linux only:
+  # SymCrypt's macOS configuration fixes the compiler to clang.
+  symcrypt:
+    needs: build
+    name: symcrypt (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
+        with:
+          name: badc-${{ matrix.os }}
+          path: target/release
+      - name: mark badc executable
+        shell: bash
+        run: chmod +x target/release/badc*
+      - name: symcrypt smoke (SymCrypt's CMake + symcryptunittest)
+        run: python demos/symcrypt/smoke.py
+
+  # System Informer 4.0.26241.138 from its own CMake lists: badc compiles its
+  # C against the Windows SDK and MSVC headers and links the programs with
+  # cl's C++ objects, the assembler's objects and rc's resources; the smoke
+  # runs phlib's self-test and starts System Informer and its PE viewer, at
+  # -O0 and -O. Windows only: the build runs the SDK's and MSVC's tools.
+  systeminformer:
+    needs: build
+    name: systeminformer (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - windows-latest
+          - windows-11-arm
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: badc from the build job
+        uses: actions/download-artifact@v4
+        with:
+          name: badc-${{ matrix.os }}
+          path: target/release
+      - name: systeminformer smoke (CMake lists, phlib-test, the programs started)
+        run: python demos/systeminformer/smoke.py
 
   # Cooperative-concurrency demos: each library's context switch leans
   # on constructs the fixtures cover only piecemeal -- the upstream asm

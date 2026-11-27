@@ -3,7 +3,7 @@ overaligned_data_placement.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -92,7 +92,7 @@ Disassembly of section .text:
                	cmp	w1, #0x2
                	b.ne	<addr>
                	adrp	x1, <page>
-               	ldrsw	x1, [x1, #0x204]
+               	ldrsw	x1, [x1, #0x304]
                	cmp	w1, #0x7
                	b.eq	<addr>
                	ret

@@ -3,7 +3,7 @@ variadic_via_fnptr.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -101,8 +101,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x9, %edi
                	movl	$0x1, %esi
                	movl	$0x2, %edx
@@ -112,7 +111,7 @@ Disassembly of section .text:
                	cmpl	$0x23a3, %eax           # imm = 0x23A3
                	je	<addr>
                	movl	$0xb, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x9, %edi
                	movl	$0x1, %esi
@@ -123,7 +122,7 @@ Disassembly of section .text:
                	cmpl	$0x23a3, %eax           # imm = 0x23A3
                	je	<addr>
                	movl	$0xc, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x9, %edi
                	movl	$0x1, %esi
@@ -134,8 +133,8 @@ Disassembly of section .text:
                	cmpl	$0x23a3, %eax           # imm = 0x23A3
                	je	<addr>
                	movl	$0xd, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

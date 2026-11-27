@@ -3,7 +3,7 @@ atomic_contention.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -80,14 +80,14 @@ Disassembly of section .text:
                	mov	x1, #0x2                // =2
                	bl	<addr>
                	mov	x21, x0
+               	mov	x0, x21
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x0, x21
                	bl	<addr>
                	mov	x20, x0
+               	mov	x0, x21
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x0, x21
                	bl	<addr>
                	mov	x21, x0
                	cbz	x20, <addr>
@@ -96,35 +96,35 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x30]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	mov	x1, #0x0                // =0
                	sub	x0, x29, #0x20
+               	mov	x1, #0x0                // =0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mov	x3, x1
+               	mov	x3, #0x0                // =0
                	blr	x20
                	cbnz	w0, <addr>
-               	mov	x3, #0x1                // =1
                	sub	x0, x29, #0x20
                	add	x0, x0, #0x8
                	mov	x1, #0x0                // =0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
+               	mov	x3, #0x1                // =1
                	blr	x20
                	cbnz	w0, <addr>
-               	mov	x3, #0x2                // =2
                	sub	x0, x29, #0x20
                	add	x0, x0, #0x10
                	mov	x1, #0x0                // =0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
+               	mov	x3, #0x2                // =2
                	blr	x20
                	cbnz	w0, <addr>
-               	mov	x3, #0x3                // =3
                	sub	x0, x29, #0x20
                	add	x0, x0, #0x18
                	mov	x1, #0x0                // =0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
+               	mov	x3, #0x3                // =3
                	blr	x20
                	cbnz	w0, <addr>
                	ldur	x0, [x29, #-0x20]

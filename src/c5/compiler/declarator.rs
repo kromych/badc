@@ -394,6 +394,21 @@ impl Compiler {
         }
     }
 
+    /// A variable-length array bound: an integer expression, whose value is
+    /// the size (C99 6.7.5.2p5); an `__int128` one converts to the `size_t`
+    /// it is taken in. Checked under `-fsanitize=vla-bound`.
+    fn parse_vla_bound(&mut self) -> Result<super::super::ast::ExprId, C5Error> {
+        let at = self.lex.position();
+        self.expr(Token::Assign as i64)?;
+        self.require_integer_size(self.ty)?;
+        if self.is_int128_ty(self.ty) {
+            self.ast_apply_assign_conv(self.size_t_ty());
+        }
+        let dim = self.ast_acc.take().expect("an expression's tree");
+        self.sanitize_vla_bound(dim, self.ty, at);
+        Ok(dim)
+    }
+
     /// The bounds below a block-scope array's outermost one: constants, or
     /// the expressions of variable ones (C99 6.7.5.2p4).
     fn parse_vla_inner_bounds(&mut self) -> Result<alloc::vec::Vec<VlaBound>, C5Error> {
@@ -415,12 +430,7 @@ impl Compiler {
                 }
                 Some(m) => bounds.push(Ok(m)),
                 None => {
-                    self.expr(Token::Assign as i64)?;
-                    self.require_integer_size(self.ty)?;
-                    if self.is_int128_ty(self.ty) {
-                        self.ast_apply_assign_conv(self.size_t_ty());
-                    }
-                    let dim = self.ast_acc.take().expect("an expression's tree");
+                    let dim = self.parse_vla_bound()?;
                     bounds.push(Err(dim));
                 }
             }
@@ -907,12 +917,7 @@ impl Compiler {
                                 pointee_dims.push(-1);
                                 continue;
                             }
-                            self.expr(Token::Assign as i64)?;
-                            self.require_integer_size(self.ty)?;
-                            if self.is_int128_ty(self.ty) {
-                                self.ast_apply_assign_conv(self.size_t_ty());
-                            }
-                            let dim = self.ast_acc.take().expect("an expression's tree");
+                            let dim = self.parse_vla_bound()?;
                             vm_dims.push((pointee_dims.len(), dim));
                             pointee_dims.push(-1);
                             self.accept(']')?;
@@ -1045,7 +1050,7 @@ impl Compiler {
                         sym: idx,
                         base: outer_ty_before_inner,
                         dims,
-                        more: sizes.iter().map(|s| s.at).collect(),
+                        more: sizes.iter().map(|s| s.at.clone()).collect(),
                         levels: inner_ptr_levels,
                     });
                     self.param_sizes.push(size);
@@ -1195,14 +1200,7 @@ impl Compiler {
                     self.next()?;
                     array_size = -1;
                 } else if self.pending.vla_allowed {
-                    self.expr(Token::Assign as i64)?;
-                    self.require_integer_size(self.ty)?;
-                    // C99 6.7.5.2p5: the size is the dimension's value; an
-                    // `__int128` one converts to the `size_t` it is taken in.
-                    if self.is_int128_ty(self.ty) {
-                        self.ast_apply_assign_conv(self.size_t_ty());
-                    }
-                    self.pending.vla_dim_expr = self.ast_acc.take();
+                    self.pending.vla_dim_expr = Some(self.parse_vla_bound()?);
                     if self.lex.tk != ']' {
                         return Err(self.compile_err(
                             Code::SYNTAX,
@@ -1348,7 +1346,7 @@ impl Compiler {
                     sym: idx,
                     base: ty,
                     dims,
-                    more: sizes.iter().map(|s| s.at).collect(),
+                    more: sizes.iter().map(|s| s.at.clone()).collect(),
                     levels: 1,
                 });
                 self.param_sizes.push(size);

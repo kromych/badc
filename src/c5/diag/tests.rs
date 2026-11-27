@@ -19,10 +19,16 @@ fn codes_are_unique() {
 
 /// Canonical names are unique, and a spelling more than one row carries is
 /// one of the deliberate shared spellings: clang's group spanning a
-/// top-level and a nested qualifier discard, and gcc's `-Wunused`.
+/// top-level and a nested qualifier discard, gcc's and clang's
+/// `incompatible-pointer-types` spanning the nested one, and gcc's
+/// `-Wunused`.
 #[test]
 fn names_and_aliases_are_unique() {
-    const SHARED: [&str; 2] = ["incompatible-pointer-types-discards-qualifiers", "unused"];
+    const SHARED: [&str; 3] = [
+        "incompatible-pointer-types-discards-qualifiers",
+        "incompatible-pointer-types",
+        "unused",
+    ];
     let mut names = BTreeSet::new();
     for row in rows() {
         assert!(names.insert(row.name), "duplicate name `{}`", row.name);
@@ -97,6 +103,13 @@ fn a_shared_spelling_selects_every_row_that_carries_it() {
     assert_eq!(
         Code::from_selector("incompatible-pointer-types-discards-qualifiers"),
         Some(nested)
+    );
+    // gcc reports the nested mismatch under `incompatible-pointer-types`,
+    // and clang's group of that name holds its own: the spelling selects
+    // the nested row beside its own.
+    assert_eq!(
+        Selector::parse("incompatible-pointer-types").map(Selector::codes),
+        Some(alloc::vec![nested, code("B3029")])
     );
 }
 

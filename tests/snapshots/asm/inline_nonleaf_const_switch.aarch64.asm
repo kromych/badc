@@ -3,7 +3,7 @@ inline_nonleaf_const_switch.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -17,9 +17,9 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x20
-               	mov	x1, #0x3344             // =13124
+               	mov	x0, #0x3344             // =13124
                	stur	wzr, [x29, #-0x8]
-               	stur	w1, [x29, #-0x10]
+               	stur	w0, [x29, #-0x10]
                	mov	x0, #0x44               // =68
                	sturb	w0, [x29, #-0x8]
                	ldur	w0, [x29, #-0x10]

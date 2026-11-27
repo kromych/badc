@@ -3,7 +3,7 @@ layout_goto_block_addr.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,36 +26,34 @@ Disassembly of section .text:
                	int3
 
 <dispatch>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	xorl	%eax, %eax
                	leaq	<rip>, %rcx # <addr>
-               	movq	%rcx, -0x10(%rbp)
+               	movq	%rcx, (%rsp)
                	leaq	<rip>, %rcx # <addr>
-               	movq	%rcx, -0x8(%rbp)
+               	movq	%rcx, 0x8(%rsp)
                	movq	%rax, %rcx
                	cmpl	%edi, %eax
                	jge	<addr>
                	movq	%rax, %rsi
                	andq	$0x1, %rsi
-               	movq	-0x10(%rbp,%rsi,8), %rsi
+               	movq	(%rsp,%rsi,8), %rsi
                	jmpq	*%rsi
                	addq	$0x2, %rcx
                	incq	%rax
+               	nopl	(%rax,%rax)
+               	cmpl	%edi, %eax
+               	jl	<addr>
                	jmp	<addr>
                	incq	%rcx
                	incq	%rax
                	cmpl	%edi, %eax
                	jl	<addr>
                	movq	%rcx, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
                	pushq	%rbx
                	xorl	%edi, %edi
                	callq	<addr>
@@ -73,5 +71,4 @@ Disassembly of section .text:
                	callq	<addr>
                	addq	%rbx, %rax
                	popq	%rbx
-               	leave
                	retq

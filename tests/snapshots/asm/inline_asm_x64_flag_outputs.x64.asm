@@ -3,7 +3,7 @@ inline_asm_x64_flag_outputs.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -33,7 +33,7 @@ Disassembly of section .text:
                	movzbq	%cl, %rcx
                	cmpq	$0x3, %rax
                	jne	<addr>
-               	testq	%rcx, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
@@ -45,7 +45,7 @@ Disassembly of section .text:
                	addq	$0xc, %rcx
                	testq	%rax, %rax
                	jne	<addr>
-               	cmpq	$0xd, %rcx
+               	cmpl	$0xd, %ecx
                	je	<addr>
                	movl	$0x2, %eax
                	retq

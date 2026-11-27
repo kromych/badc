@@ -3,7 +3,7 @@ tailcall_return_extension.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -42,20 +42,18 @@ Disassembly of section .text:
                	retq
 
 <get_long>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	xorl	%esi, %esi
                	callq	<addr>
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <widen>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	xorl	%esi, %esi
                	callq	<addr>
                	movl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <load_alias>:
@@ -63,35 +61,33 @@ Disassembly of section .text:
                	jmp	<addr>
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rdi
-               	movl	$0xfebf1000, -0x8(%rbp) # imm = 0xFEBF1000
+               	subq	$0x18, %rsp
+               	movl	$0xfebf1000, 0x8(%rsp)  # imm = 0xFEBF1000
+               	leaq	0x8(%rsp), %rdi
                	xorl	%esi, %esi
                	callq	<addr>
                	cmpl	$0xfebf1000, %eax       # imm = 0xFEBF1000
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	leaq	-0x8(%rbp), %rdi
+               	leaq	0x8(%rsp), %rdi
                	xorl	%esi, %esi
                	callq	<addr>
                	cmpl	$0xfebf1000, %eax       # imm = 0xFEBF1000
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	leaq	-0x8(%rbp), %rdi
-               	movb	$0x7f, -0x5(%rbp)
+               	movb	$0x7f, 0xb(%rsp)
+               	leaq	0x8(%rsp), %rdi
                	xorl	%esi, %esi
                	callq	<addr>
                	cmpl	$0x7fbf1000, %eax       # imm = 0x7FBF1000
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

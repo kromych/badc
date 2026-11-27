@@ -3,7 +3,7 @@ stack_arguments_read_from_a_local_array.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -87,14 +87,13 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x110
-               	mov	x1, #0x14               // =20
-               	mov	x2, #0x0                // =0
                	cmp	w0, #0x0
-               	csel	x1, x1, x2, gt
+               	mov	x16, #0x14              // =20
+               	csel	x1, x16, xzr, gt
                	mov	x0, #0x0                // =0
+               	sub	x2, x29, #0xa0
                	cmp	w0, w1
                	b.ge	<addr>
-               	sub	x2, x29, #0xa0
                	add	x3, x0, x0, lsl #1
                	add	x3, x3, #0x1
                	sxtw	x3, w3
@@ -102,10 +101,9 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, w1
                	b.lt	<addr>
-               	ldur	x8, [x29, #-0xa0]
-               	mov	x0, #0x3e8              // =1000
-               	stur	x0, [x29, #-0xa0]
-               	mov	x0, #0x15               // =21
+               	ldur	x0, [x29, #-0xa0]
+               	mov	x1, #0x3e8              // =1000
+               	stur	x1, [x29, #-0xa0]
                	ldur	x1, [x29, #-0x98]
                	ldur	x2, [x29, #-0x90]
                	ldur	x3, [x29, #-0x88]
@@ -137,25 +135,24 @@ Disassembly of section .text:
                	str	x16, [sp, #0x50]
                	ldur	x16, [x29, #-0x8]
                	str	x16, [sp, #0x58]
-               	str	x8, [sp, #0x60]
+               	str	x0, [sp, #0x60]
                	ldur	x16, [x29, #-0xa0]
                	str	x16, [sp, #0x68]
+               	mov	x0, #0x15               // =21
                	bl	<addr>
                	mov	x2, #0x0                // =0
                	mov	x1, #0x1                // =1
                	add	x3, x1, x1, lsl #1
                	add	x3, x3, #0x1
-               	sxtw	x3, w3
                	madd	x2, x1, x3, x2
                	add	x1, x1, #0x1
                	cmp	w1, #0x14
                	b.lt	<addr>
                	mov	x17, #0x521c            // =21020
                	add	x1, x2, x17
-               	mov	x2, #0x0                // =0
-               	mov	x3, #0x1                // =1
                	cmp	x0, x1
-               	csel	x0, x2, x3, eq
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, eq
                	add	sp, sp, #0x110
                	ldp	x29, x30, [sp], #0x10
                	ret

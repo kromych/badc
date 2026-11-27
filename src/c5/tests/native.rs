@@ -1,15 +1,14 @@
 //! End-to-end native-codegen tests: compile a C source, write a
-//! Mach-O, ad-hoc-sign it, exec it, check the exit code.
+//! Mach-O, exec it, check the exit code. The writer signs the image
+//! ad hoc, so it runs as written.
 //!
 //! Gated to macOS because the produced binary is a Mach-O that links
-//! libSystem -- nothing else can load it, and `codesign` only exists
-//! on Darwin. CI on other OSes skips these.
+//! libSystem, which nothing else can load. CI on other OSes skips these.
 
 #![cfg(target_os = "macos")]
 
 use std::io::Write;
 use std::path::Path;
-use std::process::Command;
 
 use super::fixture_tables::{BADC_FIXTURES, NATIVE_FIXTURES};
 use crate::{Compiler, NativeOptions, Target, emit_native, emit_native_with_options};
@@ -93,7 +92,6 @@ fn sign_run(bytes: &[u8], stem: &str) -> RunOutcome {
         f.write_all(bytes).expect("write temp file");
     }
     set_executable(&path);
-    codesign(&path);
 
     let output = super::output_when_not_busy(|| super::image_command(&path));
     let _ = std::fs::remove_file(&path);
@@ -114,18 +112,25 @@ fn set_executable(path: &Path) {
     std::fs::set_permissions(path, perms).unwrap();
 }
 
-fn codesign(path: &Path) {
-    let status = Command::new("/usr/bin/codesign")
-        .args(["--sign", "-", "--force"])
-        .arg(path)
-        .status()
-        .expect("codesign not available");
-    assert!(status.success(), "codesign failed for {path:?}: {status:?}");
-}
-
 #[test]
 fn return_42() {
     assert_eq!(build_and_run("int main() { return 42; }", "ret42"), 42);
+}
+
+/// The zero-filled storage past `.data` reaches the image as `.bss` and
+/// holds what the program stores.
+#[test]
+fn zero_filled_static_storage_runs() {
+    let src = super::zero_filled_storage_source();
+    assert_eq!(build_and_run(src, "zero_filled_storage"), 0);
+}
+
+/// The zero-filled thread-local storage past the template is each thread's,
+/// zeroed, in the image's thread-local block.
+#[test]
+fn zero_filled_thread_local_storage_runs() {
+    let src = super::zero_filled_thread_local_source();
+    assert_eq!(build_and_run(src, "zero_filled_thread_local"), 0);
 }
 
 /// Return-address signing on the host CPU: every frame shape the
@@ -256,7 +261,6 @@ fn link_run_capture(src: &str, stem: &str) -> (i32, String) {
         f.write_all(&bytes).expect("write temp file");
     }
     set_executable(&path);
-    codesign(&path);
     let output = super::output_when_not_busy(|| super::image_command(&path));
     let _ = std::fs::remove_file(&path);
     let code = output.status.code().unwrap_or(-1);
@@ -438,7 +442,6 @@ fn faulting_fixture_dies_with_the_fault_signal_blocked() {
     let path = super::unique_temp_path("badc-test", "const_store_blocked", ".bin");
     std::fs::write(&path, &bytes).expect("write temp file");
     set_executable(&path);
-    codesign(&path);
 
     let saved = super::signals::block_on_this_thread(super::signals::STORE_TO_READ_ONLY);
     let spawned = super::image_command(&path).spawn();
@@ -486,7 +489,6 @@ int main(void) { return *third == 30 ? 0 : 1; }\n";
         f.write_all(&bytes).expect("write temp file");
     }
     set_executable(&path);
-    codesign(&path);
     let output = super::output_when_not_busy(|| super::image_command(&path));
     let _ = std::fs::remove_file(&path);
     assert_eq!(output.status.code(), Some(0));
@@ -517,7 +519,6 @@ fn over_aligned_objects_keep_their_alignment() {
     let path = super::unique_temp_path("badc-test", "over_aligned_two_units", ".bin");
     std::fs::write(&path, &bytes).expect("write temp file");
     set_executable(&path);
-    codesign(&path);
     let output = super::output_when_not_busy(|| super::image_command(&path));
     let _ = std::fs::remove_file(&path);
     assert_eq!(output.status.code(), Some(0), "two units");
@@ -975,7 +976,6 @@ where
         f.write_all(&bytes).expect("write temp file");
     }
     set_executable(&bin_path);
-    codesign(&bin_path);
 
     let args: Vec<String> = args.into_iter().map(|s| s.as_ref().to_string()).collect();
     let output = super::output_when_not_busy(|| {
@@ -1012,7 +1012,6 @@ fn file_io_natively() {
     let bin_path = super::unique_temp_path("badc-test", "file_io", ".bin");
     std::fs::write(&bin_path, &bytes).unwrap();
     set_executable(&bin_path);
-    codesign(&bin_path);
 
     let output = super::output_when_not_busy(|| {
         let mut cmd = super::image_command(&bin_path);
@@ -1042,7 +1041,6 @@ fn getenv_value_natively() {
     let bin_path = super::unique_temp_path("badc-test", "getenv", ".bin");
     std::fs::write(&bin_path, &bytes).unwrap();
     set_executable(&bin_path);
-    codesign(&bin_path);
 
     let output = super::output_when_not_busy(|| {
         let mut cmd = super::image_command(&bin_path);
@@ -1473,13 +1471,6 @@ fn dylib_export_dlopen_call_returns_42() {
 
     let path = super::unique_temp_path("badc-dylib", "export", ".dylib");
     std::fs::write(&path, &bytes).unwrap();
-    // dyld refuses to load an unsigned dylib on Apple Silicon.
-    let status = Command::new("/usr/bin/codesign")
-        .args(["--sign", "-", "--force"])
-        .arg(&path)
-        .status()
-        .expect("codesign not available");
-    assert!(status.success(), "codesign failed: {status:?}");
 
     unsafe extern "C" {
         fn dlopen(filename: *const std::os::raw::c_char, flag: c_int) -> *mut c_void;
@@ -1569,7 +1560,6 @@ fn dylib_reads_host_data_symbol_through_its_import_slot() {
 
     let path = super::unique_temp_path("badc-dylib", "host-data", ".dylib");
     std::fs::write(&path, &bytes).unwrap();
-    codesign(&path);
 
     unsafe extern "C" {
         fn dlopen(filename: *const std::os::raw::c_char, flag: c_int) -> *mut c_void;

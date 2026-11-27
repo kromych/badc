@@ -3,7 +3,7 @@ indirect_call_through_global_fn_ptr.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -22,17 +22,17 @@ Disassembly of section .text:
 <driver>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	adrp	x1, <page>
-               	mov	x0, #0x7                // =7
-               	str	w0, [x1, #0x34]
                	adrp	x0, <page>
+               	mov	x1, #0x7                // =7
+               	str	w1, [x0, #0x34]
+               	adrp	x1, <page>
                	mov	x2, #0x23               // =35
-               	str	w2, [x0, #0x38]
+               	str	w2, [x1, #0x38]
+               	ldrsw	x1, [x0, #0x34]
+               	adrp	x0, <page>
+               	ldr	x3, [x0, #0x10]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x1, [x1, #0x34]
-               	adrp	x3, <page>
-               	ldr	x3, [x3, <lo12>]
                	blr	x3
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x30]
@@ -42,17 +42,17 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	adrp	x1, <page>
-               	mov	x0, #0x7                // =7
-               	str	w0, [x1, #0x34]
                	adrp	x0, <page>
+               	mov	x1, #0x7                // =7
+               	str	w1, [x0, #0x34]
+               	adrp	x1, <page>
                	mov	x2, #0x23               // =35
-               	str	w2, [x0, #0x38]
+               	str	w2, [x1, #0x38]
+               	ldrsw	x1, [x0, #0x34]
+               	adrp	x0, <page>
+               	ldr	x3, [x0, #0x10]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldrsw	x1, [x1, #0x34]
-               	adrp	x3, <page>
-               	ldr	x3, [x3, <lo12>]
                	blr	x3
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x30]

@@ -1,6 +1,6 @@
 //! Duplicate-definition elimination shared by the relocatable
-//! (`ld -r`) and script-driven final-link paths, which GNU ld 2.46.1
-//! applies identically to both, and the COFF COMDAT selection of the
+//! (`ld -r`) and script-driven final-link paths, applied identically to
+//! both, and the COFF COMDAT selection of the
 //! native link.
 //!
 //! A `GRP_COMDAT` group is keyed on its signature symbol's name and

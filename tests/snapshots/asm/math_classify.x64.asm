@@ -3,7 +3,7 @@ math_classify.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,47 +26,43 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	xorl	%esi, %esi
-               	movq	%rsi, %xmm14
-               	movq	%rsi, %xmm15
+               	xorl	%ecx, %ecx
+               	movq	%rcx, %xmm14
+               	movq	%rcx, %xmm15
                	vdivsd	%xmm15, %xmm14, %xmm0
-               	movq	%xmm0, %rax
-               	movq	%rax, %rcx
-               	shrq	$0x34, %rcx
-               	andq	$0x7ff, %rcx            # imm = 0x7FF
-               	movabsq	$0xfffffffffffff, %rdx  # imm = 0xFFFFFFFFFFFFF
-               	andq	%rax, %rdx
-               	testl	%ecx, %ecx
+               	movq	%xmm0, %rdx
+               	movq	%rdx, %rax
+               	shrq	$0x34, %rax
+               	andq	$0x7ff, %rax            # imm = 0x7FF
+               	movabsq	$0xfffffffffffff, %rsi  # imm = 0xFFFFFFFFFFFFF
+               	andq	%rdx, %rsi
+               	testl	%eax, %eax
                	jne	<addr>
-               	movl	$0x2, %esi
+               	movl	$0x2, %ecx
                	movl	$0x3, %edi
-               	testq	%rdx, %rdx
-               	cmovneq	%rdi, %rsi
-               	testl	%esi, %esi
+               	testq	%rsi, %rsi
+               	cmovneq	%rdi, %rcx
+               	testl	%ecx, %ecx
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	testl	%ecx, %ecx
+               	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x2, %ecx
-               	movl	$0x3, %esi
-               	testq	%rdx, %rdx
-               	cmovneq	%rsi, %rcx
+               	movl	$0x3, %edi
+               	testq	%rsi, %rsi
+               	cmovneq	%rdi, %rcx
                	cmpl	$0x1, %ecx
                	jne	<addr>
                	movl	$0x7, %eax
                	retq
-               	movq	%rax, %rcx
-               	shrq	$0x34, %rcx
-               	andq	$0x7ff, %rcx            # imm = 0x7FF
-               	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
-               	andq	%r11, %rax
-               	testl	%ecx, %ecx
+               	movabsq	$0xfffffffffffff, %rcx  # imm = 0xFFFFFFFFFFFFF
+               	andq	%rdx, %rcx
+               	testl	%eax, %eax
                	jne	<addr>
-               	movl	$0x2, %ecx
+               	movl	$0x2, %eax
                	movl	$0x3, %edx
-               	testq	%rax, %rax
-               	movq	%rcx, %rax
+               	testq	%rcx, %rcx
                	cmovneq	%rdx, %rax
                	testl	%eax, %eax
                	je	<addr>
@@ -74,18 +70,17 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xb, %eax
                	retq
-               	movq	%xmm0, %rax
-               	movq	%rax, %rcx
-               	shrq	$0x34, %rcx
-               	andq	$0x7ff, %rcx            # imm = 0x7FF
-               	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
-               	andq	%r11, %rax
-               	testl	%ecx, %ecx
-               	jne	<addr>
-               	movl	$0x2, %ecx
-               	movl	$0x3, %edx
-               	testq	%rax, %rax
+               	movq	%xmm0, %rcx
                	movq	%rcx, %rax
+               	shrq	$0x34, %rax
+               	andq	$0x7ff, %rax            # imm = 0x7FF
+               	movabsq	$0xfffffffffffff, %r11  # imm = 0xFFFFFFFFFFFFF
+               	andq	%r11, %rcx
+               	testl	%eax, %eax
+               	jne	<addr>
+               	movl	$0x2, %eax
+               	movl	$0x3, %edx
+               	testq	%rcx, %rcx
                	cmovneq	%rdx, %rax
                	testl	%eax, %eax
                	je	<addr>
@@ -93,34 +88,32 @@ Disassembly of section .text:
                	retq
                	xorl	%eax, %eax
                	retq
-               	cmpl	$0x7ff, %ecx            # imm = 0x7FF
+               	cmpl	$0x7ff, %eax            # imm = 0x7FF
                	jne	<addr>
-               	movl	$0x1, %ecx
+               	movl	$0x1, %eax
                	xorl	%edx, %edx
-               	testq	%rax, %rax
-               	movq	%rcx, %rax
+               	testq	%rcx, %rcx
                	cmovneq	%rdx, %rax
                	jmp	<addr>
-               	cmpl	$0x7ff, %ecx            # imm = 0x7FF
+               	cmpl	$0x7ff, %eax            # imm = 0x7FF
                	jne	<addr>
-               	movl	$0x1, %ecx
+               	movl	$0x1, %eax
                	xorl	%edx, %edx
-               	testq	%rax, %rax
-               	movq	%rcx, %rax
+               	testq	%rcx, %rcx
                	cmovneq	%rdx, %rax
                	jmp	<addr>
                	movl	$0x4, %eax
                	jmp	<addr>
-               	cmpl	$0x7ff, %ecx            # imm = 0x7FF
+               	cmpl	$0x7ff, %eax            # imm = 0x7FF
                	jne	<addr>
                	movl	$0x1, %ecx
-               	xorl	%esi, %esi
-               	testq	%rdx, %rdx
-               	cmovneq	%rsi, %rcx
+               	xorl	%edi, %edi
+               	testq	%rsi, %rsi
+               	cmovneq	%rdi, %rcx
                	jmp	<addr>
-               	cmpl	$0x7ff, %ecx            # imm = 0x7FF
+               	cmpl	$0x7ff, %eax            # imm = 0x7FF
                	jne	<addr>
                	movl	$0x1, %edi
-               	testq	%rdx, %rdx
-               	cmoveq	%rdi, %rsi
+               	testq	%rsi, %rsi
+               	cmoveq	%rdi, %rcx
                	jmp	<addr>

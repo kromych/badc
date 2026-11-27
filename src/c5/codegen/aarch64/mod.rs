@@ -10,6 +10,7 @@ mod isa_a64_table;
 pub(crate) mod patch;
 mod sysreg_a64_table;
 pub(crate) mod table;
+pub(crate) mod text;
 
 // Resolve the codegen-level paths the two large modules reference relative to
 // their original location, now that they sit one level deeper.

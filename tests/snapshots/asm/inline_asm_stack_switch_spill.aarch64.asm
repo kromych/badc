@@ -3,7 +3,7 @@ inline_asm_stack_switch_spill.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -232,7 +232,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	adrp	x0, <page>
-               	ldr	x20, [x0, #0x10]
+               	ldr	x20, [x0, #0x20]
                	mov	x0, x20
                	bl	<addr>
                	mov	x21, x0

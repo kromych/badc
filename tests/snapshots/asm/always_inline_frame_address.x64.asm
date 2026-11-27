@@ -3,7 +3,7 @@ always_inline_frame_address.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -53,42 +53,41 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	callq	<addr>
-               	movq	<rip>, %rcx # <addr>
-               	testq	%rcx, %rcx
-               	je	<addr>
                	movq	<rip>, %rax # <addr>
                	testq	%rax, %rax
+               	je	<addr>
+               	movq	<rip>, %rcx # <addr>
+               	testq	%rcx, %rcx
                	jne	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movq	<rip>, %rdx # <addr>
-               	cmpq	%rdx, %rcx
+               	cmpq	%rdx, %rax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	movq	<rip>, %rcx # <addr>
-               	cmpq	%rcx, %rax
+               	movq	<rip>, %rax # <addr>
+               	cmpq	%rax, %rcx
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	movq	<rip>, %rcx # <addr>
-               	cmpq	%rcx, %rax
+               	movq	<rip>, %rax # <addr>
+               	cmpq	%rax, %rcx
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	movq	<rip>, %rcx # <addr>
-               	cmpq	%rax, %rcx
+               	movq	<rip>, %rax # <addr>
+               	cmpq	%rcx, %rax
                	jne	<addr>
                	movl	$0x5, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

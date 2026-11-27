@@ -3,7 +3,7 @@ function_alignment_attribute.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -40,48 +40,14 @@ Disassembly of section .text:
 <first>:
                	mov	x0, #0x2                // =2
                	ret
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
 
 <f64>:
                	mov	x0, #0x1                // =1
                	ret
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
 
 <s128>:
                	add	x0, x0, #0x1
                	ret
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
 
 <h>:
                	mov	x0, #0x3                // =3
@@ -113,8 +79,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
                	ldur	x1, [x29, #-0x18]
+               	mov	x0, #0x1                // =1
                	blr	x1
                	str	x0, [sp, #0x8]
                	ldur	x0, [x29, #-0x10]
@@ -127,10 +93,9 @@ Disassembly of section .text:
                	ldr	x16, [sp, #0x8]
                	add	x0, x16, x0
                	add	x0, x0, #0x2
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x2                // =2
                	cmp	w0, #0x8
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x2               // =2
+               	csel	x0, xzr, x17, eq
                	add	sp, sp, #0x30
                	ldp	x29, x30, [sp], #0x10
                	ret

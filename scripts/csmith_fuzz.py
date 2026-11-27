@@ -521,6 +521,13 @@ def first_error_line(text: str) -> str:
     return ""
 
 
+def internal_error_shape(text: str) -> str | None:
+    """The message shape of an internal compiler error. Every one carries
+    the same diagnostic code, so the code alone names no defect."""
+    said = first_error_line(text)
+    return normalize_message(said) if "[internal-error]" in said else None
+
+
 def normalize_message(message: str) -> str:
     """Drop what varies between two hits of the same defect.
 
@@ -817,10 +824,11 @@ def classify(
                 text = built.stderr + built.stdout
                 code = diagnostic_code(text) or "no-code"
                 said = first_error_line(text) or f"exit {built.status}"
+                shape = internal_error_shape(text)
                 record(
                     "compile-error",
                     config,
-                    ["compile-error", code],
+                    ["compile-error", code, *([shape] if shape else [])],
                     f"rejected the program: {said}",
                     built,
                 )
@@ -1169,6 +1177,9 @@ def signature_regex(finding: Finding) -> str:
         # Each part anywhere in the output: the message precedes the
         # backtrace that names the frame.
         return "".join(rf"(?=[\s\S]*{part})" for part in wanted)
+    shape = internal_error_shape(finding.evidence)
+    if shape:
+        return message_pattern(shape)
     code = diagnostic_code(finding.evidence)
     return re.escape(f"[{code}]") if code else "error"
 
@@ -1840,6 +1851,17 @@ def self_test() -> int:
         if got != want:
             failures.append(f"{name}: got {got!r}, want {want!r}")
 
+    with tempfile.TemporaryDirectory() as scratch:
+        report = Path(scratch) / "runs" / "today" / "report.json"
+        check("an output directory is made", output_problem([str(report), None]), None)
+        check("before the run", report.parent.is_dir(), True)
+        blocker = Path(scratch) / "file"
+        blocker.write_text("", encoding="utf-8")
+        check(
+            "an output under a file is refused",
+            output_problem([str(blocker / "report.json")]) is not None,
+            True,
+        )
     check(
         "weekly title mid-week",
         weekly_title(dt.date(2026, 9, 17)),
@@ -2241,6 +2263,20 @@ def self_test() -> int:
     check("a diagnostic is the compiler's", storage_full(outcomes["-O"].compile_step), False)
     check("its signature names the diagnostic", "B2020" in findings[0].human, True)
     check("its detail quotes the diagnostic", "error: x" in findings[0].detail, True)
+    ice = "badc: error: internal compiler error: ELF: data fixup: low-12 offset 0x2b not aligned to load/store size 8 [B9001] [internal-error]"
+    other = "case.c:3: error: internal compiler error: unexpected token [B9001] [internal-error]"
+    signatures = []
+    for said in (ice, ice.replace("0x2b", "0x4"), other):
+        outcomes["-O"] = Outcome(
+            "-O", Step([], 101, 0.1, "", said, False), None, None, "compile failed", []
+        )
+        found = classify(1, "x86_64", outcomes, "AA", Path("case.c"), 10)[0]
+        found.evidence = said
+        signatures.append((found.key, signature_regex(found)))
+    check("an internal error's signature keeps its message shape", signatures[0][0], signatures[1][0])
+    check("another internal error is another signature", signatures[0][0] != signatures[2][0], True)
+    check("a reduction keeps the internal error's message", bool(re.search(signatures[0][1], ice.replace("0x2b", "0x10"))), True)
+    check("a reduction does not take another internal error", bool(re.search(signatures[0][1], other)), False)
     outcomes["-O"] = Outcome(
         "-O",
         Step([], 0, 0.1, "", "", False),
@@ -2399,6 +2435,18 @@ def generator_lacks(csmith: Csmith, flags: tuple[str, ...]) -> list[str]:
     return [f for f in flags if f not in text]
 
 
+def output_problem(paths: list[str | None]) -> str | None:
+    """Create the directories of the files a run writes when it ends, so
+    that a run cannot spend its budget and then fail to record it; why one
+    cannot be created, or None."""
+    for path in filter(None, paths):
+        try:
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+        except OSError as error:
+            return f"cannot create the directory of {path}: {error}"
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     global LEG, KEEP
     args = parse_args(argv)
@@ -2406,6 +2454,10 @@ def main(argv: list[str] | None = None) -> int:
         return self_test()
     LEG = LEGS[args.leg]
     KEEP = args.keep
+    problem = output_problem([args.report, args.summary])
+    if problem:
+        print(f"error: {problem}", file=sys.stderr)
+        return 2
 
     csmith = find_csmith(args.csmith, args.csmith_include)
     if csmith is None:

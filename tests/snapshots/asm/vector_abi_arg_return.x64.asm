@@ -3,7 +3,7 @@ vector_abi_arg_return.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -42,13 +42,11 @@ Disassembly of section .text:
                	retq
 
 <nine>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	0x10(%rbp), %r10
-               	movq	%r10, -0x10(%rbp)
-               	movq	0x18(%rbp), %r10
-               	movq	%r10, -0x8(%rbp)
+               	subq	$0x18, %rsp
+               	movq	0x20(%rsp), %r10
+               	movq	%r10, (%rsp)
+               	movq	0x28(%rsp), %r10
+               	movq	%r10, 0x8(%rsp)
                	vpaddb	%xmm1, %xmm0, %xmm0
                	vpaddb	%xmm2, %xmm0, %xmm0
                	vpaddb	%xmm3, %xmm0, %xmm0
@@ -56,9 +54,9 @@ Disassembly of section .text:
                	vpaddb	%xmm5, %xmm0, %xmm0
                	vpaddb	%xmm6, %xmm0, %xmm0
                	vpaddb	%xmm7, %xmm0, %xmm0
-               	movups	-0x10(%rbp), %xmm1
+               	movups	(%rsp), %xmm1
                	vpaddb	%xmm1, %xmm0, %xmm0
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <mixed>:
@@ -97,16 +95,16 @@ Disassembly of section .text:
                	leaq	0x6(%rax), %rcx
                	andq	$0xff, %rcx
                	vpinsrb	$0x6, %ecx, %xmm0, %xmm0
-               	addq	$0x7, %rax
-               	andq	$0xff, %rax
-               	vpinsrb	$0x7, %eax, %xmm0, %xmm0
-               	andq	$0xff, %rdi
-               	leaq	0x8(%rdi), %rax
-               	andq	$0xff, %rax
-               	vpinsrb	$0x8, %eax, %xmm0, %xmm0
-               	leaq	0x9(%rdi), %rax
+               	leaq	0x7(%rax), %rcx
+               	andq	$0xff, %rcx
+               	vpinsrb	$0x7, %ecx, %xmm0, %xmm0
+               	leaq	0x8(%rax), %rcx
+               	andq	$0xff, %rcx
+               	vpinsrb	$0x8, %ecx, %xmm0, %xmm0
+               	addq	$0x9, %rax
                	andq	$0xff, %rax
                	vpinsrb	$0x9, %eax, %xmm0, %xmm0
+               	andq	$0xff, %rdi
                	leaq	0xa(%rdi), %rax
                	andq	$0xff, %rax
                	vpinsrb	$0xa, %eax, %xmm0, %xmm0
@@ -233,23 +231,19 @@ Disassembly of section .text:
                	movups	(%rax), %xmm1
                	vaddps	%xmm1, %xmm0, %xmm0
                	vpermilps	$0x0, %xmm0, %xmm1 # xmm1 = xmm0[0,0,0,0]
-               	movss	<rip>, %xmm2
-               	ucomiss	%xmm2, %xmm1
+               	ucomiss	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
                	vpermilps	$0x1, %xmm0, %xmm1 # xmm1 = xmm0[1,0,0,0]
-               	movss	<rip>, %xmm2
-               	ucomiss	%xmm2, %xmm1
+               	ucomiss	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
                	vpermilps	$0x2, %xmm0, %xmm1 # xmm1 = xmm0[2,0,0,0]
-               	movss	<rip>, %xmm2
-               	ucomiss	%xmm2, %xmm1
+               	ucomiss	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
                	vpermilps	$0x3, %xmm0, %xmm0 # xmm0 = xmm0[3,0,0,0]
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax
@@ -328,10 +322,10 @@ Disassembly of section .text:
                	movzbq	0x20(%rsp,%rax), %rdx
                	leaq	0x1(%rax), %rsi
                	leaq	(%rsi,%rsi,8), %rsi
-               	andq	$0xff, %rsi
                	cmpl	%esi, %edx
                	jne	<addr>
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	$0x10, %eax
                	jl	<addr>
                	movl	$0x32, %edi
@@ -349,8 +343,7 @@ Disassembly of section .text:
                	xorps	%xmm0, %xmm0
                	cvtsi2sd	%rax, %xmm0
                	vaddsd	<rip>, %xmm0, %xmm0
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x6, %eax
@@ -371,6 +364,7 @@ Disassembly of section .text:
                	vmovups	%ymm0, 0x20(%rsp)
                	xorl	%eax, %eax
                	movzbq	0x20(%rsp,%rax), %rdx
+               	nopw	(%rax,%rax)
                	cmpl	$0x45, %edx
                	jne	<addr>
                	incq	%rax

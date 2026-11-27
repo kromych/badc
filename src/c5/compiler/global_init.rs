@@ -362,11 +362,7 @@ impl Compiler {
             // A trailing `,` before `}` is allowed in C99.
             self.accept(',')?;
             if self.lex.tk != '}' {
-                return Err(self.compile_err_at(
-                    Code::INVALID_INITIALIZER,
-                    at.line,
-                    "scalar initializer wrapped in `{ ... }` must hold a single value",
-                ));
+                self.drop_excess_initializers("scalar")?;
             }
             self.next()?; // consume `}`
             return Ok(());

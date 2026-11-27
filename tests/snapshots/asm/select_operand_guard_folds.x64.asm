@@ -3,7 +3,7 @@ select_operand_guard_folds.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -39,17 +39,17 @@ Disassembly of section .text:
 
 <main>:
                	movq	$0x0, <rip> # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	movq	(%rcx), %rcx
-               	testl	$0x400000, %ecx         # imm = 0x400000
+               	movq	<rip>, %rax # <addr>
+               	movq	(%rax), %rax
+               	testl	$0x400000, %eax         # imm = 0x400000
                	je	<addr>
                	movl	$0x1, %eax
                	retq
                	movq	$0x400000, <rip> # imm = 0x400000
                                                 # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	movq	(%rcx), %rcx
-               	testl	$0x400000, %ecx         # imm = 0x400000
+               	movq	<rip>, %rax # <addr>
+               	movq	(%rax), %rax
+               	testl	$0x400000, %eax         # imm = 0x400000
                	je	<addr>
                	movl	$0x0, <rip> # <addr>
                	movq	$0x1000, <rip> # imm = 0x1000
@@ -57,8 +57,8 @@ Disassembly of section .text:
                	movl	$0x1, <rip> # <addr>
                	movq	$0x1001, <rip> # imm = 0x1001
                                                 # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	cmpq	$0x1001, %rcx           # imm = 0x1001
+               	movq	<rip>, %rax # <addr>
+               	cmpq	$0x1001, %rax           # imm = 0x1001
                	je	<addr>
                	movl	$0x5, %eax
                	retq
@@ -69,9 +69,11 @@ Disassembly of section .text:
                	movl	%eax, <rip> # <addr>
                	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
-               	movl	%eax, <rip> # <addr>
-               	retq
+               	cmpl	$0x0, <rip> # <addr>
+               	je	<addr>
                	movl	$0x7, %eax
+               	retq
+               	movl	%eax, <rip> # <addr>
                	retq
                	movl	$0x6, %eax
                	retq

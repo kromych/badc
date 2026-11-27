@@ -3,7 +3,7 @@ float_variadic_promotion.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -72,6 +72,7 @@ Disassembly of section .text:
                	vaddsd	(%rcx), %xmm0, %xmm0
                	incq	%rax
                	movl	-0xd0(%rbp), %ecx
+               	nopl	(%rax)
                	cmpl	%ecx, %eax
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
@@ -79,79 +80,70 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x1, %edi
+               	pushq	%rax
                	movsd	<rip>, %xmm0
+               	movl	$0x1, %edi
                	movb	$0x1, %al
                	callq	<addr>
                	vsubsd	<rip>, %xmm0, %xmm0
                	xorps	%xmm1, %xmm1
                	comisd	%xmm0, %xmm1
                	jbe	<addr>
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movsd	<rip>, %xmm1
                	comisd	%xmm0, %xmm1
                	ja	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	movl	$0x1, %edi
                	movsd	<rip>, %xmm0
+               	movl	$0x1, %edi
                	movb	$0x1, %al
                	callq	<addr>
                	vsubsd	<rip>, %xmm0, %xmm0
                	xorps	%xmm1, %xmm1
                	comisd	%xmm0, %xmm1
                	jbe	<addr>
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movsd	<rip>, %xmm1
                	comisd	%xmm0, %xmm1
                	ja	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	movl	$0x2, %edi
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
+               	movl	$0x2, %edi
                	movb	$0x2, %al
                	callq	<addr>
                	vsubsd	<rip>, %xmm0, %xmm0
                	xorps	%xmm1, %xmm1
                	comisd	%xmm0, %xmm1
                	jbe	<addr>
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movsd	<rip>, %xmm1
                	comisd	%xmm0, %xmm1
                	ja	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	movl	$0x3, %edi
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
                	movsd	<rip>, %xmm2
+               	movl	$0x3, %edi
                	movb	$0x3, %al
                	callq	<addr>
                	vsubsd	<rip>, %xmm0, %xmm0
                	xorl	%eax, %eax
-               	movq	%rax, %xmm15
-               	comisd	%xmm0, %xmm15
+               	movq	%rax, %xmm14
+               	comisd	%xmm0, %xmm14
                	jbe	<addr>
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm0
+               	vxorpd	<rip>, %xmm0, %xmm0
                	movsd	<rip>, %xmm1
                	comisd	%xmm0, %xmm1
                	ja	<addr>
                	movl	$0x4, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	popq	%rbp
+               	popq	%r11
                	retq

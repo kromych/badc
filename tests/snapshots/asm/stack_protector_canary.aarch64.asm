@@ -3,7 +3,7 @@ stack_protector_canary.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -34,8 +34,8 @@ Disassembly of section .text:
                	subs	x17, x17, #0x1
                	b.ne	<addr>
                	mov	sp, x20
-               	mov	x1, #0x9                // =9
                	mov	x0, x20
+               	mov	x1, #0x9                // =9
                	bl	<addr>
                	ldrb	w0, [x20, #0x8]
                	adrp	x16, <page>
@@ -78,10 +78,10 @@ Disassembly of section .text:
                	ldr	x16, [x16]
                	stur	x16, [x29, #-0x8]
                	mov	x16, #0x0               // =0
+               	ldrsw	x0, [x29, #0x10]
+               	and	x1, x0, #0xff
                	sub	x0, x29, #0x48
                	mov	x2, #0x18               // =24
-               	ldrsw	x1, [x29, #0x10]
-               	and	x1, x1, #0xff
                	bl	<addr>
                	sub	x2, x29, #0x30
                	add	x0, x29, #0x10
@@ -155,8 +155,8 @@ Disassembly of section .text:
                	mov	x16, sp
                	and	sp, x16, #0xffffffffffffffe0
                	sub	x0, x29, #0x30
-               	mov	x2, #0x20               // =32
                	mov	x1, #0x3                // =3
+               	mov	x2, #0x20               // =32
                	bl	<addr>
                	ldurb	w0, [x29, #-0x30]
                	ldurb	w1, [x29, #-0x11]
@@ -177,12 +177,11 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	sub	x0, x29, #0x20
-               	mov	x2, #0x10               // =16
                	mov	x1, #0x1                // =1
+               	mov	x2, #0x10               // =16
                	bl	<addr>
-               	sub	x0, x29, #0x20
-               	ldurb	w1, [x29, #-0x20]
-               	cmp	w1, #0x1
+               	ldurb	w0, [x29, #-0x20]
+               	cmp	w0, #0x1
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	adrp	x16, <page>
@@ -197,13 +196,13 @@ Disassembly of section .text:
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x2, #0x10               // =16
-               	mov	x1, #0x2                // =2
-               	bl	<addr>
                	sub	x0, x29, #0x20
-               	ldurb	w1, [x29, #-0x20]
-               	add	x1, x1, #0x1
-               	cmp	w1, #0x3
+               	mov	x1, #0x2                // =2
+               	mov	x2, #0x10               // =16
+               	bl	<addr>
+               	ldurb	w0, [x29, #-0x20]
+               	add	x0, x0, #0x1
+               	cmp	w0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
                	adrp	x16, <page>
@@ -218,8 +217,9 @@ Disassembly of section .text:
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x2, #0x10               // =16
+               	sub	x0, x29, #0x20
                	mov	x1, #0x7                // =7
+               	mov	x2, #0x10               // =16
                	bl	<addr>
                	ldurb	w0, [x29, #-0x20]
                	add	x0, x0, #0x2
@@ -256,8 +256,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, sp
-               	mov	x2, #0x40               // =64
                	mov	x1, #0x4                // =4
+               	mov	x2, #0x40               // =64
                	bl	<addr>
                	ldrb	w0, [sp, #0x3f]
                	cmp	w0, #0x4
@@ -295,10 +295,6 @@ Disassembly of section .text:
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x29               // =41
-               	stur	w0, [x29, #-0x18]
-               	mov	x0, #0x2a               // =42
-               	stur	w0, [x29, #-0x18]
                	mov	x0, #0x0                // =0
                	adrp	x16, <page>
                	ldr	x16, [x16, <lo12>]

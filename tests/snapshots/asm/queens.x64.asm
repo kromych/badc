@@ -3,7 +3,7 @@ queens.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -28,9 +28,6 @@ Disassembly of section .text:
 <solve>:
                	cmpl	$0x8, %esi
                	je	<addr>
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
                	pushq	%r15
                	pushq	%r14
                	pushq	%r13
@@ -63,6 +60,7 @@ Disassembly of section .text:
                	cmpl	%ecx, %edx
                	je	<addr>
                	incq	%rax
+               	nopl	(%rax)
                	cmpl	%r13d, %eax
                	jl	<addr>
                	movl	%ebx, (%r12,%r13,4)
@@ -77,23 +75,20 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%r14
                	popq	%r15
-               	leave
                	retq
                	movl	$0x1, %eax
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	leaq	-0x20(%rbp), %rdi
+               	subq	$0x28, %rsp
+               	leaq	(%rsp), %rdi
                	xorl	%esi, %esi
                	callq	<addr>
                	cmpl	$0x5c, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq

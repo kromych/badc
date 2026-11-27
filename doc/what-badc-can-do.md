@@ -37,6 +37,8 @@ badc writes Mach-O, ELF, and PE32+ directly:
 It also writes EFI applications and drivers. `--freestanding` links without
 the startup runtime. x86-64 code assumes x86-64-v3, and ARM64 code the Apple
 M1's ARMv8.4-A ([baseline](./native-compilation.md#instruction-set-baseline)).
+A macOS image carries the ad-hoc code signature Apple's linker writes, so one
+built on Linux or Windows runs on a Mac as written.
 
 ## Ship as one binary
 
@@ -48,10 +50,9 @@ files and inline `asm`.
 ## Optimize
 
 Every build goes through SSA and a graph-coloring register allocator, and
-`-O` adds the SSA optimization passes. The code `-O` produces runs faster
-than `clang -O0`'s. CI measures badc against tcc, ccc, clang, and gcc on Linux
-and against MSVC on Windows for every pull request and every push to
-`master`; the results are at
+`-O` adds the SSA optimization passes. CI measures badc against tcc, ccc,
+clang, and gcc on Linux and against MSVC on Windows for every pull request
+and every push to `master`; the results are at
 [badc.dev/performance](https://badc.dev/performance/).
 
 ## Emit debug info
@@ -64,6 +65,20 @@ debug directory. The `-g<level>`, `-ggdb`, `-gdwarf`, and
 DWARF 5 or `-gdwarf64`, reports B7011 `dwarf-output`, and the compile
 continues with DWARF 4.
 
+## Check programs at run time
+
+`-fsanitize=undefined` inserts the UndefinedBehaviorSanitizer checks badc
+implements: signed overflow, shifts, division by zero, array bounds, null and
+misaligned pointers, pointer overflow, float-to-integer overflow, `_Bool`
+loads, calls through an incompatible function type, and the rest
+[command-line compatibility](./std-conformance.md#command-line-compatibility)
+lists. A runtime linked into the image reports each failing site once;
+`-fsanitize-trap` traps instead. `-fcrash-report` has a program report a
+fatal signal, or an exception no handler takes, with the registers and the
+frames the system unwinder steps through. `-fstack-protector` and
+`-fstack-clash-protection` guard the stack
+([hardening](./native-compilation.md#hardening-and-code-model-knobs)).
+
 ## Run C without writing a binary
 
 `--jit` compiles in memory and calls `main`. `--interp` runs the SSA IR in an
@@ -74,4 +89,9 @@ interpreter that keeps code apart from data and can check every heap access
 ## Be a library
 
 `cargo add badc` compiles and runs C from a Rust program, with `std` or with
-`alloc` alone ([library and `no_std`](./library-and-no-std.md)).
+`alloc` alone ([library and `no_std`](./library-and-no-std.md)). Cargo
+features select what is built: the bundled headers, the optimizer, the
+backend of each architecture other than the host's, the assembler, the
+linker, and the debug-info writers. `jit_load` maps a compiled program into
+the process without running `main` and gives the address of each function
+and object it defines.

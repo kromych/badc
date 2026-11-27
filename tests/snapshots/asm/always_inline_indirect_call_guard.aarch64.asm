@@ -3,7 +3,7 @@ always_inline_indirect_call_guard.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -88,12 +88,11 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x20
                	mov	x0, #0x0                // =0
-               	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, #0xf                // =15
                	stur	x1, [x29, #-0x8]
                	stur	x0, [x29, #-0x8]
                	mov	x1, #0x5                // =5
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	cbnz	w0, <addr>
                	ldur	x0, [x29, #-0x8]
@@ -170,8 +169,8 @@ Disassembly of section .text:
                	ret
                	stur	xzr, [x29, #-0x8]
                	mov	x0, #0x2                // =2
+               	mov	x1, #0x2                // =2
                	sub	x2, x29, #0x8
-               	mov	x1, x0
                	bl	<addr>
                	cbnz	w0, <addr>
                	ldur	x0, [x29, #-0x8]
@@ -183,8 +182,8 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x0                // =0
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	sxtw	x0, w0
                	ldur	x1, [x29, #-0x8]
@@ -192,8 +191,8 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x0, #0x0                // =0
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	lsl	x0, x0, #1
                	sxtw	x0, w0
@@ -204,8 +203,8 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x0, #0x1                // =1
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	sxtw	x0, w0
                	ldur	x1, [x29, #-0x8]
@@ -215,8 +214,8 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x0, #0x1                // =1
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	lsl	x0, x0, #1
                	sxtw	x0, w0
@@ -227,8 +226,8 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x0, #0x2                // =2
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	sxtw	x0, w0
                	ldur	x1, [x29, #-0x8]
@@ -238,8 +237,8 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x0, #0x2                // =2
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	lsl	x0, x0, #1
                	sxtw	x0, w0
@@ -250,8 +249,8 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x0, #0x3                // =3
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	sxtw	x0, w0
                	ldur	x1, [x29, #-0x8]
@@ -261,8 +260,8 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x0, #0x3                // =3
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	lsl	x0, x0, #1
                	sxtw	x0, w0
@@ -273,8 +272,8 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x0, #0x4                // =4
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	sxtw	x0, w0
                	ldur	x1, [x29, #-0x8]
@@ -284,8 +283,8 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x0, #0x4                // =4
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	lsl	x0, x0, #1
                	sxtw	x0, w0
@@ -296,8 +295,8 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x0, #0x5                // =5
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	sxtw	x0, w0
                	ldur	x1, [x29, #-0x8]
@@ -307,8 +306,8 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x0, #0x5                // =5
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	lsl	x0, x0, #1
                	sxtw	x0, w0
@@ -319,8 +318,8 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x0, #0x6                // =6
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	sxtw	x0, w0
                	ldur	x1, [x29, #-0x8]
@@ -330,8 +329,8 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x0, #0x6                // =6
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	lsl	x0, x0, #1
                	sxtw	x0, w0
@@ -342,8 +341,8 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x0, #0x7                // =7
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	sxtw	x0, w0
                	ldur	x1, [x29, #-0x8]
@@ -353,8 +352,8 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x0, #0x7                // =7
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	lsl	x0, x0, #1
                	sxtw	x0, w0
@@ -365,8 +364,8 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x0, #0x8                // =8
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	sxtw	x0, w0
                	ldur	x1, [x29, #-0x8]
@@ -376,8 +375,8 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x0, #0x8                // =8
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	lsl	x0, x0, #1
                	sxtw	x0, w0
@@ -388,8 +387,8 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x0, #0x9                // =9
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	sxtw	x0, w0
                	ldur	x1, [x29, #-0x8]
@@ -399,8 +398,8 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x0, #0x9                // =9
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	lsl	x0, x0, #1
                	sxtw	x0, w0
@@ -411,8 +410,8 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x0, #0xa                // =10
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	sxtw	x0, w0
                	ldur	x1, [x29, #-0x8]
@@ -422,8 +421,8 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x0, #0xa                // =10
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	lsl	x0, x0, #1
                	sxtw	x0, w0
@@ -434,8 +433,8 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x0, #0xb                // =11
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	sxtw	x0, w0
                	ldur	x1, [x29, #-0x8]
@@ -445,8 +444,8 @@ Disassembly of section .text:
                	str	x16, [sp, #0x8]
                	mov	x0, #0xb                // =11
                	stur	x0, [x29, #-0x8]
-               	sub	x2, x29, #0x8
                	mov	x1, x0
+               	sub	x2, x29, #0x8
                	bl	<addr>
                	lsl	x0, x0, #1
                	sxtw	x0, w0

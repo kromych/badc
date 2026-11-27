@@ -3,7 +3,7 @@ runtime_struct_array_member_init.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -27,13 +27,13 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rax # <addr>
-               	addq	$0x8, %rax
-               	movl	<rip>, %ecx # <addr>
-               	cmpl	$0xa, %ecx
+               	leaq	0x8(%rax), %rcx
+               	movl	<rip>, %eax # <addr>
+               	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x2, %eax
                	retq
-               	movl	(%rax), %eax
+               	movl	(%rcx), %eax
                	cmpl	$0x1e, %eax
                	je	<addr>
                	movl	$0x6, %eax

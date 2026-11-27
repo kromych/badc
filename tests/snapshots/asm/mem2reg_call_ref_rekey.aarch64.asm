@@ -3,7 +3,7 @@ mem2reg_call_ref_rekey.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -18,10 +18,10 @@ Disassembly of section .text:
                	ret
 
 <f>:
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x2                // =2
                	cmp	w0, #0x0
-               	csel	x0, x1, x2, ne
+               	mov	x16, #0x1               // =1
+               	mov	x17, #0x2               // =2
+               	csel	x0, x16, x17, ne
                	b	<addr>
 
 <main>:

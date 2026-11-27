@@ -306,8 +306,8 @@ fn asm_label_renames_every_emitted_symbol() {
 #[test]
 fn an_internal_linkage_data_alias_names_its_target() {
     // `static T a __attribute__((alias("t")))` is an additional local name
-    // for `t`'s storage: gcc emits the alias symbol with `t`'s section,
-    // value and size.
+    // for `t`'s storage: the alias symbol takes `t`'s section, value and
+    // size.
     const STB_LOCAL: u8 = 0;
     const STB_GLOBAL: u8 = 1;
     const STT_OBJECT: u8 = 1;
@@ -543,18 +543,91 @@ fn a_unit_without_functions_places_its_objects_as_any_unit_does() {
     }
 }
 
+/// gcc `-fno-plt`: a call to a function the link resolves loads the callee
+/// from its GOT entry, on x86-64 ELF always and on aarch64 under `-fPIC`; a
+/// hidden callee and a `static` one stay direct, and so does every call
+/// without the option, at -O0 and -O.
+#[test]
+fn no_plt_calls_load_the_callee_from_its_got_entry() {
+    use crate::c5::object::elf_reloc_types::*;
+    let src = "extern void g(int);\n\
+               __attribute__((visibility(\"hidden\"))) extern void h(void);\n\
+               static void s(void) {}\n\
+               void f(void) { g(1); h(); s(); }\n";
+    let relocs = |target: Target, no_plt: bool, pic: bool, optimize: bool| {
+        let copts = CompileOptions {
+            no_entry_point: true,
+            ..Default::default()
+        };
+        let program = Compiler::with_options(src.to_string(), target, copts)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            no_plt,
+            pic,
+            optimize,
+            ..Default::default()
+        };
+        let bytes = emit_native_with_options(&program, target, opts).expect("emit");
+        let obj = parse_et_rel(&bytes, "n.o").expect("parse");
+        let text = obj
+            .sections
+            .iter()
+            .find(|s| s.name == ".text")
+            .expect(".text");
+        let mut out: Vec<(String, u32)> = (text.relocs.iter())
+            .map(|r| (obj.symbols[r.sym as usize].name.clone(), r.rtype))
+            .collect();
+        out.sort();
+        out
+    };
+    let calls = |r: &[(String, u32)], name: &str| -> Vec<u32> {
+        r.iter()
+            .filter(|(n, _)| n == name)
+            .map(|(_, t)| *t)
+            .collect()
+    };
+    for optimize in [false, true] {
+        let x64 = relocs(Target::LinuxX64, true, false, optimize);
+        assert_eq!(calls(&x64, "g"), [R_X86_64_REX_GOTPCRELX], "{x64:?}");
+        assert_eq!(calls(&x64, "h"), [R_X86_64_PLT32], "{x64:?}");
+        assert!(calls(&x64, "s").is_empty(), "{x64:?}");
+        let x64 = relocs(Target::LinuxX64, false, false, optimize);
+        assert_eq!(calls(&x64, "g"), [R_X86_64_PLT32], "{x64:?}");
+        let a64 = relocs(Target::LinuxAarch64, true, true, optimize);
+        assert_eq!(
+            calls(&a64, "g"),
+            [R_AARCH64_ADR_GOT_PAGE, R_AARCH64_LD64_GOT_LO12_NC],
+            "{a64:?}"
+        );
+        let direct = |r: &[(String, u32)], name: &str| {
+            let t = calls(r, name);
+            !t.is_empty()
+                && t.iter()
+                    .all(|t| matches!(*t, R_AARCH64_CALL26 | R_AARCH64_JUMP26))
+        };
+        assert!(direct(&a64, "h"), "{a64:?}");
+        let a64 = relocs(Target::LinuxAarch64, true, false, optimize);
+        assert!(direct(&a64, "g"), "{a64:?}");
+    }
+}
+
 #[test]
 fn a_pic_unit_names_its_interposable_definitions() {
     // System V gABI, symbol visibility: `-fPIC` code reaches the functions
     // and objects of default visibility it defines through their symbols,
     // so the link decides whether another component preempts them -- a
     // call by PLT relocation, an address and a read through the GOT, an
-    // initializer against the symbol. A `static` and a hidden definition
-    // stay direct.
+    // initializer against the symbol. A weak definition is one of them: a
+    // PC-relative address of it is refused in a shared object by GNU ld and
+    // lld, and bound to this copy by a linker that accepts it. A `static`
+    // and a hidden definition stay direct.
     let src = "int g = 1;\nint *pg = &g;\nint f(void) { return 1; }\nint (*pf)(void) = f;\n\
                static int s(void) { return 3; }\n\
                __attribute__((visibility(\"hidden\"))) int h(void) { return 4; }\n\
-               int use(void) { return f() + s() + h() + g + (pf == f); }\n";
+               __attribute__((weak)) int w(void) { return 5; }\n\
+               int use(void) { return f() + s() + h() + g + (pf == f) + (pf == w); }\n";
     let copts = CompileOptions {
         no_entry_point: true,
         ..Default::default()
@@ -575,18 +648,44 @@ fn a_pic_unit_names_its_interposable_definitions() {
         .map(|r| (name_of(r), r.rtype))
         .collect();
     // R_X86_64_PLT32 (4) and R_X86_64_REX_GOTPCRELX (42).
-    for want in [("f", 4), ("f", 42), ("g", 42)] {
+    for want in [("f", 4), ("f", 42), ("g", 42), ("w", 42)] {
         assert!(
             text.iter().any(|(n, t)| (n.as_str(), *t) == want),
             "{want:?}: {text:?}"
         );
     }
     assert!(!text.iter().any(|(n, _)| n == "s" || n == "h"), "{text:?}");
+    assert!(!text.iter().any(|(n, t)| n == "w" && *t == 2), "{text:?}");
     let data: Vec<String> = section(".data").relocs.iter().map(name_of).collect();
     assert!(
         data.contains(&"g".to_string()) && data.contains(&"f".to_string()),
         "{data:?}"
     );
+}
+
+#[test]
+fn a_c23_attribute_takes_the_operands_its_gnu_spelling_does() {
+    // C23 6.7.13.2: `[[gnu::name(...)]]` is the GNU attribute `name`, with
+    // its operands. `section`, `visibility` and `alias` were dropped in the
+    // `[[ ]]` spelling: the object went to `.data`, default visibility, and
+    // the alias was never defined.
+    let body = |a: &dyn Fn(&str) -> String| {
+        alloc::format!(
+            "{} int v = 1;\n{} int w = 2;\n{} extern int al;\n{} static int t;\n\
+             int *use(void) {{ return &t; }}\n",
+            a("section(\".mysec\")"),
+            a("visibility(\"hidden\")"),
+            a("alias(\"v\")"),
+            a("aligned(64)"),
+        )
+    };
+    let gnu = body(&|x| alloc::format!("__attribute__(({x}))"));
+    let c23 = body(&|x| alloc::format!("[[gnu::{x}]]"));
+    for target in [Target::LinuxX64, Target::LinuxAarch64] {
+        let want = compile_bytes(&gnu, target);
+        assert!(want.windows(6).any(|w| w == b".mysec"), "{target:?}");
+        assert!(compile_bytes(&c23, target) == want, "{target:?}");
+    }
 }
 
 #[test]
@@ -933,8 +1032,7 @@ fn module_script_discard_and_gather() {
 
 /// A `.debug_info` reference to an object the script discarded
 /// resolves to null instead of failing the link: the section describes
-/// the image rather than taking part in it, which is how GNU ld treats
-/// the same reference.
+/// the image rather than taking part in it.
 #[test]
 fn debug_reference_to_a_discarded_object_resolves_to_null() {
     let script = parse_module_script("SECTIONS {\n /DISCARD/ : { *(.discard) *(.discard.*) }\n}\n")
@@ -1696,8 +1794,8 @@ fn a_comdat_group_survives_a_relocatable_merge_once() {
     );
 }
 
-/// `.gnu.linkonce.*` deduplicates by section name here too. GNU ld's
-/// `-r` keeps the first copy and drops the later one whole.
+/// `.gnu.linkonce.*` deduplicates by section name here too: the first
+/// copy stays and the later one is dropped whole.
 #[test]
 fn gnu_linkonce_deduplicates_in_a_relocatable_merge() {
     let unit = |source: &str, fill: u8, only: &str| {
@@ -1726,9 +1824,8 @@ fn gnu_linkonce_deduplicates_in_a_relocatable_merge() {
 }
 
 /// A local reference into a dropped member is reported rather than
-/// redirected onto the surviving copy, which is what GNU ld's `-r`
-/// does; the surviving group's contents need bear no relation to the
-/// dropped one's.
+/// redirected onto the surviving copy; the surviving group's contents
+/// need bear no relation to the dropped one's.
 #[test]
 fn a_local_reference_into_a_dropped_group_fails_the_merge() {
     let unit = |source: &str, fill: u8, refs: bool| {
@@ -1849,11 +1946,11 @@ impl<'a> Img<'a> {
     }
 }
 
-/// An output past `SHN_LORESERVE` sections numbers itself the way gas
-/// and GNU ld do: `e_shnum` 0 with the real count in section header
-/// 0's `sh_size`, `e_shstrndx` `SHN_XINDEX` with the real index in its
-/// `sh_link`, and every symbol in a high section reaching it through
-/// `SHT_SYMTAB_SHNDX`.
+/// An output past `SHN_LORESERVE` sections numbers itself by the gABI's
+/// extended section numbering: `e_shnum` 0 with the real count in
+/// section header 0's `sh_size`, `e_shstrndx` `SHN_XINDEX` with the
+/// real index in its `sh_link`, and every symbol in a high section
+/// reaching it through `SHT_SYMTAB_SHNDX`.
 #[test]
 fn extended_section_numbering_round_trips() {
     const N: usize = 0xff00 + 16;
@@ -1929,9 +2026,8 @@ fn extended_section_numbering_round_trips() {
     assert_eq!(reloc_syms, alloc::vec!["high"]);
 }
 
-/// The merged string tables share suffixes the way gas and GNU ld
-/// build theirs: a name that ends another name points into it and the
-/// tail is stored once.
+/// The merged string tables share suffixes: a name that ends another
+/// name points into it and the tail is stored once.
 #[test]
 fn merged_string_tables_share_suffixes() {
     let mut o = group_obj("a.o", &[(".text", SHF_AX, &[0u8; 8])]);
@@ -2200,10 +2296,10 @@ const char *const *through(void) { return &escaped; }\n";
     }
 }
 
-/// A relocatable link writes the map `-Map` asks for, as GNU ld does,
-/// attributing a section's bytes to the object that contributed them in
-/// rows of exactly four fields that begin with one space and carry a
-/// non-zero size. The row shape is what this pins.
+/// A relocatable link writes the map `-Map` asks for, attributing a
+/// section's bytes to the object that contributed them in rows of
+/// exactly four fields that begin with one space and carry a non-zero
+/// size. The row shape is what this pins.
 #[test]
 fn a_relocatable_link_renders_gnu_ld_map_rows() {
     use crate::c5::linker::relocatable::link_relocatable_with_map;
@@ -2241,8 +2337,8 @@ fn a_relocatable_link_renders_gnu_ld_map_rows() {
 /// spans its own size, and a negative initializer leaves the bytes past
 /// its object zero. The x86-64 psABI 3.1.2 puts an array variable of 16
 /// bytes or more on 16. The sections hold nothing else: `.data` the
-/// one-byte NULL guard and the initialized objects, `.bss` the rest, as
-/// gcc lays them out; the `const` object moved to `.rodata` leaves no gap.
+/// one-byte NULL guard and the initialized objects, `.bss` the rest; the
+/// `const` object moved to `.rodata` leaves no gap.
 #[test]
 fn file_scope_objects_take_their_own_size_and_boundary() {
     let src = "char c1 = -1; char c2; short s1; int i1; int i2; static int i3; int *p;\n\

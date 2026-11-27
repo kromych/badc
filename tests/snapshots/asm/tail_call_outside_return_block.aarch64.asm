@@ -3,7 +3,7 @@ tail_call_outside_return_block.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -59,13 +59,13 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
+               	adrp	x0, <page>
+               	ldr	x5, [x0, #0x10]
                	mov	x0, #0x1                // =1
                	mov	x1, #0x2                // =2
                	mov	x2, #0x0                // =0
                	mov	x3, #0x7                // =7
                	mov	x4, #0x3                // =3
-               	adrp	x5, <page>
-               	ldr	x5, [x5, <lo12>]
                	blr	x5
                	adrp	x1, <page>
                	ldrsw	x1, [x1, #0x70]

@@ -3,7 +3,7 @@ designator_range_in_chain.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -57,6 +57,7 @@ Disassembly of section .text:
                	cmpl	$0x8, %ecx
                	jne	<addr>
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x3, %eax
                	jl	<addr>
                	movl	<rip>, %eax # <addr>

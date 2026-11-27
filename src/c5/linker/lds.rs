@@ -11,7 +11,7 @@
 //! only builds the tree. The lexer runs in two states the parser
 //! selects per position -- pattern state, where `*?[]-+` are name
 //! constituents (glob syntax), and expression state, where they are
-//! operators -- the same split GNU ld and lld use.
+//! operators.
 
 #![cfg(feature = "std")]
 #![allow(dead_code)]

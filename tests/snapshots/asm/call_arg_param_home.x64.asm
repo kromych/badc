@@ -3,7 +3,7 @@ call_arg_param_home.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,23 +26,18 @@ Disassembly of section .text:
                	int3
 
 <take>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	0x10(%rbp), %r10d
-               	movl	%r10d, -0x8(%rbp)
+               	subq	$0x18, %rsp
+               	movl	0x20(%rsp), %r10d
+               	movl	%r10d, 0x8(%rsp)
                	movl	%edi, <rip> # <addr>
                	movl	%esi, <rip> # <addr>
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <pass>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movq	%rdi, %r9
-               	movl	$0x1, %edi
-               	movl	$0x2, %esi
+               	pushq	%rax
                	subq	$0x10, %rsp
+               	movq	%rdi, %r9
                	movq	%r9, %r10
                	movzbq	(%r10), %r11
                	movb	%r11b, (%rsp)
@@ -52,22 +47,20 @@ Disassembly of section .text:
                	movb	%r11b, 0x2(%rsp)
                	movzbq	0x3(%r10), %r11
                	movb	%r11b, 0x3(%rsp)
+               	movl	$0x1, %edi
+               	movl	$0x2, %esi
                	callq	<addr>
                	addq	$0x10, %rsp
-               	popq	%rbp
+               	popq	%r11
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	subq	$0x18, %rsp
                	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %r9
+               	leaq	0x18(%rsp), %r9
                	leaq	<rip>, %rax
                	movl	(%rax), %r10d
                	movl	%r10d, (%r9)
-               	movl	$0x1, %edi
-               	movl	$0x2, %esi
-               	subq	$0x10, %rsp
                	movq	%r9, %r10
                	movzbq	(%r10), %r11
                	movb	%r11b, (%rsp)
@@ -77,8 +70,9 @@ Disassembly of section .text:
                	movb	%r11b, 0x2(%rsp)
                	movzbq	0x3(%r10), %r11
                	movb	%r11b, 0x3(%rsp)
+               	movl	$0x1, %edi
+               	movl	$0x2, %esi
                	callq	<addr>
-               	addq	$0x10, %rsp
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x1, %eax
                	jne	<addr>
@@ -86,7 +80,8 @@ Disassembly of section .text:
                	cmpl	$0x2, %eax
                	jne	<addr>
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x10, %rsp
+               	addq	$0x18, %rsp
                	retq
                	movl	$0x1, %eax
                	jmp	<addr>

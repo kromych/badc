@@ -148,7 +148,7 @@ no i386 code, so a C source under either flag is refused.
 
 The assembler tests compare badc's encodings with GNU as 2.46.1's for the same
 source. On x86-64 a branch to a label takes the 8-bit displacement where it
-reaches, as GNU as relaxes it.
+reaches.
 
 ### Distribution packages
 
@@ -304,7 +304,7 @@ that express it:
   its NOP area, aligned as the function is, and a `__patchable_function_entries`
   record linked to the function's text section. On x86_64,
   `-pg -mfentry -mrecord-mcount` gives it the `call __fentry__` at the symbol
-  and the `__mcount_loc` entry, as gcc emits them.
+  and the `__mcount_loc` entry, the layout ftrace reads.
 - Every `-ffixed-REG` as written: `-ffixed-x18` for the aarch64 shadow call
   stack, and `-ffixed-q16` .. `-ffixed-q31` for a NEON unit that keeps state in
   those registers. badc keeps the register out of its allocator and its own

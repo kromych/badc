@@ -1055,23 +1055,34 @@ fn eligible(func: &FunctionSsa, spliced: bool, w: Whole) -> BTreeSet<i64> {
     if w.cells == 2 {
         simd.extend(func.vector_objects.iter().copied());
     }
-    slots.retain(|s| !reject.contains(s) && reads.contains(s) && addr.values().any(|b| b == s));
-    let mut vector: BTreeSet<i64> = simd.intersection(&slots).copied().collect();
-    let mut grew = true;
-    while grew {
-        grew = false;
-        for &(d, s) in &copies {
-            if slots.contains(&d)
-                && slots.contains(&s)
-                && vector.contains(&d) != vector.contains(&s)
-            {
-                vector.insert(d);
-                vector.insert(s);
-                grew = true;
-            }
+    let addressed: BTreeSet<i64> = addr.values().copied().collect();
+    slots.retain(|s| !reject.contains(s) && reads.contains(s) && addressed.contains(s));
+    // A copy between two of them makes both vectors when either is one: the
+    // vectors are the copy-connected classes holding one.
+    let mut parent: BTreeMap<i64, i64> = BTreeMap::new();
+    fn root(parent: &mut BTreeMap<i64, i64>, mut x: i64) -> i64 {
+        while let Some(&p) = parent.get(&x).filter(|&&p| p != x) {
+            let up = parent.get(&p).copied().unwrap_or(p);
+            parent.insert(x, up);
+            x = p;
+        }
+        x
+    }
+    for &(d, s) in copies
+        .iter()
+        .filter(|(d, s)| slots.contains(d) && slots.contains(s))
+    {
+        let (rd, rs) = (root(&mut parent, d), root(&mut parent, s));
+        if rd != rs {
+            parent.insert(rd, rs);
         }
     }
-    vector
+    let seeds: BTreeSet<i64> = (simd.intersection(&slots))
+        .map(|&v| root(&mut parent, v))
+        .collect();
+    (slots.iter().copied())
+        .filter(|&v| seeds.contains(&root(&mut parent, v)))
+        .collect()
 }
 
 /// The lane stores that each begin a run of lane stores to one slot, in one
@@ -1618,10 +1629,27 @@ fn cell_slots(func: &FunctionSsa) -> (BTreeSet<i64>, BTreeSet<ValueId>) {
             _ => false,
         },
     };
+    // The cells of the multi-cell objects, as disjoint runs by first cell.
+    let mut runs: BTreeMap<i64, i64> = BTreeMap::new();
+    let mut objects: Vec<(i64, i64)> = (func.multi_cell_slots.iter())
+        .filter(|&&(_, c)| c > 1)
+        .map(|&(b, c)| (b, b + c))
+        .collect();
+    objects.sort_unstable();
+    for (lo, hi) in objects {
+        match runs.last_key_value() {
+            Some((&start, &end)) if lo <= end => {
+                runs.insert(start, end.max(hi));
+            }
+            _ => {
+                runs.insert(lo, hi);
+            }
+        }
+    }
     let multi = |off: i64| {
-        func.multi_cell_slots
-            .iter()
-            .any(|&(b, c)| c > 1 && b <= off && off < b + c)
+        runs.range(..=off)
+            .next_back()
+            .is_some_and(|(_, &end)| off < end)
     };
     let (mut slots, mut reject) = (BTreeSet::new(), BTreeSet::new());
     for (v, inst) in func.insts.iter().enumerate() {

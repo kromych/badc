@@ -137,7 +137,7 @@ fn plan(func: &FunctionSsa, alloc: &Allocation) -> Vec<Run> {
             }
             // A skipped instruction reads nothing (`spill_traffic` alike).
             if matches!(inst, Inst::Phi { .. })
-                || super::emit_common::is_dead_pure_counts(inst, idx, &alloc.use_counts)
+                || super::emit_common::is_dead_pure_counts(func, inst, idx, &alloc.use_counts)
             {
                 continue;
             }
@@ -221,15 +221,27 @@ fn apply(func: &mut FunctionSsa, runs: &[Run]) -> Undo {
     }
     // Point each run's uses at its copy. The window opens after the
     // copy, so the copy keeps reading the original value even when a
-    // later run of the same value shares the block.
+    // later run of the same value shares the block. A run visits its
+    // value's readers in the window, not every instruction there.
+    let sources: alloc::collections::BTreeSet<ValueId> =
+        runs.iter().map(|r| rewrite.remap[r.src as usize]).collect();
+    let mut readers: alloc::collections::BTreeMap<ValueId, Vec<ValueId>> = Default::default();
+    for (i, inst) in func.insts.iter().enumerate() {
+        if matches!(inst, Inst::Phi { .. }) {
+            continue;
+        }
+        inst.for_each_operand(|op| {
+            if sources.contains(&op) {
+                readers.entry(op).or_default().push(i as ValueId);
+            }
+        });
+    }
     for (k, r) in runs.iter().enumerate() {
         let new_src = rewrite.remap[r.src as usize];
-        let from = copy_id[k] + 1;
-        let to = rewrite.remap[r.last as usize];
-        for i in from..=to {
-            if matches!(func.insts[i as usize], Inst::Phi { .. }) {
-                continue;
-            }
+        let (from, to) = (copy_id[k] + 1, rewrite.remap[r.last as usize]);
+        let at = readers.get(&new_src).map_or(&[][..], |v| &v[..]);
+        let start = at.partition_point(|&i| i < from);
+        for &i in at[start..].iter().take_while(|&&i| i <= to) {
             func.insts[i as usize].for_each_operand_mut(|op| {
                 if *op == new_src {
                     *op = copy_id[k];
@@ -273,7 +285,7 @@ fn plan_heads(func: &FunctionSsa, alloc: &Allocation) -> Vec<Head> {
         for idx in block.inst_range.clone() {
             let inst = &func.insts[idx as usize];
             if matches!(inst, Inst::Phi { .. })
-                || super::emit_common::is_dead_pure_counts(inst, idx, &alloc.use_counts)
+                || super::emit_common::is_dead_pure_counts(func, inst, idx, &alloc.use_counts)
             {
                 continue;
             }
@@ -398,22 +410,31 @@ fn apply_heads(func: &mut FunctionSsa, heads: &[Head]) -> Undo {
     undo
 }
 
-/// Loop-weighted count of the memory traffic and copies placement
-/// forces the emit to issue: one per spilled definition, one per operand
-/// reference naming a spilled value, and one per inserted copy. Charging
-/// the copies is what keeps a split that only renames a value the second
-/// allocation would have given a register anyway from looking free.
+/// Loop-weighted count of the memory traffic and copies placement forces
+/// the emit to issue, in the units of LICM's hoist profits and saves
+/// (`placement_cost` in [`super::licm`]): one per spilled definition, one
+/// per operand reference naming a spilled value, one per inserted copy,
+/// and one per store and load of a register saved around a call or a
+/// loop. Charging the copies is what keeps a split that only renames a
+/// value the second allocation would have given a register anyway from
+/// looking free.
 pub(super) fn spill_traffic(func: &FunctionSsa, alloc: &Allocation) -> u64 {
+    (spill_traffic_by_block(func, alloc).into_iter()).fold(0, u64::saturating_add)
+}
+
+/// [`spill_traffic`] per block.
+pub(super) fn spill_traffic_by_block(func: &FunctionSsa, alloc: &Allocation) -> Vec<u64> {
     let weights = super::reg_alloc::block_weights(func);
     let spilled = |v: ValueId| -> bool {
         v != NO_VALUE && matches!(alloc.places.get(v as usize), Some(Place::Spill(_)))
     };
-    let mut total: u64 = 0;
+    let mut out = vec![0u64; func.blocks.len()];
     for (b, block) in func.blocks.iter().enumerate() {
         let wb = weights[b];
+        let total = &mut out[b];
         for idx in block.inst_range.clone() {
             let inst = &func.insts[idx as usize];
-            if super::emit_common::is_dead_pure_counts(inst, idx, &alloc.use_counts) {
+            if super::emit_common::is_dead_pure_counts(func, inst, idx, &alloc.use_counts) {
                 continue;
             }
             // A copy is one instruction -- a reload, a register move, or a
@@ -421,32 +442,41 @@ pub(super) fn spill_traffic(func: &FunctionSsa, alloc: &Allocation) -> u64 {
             // slot; its operand is not charged again.
             if let Inst::Copy { value, .. } = *inst {
                 let both = spilled(idx) && spilled(value);
-                total = total.saturating_add(wb * (1 + u64::from(both)));
+                *total = total.saturating_add(wb * (1 + u64::from(both)));
                 continue;
             }
             if spilled(idx) {
-                total = total.saturating_add(wb);
+                *total = total.saturating_add(wb);
+            }
+            if let Ok(i) = alloc
+                .call_saves
+                .binary_search_by_key(&idx, |&(site, _)| site)
+            {
+                let saves = &alloc.call_saves[i].1;
+                let moved = saves.len() + saves.iter().filter(|s| !s.stored).count();
+                *total = total.saturating_add(wb.saturating_mul(moved as u64));
             }
             super::reg_alloc::for_each_operand(inst, |op| {
                 if spilled(op) {
-                    total = total.saturating_add(wb);
+                    *total = total.saturating_add(wb);
                 }
             });
         }
         block.terminator.for_each_operand(|op| {
             if spilled(op) {
-                total = total.saturating_add(wb);
+                *total = total.saturating_add(wb);
             }
         });
-        // The stores and loads of the registers saved around loops.
+        // The stores and loads of the registers saved around regions.
         let saves = &alloc.loop_saves;
         let b = b as BlockId;
         let moved = saves.stores_at(b).len()
+            + saves.stores_at_start_of(b).len()
             + saves.loads_at_start_of(b).len()
             + saves.loads_at_end_of(b).len();
-        total = total.saturating_add(wb.saturating_mul(moved as u64));
+        *total = total.saturating_add(wb.saturating_mul(moved as u64));
     }
-    total
+    out
 }
 
 /// Allocate `func`, then retry with the spilled values' call-free runs
@@ -573,6 +603,7 @@ mod tests {
         places[0] = Place::Spill(0);
         Allocation {
             places,
+            fenv_access: false,
             spill_count: 1,
             gpr_used: Vec::new(),
             fp_used: Vec::new(),
@@ -589,7 +620,8 @@ mod tests {
             select_inc: vec![false; n],
             imm_held: vec![false; n],
             imm_store: vec![false; n],
-            stack_imm: alloc::collections::BTreeMap::new(),
+            call_set: alloc::collections::BTreeMap::new(),
+            select_set: alloc::collections::BTreeSet::new(),
             stack_load: alloc::collections::BTreeMap::new(),
             fp_const: vec![false; n],
             fp_mem_operand: alloc::collections::BTreeSet::new(),
@@ -603,6 +635,7 @@ mod tests {
             call_saves: Vec::new(),
             loop_saves: Default::default(),
             sve: Default::default(),
+            scratch_sites: None,
         }
     }
 

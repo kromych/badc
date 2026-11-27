@@ -3,7 +3,7 @@ vector_lane_runs_keep_what_they_do_not_write.aarch64:	file format elf64-littleaa
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -70,9 +70,9 @@ Disassembly of section .text:
                	sub	sp, sp, #0x200
                	mov	x0, #0x0                // =0
                	sub	x1, x29, #0x200
-               	add	x1, x1, x0, lsl #3
-               	mov	x2, #-0x1               // =-1
-               	str	x2, [x1]
+               	add	x2, x1, x0, lsl #3
+               	mov	x3, #-0x1               // =-1
+               	str	x3, [x2]
                	add	x0, x0, #0x1
                	cmp	w0, #0x40
                	b.lt	<addr>
@@ -128,8 +128,8 @@ Disassembly of section .text:
                	stur	wzr, [x29, #-0x38]
                	sub	x7, x29, #0x50
                	ldursw	x0, [x29, #-0x8]
-               	sub	x1, x29, #0x38
                	ldr	q0, [x7]
+               	sub	x1, x29, #0x38
                	bl	<addr>
                	ldursw	x0, [x29, #-0x38]
                	cmp	w0, #0x1e

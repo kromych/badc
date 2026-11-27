@@ -4,6 +4,7 @@
 // return code.
 #include <fenv.h>
 #include <math.h>
+#pragma STDC FENV_ACCESS ON
 
 static int invalid_after(int r) {
     return !r && fetestexcept(FE_INVALID);

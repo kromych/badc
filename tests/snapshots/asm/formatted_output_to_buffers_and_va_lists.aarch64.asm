@@ -3,7 +3,7 @@ formatted_output_to_buffers_and_va_lists.aarch64:	file format elf64-littleaarch6
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -149,22 +149,29 @@ Disassembly of section .text:
                	movk	x3, #0x1, lsl #16
                	bl	<addr>
                	mov	x1, x0
+               	ldurb	w3, [x29, #-0x3b]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	sub	x2, x29, #0x40
-               	ldurb	w3, [x29, #-0x3b]
                	bl	<addr>
                	mov	x0, #0x0                // =0
+               	mov	x1, #0x0                // =0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	mov	x1, x0
                	bl	<addr>
                	mov	x1, x0
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	bl	<addr>
+               	fmov	d0, #3.50000000
+               	fmov	d1, #4.50000000
+               	sub	x0, x29, #0x50
+               	add	x16, sp, #0x30
+               	fmov	x17, d0
+               	bl	<addr>
+               	ldr	q0, [x0]
                	sub	x0, x29, #0x40
                	mov	x1, #0x40               // =64
                	adrp	x2, <page>
@@ -172,16 +179,9 @@ Disassembly of section .text:
                	mov	x3, #0x1                // =1
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
-               	fmov	d0, #3.50000000
-               	fmov	d1, #4.50000000
                	mov	x5, #0x7a               // =122
                	mov	x6, #-0x5               // =-5
                	mov	x7, #0x12c              // =300
-               	sub	x8, x29, #0x50
-               	add	x16, sp, #0x30
-               	fmov	x17, d0
-               	bl	<addr>
-               	ldr	q0, [x8]
                	bl	<addr>
                	mov	x1, x0
                	adrp	x0, <page>

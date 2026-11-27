@@ -3,7 +3,7 @@ variadic_hfa_struct_arg.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -92,15 +92,14 @@ Disassembly of section .text:
                	stur	d0, [x29, #-0x10]
                	fmov	d0, #2.25000000
                	stur	d0, [x29, #-0x8]
-               	mov	x0, #0x1                // =1
                	ldr	d0, [x7]
                	ldr	d1, [x7, #0x8]
+               	mov	x0, #0x1                // =1
                	bl	<addr>
                	fmov	d1, #3.75000000
-               	mov	x0, #0x0                // =0
-               	mov	x1, #0x1                // =1
                	fcmp	d0, d1
-               	csel	x0, x0, x1, eq
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, eq
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

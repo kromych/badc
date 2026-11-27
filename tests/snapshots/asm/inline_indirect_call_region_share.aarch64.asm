@@ -3,7 +3,7 @@ inline_indirect_call_region_share.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -81,14 +81,14 @@ Disassembly of section .text:
                	ldur	x1, [x29, #-0x10]
                	add	x0, x0, x1
                	ldur	x1, [x29, #-0x8]
-               	add	x0, x0, x1
+               	add	x1, x0, x1
                	cmp	x20, #0x1c
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x30]
                	ldr	x20, [sp], #0x40
                	ret
-               	cmn	x0, #0x2
+               	cmn	x1, #0x2
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x30]

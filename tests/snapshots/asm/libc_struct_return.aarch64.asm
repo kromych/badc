@@ -3,7 +3,7 @@ libc_struct_return.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -16,41 +16,31 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
                	mov	x0, #0x11               // =17
                	mov	x1, #0x5                // =5
                	bl	<addr>
-               	stur	x0, [x29, #-0x8]
-               	ldur	w0, [x29, #-0x8]
-               	ldur	w1, [x29, #-0x4]
+               	lsr	x1, x0, #32
                	add	x2, x0, x1
                	cmp	w2, #0x5
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mul	x0, x0, x1
                	cmp	w0, #0x6
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x64               // =100
                	mov	x1, #0x7                // =7
                	bl	<addr>
-               	stur	x0, [x29, #-0x8]
-               	ldur	w0, [x29, #-0x8]
-               	ldur	w1, [x29, #-0x4]
-               	add	x0, x0, x1
+               	add	x0, x0, x0, lsr #32
                	cmp	w0, #0x10
                	b.eq	<addr>
                	mov	x0, #0x3                // =3
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

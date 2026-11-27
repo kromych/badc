@@ -35,11 +35,6 @@ use super::types::{
     narrow_const_int, strip_unsigned, struct_ptr_depth, unqualified_version_ty,
 };
 
-/// The outer binding a nested block saved before rebinding a name, restored
-/// at the block's exit. A block nests arbitrarily, so unlike the single
-/// `h_*` shadow slot used at function-body top level this is a per-entry
-/// snapshot; it carries every field that a block-local declarator can retype
-/// on the reused symbol slot (C99 6.2.1 nested scopes).
 /// A registered `__attribute__((cleanup(fn)))` variable. The fields the
 /// destructor call bakes into its `Ident` are captured at declaration
 /// time; see `register_cleanup_var`.
@@ -87,37 +82,10 @@ pub(super) struct SwitchLabels {
     ranges: Vec<(i128, i128)>,
 }
 
+/// A binding a block-scope declaration hides, restored at the block's exit.
 pub(super) struct BlockShadow {
     pub(super) idx: usize,
-    class: i64,
-    type_: i64,
-    incomplete_enum_tag: Option<u32>,
-    enumeration: Option<u32>,
-    val: i64,
-    fn_ptr_indirection: i64,
-    fn_ptr_ret_indirection: i64,
-    fn_type: crate::c5::symbol::FnType,
-    array_size: i64,
-    type_align: i64,
-    inner_array_size: i64,
-    array_dims: Vec<i64>,
-    is_vla: bool,
-    vla_ptr_slot: i64,
-    vla_size_slot: i64,
-    is_zero_len_array: bool,
-    reserved_data_bytes: i64,
-    fam_init_bytes: i64,
-    data_align: i64,
-    is_thread_local: bool,
-    is_const_qualified: bool,
-    storage_is_const: bool,
-    runtime_initialized: bool,
-    is_extern_decl: bool,
-    asm_register: Option<crate::c5::symbol::AsmRegister>,
-    is_global_register: bool,
-    const_object_value: Option<crate::c5::symbol::ConstObjectValue>,
-    entity_record: Option<u32>,
-    binding: crate::c5::symbol::BindingInfo,
+    outer: crate::c5::symbol::ScopedBinding,
 }
 
 /// The fields of a name's slot that make it a function entity.
@@ -130,18 +98,29 @@ pub(super) struct FnEntity {
     pub(super) fn_type: crate::c5::symbol::FnType,
     pub(super) lineage: (i64, i64),
     pub(super) is_extern_decl: bool,
+    pub(super) asm_name: Option<alloc::string::String>,
 }
 
 impl BlockShadow {
     /// Rewrite the saved binding's types an enum definition completes.
     pub(super) fn complete_enum(&mut self, c: &super::enum_decl::EnumCompletion) {
-        c.ty(&mut self.type_, &mut self.incomplete_enum_tag);
-        c.fn_type(&mut self.fn_type);
+        self.outer.complete_enum(c);
     }
 
-    /// The saved binding's class, and whether it is a global register.
-    pub(super) fn class(&self) -> (i64, bool) {
-        (self.class, self.is_global_register)
+    pub(super) fn outer(&self) -> &crate::c5::symbol::ScopedBinding {
+        &self.outer
+    }
+
+    pub(super) fn outer_mut(&mut self) -> &mut crate::c5::symbol::ScopedBinding {
+        &mut self.outer
+    }
+}
+
+impl crate::c5::symbol::ScopedBinding {
+    /// Rewrite the binding's types an enum definition completes.
+    pub(super) fn complete_enum(&mut self, c: &super::enum_decl::EnumCompletion) {
+        c.ty(&mut self.type_, &mut self.incomplete_enum_tag);
+        c.fn_type(&mut self.fn_type);
     }
 
     pub(super) fn fn_entity(&self) -> FnEntity {
@@ -153,6 +132,7 @@ impl BlockShadow {
             fn_type: self.fn_type.clone(),
             lineage: (self.fn_ptr_indirection, self.fn_ptr_ret_indirection),
             is_extern_decl: self.is_extern_decl,
+            asm_name: self.asm_name.clone(),
         }
     }
 
@@ -164,106 +144,20 @@ impl BlockShadow {
         self.fn_type = e.fn_type.clone();
         (self.fn_ptr_indirection, self.fn_ptr_ret_indirection) = e.lineage;
         self.is_extern_decl = e.is_extern_decl;
+        self.asm_name = e.asm_name.clone();
     }
 }
 
 impl Compiler {
     /// Snapshot the current binding of `idx` for restore at block exit.
-    /// Also lists `idx` on `scope_bound`, so that the enclosing scope's
-    /// unwind covers every rebound name whether or not this snapshot
-    /// carries the field the unwind reads.
     pub(super) fn capture_block_shadow(&mut self, idx: usize) -> BlockShadow {
-        self.scope_bound.push(idx as u32);
-        let prior = self.take_prior_shape(idx);
-        let binding = Self::save_binding(&mut self.symbols[idx].binding);
-        let s = &self.symbols[idx];
-        let (inner_array_size, array_dims) =
-            prior.unwrap_or_else(|| (s.inner_array_size, s.array_dims.clone()));
-        let shadow = BlockShadow {
-            idx,
-            class: s.class,
-            type_: s.type_,
-            incomplete_enum_tag: s.incomplete_enum_tag,
-            enumeration: s.enumeration,
-            val: s.val,
-            fn_ptr_indirection: s.fn_ptr_indirection,
-            fn_ptr_ret_indirection: s.fn_ptr_ret_indirection,
-            fn_type: s.fn_type.clone(),
-            array_size: s.array_size,
-            type_align: s.type_align,
-            inner_array_size,
-            array_dims,
-            is_vla: s.is_vla,
-            vla_ptr_slot: s.vla_ptr_slot,
-            vla_size_slot: s.vla_size_slot,
-            is_zero_len_array: s.is_zero_len_array,
-            reserved_data_bytes: s.reserved_data_bytes,
-            fam_init_bytes: s.fam_init_bytes,
-            data_align: s.data_align,
-            is_thread_local: s.is_thread_local,
-            is_const_qualified: s.is_const_qualified,
-            storage_is_const: s.storage_is_const,
-            runtime_initialized: s.runtime_initialized,
-            is_extern_decl: s.is_extern_decl,
-            asm_register: s.asm_register,
-            is_global_register: s.is_global_register,
-            const_object_value: s.const_object_value,
-            entity_record: s.entity_record,
-            binding,
-        };
-        // The inner binding denotes no record yet; its declaration sets
-        // its own. Its type records its own enum tag.
-        self.symbols[idx].entity_record = None;
-        self.symbols[idx].incomplete_enum_tag = None;
-        self.symbols[idx].enumeration = None;
-        shadow
+        let outer = self.take_scope_binding(idx);
+        BlockShadow { idx, outer }
     }
 
-    /// Restore a binding saved by [`Self::capture_block_shadow`], reverting
-    /// the whole retyped slot (type and array / VLA shape included) and
-    /// clearing the block-`extern` mark.
+    /// Restore a binding saved by [`Self::capture_block_shadow`].
     pub(super) fn restore_block_shadow(&mut self, b: BlockShadow) {
-        let s = &mut self.symbols[b.idx];
-        // Same entity-preserving unbind as `restore_shadowed_symbol`:
-        // a scoped function declaration keeps its prototype / linkage
-        // on the slot; only the name binding ends.
-        if s.scoped_fn_decl && s.class == Token::Fun as i64 && b.class == 0 {
-            s.class = 0;
-            s.block_extern_active = false;
-            s.entity_record = b.entity_record;
-            return;
-        }
-        let same_function = s.class == Token::Fun as i64 && b.class == Token::Fun as i64;
-        Self::restore_binding(&mut s.binding, b.binding, same_function);
-        s.class = b.class;
-        s.type_ = b.type_;
-        s.incomplete_enum_tag = b.incomplete_enum_tag;
-        s.enumeration = b.enumeration;
-        s.val = b.val;
-        s.fn_ptr_indirection = b.fn_ptr_indirection;
-        s.fn_ptr_ret_indirection = b.fn_ptr_ret_indirection;
-        s.fn_type = b.fn_type;
-        s.array_size = b.array_size;
-        s.type_align = b.type_align;
-        s.inner_array_size = b.inner_array_size;
-        s.array_dims = b.array_dims;
-        s.is_vla = b.is_vla;
-        s.vla_ptr_slot = b.vla_ptr_slot;
-        s.vla_size_slot = b.vla_size_slot;
-        s.is_zero_len_array = b.is_zero_len_array;
-        s.reserved_data_bytes = b.reserved_data_bytes;
-        s.fam_init_bytes = b.fam_init_bytes;
-        s.data_align = b.data_align;
-        s.is_thread_local = b.is_thread_local;
-        s.is_const_qualified = b.is_const_qualified;
-        s.storage_is_const = b.storage_is_const;
-        s.runtime_initialized = b.runtime_initialized;
-        s.is_extern_decl = b.is_extern_decl;
-        s.asm_register = b.asm_register;
-        s.is_global_register = b.is_global_register;
-        s.const_object_value = b.const_object_value;
-        s.entity_record = b.entity_record;
-        s.block_extern_active = false;
+        Self::restore_scope_binding(&mut self.symbols[b.idx], b.outer);
     }
 
     /// Record the locals a scope declared before its bindings are
@@ -815,6 +709,8 @@ impl Compiler {
             self.pending.fn_ptr_type.clone(),
             self.pending.base_is_function_type,
         );
+        // A declarator that derives nothing from a `void` base is bare `void`.
+        let base_was_void = self.pending.base_was_void;
         while self.lex.tk != ';' {
             self.pending.attrs = spec_attrs.clone();
             (
@@ -834,6 +730,7 @@ impl Compiler {
             if id_idx == usize::MAX {
                 return Err(self.compile_err(Code::INVALID_DECLARATION, "typedef requires a name"));
             }
+            let declarator_is_bare_void = base_was_void && is_void_ty(ty);
             self.emit_vm_bound_stores(id_idx, false)?;
             // An array of a variable-length array type is one too, its byte
             // count the element's times the bound.
@@ -971,6 +868,7 @@ impl Compiler {
             // A zero-length alias shares the `-1` count of one of unknown size.
             self.symbols[id_idx].is_zero_len_array = td_array < 0 && td_zero_len;
             self.symbols[id_idx].is_function_type = typedef_is_fn_type;
+            self.symbols[id_idx].is_void_typedef = declarator_is_bare_void;
             self.symbols[id_idx].fn_ptr_indirection = typedef_fpi;
             self.symbols[id_idx].fn_ptr_ret_indirection =
                 fn_ptr_ret_indirection * i64::from(typedef_fpi > 0);
@@ -1177,18 +1075,17 @@ impl Compiler {
     fn new_temp(&mut self, ty: i64) -> (usize, i64) {
         let slot = self.reserve_slots(self.local_storage_slots(ty, 1));
         let sym_idx = self.symbols.len();
-        // The shadow fields mirror the live ones so the function-exit
+        // The saved binding mirrors the live one so the function-exit
         // `restore_shadowed_symbol` leaves this compiler-generated local
         // a `Loc`, rather than resetting its class to the zero default.
-        self.symbols.push(crate::c5::symbol::Symbol {
+        let mut temp = crate::c5::symbol::Symbol {
             class: Token::Loc as i64,
             type_: ty,
             val: slot,
-            h_class: Token::Loc as i64,
-            h_type: ty,
-            h_val: slot,
             ..Default::default()
-        });
+        };
+        temp.outer = crate::c5::symbol::ScopedBinding::of(&temp);
+        self.symbols.push(temp);
         // The symbol index runs a hash array in lockstep with `symbols`;
         // a push without a matching `record` desyncs it and the next
         // interned identifier lands at the wrong index. The empty name is
@@ -1315,9 +1212,10 @@ impl Compiler {
         &mut self,
         stmt_expr: bool,
     ) -> Result<(super::super::ast::StmtId, Option<usize>), C5Error> {
-        // C99 7.12.2: an `FP_CONTRACT` pragma inside the block holds to its
-        // end, where the state before the block is restored.
-        let fp_contract = self.lex.fp_contract;
+        // C99 7.12.2, C17 7.6.1p2: an `FP_CONTRACT` or `FENV_ACCESS` pragma
+        // inside the block holds to its end, where the state before the block
+        // is restored.
+        let (fp_contract, fenv_access) = (self.lex.fp_contract, self.lex.fenv_access);
         self.next()?;
         self.open_cleanup_scope(stmt_expr);
         // C99 6.2.1: a block introduces a new scope for struct,
@@ -1459,6 +1357,7 @@ impl Compiler {
         // level ids).
         let block_id = self.ast_wrap_block_items(&top_level_ids);
         self.lex.fp_contract = fp_contract;
+        self.lex.fenv_access = fenv_access;
         self.next()?;
 
         // Emit the unused-variable / unused-value diagnostics for
@@ -1681,6 +1580,9 @@ impl Compiler {
     /// (`pause` / `yield`, lowered to the target spin-loop hint).
     /// Operand constraints and other instructions are rejected.
     fn parse_asm_stmt(&mut self) -> Result<(), C5Error> {
+        if !cfg!(feature = "inline-asm") {
+            return Err(self.compile_err(Code::UNSUPPORTED, crate::c5::asm::NO_INLINE_ASM));
+        }
         let at = self.site();
         let (template, tstart, is_volatile, is_goto) = self.parse_asm_head()?;
         // `asm goto` takes the general extended-asm path directly: the
@@ -2067,10 +1969,20 @@ impl Compiler {
                     Some(c) => c,
                     None => {
                         self.truncate_data(data_base);
-                        return Err(self.compile_err(
-                            Code::UNSUPPORTED,
-                            alloc::format!("inline asm: unsupported constraint `{cstr}`"),
-                        ));
+                        let text = match matching_index(cstr) {
+                            Some(_) if !is_output => match n_outputs.checked_sub(1) {
+                                Some(last) => alloc::format!(
+                                    "inline asm: matching constraint `{cstr}` names no output: \
+                                     the last is {last}"
+                                ),
+                                None => alloc::format!(
+                                    "inline asm: matching constraint `{cstr}` in a statement \
+                                     with no outputs"
+                                ),
+                            },
+                            _ => alloc::format!("inline asm: unsupported constraint `{cstr}`"),
+                        };
+                        return Err(self.compile_err(Code::UNSUPPORTED, text));
                     }
                 };
             if self.lex.tk != '(' {
@@ -2423,7 +2335,7 @@ impl Compiler {
             // A statement with successors, not an expression: the
             // walker closes the block with `Terminator::AsmGoto`.
             self.flush_pending_stores();
-            let pos = self.ast_src_pos();
+            let pos = self.ast_src_pos_at(at);
             let stmt = self
                 .ast
                 .push_stmt(super::super::ast::Stmt::AsmGoto(idx), pos);
@@ -2434,10 +2346,10 @@ impl Compiler {
             return Ok(());
         }
         self.ty = Ty::Int as i64;
-        let pos = self.ast_src_pos();
+        let pos = self.ast_src_pos_at(at);
         let id = self.ast.push_expr(Expr::InlineAsm(idx), pos);
-        self.ast_acc = Some(id);
-        let _ = self.ast_emit_expr_stmt();
+        self.ast.push_stmt(super::super::ast::Stmt::Expr(id), pos);
+        self.ast_acc = None;
         Ok(())
     }
 
@@ -2871,18 +2783,17 @@ impl Compiler {
         }
         // x86 `A`. On i386 this names the `edx:eax` pair; on x86-64 it is the
         // `a` or `d` register (a value wider than a register has no pair form
-        // here and is rejected at the operand). GCC and clang allocate
-        // `rax` for it, which `Fixed(0)` spells.
+        // here and is rejected at the operand). It allocates `rax`, which
+        // `Fixed(0)` spells.
         if is_x86 && body == "A" {
             return Some((AsmConstraint::Fixed(0), is_rw));
         }
         // A matching constraint ties an input to an earlier output.
-        if let Some(d) = body.chars().find(|c| c.is_ascii_digit()) {
-            let idx = d as u8 - b'0';
-            if (idx as usize) < n_outputs {
-                return Some((AsmConstraint::Match(idx), is_rw));
-            }
-            return None;
+        if let Some(idx) = matching_index(body) {
+            return (idx < n_outputs)
+                .then(|| u8::try_from(idx).ok())
+                .flatten()
+                .map(|idx| (AsmConstraint::Match(idx), is_rw));
         }
         // Fixed-register class letters.
         let fixed = |c: char| -> Option<u8> {
@@ -3801,6 +3712,7 @@ impl Compiler {
             let at = self.site();
             self.check_seh_exit("`return`", None)?;
             self.next()?;
+            let value_at = self.site();
             let ret_ty = self.current_func_return_ty;
             let returns_sve = self.sve_type_of(ret_ty).is_some();
             let returns_struct = is_struct_value_ty(ret_ty) && !returns_sve;
@@ -3926,13 +3838,22 @@ impl Compiler {
                         }
                         self.report_mismatch(&m, at, text)?;
                     }
-                    self.check_value_conversion_of(self.ast_acc, ret_ty, 0, at);
+                    self.check_value_conversion_of(self.ast_acc, ret_ty, 0, value_at);
                     // Reuse `convert_assign_rhs` so an `int`-typed
                     // `return` from a `double`-returning function lifts
                     // through the int-to-float cast rather than landing
                     // the integer's bit pattern in the FP slot.
                     self.convert_assign_rhs(ret_ty);
                     return_value = self.ast_acc;
+                    if let (Some(attr), Some(value)) =
+                        (self.current_func_returns_nonnull, return_value)
+                        && super::types::is_pointer_ty(ret_ty)
+                    {
+                        let pos = at
+                            .offset
+                            .map_or((at.line as u32, 0), |o| self.lex.position_at(o as usize));
+                        self.sanitize_nonnull_return(value, attr, pos);
+                    }
                 }
             } else if !returns_void {
                 // Bare `return;` in a function returning non-void.
@@ -4104,4 +4025,15 @@ enum AsmListPos {
     SectionStart,
     AfterOperand,
     AfterComma,
+}
+
+/// The output a matching constraint names: the decimal number its digits
+/// spell, all of them.
+fn matching_index(body: &str) -> Option<usize> {
+    let start = body.find(|c: char| c.is_ascii_digit())?;
+    let digits = &body[start..];
+    let end = digits
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(digits.len());
+    Some(digits[..end].parse().unwrap_or(usize::MAX))
 }

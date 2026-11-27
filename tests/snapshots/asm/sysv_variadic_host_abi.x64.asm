@@ -3,7 +3,7 @@ sysv_variadic_host_abi.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -144,6 +144,7 @@ Disassembly of section .text:
                	vaddsd	(%rcx), %xmm0, %xmm0
                	incq	%rax
                	movl	-0xd0(%rbp), %ecx
+               	nopl	(%rax)
                	cmpl	%ecx, %eax
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
@@ -151,30 +152,28 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0x1, %edi
-               	movl	$0x2, %esi
+               	pushq	%rax
+               	subq	$0x10, %rsp
                	movsd	<rip>, %xmm0
-               	movl	$0x3, %ecx
                	movsd	<rip>, %xmm1
-               	movl	$0x5, %r8d
                	movsd	<rip>, %xmm2
-               	movl	$0x7, %r9d
                	movsd	<rip>, %xmm3
                	movsd	<rip>, %xmm4
-               	subq	$0x10, %rsp
                	movq	$0x9, (%rsp)
-               	movq	%rdi, %rdx
+               	movl	$0x1, %edi
+               	movl	$0x2, %esi
+               	movl	$0x1, %edx
+               	movl	$0x3, %ecx
+               	movl	$0x5, %r8d
+               	movl	$0x7, %r9d
                	movb	$0x5, %al
                	callq	<addr>
-               	addq	$0x10, %rsp
                	cmpq	$0x3a, %rax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	addq	$0x10, %rsp
+               	popq	%r11
                	retq
-               	movl	$0x9, %edi
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm1
                	movsd	<rip>, %xmm2
@@ -184,19 +183,19 @@ Disassembly of section .text:
                	movsd	<rip>, %xmm6
                	movsd	<rip>, %xmm7
                	movsd	<rip>, %xmm8
-               	subq	$0x10, %rsp
                	movq	%xmm8, %r10
                	movq	%r10, (%rsp)
+               	movl	$0x9, %edi
                	movb	$0x8, %al
                	callq	<addr>
-               	addq	$0x10, %rsp
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	addq	$0x10, %rsp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	addq	$0x10, %rsp
+               	popq	%r11
                	retq

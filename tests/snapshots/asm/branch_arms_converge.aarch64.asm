@@ -3,7 +3,7 @@ branch_arms_converge.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -30,10 +30,10 @@ Disassembly of section .text:
                	ret
 
 <keeps_values>:
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x2                // =2
                	cmp	w0, #0x0
-               	csel	x0, x2, x1, ne
+               	mov	x16, #0x2               // =2
+               	mov	x17, #0x1               // =1
+               	csel	x0, x16, x17, ne
                	ret
 
 <keeps_store>:
@@ -49,20 +49,14 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0x3                // =3
                	stur	w0, [x29, #-0x8]
-               	ldursw	x1, [x29, #-0x8]
+               	ldursw	x0, [x29, #-0x8]
+               	cbz	x0, <addr>
+               	cbz	x0, <addr>
                	mov	x0, #0x0                // =0
-               	stur	w0, [x29, #-0x10]
-               	cbz	x1, <addr>
-               	cbz	x1, <addr>
-               	mov	x1, #0x1                // =1
-               	stur	w1, [x29, #-0x10]
-               	ldursw	x1, [x29, #-0x10]
-               	cmp	w1, #0x1
-               	b.eq	<addr>
-               	mov	x0, #0x7                // =7
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, #0x7                // =7
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

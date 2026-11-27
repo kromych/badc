@@ -23,74 +23,76 @@ mod aarch64_simd;
 // These modules emit / link native images (via `emit_native*` and the
 // `link_*` helpers below), which require `native-emit` -- pulled in by
 // `full`. The host-only `--features std` build gates them out.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod atomics;
 mod auto_var_init;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod block_plan;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod branch_reach;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod codegen;
 mod compound_assign;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod computed_goto;
 mod deferred;
 mod diag_cases;
 mod divmod;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod dwarf;
-#[cfg(feature = "full")]
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+mod fault_delivery;
+#[cfg(feature = "linker")]
 mod fixed_regs;
 mod fixture_tables;
 mod frame_slot_fuzz;
 mod header_constants;
 mod inline_asm;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod inline_linkage;
 mod intrinsics;
 mod jit;
 mod lexer;
 mod libc_layout;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod linker;
 mod loop_idiom;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod native;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod native_elf;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod native_elf_x64;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod native_pe_arm64;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod native_pe_x64;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod on_demand;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod overflow;
 mod parser;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod patchable_entry;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod perf_codegen;
 mod pointer_tracking;
 mod programs;
 mod prototypes;
 mod record_layouts;
 mod redeclaration;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod reloc_golden;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod relocatable;
 mod seh;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod stack_guard;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod static_init;
 mod types;
 mod vla;
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 mod x64_frame;
 mod x86_simd;
 
@@ -178,6 +180,7 @@ pub mod signals {
         fn sigaddset(set: *mut Set, sig: c_int) -> c_int;
         fn sigismember(set: *const Set, sig: c_int) -> c_int;
         fn pthread_sigmask(how: c_int, set: *const Set, old: *mut Set) -> c_int;
+        fn sigprocmask(how: c_int, set: *const Set, old: *mut Set) -> c_int;
         fn signal(sig: c_int, handler: usize) -> usize;
     }
 
@@ -195,9 +198,12 @@ pub mod signals {
         }
 
         pub fn with(sig: c_int) -> Self {
-            let mut set = Self::empty();
-            unsafe { sigaddset(&mut set, sig) };
-            set
+            Self::empty().and(sig)
+        }
+
+        pub fn and(mut self, sig: c_int) -> Self {
+            unsafe { sigaddset(&mut self, sig) };
+            self
         }
 
         pub fn holds(&self, sig: c_int) -> bool {
@@ -215,6 +221,12 @@ pub mod signals {
     /// Restore a mask taken from [`block_on_this_thread`].
     pub fn set_thread_mask(mask: &Set) {
         unsafe { pthread_sigmask(SIG_SETMASK, mask, core::ptr::null_mut()) };
+    }
+
+    /// Set the mask through `sigprocmask`: the calling thread's, and on
+    /// macOS every thread's.
+    pub fn set_process_mask(mask: &Set) {
+        unsafe { sigprocmask(SIG_SETMASK, mask, core::ptr::null_mut()) };
     }
 
     /// The calling thread's blocked set.
@@ -1340,13 +1352,204 @@ int main(void) {{
     )
 }
 
+/// CPU time the calling thread has consumed, which waiting for a core does not advance.
+#[cfg(not(debug_assertions))]
+pub(crate) fn thread_cpu_time() -> core::time::Duration {
+    #[cfg(unix)]
+    {
+        #[repr(C)]
+        struct Timespec {
+            sec: core::ffi::c_long,
+            nsec: core::ffi::c_long,
+        }
+        #[cfg(target_vendor = "apple")]
+        const CLOCK_THREAD_CPUTIME_ID: core::ffi::c_int = 16;
+        #[cfg(not(target_vendor = "apple"))]
+        const CLOCK_THREAD_CPUTIME_ID: core::ffi::c_int = 3;
+        unsafe extern "C" {
+            fn clock_gettime(id: core::ffi::c_int, ts: *mut Timespec) -> core::ffi::c_int;
+        }
+        let mut ts = Timespec { sec: 0, nsec: 0 };
+        assert_eq!(
+            unsafe { clock_gettime(CLOCK_THREAD_CPUTIME_ID, &mut ts) },
+            0
+        );
+        core::time::Duration::new(ts.sec as u64, ts.nsec as u32)
+    }
+    #[cfg(windows)]
+    {
+        unsafe extern "system" {
+            fn GetCurrentThread() -> *mut core::ffi::c_void;
+            fn GetThreadTimes(
+                thread: *mut core::ffi::c_void,
+                creation: *mut [u32; 2],
+                exit: *mut [u32; 2],
+                kernel: *mut [u32; 2],
+                user: *mut [u32; 2],
+            ) -> core::ffi::c_int;
+        }
+        let mut t = [[0u32; 2]; 4];
+        let [c, e, k, u] = &mut t;
+        assert_ne!(unsafe { GetThreadTimes(GetCurrentThread(), c, e, k, u) }, 0);
+        let hundred_ns = |f: [u32; 2]| (u64::from(f[1]) << 32) | u64::from(f[0]);
+        core::time::Duration::from_nanos((hundred_ns(t[2]) + hundred_ns(t[3])) * 100)
+    }
+}
+
+/// A function with more values live at once than the register allocator
+/// builds its interference graph over: values live across a loop and read
+/// only at the start of its body, then three regions of the body, each
+/// holding `N` integers, doubles or vectors live at once, computed from the
+/// running sum and read in two chains of opposite order. Spilled values of
+/// one region may share slots with those of another, never with the values
+/// live across the loop. It exits 0 when its sums match the same sums kept
+/// in arrays.
+// Used only by the release-only JIT test, so it is dead on a debug build.
+#[allow(dead_code)]
+pub fn crowded_values_source() -> String {
+    use core::fmt::Write;
+    const M: usize = 8;
+    const N: usize = 150;
+    let mut f = String::new();
+    for k in 0..M {
+        writeln!(f, "    unsigned long a{k} = p[{k}] * {} + {k};", 2 * k + 1).unwrap();
+    }
+    f.push_str("    unsigned long s = 0;\n    for (int i = 0; i < n; i++) {\n");
+    let chains = |f: &mut String, value: &dyn Fn(usize) -> String, first: &str, second: &str| {
+        for k in 0..N {
+            writeln!(f, "{}", value(k)).unwrap();
+        }
+        for k in 0..N {
+            writeln!(f, "        s = s * {};", first.replace('#', &k.to_string())).unwrap();
+        }
+        for k in (0..N).rev() {
+            writeln!(
+                f,
+                "        s = s * {};",
+                second.replace('#', &k.to_string())
+            )
+            .unwrap();
+        }
+    };
+    chains(
+        &mut f,
+        &|k| {
+            let a = k % M;
+            format!(
+                "        unsigned long b{k} = (s * {}) ^ p[(i + {k}) % 256] ^ a{a};",
+                2 * k + 1
+            )
+        },
+        "31 + b#",
+        "37 + b#",
+    );
+    chains(
+        &mut f,
+        &|k| {
+            let sh = k % 50;
+            format!("        double d{k} = (double)((s >> {sh}) & 1023) * 0.5;")
+        },
+        "41 + (unsigned long)d#",
+        "43 + (unsigned long)(d# * 3.0)",
+    );
+    chains(
+        &mut f,
+        &|k| {
+            let sh = k % 40;
+            format!("        v4u v{k} = (v4u){{(unsigned)(s >> {sh}), {k}, (unsigned)i, 1}};")
+        },
+        "47 + v#[0]",
+        "53 + v#[0] + v#[1] + v#[2]",
+    );
+    format!(
+        r#"typedef unsigned v4u __attribute__((vector_size(16)));
+enum {{ M = {M}, N = {N} }};
+__attribute__((noinline)) static unsigned long crowded(const unsigned long *p, int n) {{
+{f}    }}
+    return s;
+}}
+__attribute__((noinline)) static unsigned long reference(const unsigned long *p, int n) {{
+    static unsigned long a[M], b[N];
+    static double d[N];
+    static v4u v[N];
+    for (int k = 0; k < M; k++) a[k] = p[k] * (2 * k + 1) + k;
+    unsigned long s = 0;
+    for (int i = 0; i < n; i++) {{
+        for (int k = 0; k < N; k++) b[k] = (s * (2 * k + 1)) ^ p[(i + k) % 256] ^ a[k % M];
+        for (int k = 0; k < N; k++) s = s * 31 + b[k];
+        for (int k = N - 1; k >= 0; k--) s = s * 37 + b[k];
+        for (int k = 0; k < N; k++) d[k] = (double)((s >> (k % 50)) & 1023) * 0.5;
+        for (int k = 0; k < N; k++) s = s * 41 + (unsigned long)d[k];
+        for (int k = N - 1; k >= 0; k--) s = s * 43 + (unsigned long)(d[k] * 3.0);
+        for (int k = 0; k < N; k++) v[k] = (v4u){{(unsigned)(s >> (k % 40)), k, (unsigned)i, 1}};
+        for (int k = 0; k < N; k++) s = s * 47 + v[k][0];
+        for (int k = N - 1; k >= 0; k--) s = s * 53 + v[k][0] + v[k][1] + v[k][2];
+    }}
+    return s;
+}}
+static volatile int rounds = 3;
+int main(void) {{
+    static unsigned long p[256];
+    unsigned long x = 88172645463325252UL;
+    for (int k = 0; k < 256; k++) {{
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        p[k] = x;
+    }}
+    return crowded(p, rounds) != reference(p, rounds);
+}}
+"#
+    )
+}
+
+/// More 128-bit vectors live at once than the register allocator builds its
+/// interference graph over, every one live across a call: `wide` loads `N`,
+/// multiplies them in pairs, calls through a pointer and stores the
+/// products. It exits 0 when every lane holds its product and the call ran.
+pub fn crowded_vectors_across_a_call_source() -> String {
+    use core::fmt::Write;
+    const N: usize = 150;
+    let mut s = String::from(
+        "typedef unsigned v4u __attribute__((vector_size(16)));\n\
+         static v4u in[150], out[150];\n\
+         static int calls;\n\
+         static void touch(void) { calls++; }\n\
+         void (*volatile hook)(void) = touch;\n\
+         __attribute__((noinline)) void wide(const v4u *p, v4u *q) {\n",
+    );
+    for k in 0..N {
+        writeln!(s, "    v4u a{k} = p[{k}];").unwrap();
+    }
+    for k in 0..N {
+        writeln!(s, "    v4u b{k} = a{k} * a{};", (k * 7 + 1) % N).unwrap();
+    }
+    s.push_str("    hook();\n");
+    for k in 0..N {
+        writeln!(s, "    q[{k}] = b{k};").unwrap();
+    }
+    s.push_str(
+        "}\n\
+         int main(void) {\n\
+             for (int k = 0; k < 150; k++)\n\
+                 for (int j = 0; j < 4; j++) in[k][j] = k * 4 + j + 1;\n\
+             wide(in, out);\n\
+             for (int k = 0; k < 150; k++)\n\
+                 for (int j = 0; j < 4; j++)\n\
+                     if (out[k][j] != in[k][j] * in[(k * 7 + 1) % 150][j]) return 1;\n\
+             return calls != 1;\n\
+         }\n",
+    );
+    s
+}
+
 /// Objects at 8 KiB and 16 KiB alignment in `.data`, `.bss`, a named
 /// read-only section and the relro region, as the defining unit and the
 /// checking one; the second holds a thread-local, whose template the
 /// image places ahead of `.bss`. Its `main` returns a bitmask of the
 /// misplaced objects, 128 for a wrong value. Concatenated, they form one
 /// unit.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 pub fn over_aligned_objects_units(target: crate::Target) -> (String, &'static str) {
     let section = match target.binary_format() {
         crate::BinaryFormat::Elf => ".rodata.overaligned",
@@ -1391,6 +1594,58 @@ int main(void) {
 }
 
 /// Compile inline source.
+/// Static storage no initializer names, in each form a unit declares it:
+/// a large array, a tentative definition, one a later initialized
+/// definition completes, an `extern` declaration a tentative one defines,
+/// a block-scope static, and pointers initialized into them. Exits 0 when every object
+/// reads as zero and holds what the program stores.
+pub fn zero_filled_storage_source() -> &'static str {
+    "static char big[1 << 26];\n\
+     int tentative[8];\n\
+     int later[4];\n\
+     int later[4] = {1, 2, 3, 4};\n\
+     extern long fallback;\n\
+     long fallback;\n\
+     char *into = &big[5];\n\
+     int *pt = &tentative[3];\n\
+     static int bump(void) { static long n; return (int)++n; }\n\
+     int main(void) {\n\
+         big[5] = 7;\n\
+         tentative[3] = 9;\n\
+         fallback = 3;\n\
+         bump();\n\
+         if (*into != 7 || *pt != 9 || later[2] != 3 || bump() != 2 || fallback != 3)\n\
+             return 1;\n\
+         return big[(1 << 26) - 1] + tentative[0];\n\
+     }\n"
+}
+
+/// A unit whose thread-local's initializer sets only its first byte.
+pub const PARTIAL_TLS_PAD: &str = "_Thread_local char pad[5000] = {1};\n\
+     char *pa(void) { return pad; }\n";
+
+/// A unit with a thread-local of its own, which the link places after
+/// [`PARTIAL_TLS_PAD`]'s.
+pub const PARTIAL_TLS_T: &str = "_Thread_local int t = 7;\nint *pt(void) { return &t; }\n";
+
+/// [`zero_filled_storage_source`] with thread storage duration: a large
+/// thread-local array, a tentative one, an initialized one between them and
+/// a block-scope one.
+pub fn zero_filled_thread_local_source() -> &'static str {
+    "_Thread_local char big[1 << 20];\n\
+     _Thread_local int tentative;\n\
+     _Thread_local int initialized = 5;\n\
+     static int bump(void) { static _Thread_local long n; return (int)++n; }\n\
+     int main(void) {\n\
+         big[7] = 3;\n\
+         tentative = 4;\n\
+         bump();\n\
+         if (big[7] != 3 || tentative != 4 || initialized != 5 || bump() != 2)\n\
+             return 1;\n\
+         return big[(1 << 20) - 1];\n\
+     }\n"
+}
+
 pub fn compile_str(src: &str) -> Program {
     Compiler::new(with_prelude(src)).compile().unwrap()
 }
@@ -1436,7 +1691,7 @@ pub fn compile_str_bare_for(src: &str, target: crate::Target) -> Program {
 /// bundled headers under the wrong OS macros: on a Windows host the
 /// `<stdlib.h>` `_WIN32` branch then contributes an `environ` symbol
 /// that collides with the runtime's when the image is emitted as ELF.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 pub fn link_executable_with_runtime(
     program: &Program,
     target: crate::Target,
@@ -1448,7 +1703,7 @@ pub fn link_executable_with_runtime(
 /// Link `objs` as the driver links an executable for `target`: under the
 /// target's container format, a `hosted` link importing what the objects
 /// leave undefined from the target's C library.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn link_for_target(
     objs: &[crate::NativeObject],
     target: crate::Target,
@@ -1473,7 +1728,7 @@ fn link_for_target(
 
 /// The names `objs` reference and none defines; with `weak`, weak
 /// references too.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn unresolved(objs: &[crate::NativeObject], weak: bool) -> alloc::collections::BTreeSet<String> {
     let mut defined = alloc::collections::BTreeSet::new();
     let mut undefined = alloc::collections::BTreeSet::new();
@@ -1496,7 +1751,7 @@ fn unresolved(objs: &[crate::NativeObject], weak: bool) -> alloc::collections::B
 }
 
 /// [`link_executable_with_runtime`] for an executable of `form`.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 pub fn link_executable_with_runtime_as(
     program: &Program,
     target: crate::Target,
@@ -1587,7 +1842,7 @@ pub fn link_executable_with_runtime_as(
 /// link does: each joins only when it defines a symbol the object set
 /// still leaves undefined. Nothing is compiled when nothing is
 /// undefined.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn append_on_demand_objects(
     objs: &mut Vec<crate::NativeObject>,
     target: crate::Target,
@@ -1634,7 +1889,7 @@ fn append_on_demand_objects(
 /// predefined macros `defines` and the emit options `reloc`. Every link of
 /// one configuration gets the same objects, so each test process compiles
 /// them once and every caller takes a copy.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn compiled_sources(
     sources: &[(&str, &str)],
     target: crate::Target,
@@ -1663,6 +1918,7 @@ fn compiled_sources(
                 SOURCES_COMPILED.with(|n| n.set(n.get() + 1));
                 let copts = CompileOptions::default()
                     .with_no_entry_point(true)
+                    .with_no_fp_regs(reloc.no_fp_regs)
                     .with_defines(defines.to_vec());
                 let p = Compiler::with_options(body.to_string(), target, copts)
                     .compile()
@@ -1676,7 +1932,7 @@ fn compiled_sources(
     .clone()
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 thread_local! {
     /// Sources [`compiled_sources`] compiled on this thread.
     static SOURCES_COMPILED: core::cell::Cell<usize> = const { core::cell::Cell::new(0) };
@@ -1684,7 +1940,7 @@ thread_local! {
 
 /// A second link of one configuration takes the objects the first one
 /// compiled. The entry name makes the configuration this test's own.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn link_sources_compile_once_per_configuration() {
     let sources = crate::embedded_runtime();
@@ -1712,7 +1968,7 @@ fn link_sources_compile_once_per_configuration() {
 /// Link one translation unit into a shared library, the way the CLI's
 /// `--shared` does: no startup runtime, and an unresolved global becomes
 /// a load-time import the host supplies.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[allow(dead_code)] // used by the feature-gated shared-library tests
 pub fn link_shared_library(
     program: &Program,
@@ -1748,7 +2004,7 @@ pub fn link_shared_library(
 /// `programs[0]` carries the entry point and subsystem. Used to exercise
 /// cross-unit references the single-program helper can't, e.g. an
 /// `extern _Thread_local` defined in one unit and read from another.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 pub fn link_executable_with_runtime_multi(
     programs: &[&Program],
     target: crate::Target,
@@ -1813,7 +2069,7 @@ pub fn link_executable_with_runtime_multi(
 /// freestanding executable: the embedded runtime is not linked and the
 /// image entry is `__c5_entry`. Mirrors the CLI path when an input
 /// object defines `__c5_entry`.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 pub fn link_freestanding(
     program: &Program,
     target: crate::Target,

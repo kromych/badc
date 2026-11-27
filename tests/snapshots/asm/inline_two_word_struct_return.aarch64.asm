@@ -3,7 +3,7 @@ inline_two_word_struct_return.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -19,12 +19,12 @@ Disassembly of section .text:
                	sub	sp, sp, #0x80
                	mov	x0, #0x0                // =0
                	mov	x2, #0xa                // =10
-               	sub	x1, x29, #0x80
-               	add	x1, x1, x0, lsl #4
-               	mul	x3, x0, x2
-               	mov	x4, #0x1                // =1
-               	str	w3, [x1]
-               	str	x4, [x1, #0x8]
+               	sub	x3, x29, #0x80
+               	add	x1, x3, x0, lsl #4
+               	mul	x4, x0, x2
+               	mov	x5, #0x1                // =1
+               	str	w4, [x1]
+               	str	x5, [x1, #0x8]
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
                	b.lt	<addr>
@@ -62,12 +62,11 @@ Disassembly of section .text:
                	mov	x17, #0x6665            // =26213
                	movk	x17, #0x1, lsl #16
                	add	x0, x0, x17
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x1                // =1
                	mov	x17, #0x6785            // =26501
                	movk	x17, #0x1, lsl #16
                	cmp	x0, x17
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, eq
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret

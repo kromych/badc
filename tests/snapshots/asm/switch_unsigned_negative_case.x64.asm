@@ -3,7 +3,7 @@ switch_unsigned_negative_case.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -78,96 +78,95 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
+               	pushq	%rax
                	movq	<rip>, %rax # <addr>
+               	movl	$0xffffffff, %edi       # imm = 0xFFFFFFFF
                	callq	*%rax
                	cmpl	$0x64, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	movl	$0xfffffffe, %edi       # imm = 0xFFFFFFFE
                	movq	<rip>, %rax # <addr>
+               	movl	$0xfffffffe, %edi       # imm = 0xFFFFFFFE
                	callq	*%rax
                	cmpl	$0xc8, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	movl	$0x5, %edi
                	movq	<rip>, %rax # <addr>
+               	movl	$0x5, %edi
                	callq	*%rax
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	xorl	%edi, %edi
                	movq	<rip>, %rax # <addr>
+               	xorl	%edi, %edi
                	callq	*%rax
                	cmpl	$0x3e7, %eax            # imm = 0x3E7
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	movl	$0xffff, %edi           # imm = 0xFFFF
                	movq	<rip>, %rax # <addr>
+               	movl	$0xffff, %edi           # imm = 0xFFFF
                	callq	*%rax
                	cmpl	$0x3e7, %eax            # imm = 0x3E7
                	je	<addr>
                	movl	$0x5, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	movl	$0x7, %edi
                	movq	<rip>, %rax # <addr>
+               	movl	$0x7, %edi
                	callq	*%rax
                	cmpl	$0x7, %eax
                	je	<addr>
                	movl	$0x6, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	movl	$0xff, %edi
                	movq	<rip>, %rax # <addr>
+               	movl	$0xff, %edi
                	callq	*%rax
                	cmpl	$0x3e7, %eax            # imm = 0x3E7
                	je	<addr>
                	movl	$0x7, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	movl	$0x3, %edi
                	movq	<rip>, %rax # <addr>
+               	movl	$0x3, %edi
                	callq	*%rax
                	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x8, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	movq	$-0x1, %rdi
                	movq	<rip>, %rax # <addr>
+               	movq	$-0x1, %rdi
                	callq	*%rax
                	cmpl	$0x64, %eax
                	je	<addr>
                	movl	$0x9, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	movq	$-0x2, %rdi
                	movq	<rip>, %rax # <addr>
+               	movq	$-0x2, %rdi
                	callq	*%rax
                	cmpl	$0xc8, %eax
                	je	<addr>
                	movl	$0xa, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	movl	$0x5, %edi
                	movq	<rip>, %rax # <addr>
+               	movl	$0x5, %edi
                	callq	*%rax
                	cmpl	$0x3e7, %eax            # imm = 0x3E7
                	je	<addr>
                	movl	$0xb, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

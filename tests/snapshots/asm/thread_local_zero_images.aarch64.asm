@@ -3,7 +3,7 @@ thread_local_zero_images.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -16,7 +16,7 @@ Disassembly of section .text:
 <block>:
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
-               	add	x0, x0, #0xe4
+               	add	x0, x0, #0x104
                	ldrsw	x1, [x0]
                	add	x1, x1, #0x1
                	str	w1, [x0]
@@ -63,7 +63,7 @@ Disassembly of section .text:
                	ret
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
-               	add	x0, x0, #0xc0
+               	add	x0, x0, #0xe0
                	and	x0, x0, #0x1f
                	cbz	x0, <addr>
                	mov	x0, #0x4                // =4
@@ -72,7 +72,7 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
-               	add	x1, x1, #0x40
+               	add	x1, x1, #0x60
                	ldrb	w2, [x1, x0]
                	cbnz	x2, <addr>
                	add	x0, x0, #0x1
@@ -80,7 +80,7 @@ Disassembly of section .text:
                	b.lt	<addr>
                	mrs	x0, TPIDR_EL0
                	add	x0, x0, #0x0, lsl #12   // =0x0
-               	add	x0, x0, #0xa4
+               	add	x0, x0, #0x40
                	ldrsw	x1, [x0]
                	cbz	x1, <addr>
                	mov	x0, #0x6                // =6
@@ -94,17 +94,17 @@ Disassembly of section .text:
                	cbnz	x1, <addr>
                	mrs	x1, TPIDR_EL0
                	add	x1, x1, #0x0, lsl #12   // =0x0
-               	add	x1, x1, #0x40
+               	add	x1, x1, #0x60
                	mov	x2, #0x1                // =1
                	strb	w2, [x1, #0x63]
                	mrs	x2, TPIDR_EL0
                	add	x2, x2, #0x0, lsl #12   // =0x0
-               	add	x2, x2, #0xc0
+               	add	x2, x2, #0xe0
                	mov	x3, #0x2                // =2
                	strb	w3, [x2, #0x1f]
                	mrs	x3, TPIDR_EL0
                	add	x3, x3, #0x0, lsl #12   // =0x0
-               	add	x3, x3, #0xe0
+               	add	x3, x3, #0x100
                	mov	x4, #0x4                // =4
                	str	w4, [x3]
                	mov	x4, #0x9                // =9

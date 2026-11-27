@@ -3,7 +3,7 @@ conditional_pointer_null_constant_type.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -23,9 +23,8 @@ Disassembly of section .text:
                	stur	x1, [x29, #-0x10]
                	mov	x1, #0x2a               // =42
                	stur	w1, [x29, #-0x8]
-               	mov	x1, #0x0                // =0
                	cmp	x0, #0x0
-               	csel	x1, x0, x1, ne
+               	csel	x1, x0, xzr, ne
                	ldrsw	x1, [x1, #0x10]
                	cmp	w1, #0x2a
                	b.eq	<addr>

@@ -3,7 +3,7 @@ inline_mcpy_flat_path.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,10 +26,10 @@ Disassembly of section .text:
                	int3
 
 <use_decode>:
-               	leaq	<rip>, %rax # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	shrq	$0x3e, %rcx
-               	shlq	$0x2, %rcx
+               	leaq	<rip>, %rcx # <addr>
+               	movq	<rip>, %rax # <addr>
+               	shrq	$0x3e, %rax
+               	shlq	$0x2, %rax
                	addq	%rcx, %rax
                	movzwq	(%rax), %r10
                	movw	%r10w, (%rdi)
@@ -56,51 +56,49 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movw	$0x0, -0x8(%rbp)
-               	movabsq	$-0x8000000000000000, %rcx # imm = 0x8000000000000000
-               	movq	%rcx, <rip> # <addr>
+               	subq	$0x18, %rsp
+               	movw	$0x0, 0x8(%rsp)
+               	movabsq	$-0x8000000000000000, %rax # imm = 0x8000000000000000
+               	movq	%rax, <rip> # <addr>
                	movl	$0x0, <rip> # <addr>
-               	leaq	-0x8(%rbp), %rdi
+               	leaq	0x8(%rsp), %rdi
                	callq	<addr>
                	cmpl	$0x1e, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movzwq	-0x8(%rbp), %rax
+               	movzwq	0x8(%rsp), %rax
                	cmpl	$0x3333, %eax           # imm = 0x3333
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x3, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	callq	<addr>
                	cmpq	$0x435, %rax            # imm = 0x435
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movq	<rip>, %rax # <addr>
                	cmpq	$0x6, %rax
                	je	<addr>
                	movl	$0x5, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movl	$0xb, %edi
                	callq	<addr>
                	cmpq	$0x475, %rax            # imm = 0x475
                	je	<addr>
                	movl	$0x6, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

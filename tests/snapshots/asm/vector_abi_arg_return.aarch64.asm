@@ -3,7 +3,7 @@ vector_abi_arg_return.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -337,7 +337,6 @@ Disassembly of section .text:
                	ldrb	w2, [x1, x0]
                	add	x3, x0, #0x1
                	add	x3, x3, x3, lsl #3
-               	and	x3, x3, #0xff
                	cmp	w2, w3
                	b.ne	<addr>
                	add	x0, x0, #0x1
@@ -365,12 +364,12 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	sub	x2, x29, #0xe0
-               	add	x1, x0, #0x1
-               	strb	w1, [x2, x0]
                	sub	x2, x29, #0xc0
-               	add	x3, x0, #0x46
-               	strb	w3, [x2, x0]
+               	sub	x3, x29, #0xe0
+               	add	x1, x0, #0x1
+               	strb	w1, [x3, x0]
+               	add	x4, x0, #0x46
+               	strb	w4, [x2, x0]
                	mov	x0, x1
                	cmp	w0, #0x20
                	b.lt	<addr>
@@ -492,8 +491,8 @@ Disassembly of section .text:
                	sturb	w16, [x29, #-0x81]
                	mov	x0, #0x0                // =0
                	sub	x1, x29, #0xa0
-               	ldrb	w1, [x1, x0]
-               	cmp	w1, #0x45
+               	ldrb	w2, [x1, x0]
+               	cmp	w2, #0x45
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x20

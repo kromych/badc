@@ -132,7 +132,7 @@ impl<'a> ConstData<'a> {
         // `__func__` arrays, and staged local-initializer templates.
         // Nothing can write them; their image is their value.
         intervals.extend(program.const_data_ranges.iter().copied());
-        let data_len = program.data.len() as i64;
+        let data_len = program.image_len() as i64;
         // A data symbol's address by link name, as the walker resolves a
         // reference: this unit's definition, else the extern declaration.
         let mut by_name: BTreeMap<&str, AddrConst> = BTreeMap::new();
@@ -429,6 +429,48 @@ fn data_addr(func: &FunctionSsa, ext: &BTreeSet<u32>, mut v: ValueId, mut off: i
     None
 }
 
+/// [`data_addr`] where an added displacement is a value `folded` gives,
+/// the loads this sweep folds ahead of it included, so a chain of loads
+/// each indexing by the one before folds in one sweep.
+fn data_addr_folded(
+    func: &FunctionSsa,
+    ext: &BTreeSet<u32>,
+    folded: &BTreeMap<ValueId, Option<i64>>,
+    mut v: ValueId,
+    mut off: i64,
+) -> Option<i64> {
+    let value = |x: ValueId| {
+        let mut cache = BTreeMap::new();
+        super::unroll::eval_value(func, x, folded, &mut cache, 0, &func.cmp32)
+    };
+    for _ in 0..16 {
+        match func.insts.get(v as usize)? {
+            Inst::Binop {
+                op: BinOp::Add,
+                lhs,
+                rhs,
+            } => {
+                let (base, k) = match value(*rhs) {
+                    Some(k) => (*lhs, k),
+                    None => (*rhs, value(*lhs)?),
+                };
+                off = off.wrapping_add(k);
+                v = base;
+            }
+            Inst::Binop {
+                op: BinOp::Sub,
+                lhs,
+                rhs,
+            } => {
+                off = off.wrapping_sub(value(*rhs)?);
+                v = *lhs;
+            }
+            _ => return data_addr(func, ext, v, off),
+        }
+    }
+    None
+}
+
 const SUBOBJECT_BOUND: i64 = crate::c5::op::Intrinsic::SubobjectBound as i64;
 const BUILTIN_ARG: i64 = crate::c5::op::Intrinsic::BuiltinArg as i64;
 
@@ -603,6 +645,9 @@ pub(crate) fn fold_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
     };
     let mut changed_vectors = rows;
     let mut folds: Vec<(ValueId, Folded)> = Vec::new();
+    // The integers this sweep folds loads to, which a later load's address
+    // may add.
+    let mut folded: BTreeMap<ValueId, Option<i64>> = BTreeMap::new();
     for i in func.blocks.iter().flat_map(|b| b.inst_range.clone()) {
         let (addr, disp, kind) = match func.insts[i as usize] {
             // A whole vector of zero or all-one bytes is a constant splat,
@@ -649,13 +694,17 @@ pub(crate) fn fold_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
         let Some(width) = int_width(kind) else {
             continue;
         };
-        let Some(off) = data_addr(func, &ext, addr, disp) else {
+        let Some(off) = data_addr_folded(func, &ext, &folded, addr, disp) else {
             continue;
         };
         let Some(value) = cd.read(off, width) else {
             continue;
         };
-        folds.push((i, Folded::of(value, kind)));
+        let f = Folded::of(value, kind);
+        if let Folded::Imm(k) = f {
+            folded.insert(i, Some(k));
+        }
+        folds.push((i, f));
     }
     apply(func, &mut folds) | changed_vectors | fold_copies(func, cd)
 }

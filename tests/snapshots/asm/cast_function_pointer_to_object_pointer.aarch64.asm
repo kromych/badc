@@ -3,7 +3,7 @@ cast_function_pointer_to_object_pointer.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -20,36 +20,25 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	sub	sp, sp, #0x10
-               	mov	x0, #0x5                // =5
-               	stur	w0, [x29, #-0x8]
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0xc]
                	cmp	w0, #0x7
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	stur	x0, [x29, #-0x8]
                	bl	<addr>
                	cmp	w0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0xa                // =10
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldur	x0, [x29, #-0x8]
-               	blr	x0
+               	bl	<addr>
                	cmp	w0, #0x2a
                	b.eq	<addr>
                	mov	x0, #0xb                // =11
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #0x0                // =0
-               	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret

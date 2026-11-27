@@ -3,7 +3,7 @@ narrow_remainder_rebuilt.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,15 +26,11 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
                	pushq	%rbx
                	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
                                                 # <addr>
-               	movl	$0xffffffff, <rip> # imm = 0xFFFFFFFF
-                                                # <addr>
-               	movl	<rip>, %ecx # <addr>
+               	movq	$-0x1, %rcx
+               	movl	%ecx, <rip> # <addr>
                	movl	<rip>, %esi # <addr>
                	movl	%ecx, %eax
                	xorl	%edx, %edx
@@ -49,17 +45,6 @@ Disassembly of section .text:
                	movl	<rip>, %ecx # <addr>
                	andq	$0x4, %rcx
                	andq	%rbx, %rcx
-               	movl	(%rax,%rcx,4), %eax
-               	movl	%eax, <rip> # <addr>
-               	leaq	<rip>, %rax # <addr>
-               	movl	<rip>, %ecx # <addr>
-               	andq	$0x4, %rcx
-               	andq	%rbx, %rcx
-               	movl	(%rax,%rcx,4), %ecx
-               	movl	%ecx, <rip> # <addr>
-               	movl	<rip>, %ecx # <addr>
-               	andq	$0x4, %rcx
-               	andq	%rbx, %rcx
                	movl	(%rax,%rcx,4), %ecx
                	movl	%ecx, <rip> # <addr>
                	movl	<rip>, %ecx # <addr>
@@ -76,21 +61,30 @@ Disassembly of section .text:
                	movl	<rip>, %ecx # <addr>
                	andq	$0x4, %rcx
                	andq	%rbx, %rcx
-               	movl	(%rax,%rcx,4), %eax
-               	movl	%eax, <rip> # <addr>
-               	leaq	<rip>, %rax # <addr>
+               	movl	(%rax,%rcx,4), %ecx
+               	movl	%ecx, <rip> # <addr>
                	movl	<rip>, %ecx # <addr>
                	andq	$0x4, %rcx
                	andq	%rbx, %rcx
                	movl	(%rax,%rcx,4), %eax
                	movl	%eax, <rip> # <addr>
-               	leaq	<rip>, %rdi
+               	leaq	<rip>, %rcx # <addr>
+               	movl	<rip>, %eax # <addr>
+               	andq	$0x4, %rax
+               	andq	%rbx, %rax
+               	movl	(%rcx,%rax,4), %eax
+               	movl	%eax, <rip> # <addr>
+               	movl	<rip>, %eax # <addr>
+               	andq	$0x4, %rax
+               	andq	%rbx, %rax
+               	movl	(%rcx,%rax,4), %eax
+               	movl	%eax, <rip> # <addr>
                	movq	%rbx, %rsi
+               	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	cmpl	$0x3, %ebx
                	setne	%al
                	movzbq	%al, %rax
                	popq	%rbx
-               	leave
                	retq

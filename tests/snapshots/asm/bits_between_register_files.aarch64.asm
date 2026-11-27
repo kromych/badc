@@ -3,7 +3,7 @@ bits_between_register_files.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -109,20 +109,20 @@ Disassembly of section .text:
                	mov	x1, x20
                	bl	<addr>
                	mov	x0, #0x0                // =0
-               	add	x2, x22, #0x8
-               	ldrsb	x3, [x22, x0]
+               	sub	x2, x29, #0x150
+               	add	x3, x22, #0x8
+               	ldrsb	x4, [x22, x0]
                	ldrsb	x1, [x20, x0]
-               	ldrsb	x4, [x21, x0]
-               	add	x4, x1, x4
-               	sxtb	x4, w4
-               	cmp	w3, w4
+               	ldrsb	x5, [x21, x0]
+               	add	x5, x1, x5
+               	sxtb	x5, w5
+               	cmp	w4, w5
                	b.ne	<addr>
-               	ldrsb	x3, [x2, x0]
-               	sub	x4, x29, #0x150
-               	ldrsb	x4, [x4, x0]
-               	sub	x1, x1, x4
+               	ldrsb	x4, [x3, x0]
+               	ldrsb	x5, [x2, x0]
+               	sub	x1, x1, x5
                	sxtb	x1, w1
-               	cmp	w3, w1
+               	cmp	w4, w1
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x8
@@ -213,8 +213,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x1a0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x140
                	fmov	d0, d8
+               	sub	x0, x29, #0x140
                	bl	<addr>
                	ldr	x0, [sp, #0x60]
                	stur	d8, [x29, #-0xd0]
@@ -361,31 +361,31 @@ Disassembly of section .text:
                	fmov	x0, d0
                	eor	x0, x0, #0x40000000000
                	stur	x0, [x29, #-0x40]
-               	sub	x1, x29, #0x138
-               	sub	x0, x29, #0x40
-               	ldr	x16, [x0]
-               	str	x16, [x1]
+               	sub	x0, x29, #0x138
+               	sub	x1, x29, #0x40
+               	ldr	x16, [x1]
+               	str	x16, [x0]
                	ldr	d0, [sp, #0x68]
                	stur	d0, [x29, #-0x38]
-               	sub	x0, x29, #0x38
-               	ldr	x16, [x0]
-               	str	x16, [x1]
-               	ldr	x0, [sp, #0x68]
-               	fmov	d0, x0
-               	sub	x0, x29, #0x120
+               	sub	x1, x29, #0x38
+               	ldr	x16, [x1]
+               	str	x16, [x0]
+               	ldr	x1, [sp, #0x68]
+               	fmov	d0, x1
                	ldur	d1, [x29, #-0x100]
                	fadd	d0, d0, d1
                	stur	d0, [x29, #-0x30]
-               	sub	x2, x29, #0x30
-               	ldr	x16, [x2]
-               	str	x16, [x1]
-               	ldr	x2, [sp, #0x68]
-               	stur	x2, [x29, #-0x28]
-               	sub	x2, x29, #0x28
-               	ldr	x16, [x2]
-               	str	x16, [x1]
+               	sub	x1, x29, #0x30
+               	ldr	x16, [x1]
+               	str	x16, [x0]
+               	ldr	x1, [sp, #0x68]
+               	stur	x1, [x29, #-0x28]
+               	sub	x1, x29, #0x28
+               	ldr	x16, [x1]
+               	str	x16, [x0]
                	ldr	d16, [sp, #0x68]
                	str	d16, [sp, #0x38]
+               	sub	x0, x29, #0x120
                	mov	x1, #0x5                // =5
                	bl	<addr>
                	stur	d0, [x29, #-0x20]

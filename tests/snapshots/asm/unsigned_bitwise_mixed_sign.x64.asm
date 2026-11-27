@@ -3,7 +3,7 @@ unsigned_bitwise_mixed_sign.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,65 +26,63 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
-               	movb	$-0x56, -0x20(%rbp)
-               	movw	$0xffaa, -0x18(%rbp)    # imm = 0xFFAA
-               	movl	$0xffffffaa, -0x10(%rbp) # imm = 0xFFFFFFAA
-               	movl	$0xffffffaa, -0x8(%rbp) # imm = 0xFFFFFFAA
-               	movsbq	-0x20(%rbp), %rax
-               	movswq	-0x18(%rbp), %rcx
-               	movl	-0x10(%rbp), %edx
-               	movl	-0x8(%rbp), %ecx
+               	subq	$0x28, %rsp
+               	movb	$-0x56, (%rsp)
+               	movw	$0xffaa, 0x8(%rsp)      # imm = 0xFFAA
+               	movl	$0xffffffaa, 0x10(%rsp) # imm = 0xFFFFFFAA
+               	movl	$0xffffffaa, 0x18(%rsp) # imm = 0xFFFFFFAA
+               	movsbq	(%rsp), %rax
+               	movswq	0x8(%rsp), %rcx
+               	movl	0x10(%rsp), %esi
+               	movl	0x18(%rsp), %ecx
                	cmpl	%eax, %ecx
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
-               	movq	%rcx, %rsi
-               	orq	%rax, %rsi
-               	cmpl	$-0x56, %esi
-               	je	<addr>
-               	movl	$0x2, %eax
-               	leave
-               	retq
-               	movq	%rcx, %rsi
-               	andq	%rax, %rsi
-               	cmpl	$-0x56, %esi
-               	je	<addr>
-               	movl	$0x3, %eax
-               	leave
-               	retq
+               	movq	%rcx, %rdx
+               	orq	%rax, %rdx
                	cmpl	$-0x56, %edx
                	je	<addr>
-               	movl	$0x7, %eax
-               	leave
+               	movl	$0x2, %eax
+               	addq	$0x28, %rsp
                	retq
-               	movq	%rcx, %rsi
-               	xorq	$-0x1, %rsi
-               	cmpl	$0x55, %esi
+               	movq	%rcx, %rdx
+               	andq	%rax, %rdx
+               	cmpl	$-0x56, %edx
+               	je	<addr>
+               	movl	$0x3, %eax
+               	addq	$0x28, %rsp
+               	retq
+               	cmpl	$-0x56, %esi
+               	je	<addr>
+               	movl	$0x7, %eax
+               	addq	$0x28, %rsp
+               	retq
+               	movq	%rcx, %rdx
+               	xorq	$-0x1, %rdx
+               	cmpl	$0x55, %edx
                	je	<addr>
                	movl	$0x8, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
-               	orq	%rdx, %rcx
-               	cmpl	$-0x56, %ecx
+               	orq	%rcx, %rsi
+               	cmpl	$-0x56, %esi
                	je	<addr>
                	movl	$0x9, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	cmpl	$-0x56, %eax
                	je	<addr>
                	movl	$0xa, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	xorq	$0xffaa, %rax           # imm = 0xFFAA
                	cmpl	$0xffff0000, %eax       # imm = 0xFFFF0000
                	je	<addr>
                	movl	$0xb, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq

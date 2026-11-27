@@ -3,7 +3,7 @@ pthread_create.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -25,21 +25,21 @@ Disassembly of section .text:
                	mov	x1, #0x2                // =2
                	bl	<addr>
                	mov	x20, x0
+               	mov	x0, x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x0, x20
                	bl	<addr>
                	mov	x21, x0
+               	mov	x0, x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	mov	x0, x20
                	bl	<addr>
                	mov	x20, x0
                	sub	x0, x29, #0x10
                	mov	x1, #0x0                // =0
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mov	x3, x1
+               	mov	x3, #0x0                // =0
                	blr	x21
                	ldur	x0, [x29, #-0x10]
                	sub	x1, x29, #0x8

@@ -3,7 +3,7 @@ sigaction_siginfo_handler.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -21,10 +21,10 @@ Disassembly of section .text:
                	add	x4, x4, #0x1
                	str	w4, [x2, #0x20]
                	adrp	x2, <page>
-               	mov	x4, #-0x1               // =-1
                	ldrsw	x1, [x1]
                	cmp	w1, w0
-               	csel	x0, x0, x4, eq
+               	mov	x17, #-0x1              // =-1
+               	csel	x0, x0, x17, eq
                	str	w0, [x2, #0x24]
                	adrp	x0, <page>
                	adrp	x1, <page>
@@ -40,8 +40,7 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x130
-               	sub	x1, x29, #0x130
-               	str	xzr, [sp]
+               	sub	x0, x29, #0x130
                	str	xzr, [sp, #0x8]
                	str	xzr, [sp, #0x10]
                	str	xzr, [sp, #0x18]
@@ -58,13 +57,13 @@ Disassembly of section .text:
                	stur	xzr, [x29, #-0xc0]
                	stur	xzr, [x29, #-0xb8]
                	stur	xzr, [x29, #-0xb0]
-               	mov	x2, #0x4                // =4
+               	mov	x1, #0x4                // =4
                	stur	xzr, [x29, #-0xa0]
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	str	x0, [sp]
-               	stur	x2, [x29, #-0xa8]
-               	add	x0, x1, #0x8
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	str	x2, [sp]
+               	stur	x1, [x29, #-0xa8]
+               	add	x0, x0, #0x8
                	bl	<addr>
                	mov	x0, #0xa                // =10
                	sub	x1, x29, #0x130
@@ -76,7 +75,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x130
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x2, x29, #0x98
                	mov	x1, #0x0                // =0
                	stur	x1, [x29, #-0x98]
                	stur	x1, [x29, #-0x90]
@@ -98,6 +96,7 @@ Disassembly of section .text:
                	stur	x1, [x29, #-0x10]
                	stur	x1, [x29, #-0x8]
                	mov	x0, #0xa                // =10
+               	sub	x2, x29, #0x98
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>
@@ -136,10 +135,9 @@ Disassembly of section .text:
                	ret
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x28]
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x6                // =6
                	cmp	x0, #0x0
-               	csel	x0, x1, x2, ne
+               	mov	x17, #0x6               // =6
+               	csel	x0, xzr, x17, ne
                	add	sp, sp, #0x130
                	ldp	x29, x30, [sp], #0x10
                	ret

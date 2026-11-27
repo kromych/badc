@@ -3,7 +3,7 @@ fenv_exception_set_matches_the_platform.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -37,9 +37,8 @@ Disassembly of section .text:
                	mov	x0, #0x1f               // =31
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x3                // =3
                	cmp	x0, #0x0
-               	csel	x0, x2, x1, ne
+               	mov	x16, #0x3               // =3
+               	csel	x0, x16, xzr, ne
                	ldp	x29, x30, [sp], #0x10
                	ret

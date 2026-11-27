@@ -3,7 +3,7 @@ return_low_word.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -69,10 +69,10 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	bl	<addr>
-               	mov	x1, #0x3                // =3
-               	mov	x2, #0x5                // =5
                	cmp	w0, #0x0
-               	csel	x0, x1, x2, ne
+               	mov	x16, #0x3               // =3
+               	mov	x17, #0x5               // =5
+               	csel	x0, x16, x17, ne
                	ldp	x29, x30, [sp], #0x10
                	ret
 
@@ -231,7 +231,7 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	mov	x0, #-0x80000000        // =-2147483648
-               	mov	x1, x0
+               	mov	x1, #-0x80000000        // =-2147483648
                	bl	<addr>
                	cmn	x0, #0x1
                	b.eq	<addr>

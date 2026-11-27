@@ -3,7 +3,7 @@ sroa_runtime_index_stays_memory.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,49 +26,47 @@ Disassembly of section .text:
                	int3
 
 <pick>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x40, %rsp
+               	subq	$0x48, %rsp
                	movq	(%rdi), %rax
                	leaq	(%rax,%rax,2), %rax
                	incq	%rax
-               	movq	%rax, -0x40(%rbp)
+               	movq	%rax, (%rsp)
                	movq	0x8(%rdi), %rax
                	leaq	(%rax,%rax,2), %rax
                	incq	%rax
-               	movq	%rax, -0x38(%rbp)
+               	movq	%rax, 0x8(%rsp)
                	movq	0x10(%rdi), %rax
                	leaq	(%rax,%rax,2), %rax
                	incq	%rax
-               	movq	%rax, -0x30(%rbp)
+               	movq	%rax, 0x10(%rsp)
                	movq	0x18(%rdi), %rax
                	leaq	(%rax,%rax,2), %rax
                	incq	%rax
-               	movq	%rax, -0x28(%rbp)
+               	movq	%rax, 0x18(%rsp)
                	movq	0x20(%rdi), %rax
                	leaq	(%rax,%rax,2), %rax
                	incq	%rax
-               	movq	%rax, -0x20(%rbp)
-               	movq	0x28(%rdi), %rcx
-               	leaq	(%rcx,%rcx,2), %rcx
-               	incq	%rcx
-               	movq	%rcx, -0x18(%rbp)
-               	movq	0x30(%rdi), %rcx
-               	leaq	(%rcx,%rcx,2), %rcx
-               	incq	%rcx
-               	movq	%rcx, -0x10(%rbp)
+               	movq	%rax, 0x20(%rsp)
+               	movq	0x28(%rdi), %rax
+               	leaq	(%rax,%rax,2), %rax
+               	incq	%rax
+               	movq	%rax, 0x28(%rsp)
+               	movq	0x30(%rdi), %rax
+               	leaq	(%rax,%rax,2), %rax
+               	incq	%rax
+               	movq	%rax, 0x30(%rsp)
                	movq	0x38(%rdi), %rcx
                	leaq	(%rcx,%rcx,2), %rcx
                	incq	%rcx
-               	movq	%rcx, -0x8(%rbp)
+               	movq	%rcx, 0x38(%rsp)
                	movq	%rsi, %rcx
                	andq	$0x7, %rcx
-               	movq	-0x40(%rbp,%rcx,8), %rcx
-               	leaq	0x5(%rsi), %rdx
-               	andq	$0x7, %rdx
-               	movq	-0x40(%rbp,%rdx,8), %rax
-               	addq	%rcx, %rax
-               	leave
+               	movq	(%rsp,%rcx,8), %rdx
+               	leaq	0x5(%rsi), %rcx
+               	andq	$0x7, %rcx
+               	movq	(%rsp,%rcx,8), %rax
+               	addq	%rdx, %rax
+               	addq	$0x48, %rsp
                	retq
 
 <main>:

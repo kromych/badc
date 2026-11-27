@@ -3,7 +3,7 @@ designator_completes_a_union.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -17,23 +17,23 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x10
-               	sub	x2, x29, #0x10
+               	sub	x1, x29, #0x10
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x2]
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
+               	stp	x16, x17, [x1]
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
-               	ldr	d1, [x3]
+               	adrp	x4, <page>
+               	add	x4, x4, <lo12>
+               	adrp	x2, <page>
+               	add	x2, x2, <lo12>
+               	ldr	d1, [x0]
                	fmov	d0, #2.50000000
                	fcmp	d1, d0
                	b.ne	<addr>
-               	ldr	x3, [x3, #0x8]
-               	cmp	x3, #0x4
+               	ldr	x0, [x0, #0x8]
+               	cmp	x0, #0x4
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	cbz	x0, <addr>
@@ -46,12 +46,11 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	add	x0, x0, <lo12>
                	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x2]
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x0                // =0
+               	stp	x16, x17, [x1]
                	ldr	d1, [x0]
                	fcmp	d1, d0
-               	csel	x0, x1, x2, ne
+               	mov	x16, #0x1               // =1
+               	csel	x0, x16, xzr, ne
                	mov	x17, #0x14              // =20
                	mul	x0, x0, x17
                	add	sp, sp, #0x10
@@ -61,30 +60,30 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldrsw	x3, [x1]
-               	cmp	w3, #0x1
+               	ldrsw	x0, [x4]
+               	cmp	w0, #0x1
                	b.ne	<addr>
-               	ldrsw	x3, [x1, #0x4]
-               	cmp	w3, #0x2
+               	ldrsw	x0, [x4, #0x4]
+               	cmp	w0, #0x2
                	b.ne	<addr>
-               	ldrsw	x1, [x1, #0x8]
-               	cmp	w1, #0x3
+               	ldrsw	x0, [x4, #0x8]
+               	cmp	w0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	b	<addr>
-               	ldr	x1, [x0]
-               	cmp	x1, #0x6
+               	ldr	x0, [x2]
+               	cmp	x0, #0x6
                	b.ne	<addr>
-               	ldr	x1, [x0, #0x8]
-               	cmp	x1, #0x7
+               	ldr	x0, [x2, #0x8]
+               	cmp	x0, #0x7
                	b.ne	<addr>
-               	ldrsw	x1, [x0, #0x10]
-               	cmp	w1, #0x8
+               	ldrsw	x0, [x2, #0x10]
+               	cmp	w0, #0x8
                	b.ne	<addr>
-               	ldr	x1, [x0, #0x18]
-               	cmp	x1, #0x9
+               	ldr	x0, [x2, #0x18]
+               	cmp	x0, #0x9
                	b.ne	<addr>
-               	ldrsw	x0, [x0, #0x20]
+               	ldrsw	x0, [x2, #0x20]
                	cmp	w0, #0xa
                	b.eq	<addr>
                	mov	x0, #0x3                // =3

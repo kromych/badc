@@ -11,6 +11,90 @@ use crate::c5::ast::expr_ty;
 use crate::c5::ir::BitCountOp;
 
 impl<'a> Walker<'a> {
+    /// A string function `-finline-stringops` expands inline (an
+    /// `Expr::MemLoop`): a loop over the bytes, one at a time, its index in
+    /// a frame slot. `memmove` copies upward unless the destination lies
+    /// inside the source above it (C17 7.24.2.2); `memcmp` compares the
+    /// bytes as `unsigned char` and yields the first pair's difference
+    /// (7.24.4.1). The value is that difference, or the destination.
+    pub(super) fn walk_mem_loop(
+        &mut self,
+        b: &mut SsaBuilder,
+        op: crate::c5::ast::StringOp,
+        (a, c, len): (ExprId, ExprId, ExprId),
+    ) -> Result<ValueId, WalkError> {
+        use crate::c5::ast::StringOp;
+        let p = self.walk_expr_rvalue(b, a)?;
+        let q = self.walk_expr_rvalue(b, c)?;
+        let n = self.walk_expr_rvalue(b, len)?;
+        let (index, result) = (b.alloc_synthetic_local(), b.alloc_synthetic_local());
+        let initial = if op == StringOp::Compare { b.imm(0) } else { p };
+        b.store_local(result, initial, StoreKind::I64);
+        let (up, after) = (b.new_block(), b.new_block());
+        let down = (op == StringOp::Move).then(|| b.new_block());
+        match down {
+            Some(down) => {
+                let gap = b.binop(BinOp::Sub, p, q);
+                let clear = b.binop(BinOp::Uge, gap, n);
+                b.branch_zero(clear, down, up);
+            }
+            None => b.jmp(up),
+        }
+        b.switch_to(up);
+        let zero = b.imm(0);
+        b.store_local(index, zero, StoreKind::I64);
+        let (head, body) = (b.new_block(), b.new_block());
+        b.jmp(head);
+        b.switch_to(head);
+        let i = b.load_local(index, LoadKind::I64);
+        let more = b.binop(BinOp::Ult, i, n);
+        b.branch_zero(more, after, body);
+        b.switch_to(body);
+        let at = b.binop(BinOp::Add, p, i);
+        match op {
+            StringOp::Set => {
+                b.store(at, q, StoreKind::I8);
+            }
+            StringOp::Copy | StringOp::Move => {
+                let from = b.binop(BinOp::Add, q, i);
+                let byte = b.load(from, LoadKind::U8);
+                b.store(at, byte, StoreKind::I8);
+            }
+            StringOp::Compare => {
+                let other = b.binop(BinOp::Add, q, i);
+                let (x, y) = (b.load(at, LoadKind::U8), b.load(other, LoadKind::U8));
+                let diff = b.binop(BinOp::Sub, x, y);
+                let (differs, same) = (b.new_block(), b.new_block());
+                b.branch_zero(diff, same, differs);
+                b.switch_to(differs);
+                b.store_local(result, diff, StoreKind::I64);
+                b.jmp(after);
+                b.switch_to(same);
+            }
+        }
+        let next = b.binop_imm(BinOp::Add, i, 1);
+        b.store_local(index, next, StoreKind::I64);
+        b.jmp(head);
+        if let Some(down) = down {
+            b.switch_to(down);
+            b.store_local(index, n, StoreKind::I64);
+            let (head, body) = (b.new_block(), b.new_block());
+            b.jmp(head);
+            b.switch_to(head);
+            let i = b.load_local(index, LoadKind::I64);
+            b.branch_zero(i, after, body);
+            b.switch_to(body);
+            let j = b.binop_imm(BinOp::Add, i, -1);
+            b.store_local(index, j, StoreKind::I64);
+            let (to, from) = (b.binop(BinOp::Add, p, j), b.binop(BinOp::Add, q, j));
+            let byte = b.load(from, LoadKind::U8);
+            b.store(to, byte, StoreKind::I8);
+            b.jmp(head);
+        }
+        b.switch_to(after);
+        Ok(b.load_local(result, LoadKind::I64))
+    }
+
     /// Expand a `__builtin_memcpy` / `__builtin_memmove` /
     /// `__builtin_memset` whose byte count is a constant. The copy rides
     /// `Inst::Mcpy`, which transfers forward in units and so carries the
@@ -142,64 +226,402 @@ impl<'a> Walker<'a> {
 
         let wrapped = b.binop(bin, va, vb);
         store_place(b, addr, wrapped, store_kind, seg, false, 0);
-        let flag = match (op, unsigned) {
-            // Unsigned add carries out iff the sum is below an addend.
-            (0, true) => b.binop(BinOp::Ult, wrapped, va),
-            // Signed add overflows iff both addends share a sign that the
-            // sum does not: `(a ^ s) & (b ^ s)` has its sign bit set.
-            (0, false) => {
-                let ax = b.binop(BinOp::Xor, va, wrapped);
-                let bx = b.binop(BinOp::Xor, vb, wrapped);
-                let m = b.binop(BinOp::And, ax, bx);
-                let zero = b.imm(0);
-                b.binop(BinOp::Lt, m, zero)
-            }
-            // Unsigned subtract borrows iff the minuend is the smaller.
-            (1, true) => b.binop(BinOp::Ult, va, vb),
-            // Signed subtract overflows iff the operands differ in sign
-            // and the result's sign differs from the minuend's.
-            (1, false) => {
-                let ab = b.binop(BinOp::Xor, va, vb);
-                let aw = b.binop(BinOp::Xor, va, wrapped);
-                let m = b.binop(BinOp::And, ab, aw);
-                let zero = b.imm(0);
-                b.binop(BinOp::Lt, m, zero)
-            }
-            // Unsigned multiply overflows iff `a != 0 && product/a != b`.
-            // The divisor is forced non-zero so the unused `a == 0` lane
-            // does not divide by zero.
-            (_, true) => {
-                let zero = b.imm(0);
-                let iszero = b.binop(BinOp::Eq, va, zero);
-                let safe = b.binop(BinOp::Or, va, iszero);
-                let q = b.binop(BinOp::Divu, wrapped, safe);
-                let a_nz = b.binop(BinOp::Ne, va, zero);
-                let mism = b.binop(BinOp::Ne, q, vb);
-                b.binop(BinOp::And, a_nz, mism)
-            }
-            // Signed multiply: same division test, but the divisor is
-            // forced to 1 for `a == 0` and `a == -1` so the `INT_MIN / -1`
-            // trap is avoided; the `a == -1` overflow is `product == INT_MIN`.
-            (_, false) => {
-                let zero = b.imm(0);
-                let neg1 = b.imm(-1);
-                let one = b.imm(1);
-                let iszero = b.binop(BinOp::Eq, va, zero);
-                let isneg1 = b.binop(BinOp::Eq, va, neg1);
-                let special = b.binop(BinOp::Or, iszero, isneg1);
-                let not_special = b.binop(BinOp::Xor, special, one);
-                let scaled = b.binop(BinOp::Mul, va, not_special);
-                let safe = b.binop(BinOp::Add, scaled, special);
-                let q = b.binop(BinOp::Div, wrapped, safe);
-                let mism = b.binop(BinOp::Ne, q, vb);
-                let normal = b.binop(BinOp::And, not_special, mism);
-                let intmin = b.imm(i64::MIN);
-                let is_intmin = b.binop(BinOp::Eq, wrapped, intmin);
-                let neg1_ovf = b.binop(BinOp::And, isneg1, is_intmin);
-                b.binop(BinOp::Or, normal, neg1_ovf)
-            }
+        let flag = match unsigned {
+            true => unsigned_overflow64(b, bin, va, vb, wrapped),
+            false => signed_overflow64(b, bin, va, vb, wrapped),
         };
         Ok(flag)
+    }
+
+    /// A `+`, `-` or `*` under `-fsanitize=signed-integer-overflow` or
+    /// `unsigned-integer-overflow`:
+    /// the 64-bit value [`Self::walk_binary`] gives, which the parser's
+    /// renormalization narrows, and where the type cannot represent the
+    /// exact value, the check's handler called with the site and the
+    /// operands, or a trap.
+    pub(super) fn walk_checked_binary(
+        &mut self,
+        b: &mut SsaBuilder,
+        check: crate::c5::ast::SanitizeCheck,
+        op: BinOp,
+        (lhs, rhs): (ExprId, ExprId),
+        ty: i64,
+    ) -> Result<ValueId, WalkError> {
+        if Self::is_pointer_step(check) {
+            let lhs_is_pointer = expr_ty(self.ast.expr(lhs)).is_some_and(is_pointer_ty);
+            let (base, offset) = if lhs_is_pointer {
+                let base = self.walk_expr_rvalue(b, lhs)?;
+                (base, self.pointer_offset(b, rhs)?)
+            } else {
+                let offset = self.pointer_offset(b, lhs)?;
+                (self.walk_expr_rvalue(b, rhs)?, offset)
+            };
+            return Ok(self.checked_pointer_step(b, check, base, offset, op == BinOp::Sub));
+        }
+        let va = self.walk_expr_rvalue(b, lhs)?;
+        let vb = self.walk_expr_rvalue(b, rhs)?;
+        if !matches!(op, BinOp::Add | BinOp::Sub | BinOp::Mul) {
+            let flag = match op {
+                BinOp::Shl | BinOp::Shr | BinOp::Shru => {
+                    self.shift_flag(b, check, op, (va, vb), ty)
+                }
+                _ => self.divide_flag(b, check, (va, vb), ty),
+            };
+            self.report_failed_check(b, check, flag, &[va, vb]);
+            let width = self.divmod_operand_width(op, ty, lhs, rhs);
+            let mask = self.operand_mask(op, ty, lhs, rhs);
+            return Ok(Self::int_binop_values(b, op, va, vb, width, mask));
+        }
+        let raw = b.binop(op, va, vb);
+        let flag = self.overflow_flag(b, op, (va, vb), raw, ty);
+        self.report_failed_check(b, check, flag, &[va, vb]);
+        Ok(raw)
+    }
+
+    /// Whether `check` is the check of a pointer step.
+    pub(super) fn is_pointer_step(check: crate::c5::ast::SanitizeCheck) -> bool {
+        check.checks == crate::c5::compiler::sanitize::Check::PointerOverflow.bit()
+    }
+
+    /// The byte offset node `off` of a pointer step, evaluated: its value,
+    /// whether it is signed, and where the parser scaled an index by a
+    /// constant element size, the flag of the product overflowing.
+    pub(super) fn pointer_offset(
+        &mut self,
+        b: &mut SsaBuilder,
+        off: ExprId,
+    ) -> Result<PointerOffset, WalkError> {
+        if let Expr::Binary {
+            op: BinOp::Mul,
+            lhs,
+            rhs,
+            ty,
+        } = *self.ast.expr(off)
+            && let Some(k) = self.const_fold_int(rhs).filter(|&k| k > 1)
+        {
+            let index = self.walk_expr_rvalue(b, lhs)?;
+            let value = b.binop_imm(BinOp::Mul, index, k);
+            let signed = !is_unsigned_ty(ty);
+            let overflow = if signed {
+                let (hi, lo) = (b.imm(i64::MAX / k), b.imm(i64::MIN / k));
+                let above = b.binop(BinOp::Gt, index, hi);
+                let below = b.binop(BinOp::Lt, index, lo);
+                b.binop(BinOp::Or, above, below)
+            } else {
+                let hi = b.imm((u64::MAX / k as u64) as i64);
+                b.binop(BinOp::Ugt, index, hi)
+            };
+            return Ok(PointerOffset {
+                value,
+                signed,
+                overflow: Some(overflow),
+            });
+        }
+        let signed = !expr_ty(self.ast.expr(off)).is_some_and(is_unsigned_ty);
+        Ok(PointerOffset {
+            value: self.walk_expr_rvalue(b, off)?,
+            signed,
+            overflow: None,
+        })
+    }
+
+    /// `base` stepped by `offset`, back where `sub`, with `check` reporting
+    /// the step `-fsanitize=pointer-overflow` finds undefined in C: a null
+    /// base or result, a result on the wrong side of the base
+    /// for the direction -- a signed offset's sign, an unsigned offset's
+    /// operator -- or the offset's scaling overflowing. The handler takes
+    /// the base and the result.
+    pub(super) fn checked_pointer_step(
+        &mut self,
+        b: &mut SsaBuilder,
+        check: crate::c5::ast::SanitizeCheck,
+        base: ValueId,
+        offset: PointerOffset,
+        sub: bool,
+    ) -> ValueId {
+        let op = if sub { BinOp::Sub } else { BinOp::Add };
+        let result = b.binop(op, base, offset.value);
+        let zero = b.imm(0);
+        let null_base = b.binop(BinOp::Eq, base, zero);
+        let null_result = b.binop(BinOp::Eq, result, zero);
+        let null = b.binop(BinOp::Or, null_base, null_result);
+        let wrong_side = if offset.signed {
+            let forward_op = if sub { BinOp::Le } else { BinOp::Ge };
+            let forward = b.binop(forward_op, offset.value, zero);
+            let ahead = b.binop(BinOp::Uge, result, base);
+            b.binop(BinOp::Ne, forward, ahead)
+        } else if sub {
+            b.binop(BinOp::Ugt, result, base)
+        } else {
+            b.binop(BinOp::Ult, result, base)
+        };
+        let mut flag = b.binop(BinOp::Or, null, wrong_side);
+        if let Some(overflow) = offset.overflow {
+            flag = b.binop(BinOp::Or, flag, overflow);
+        }
+        self.report_failed_check(b, check, flag, &[base, result]);
+        result
+    }
+
+    /// Whether `va op vb`, a shift of a left operand promoted to `ty`,
+    /// fails `check`: an amount below 0 or at the width or above
+    /// (`shift-exponent`), or for a signed left shift, a negative value or
+    /// one whose bits at or above the result's sign bit, after the shift,
+    /// are not all zero (`shift-base`, C11 6.5.7p4).
+    pub(super) fn shift_flag(
+        &mut self,
+        b: &mut SsaBuilder,
+        check: crate::c5::ast::SanitizeCheck,
+        op: BinOp,
+        (va, vb): (ValueId, ValueId),
+        ty: i64,
+    ) -> ValueId {
+        use crate::c5::compiler::sanitize::Check;
+        let bits = 8 * type_size_bytes(ty, self.target) as i64;
+        let width = b.imm(bits);
+        let too_far = b.binop(BinOp::Uge, vb, width);
+        let mut flag = if check.checks & Check::ShiftExponent.bit() != 0 {
+            too_far
+        } else {
+            b.imm(0)
+        };
+        if op == BinOp::Shl && check.checks & Check::ShiftBase.bit() != 0 {
+            // The value is sign-extended in the register, so shifting it
+            // right by `bits - 1 - amount` leaves the bits that land at or
+            // above the sign bit, the sign included.
+            let amount = b.binop_imm(BinOp::And, vb, bits - 1);
+            let top = b.imm(bits - 1);
+            let keep = b.binop(BinOp::Sub, top, amount);
+            let lost = b.binop(BinOp::Shr, va, keep);
+            let zero = b.imm(0);
+            let lost = b.binop(BinOp::Ne, lost, zero);
+            let one = b.imm(1);
+            let in_range = b.binop(BinOp::Xor, too_far, one);
+            let base = b.binop(BinOp::And, lost, in_range);
+            flag = b.binop(BinOp::Or, flag, base);
+        }
+        flag
+    }
+
+    /// Whether the `/` or `%` of `va` by `vb` in `ty` fails `check`: a zero
+    /// divisor (`integer-divide-by-zero`), or for a signed type the
+    /// type's minimum by -1 (`signed-integer-overflow`).
+    pub(super) fn divide_flag(
+        &mut self,
+        b: &mut SsaBuilder,
+        check: crate::c5::ast::SanitizeCheck,
+        (va, vb): (ValueId, ValueId),
+        ty: i64,
+    ) -> ValueId {
+        use crate::c5::compiler::sanitize::Check;
+        let zero = b.imm(0);
+        let mut flag = if check.checks & Check::IntegerDivideByZero.bit() != 0 {
+            b.binop(BinOp::Eq, vb, zero)
+        } else {
+            b.imm(0)
+        };
+        if check.checks & Check::SignedIntegerOverflow.bit() != 0 {
+            let bits = 8 * type_size_bytes(ty, self.target) as u32;
+            let min = b.imm(i64::MIN >> (64 - bits));
+            let neg1 = b.imm(-1);
+            let is_min = b.binop(BinOp::Eq, va, min);
+            let by_neg1 = b.binop(BinOp::Eq, vb, neg1);
+            let overflow = b.binop(BinOp::And, is_min, by_neg1);
+            flag = b.binop(BinOp::Or, flag, overflow);
+        }
+        flag
+    }
+
+    /// `-x` under `-fsanitize=signed-integer-overflow`, `0 - x`, which
+    /// overflows for the type's minimum alone, or `unsigned-integer-overflow`,
+    /// for every `x` but 0; reported with `x`.
+    pub(super) fn walk_checked_neg(
+        &mut self,
+        b: &mut SsaBuilder,
+        check: crate::c5::ast::SanitizeCheck,
+        child: ExprId,
+        ty: i64,
+    ) -> Result<ValueId, WalkError> {
+        let v = self.walk_expr_rvalue(b, child)?;
+        let zero = b.imm(0);
+        let raw = b.binop(BinOp::Sub, zero, v);
+        let flag = self.overflow_flag(b, BinOp::Sub, (zero, v), raw, ty);
+        self.report_failed_check(b, check, flag, &[v]);
+        Ok(raw)
+    }
+
+    /// Whether the `a op b` of type `ty`, whose 64-bit value is `raw`,
+    /// overflows `ty`. Under 8 bytes the operands are extended in the
+    /// register, so `raw` is exact and overflows where narrowing changes it.
+    pub(super) fn overflow_flag(
+        &mut self,
+        b: &mut SsaBuilder,
+        op: BinOp,
+        (va, vb): (ValueId, ValueId),
+        raw: ValueId,
+        ty: i64,
+    ) -> ValueId {
+        if type_size_bytes(ty, self.target) < 8 {
+            let narrowed = self.extend_atomic_result(b, raw, ty);
+            b.binop(BinOp::Ne, raw, narrowed)
+        } else if crate::c5::compiler::types::is_unsigned_ty(ty) {
+            unsigned_overflow64(b, op, va, vb, raw)
+        } else {
+            signed_overflow64(b, op, va, vb, raw)
+        }
+    }
+
+    /// Where `flag` is set, call `check`'s handler with its site data and
+    /// `values`, or trap; the failing path is the unlikely one.
+    /// Hold `value` to what `check` tests it against, reporting it where it
+    /// fails.
+    pub(super) fn check_value(
+        &mut self,
+        b: &mut SsaBuilder,
+        check: crate::c5::ast::ValueCheck,
+        value: ValueId,
+    ) {
+        use crate::c5::ast::ValueTest;
+        let flag = match check.test {
+            // A negative index, read unsigned, lies past every bound.
+            ValueTest::Index { len, one_past } => {
+                let limit = b.imm((len + u64::from(one_past)) as i64);
+                b.binop(BinOp::Uge, value, limit)
+            }
+            ValueTest::Bool => {
+                let one = b.imm(1);
+                b.binop(BinOp::Ugt, value, one)
+            }
+            ValueTest::FloatRange {
+                lo,
+                hi,
+                lo_inclusive,
+                single,
+            } => {
+                let v = if single {
+                    b.fp_widen_to_f64(value)
+                } else {
+                    value
+                };
+                let (lo, hi) = (b.imm(lo as i64), b.imm(hi as i64));
+                let above_op = if lo_inclusive {
+                    BinOp::FgeQuiet
+                } else {
+                    BinOp::FgtQuiet
+                };
+                let above = b.binop(above_op, v, lo);
+                let below = b.binop(BinOp::FltQuiet, v, hi);
+                let fits = b.binop(BinOp::And, above, below);
+                let zero = b.imm(0);
+                b.binop(BinOp::Eq, fits, zero)
+            }
+            ValueTest::Pointer { short: true, .. } => b.imm(1),
+            ValueTest::Pointer {
+                null, align_mask, ..
+            } => {
+                let zero = b.imm(0);
+                let misaligned = if align_mask != 0 {
+                    let low = b.binop_imm(BinOp::And, value, align_mask as i64);
+                    Some(b.binop(BinOp::Ne, low, zero))
+                } else {
+                    None
+                };
+                let is_null = null.then(|| b.binop(BinOp::Eq, value, zero));
+                match (is_null, misaligned) {
+                    (Some(n), Some(m)) => b.binop(BinOp::Or, n, m),
+                    (Some(f), None) | (None, Some(f)) => f,
+                    (None, None) => zero,
+                }
+            }
+            ValueTest::Positive { signed } => {
+                let zero = b.imm(0);
+                b.binop(if signed { BinOp::Le } else { BinOp::Eq }, value, zero)
+            }
+            ValueTest::NonZero { site } => {
+                let zero = b.imm(0);
+                let flag = b.binop(BinOp::Eq, value, zero);
+                let at: alloc::vec::Vec<ValueId> =
+                    site.map(|s| b.imm_data(s)).into_iter().collect();
+                self.report_failed_check(b, check.check, flag, &at);
+                return;
+            }
+            ValueTest::FunctionType { hash } => {
+                use crate::c5::op::{FUNCTION_PREFIX_SIGNATURE, Intrinsic};
+                let (read, join) = (b.new_block(), b.new_block());
+                b.branch_zero(value, join, read);
+                b.switch_to(read);
+                let prefix = b.intrinsic(Intrinsic::FunctionPrefix as i64, alloc::vec![value]);
+                let signature = b.binop_imm(BinOp::And, prefix, i64::from(u32::MAX));
+                let signature_imm = b.imm(i64::from(FUNCTION_PREFIX_SIGNATURE));
+                let prefixed = b.binop(BinOp::Eq, signature, signature_imm);
+                let wanted = u64::from(hash) << 32 | u64::from(FUNCTION_PREFIX_SIGNATURE);
+                let wanted = b.imm(wanted as i64);
+                let differs = b.binop(BinOp::Ne, prefix, wanted);
+                let flag = b.binop(BinOp::And, prefixed, differs);
+                self.report_failed_check(b, check.check, flag, &[value]);
+                b.jmp(join);
+                b.switch_to(join);
+                return;
+            }
+            // The value as its own type reads it against the value the
+            // narrower type keeps; the handler takes both.
+            ValueTest::Truncation { from, to } => {
+                let had = extend_from(b, value, from);
+                let kept = extend_from(b, value, to);
+                let flag = b.binop(BinOp::Ne, had, kept);
+                self.report_failed_check(b, check.check, flag, &[had, kept]);
+                return;
+            }
+        };
+        self.report_failed_check(b, check.check, flag, &[value]);
+    }
+
+    pub(super) fn report_failed_check(
+        &self,
+        b: &mut SsaBuilder,
+        check: crate::c5::ast::SanitizeCheck,
+        flag: ValueId,
+        values: &[ValueId],
+    ) {
+        let (failed, join) = (b.new_block(), b.new_block());
+        b.expect(Some(false));
+        b.branch_zero(flag, join, failed);
+        b.expect(None);
+        b.switch_to(failed);
+        if self.fail_check(b, check, values) {
+            b.jmp(join);
+        }
+        b.switch_to(join);
+    }
+
+    /// Call `check`'s handler with its site data and `values`, or trap;
+    /// whether the handler returns, the block then left open.
+    pub(super) fn fail_check(
+        &self,
+        b: &mut SsaBuilder,
+        check: crate::c5::ast::SanitizeCheck,
+        values: &[ValueId],
+    ) -> bool {
+        let Some(sym) = check.handler else {
+            b.unreachable();
+            return false;
+        };
+        let site = b.imm_data(check.data);
+        let mut args = alloc::vec![site];
+        args.extend_from_slice(values);
+        let n = args.len();
+        let conv = crate::c5::codegen::CallConv::Target;
+        let mask = crate::c5::ir::FpMask::EMPTY;
+        // The handler's import placeholder, as a library call's.
+        match crate::c5::irgen::live_fun_val(self.symbols, sym, 0) {
+            0 => b.call_extern(sym, args, n, false, mask, conv),
+            pc => b.call(pc as usize, args, n, false, mask, conv),
+        };
+        let returns = !(self.symbols.get(sym as usize)).is_some_and(|s| s.is_noreturn);
+        if !returns {
+            b.unreachable();
+        }
+        returns
     }
 
     /// 128-bit multiply, returning the product mod 2^128 and whether the
@@ -541,4 +963,98 @@ fn lower_ffs(b: &mut SsaBuilder, x: ValueId, width: u8) -> ValueId {
     let at_zero = b.binop_imm(BinOp::Shru, ctz, if width == 8 { 6 } else { 5 });
     let keep = b.binop_imm(BinOp::Sub, at_zero, 1);
     b.binop(BinOp::And, cp1, keep)
+}
+
+/// Whether the unsigned 64-bit `a op b` (`+`, `-` or `*`) overflows, given its
+/// wrapped value: an add carries out where the sum is below an addend, a
+/// subtract borrows where the minuend is the smaller, and a multiply
+/// overflows where `a != 0 && product / a != b`, the divisor forced non-zero
+/// so the unused `a == 0` lane does not divide by zero.
+fn unsigned_overflow64(
+    b: &mut SsaBuilder,
+    op: BinOp,
+    va: ValueId,
+    vb: ValueId,
+    wrapped: ValueId,
+) -> ValueId {
+    match op {
+        BinOp::Add => b.binop(BinOp::Ult, wrapped, va),
+        BinOp::Sub => b.binop(BinOp::Ult, va, vb),
+        _ => {
+            let zero = b.imm(0);
+            let iszero = b.binop(BinOp::Eq, va, zero);
+            let safe = b.binop(BinOp::Or, va, iszero);
+            let q = b.binop(BinOp::Divu, wrapped, safe);
+            let a_nz = b.binop(BinOp::Ne, va, zero);
+            let mism = b.binop(BinOp::Ne, q, vb);
+            b.binop(BinOp::And, a_nz, mism)
+        }
+    }
+}
+
+/// Whether the signed 64-bit `a op b` (`+`, `-` or `*`) overflows, given its
+/// wrapped value. An add overflows where both addends share a sign the sum
+/// does not, a subtract where the operands differ in sign and the result's
+/// differs from the minuend's. A multiply divides the product by `a`, the
+/// divisor forced to 1 for `a == 0` and `a == -1` so `INT_MIN / -1` cannot
+/// trap; the `a == -1` overflow is `product == INT_MIN`.
+fn signed_overflow64(
+    b: &mut SsaBuilder,
+    op: BinOp,
+    va: ValueId,
+    vb: ValueId,
+    wrapped: ValueId,
+) -> ValueId {
+    match op {
+        BinOp::Add => {
+            let ax = b.binop(BinOp::Xor, va, wrapped);
+            let bx = b.binop(BinOp::Xor, vb, wrapped);
+            let m = b.binop(BinOp::And, ax, bx);
+            let zero = b.imm(0);
+            b.binop(BinOp::Lt, m, zero)
+        }
+        BinOp::Sub => {
+            let ab = b.binop(BinOp::Xor, va, vb);
+            let aw = b.binop(BinOp::Xor, va, wrapped);
+            let m = b.binop(BinOp::And, ab, aw);
+            let zero = b.imm(0);
+            b.binop(BinOp::Lt, m, zero)
+        }
+        _ => {
+            let zero = b.imm(0);
+            let neg1 = b.imm(-1);
+            let one = b.imm(1);
+            let iszero = b.binop(BinOp::Eq, va, zero);
+            let isneg1 = b.binop(BinOp::Eq, va, neg1);
+            let special = b.binop(BinOp::Or, iszero, isneg1);
+            let not_special = b.binop(BinOp::Xor, special, one);
+            let scaled = b.binop(BinOp::Mul, va, not_special);
+            let safe = b.binop(BinOp::Add, scaled, special);
+            let q = b.binop(BinOp::Div, wrapped, safe);
+            let mism = b.binop(BinOp::Ne, q, vb);
+            let normal = b.binop(BinOp::And, not_special, mism);
+            let intmin = b.imm(i64::MIN);
+            let is_intmin = b.binop(BinOp::Eq, wrapped, intmin);
+            let neg1_ovf = b.binop(BinOp::And, isneg1, is_intmin);
+            b.binop(BinOp::Or, normal, neg1_ovf)
+        }
+    }
+}
+
+/// `value`'s low `bits` bits, sign-extended when `signed`, as a 64-bit value.
+fn extend_from(b: &mut SsaBuilder, value: ValueId, (bits, signed): (u8, bool)) -> ValueId {
+    if bits >= 64 {
+        return value;
+    }
+    let shift = b.imm(i64::from(64 - bits));
+    let high = b.binop(BinOp::Shl, value, shift);
+    b.binop(if signed { BinOp::Shr } else { BinOp::Shru }, high, shift)
+}
+
+/// A pointer step's byte offset, evaluated.
+pub(super) struct PointerOffset {
+    pub(super) value: ValueId,
+    pub(super) signed: bool,
+    /// The flag of the index's scaling to the offset overflowing.
+    pub(super) overflow: Option<ValueId>,
 }

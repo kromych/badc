@@ -3,7 +3,7 @@ variadic_sprintf.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -20,13 +20,13 @@ Disassembly of section .text:
                	mov	x0, #0x40               // =64
                	bl	<addr>
                	mov	x20, x0
+               	mov	x0, x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x2, #0xb                // =11
                	mov	x3, #0x16               // =22
                	mov	x4, #0x21               // =33
                	mov	x5, #0x2c               // =44
-               	mov	x0, x20
                	bl	<addr>
                	cmp	w0, #0xb
                	b.eq	<addr>
@@ -34,10 +34,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x10]
                	ldr	x20, [sp], #0x20
                	ret
+               	mov	x0, x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x2, #0xb                // =11
-               	mov	x0, x20
                	bl	<addr>
                	sxtw	x0, w0
                	cbz	x0, <addr>

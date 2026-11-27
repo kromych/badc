@@ -1439,6 +1439,7 @@ mod tests {
             compact_unwind: Vec::new(),
             eh_frame: Vec::new(),
             pe_unwind: Vec::new(),
+            guard_cf: None,
         }
     }
 

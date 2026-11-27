@@ -3,7 +3,7 @@ pointer_to_array_arithmetic.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -27,16 +27,16 @@ Disassembly of section .text:
 
 <main>:
                	leaq	<rip>, %rax # <addr>
-               	leaq	0x10(%rax), %rcx
-               	movq	%rcx, %rsi
+               	leaq	0x10(%rax), %rdx
+               	movq	%rdx, %rsi
                	subq	%rax, %rsi
                	cmpq	$0x10, %rsi
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	leaq	0x8(%rax), %rdx
-               	subq	%rax, %rdx
-               	cmpq	$0x8, %rdx
+               	leaq	0x8(%rax), %rcx
+               	subq	%rax, %rcx
+               	cmpq	$0x8, %rcx
                	je	<addr>
                	movl	$0x2, %eax
                	retq
@@ -44,24 +44,23 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	movl	(%rcx), %eax
-               	cmpl	$0x4, %eax
+               	movl	(%rdx), %esi
+               	cmpl	$0x4, %esi
                	jne	<addr>
-               	movl	0x4(%rcx), %eax
-               	cmpl	$0x5, %eax
+               	movl	0x4(%rdx), %edx
+               	cmpl	$0x5, %edx
                	je	<addr>
                	movl	$0x4, %eax
                	retq
-               	movq	%rdx, %rax
-               	sarq	$0x3f, %rax
-               	shrq	$0x3d, %rax
-               	addq	%rdx, %rax
-               	sarq	$0x3, %rax
-               	cmpq	$0x1, %rax
+               	movq	%rcx, %rdx
+               	sarq	$0x3f, %rdx
+               	shrq	$0x3d, %rdx
+               	addq	%rdx, %rcx
+               	sarq	$0x3, %rcx
+               	cmpq	$0x1, %rcx
                	je	<addr>
                	movl	$0x5, %eax
                	retq
-               	leaq	<rip>, %rax # <addr>
                	movl	<rip>, %ecx # <addr>
                	movl	<rip>, %edx # <addr>
                	cmpl	$0x1, %ecx

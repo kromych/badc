@@ -3,7 +3,7 @@ aapcs64_variadic_host_abi.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -485,20 +485,11 @@ Disassembly of section .text:
                	mov	x2, #0x2                // =2
                	mov	x3, #0x3                // =3
                	mov	x4, #0x4                // =4
-               	mov	x5, x0
-               	bl	<addr>
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x0                // =0
-               	cmp	w0, #0xf
-               	csel	x20, x1, x2, ne
-               	mov	x0, #0xc                // =12
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x2                // =2
-               	mov	x3, #0x3                // =3
-               	mov	x4, #0x4                // =4
                	mov	x5, #0x5                // =5
-               	mov	x6, #0x6                // =6
-               	mov	x7, #0x7                // =7
+               	bl	<addr>
+               	cmp	w0, #0xf
+               	mov	x16, #0x1               // =1
+               	csel	x20, x16, xzr, ne
                	mov	x16, #0x8               // =8
                	str	x16, [sp]
                	mov	x16, #0x9               // =9
@@ -507,22 +498,30 @@ Disassembly of section .text:
                	str	x16, [sp, #0x10]
                	mov	x16, #0xb               // =11
                	str	x16, [sp, #0x18]
-               	str	x0, [sp, #0x20]
+               	mov	x16, #0xc               // =12
+               	str	x16, [sp, #0x20]
+               	mov	x0, #0xc                // =12
+               	mov	x1, #0x1                // =1
+               	mov	x2, #0x2                // =2
+               	mov	x3, #0x3                // =3
+               	mov	x4, #0x4                // =4
+               	mov	x5, #0x5                // =5
+               	mov	x6, #0x6                // =6
+               	mov	x7, #0x7                // =7
                	bl	<addr>
                	orr	x1, x20, #0x2
                	cmp	w0, #0x4e
                	csel	x20, x1, x20, ne
-               	mov	x0, #0x4                // =4
                	fmov	d0, #1.50000000
                	fmov	d1, #2.50000000
                	fmov	d2, #3.00000000
                	fmov	d3, #4.00000000
+               	mov	x0, #0x4                // =4
                	bl	<addr>
                	fmov	d1, #11.00000000
                	orr	x0, x20, #0x4
                	fcmp	d0, d1
                	csel	x20, x0, x20, ne
-               	mov	x0, #0xa                // =10
                	fmov	d0, #1.00000000
                	fmov	d1, #2.00000000
                	fmov	d2, #3.00000000
@@ -535,17 +534,18 @@ Disassembly of section .text:
                	fmov	d20, #10.00000000
                	str	d19, [sp]
                	str	d20, [sp, #0x8]
+               	mov	x0, #0xa                // =10
                	bl	<addr>
                	adrp	x16, <page>
                	ldr	d1, [x16]
                	orr	x0, x20, #0x8
                	fcmp	d0, d1
                	csel	x20, x0, x20, ne
+               	fmov	d0, #1.50000000
+               	fmov	d1, #2.50000000
                	mov	x0, #0x4                // =4
                	mov	x1, #0xa                // =10
-               	fmov	d0, #1.50000000
                	mov	x2, #0x14               // =20
-               	fmov	d1, #2.50000000
                	bl	<addr>
                	mov	x16, #0x4041000000000000 // =4629981891913580544
                	fmov	d1, x16
@@ -562,14 +562,6 @@ Disassembly of section .text:
                	orr	x1, x20, #0x20
                	cmp	w0, #0x3c
                	csel	x20, x1, x20, ne
-               	mov	x0, #0x1                // =1
-               	mov	x1, #0x2                // =2
-               	mov	x2, #0x3                // =3
-               	mov	x3, #0x4                // =4
-               	mov	x4, #0x5                // =5
-               	mov	x5, #0x6                // =6
-               	mov	x6, #0x7                // =7
-               	mov	x7, #0x8                // =8
                	mov	x16, #0x9               // =9
                	str	x16, [sp]
                	mov	x16, #0xa               // =10
@@ -580,6 +572,14 @@ Disassembly of section .text:
                	str	x16, [sp, #0x18]
                	mov	x16, #0x12c             // =300
                	str	x16, [sp, #0x20]
+               	mov	x0, #0x1                // =1
+               	mov	x1, #0x2                // =2
+               	mov	x2, #0x3                // =3
+               	mov	x3, #0x4                // =4
+               	mov	x4, #0x5                // =5
+               	mov	x5, #0x6                // =6
+               	mov	x6, #0x7                // =7
+               	mov	x7, #0x8                // =8
                	bl	<addr>
                	orr	x1, x20, #0x40
                	cmp	w0, #0x28f

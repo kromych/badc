@@ -157,7 +157,7 @@ pub(crate) fn fold_converging_arms(func: &mut FunctionSsa) -> bool {
         };
         let quiet = block.inst_range.clone().all(|i| {
             let inst = &func.insts[i as usize];
-            !matches!(inst, Inst::Phi { .. }) && inst.is_pure() && !read_away[i as usize]
+            !matches!(inst, Inst::Phi { .. }) && func.is_pure(inst) && !read_away[i as usize]
         });
         (s != 0 && quiet).then_some(next)
     };
@@ -335,7 +335,7 @@ pub(crate) fn strip_zero_test_conds(func: &mut FunctionSsa) -> bool {
                 *c += 1;
             }
             release(&mut uses, cond);
-            if uses[cond as usize] == 0 && func.insts[cond as usize].is_pure() {
+            if uses[cond as usize] == 0 && func.is_pure(&func.insts[cond as usize]) {
                 for_each_operand(&func.insts[cond as usize], |op| release(&mut uses, op));
             }
             // Each link replaces the test: only the last compare's width counts.
@@ -397,7 +397,7 @@ pub(crate) fn strip_zero_test_conds(func: &mut FunctionSsa) -> bool {
             }
             uses[lhs as usize] += 1;
             uses[cond as usize] -= 1;
-            if func.insts[cond as usize].is_pure() {
+            if func.is_pure(&func.insts[cond as usize]) {
                 for_each_operand(&func.insts[cond as usize], |op| {
                     uses[op as usize] = uses[op as usize].saturating_sub(1);
                 });
@@ -507,7 +507,7 @@ pub(crate) fn low_word_xor_to_compare(func: &mut FunctionSsa, is_x86: bool) -> b
         let window = ((cond + 1)..block.inst_range.end).all(|p| {
             let inst = &func.insts[p as usize];
             inst.is_lifetime_marker()
-                || (inst.is_pure() && uses[p as usize] == 0)
+                || (func.is_pure(inst) && uses[p as usize] == 0)
                 || flags_survive(inst, is_x86)
         });
         if !shorter || !window {
@@ -759,6 +759,7 @@ mod tests {
             tls_dynamic: false,
             section: None,
             patchable_entry: None,
+            type_hash: None,
             no_instrument: false,
             no_stack_protector: false,
             is_weak: false,
@@ -793,6 +794,9 @@ mod tests {
             has_returns_twice_call: false,
             did_unroll: false,
             did_inline: false,
+            frees_rbp: false,
+            fenv_access: false,
+            ret_low_word: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),

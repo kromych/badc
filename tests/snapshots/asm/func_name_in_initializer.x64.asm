@@ -3,7 +3,7 @@ func_name_in_initializer.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -32,6 +32,7 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	je	<addr>
                	movsbq	(%rcx), %rsi
+               	nopl	(%rax,%rax)
                	cmpl	%esi, %edx
                	jne	<addr>
                	incq	%rax
@@ -107,6 +108,7 @@ Disassembly of section .text:
                	testq	%rdx, %rdx
                	je	<addr>
                	movsbq	(%rcx), %rsi
+               	nop
                	cmpl	%esi, %edx
                	jne	<addr>
                	incq	%rax

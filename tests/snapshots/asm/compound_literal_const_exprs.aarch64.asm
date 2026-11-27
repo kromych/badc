@@ -3,7 +3,7 @@ compound_literal_const_exprs.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -60,7 +60,7 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	ret
                	adrp	x0, <page>
-               	ldrsw	x0, [x0, #0x68]
+               	ldrsw	x0, [x0, #0x60]
                	cbz	w0, <addr>
                	mov	x0, #0x5                // =5
                	ret

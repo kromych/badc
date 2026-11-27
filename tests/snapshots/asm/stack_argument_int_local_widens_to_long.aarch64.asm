@@ -3,7 +3,7 @@ stack_argument_int_local_widens_to_long.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -50,18 +50,18 @@ Disassembly of section .text:
                	sxtw	x7, w0
                	mov	x17, #-0x3              // =-3
                	mul	x0, x20, x17
-               	sxtw	x1, w0
+               	sxtw	x0, w0
                	mov	x17, #-0x4              // =-4
-               	mul	x0, x20, x17
-               	sxtw	x2, w0
+               	mul	x1, x20, x17
+               	sxtw	x1, w1
+               	str	x0, [sp]
+               	str	x1, [sp, #0x8]
                	mov	x0, #0x0                // =0
-               	str	x1, [sp]
-               	str	x2, [sp, #0x8]
-               	mov	x1, x0
-               	mov	x5, x0
-               	mov	x4, x0
-               	mov	x3, x0
-               	mov	x2, x0
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x0                // =0
+               	mov	x3, #0x0                // =0
+               	mov	x4, #0x0                // =0
+               	mov	x5, #0x0                // =0
                	bl	<addr>
                	mov	x17, #-0x4d2            // =-1234
                	mul	x1, x20, x17
@@ -75,17 +75,17 @@ Disassembly of section .text:
                	mov	x0, #-0x7fffffff        // =-2147483647
                	cmp	w20, #0x0
                	cset	x1, gt
-               	sub	x1, x0, x1
+               	sub	x0, x0, x1
+               	str	xzr, [sp]
+               	str	x0, [sp, #0x8]
                	mov	x0, #0x0                // =0
-               	str	x0, [sp]
-               	str	x1, [sp, #0x8]
-               	mov	x1, x0
-               	mov	x7, x0
-               	mov	x6, x0
-               	mov	x5, x0
-               	mov	x4, x0
-               	mov	x3, x0
-               	mov	x2, x0
+               	mov	x1, #0x0                // =0
+               	mov	x2, #0x0                // =0
+               	mov	x3, #0x0                // =0
+               	mov	x4, #0x0                // =0
+               	mov	x5, #0x0                // =0
+               	mov	x6, #0x0                // =0
+               	mov	x7, #0x0                // =0
                	bl	<addr>
                	mov	x17, #-0x80000000       // =-2147483648
                	cmp	x0, x17

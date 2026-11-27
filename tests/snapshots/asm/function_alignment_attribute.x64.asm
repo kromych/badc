@@ -3,7 +3,7 @@ function_alignment_attribute.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -124,194 +124,49 @@ Disassembly of section .text:
 <first>:
                	movl	$0x2, %eax
                	retq
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
 
 <f64>:
                	movl	$0x1, %eax
                	retq
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
 
 <s128>:
                	leaq	0x1(%rdi), %rax
                	retq
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
-               	nop
 
 <h>:
                	movl	$0x3, %eax
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x38, %rsp
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x18(%rbp)
+               	movq	%rax, 0x18(%rsp)
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x10(%rbp)
+               	movq	%rax, 0x20(%rsp)
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x10(%rbp), %rax
+               	movq	%rax, 0x28(%rsp)
+               	movq	0x20(%rsp), %rax
                	testb	$0x3f, %al
                	jne	<addr>
-               	movq	-0x18(%rbp), %rax
+               	movq	0x18(%rsp), %rax
                	testb	$0x7f, %al
                	jne	<addr>
-               	movq	-0x8(%rbp), %rax
+               	movq	0x28(%rsp), %rax
                	testb	$0x1f, %al
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq
+               	movq	0x18(%rsp), %rax
                	movl	$0x1, %edi
-               	movq	-0x18(%rbp), %rax
                	callq	*%rax
                	movq	%rax, 0x8(%rsp)
-               	movq	-0x10(%rbp), %rax
+               	movq	0x20(%rsp), %rax
                	callq	*%rax
                	movq	0x8(%rsp), %r10
                	addq	%rax, %r10
                	movq	%r10, 0x8(%rsp)
-               	movq	-0x8(%rbp), %rax
+               	movq	0x28(%rsp), %rax
                	callq	*%rax
                	movq	%rax, %r10
                	movq	0x8(%rsp), %rax
@@ -322,5 +177,5 @@ Disassembly of section .text:
                	cmpl	$0x8, %eax
                	cmovneq	%rdx, %rcx
                	movq	%rcx, %rax
-               	leave
+               	addq	$0x38, %rsp
                	retq

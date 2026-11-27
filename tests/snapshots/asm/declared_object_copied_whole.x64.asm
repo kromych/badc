@@ -3,7 +3,7 @@ declared_object_copied_whole.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -69,9 +69,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x60, %rsp
+               	subq	$0x68, %rsp
                	movzbq	<rip>, %rax # <addr>
                	andq	$-0x2, %rax
                	movb	%al, <rip> # <addr>
@@ -89,7 +87,7 @@ Disassembly of section .text:
                	cmpl	$0x1, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x68, %rsp
                	retq
                	movq	$0x63, <rip> # <addr>
                	movl	$0x63, <rip> # <addr>
@@ -100,7 +98,7 @@ Disassembly of section .text:
                	cmpl	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x68, %rsp
                	retq
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x5, %eax
@@ -115,36 +113,36 @@ Disassembly of section .text:
                	cmpl	$0x8, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x68, %rsp
                	retq
                	movl	<rip>, %edi # <addr>
                	callq	<addr>
                	cmpl	$0x195, %eax            # imm = 0x195
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x68, %rsp
                	retq
-               	leaq	-0x58(%rbp), %rdi
-               	movq	$0x63, -0x48(%rbp)
-               	movl	$0x63, -0x4(%rbp)
+               	movq	$0x63, 0x18(%rsp)
+               	movl	$0x63, 0x5c(%rsp)
                	movl	<rip>, %esi # <addr>
+               	leaq	0x8(%rsp), %rdi
                	callq	<addr>
-               	cmpq	$0x0, -0x48(%rbp)
+               	cmpq	$0x0, 0x18(%rsp)
                	je	<addr>
                	movl	$0x5, %eax
-               	leave
+               	addq	$0x68, %rsp
                	retq
-               	movl	-0x4(%rbp), %eax
+               	movl	0x5c(%rsp), %eax
                	cmpl	$0x7, %eax
                	jne	<addr>
-               	movl	-0x14(%rbp), %eax
+               	movl	0x4c(%rsp), %eax
                	cmpl	$0x8, %eax
                	jne	<addr>
-               	cmpl	$0x0, -0x28(%rbp)
+               	cmpl	$0x0, 0x38(%rsp)
                	je	<addr>
                	movl	$0x6, %eax
-               	leave
+               	addq	$0x68, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x68, %rsp
                	retq

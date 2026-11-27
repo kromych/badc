@@ -3,7 +3,7 @@ designator_completes_a_union.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,16 +26,13 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rcx
+               	subq	$0x18, %rsp
+               	leaq	(%rsp), %rcx
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
-               	movsd	<rip>, %xmm1 # <addr>
-               	movsd	<rip>, %xmm0
-               	ucomisd	%xmm0, %xmm1
+               	movsd	<rip>, %xmm0 # <addr>
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movq	<rip>, %rax # <addr>
@@ -44,28 +41,27 @@ Disassembly of section .text:
                	movl	$0x1, %eax
                	testq	%rax, %rax
                	je	<addr>
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movsd	-0x10(%rbp), %xmm1
-               	ucomisd	%xmm0, %xmm1
+               	movsd	(%rsp), %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	leaq	<rip>, %rax
                	movups	(%rax), %xmm14
                	movups	%xmm14, (%rcx)
-               	movsd	<rip>, %xmm0
                	movl	$0x1, %eax
                	xorl	%ecx, %ecx
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm0, %xmm1
+               	movsd	<rip>, %xmm0
+               	ucomisd	<rip>, %xmm0
                	movq	%rcx, %r10
                	cmovpq	%rax, %r10
                	cmoveq	%r10, %rax
                	imulq	$0x14, %rax, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movl	$0xb, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x1, %eax

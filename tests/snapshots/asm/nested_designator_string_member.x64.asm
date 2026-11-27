@@ -3,7 +3,7 @@ nested_designator_string_member.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,9 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	leaq	<rip>, %rax # <addr>
                	addq	$0x4, %rax
                	leaq	<rip>, %rcx
@@ -48,14 +46,14 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	cmpb	$0x0, <rip> # <addr>
                	jne	<addr>
                	cmpb	$0x0, <rip> # <addr>
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x7, %eax
@@ -64,16 +62,16 @@ Disassembly of section .text:
                	cmpl	$0x5, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movl	$0x7a797877, -0xc(%rbp) # imm = 0x7A797877
-               	leaq	-0x10(%rbp), %rax
-               	movl	$0x0, -0x8(%rbp)
-               	leaq	0x6(%rdi), %rcx
-               	movl	%ecx, -0x4(%rbp)
-               	leaq	0x4(%rdi), %rcx
-               	movl	%ecx, -0x10(%rbp)
-               	addq	$0x4, %rax
+               	movl	$0x7a797877, 0x4(%rsp)  # imm = 0x7A797877
+               	movl	$0x0, 0x8(%rsp)
+               	leaq	0x6(%rdi), %rax
+               	leaq	(%rsp), %rcx
+               	movl	%eax, 0xc(%rsp)
+               	leaq	0x4(%rdi), %rax
+               	movl	%eax, (%rsp)
+               	leaq	0x4(%rcx), %rax
                	leaq	<rip>, %rcx
                	movsbq	(%rax), %rdx
                	testq	%rdx, %rdx
@@ -91,19 +89,19 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movl	-0x4(%rbp), %eax
+               	movl	0xc(%rsp), %eax
                	leaq	0x6(%rdi), %rcx
                	cmpl	%ecx, %eax
                	jne	<addr>
-               	movl	-0x10(%rbp), %eax
+               	movl	(%rsp), %eax
                	leaq	0x4(%rdi), %rcx
                	cmpl	%ecx, %eax
                	je	<addr>
                	movl	$0x6, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

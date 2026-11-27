@@ -104,6 +104,41 @@ pub(crate) enum UnOp {
     Renormalize { nsw: bool },
 }
 
+/// The string function an [`Expr::MemLoop`] performs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum StringOp {
+    /// C17 7.24.4.1 `memcmp`.
+    Compare,
+    /// C17 7.24.2.1 `memcpy`.
+    Copy,
+    /// C17 7.24.2.2 `memmove`.
+    Move,
+    /// C17 7.24.6.1 `memset`.
+    Set,
+}
+
+impl StringOp {
+    /// The library function's name.
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            StringOp::Compare => "memcmp",
+            StringOp::Copy => "memcpy",
+            StringOp::Move => "memmove",
+            StringOp::Set => "memset",
+        }
+    }
+}
+
+impl From<MemTransferOp> for StringOp {
+    fn from(op: MemTransferOp) -> Self {
+        match op {
+            MemTransferOp::Copy => StringOp::Copy,
+            MemTransferOp::Move => StringOp::Move,
+            MemTransferOp::Fill => StringOp::Set,
+        }
+    }
+}
+
 /// Memory transfer the compiler expands inline, from a `__builtin_mem*`
 /// call whose byte count is an integer constant expression.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -575,6 +610,18 @@ pub(crate) enum Expr {
         align: u32,
         ty: i64,
     },
+    /// A call to `memcmp`, `memcpy`, `memmove` or `memset` that
+    /// `-finline-stringops` expands inline whatever its length: a loop over
+    /// the `len` bytes. `a` and `b` are the two addresses, or `memset`'s
+    /// destination and fill byte. The value is the destination address, or
+    /// `memcmp`'s difference of the first bytes that differ (`ty`).
+    MemLoop {
+        op: StringOp,
+        a: ExprId,
+        b: ExprId,
+        len: ExprId,
+        ty: i64,
+    },
     /// An MSVC intrinsic (`crate::c5::ms_intrinsic`): `args` are the value
     /// operands converted to the parameter types, `imm` the constant one.
     MsIntrinsic {
@@ -885,6 +932,9 @@ pub(crate) struct FinishedFunction {
     /// `_Noreturn` (C11 6.7.4) on any declaration of the function:
     /// propagated onto `FunctionSsa::is_noreturn`.
     pub is_noreturn: bool,
+    /// Some of the body was translated with `#pragma STDC FENV_ACCESS ON`:
+    /// propagated onto `FunctionSsa::fenv_access`.
+    pub fenv_access: bool,
     /// `__attribute__((ms_abi))` / `((sysv_abi))`: propagated onto
     /// `FunctionSsa::conv`. `CallConv::Target` when the definition
     /// follows the target's own convention.
@@ -1023,6 +1073,79 @@ pub(crate) struct Ast {
     /// cross-TU relocation, rather than re-reading the restored slot.
     /// Sparse: empty unless a block-scope extern shadows a local.
     pub block_extern_refs: Vec<ExprId>,
+    /// The runtime check `-fsanitize=` attaches to an operation, keyed by
+    /// its node.
+    pub checks: alloc::collections::BTreeMap<ExprId, SanitizeCheck>,
+    /// The runtime checks `-fsanitize=` attaches to the value a node yields
+    /// wherever it is read as an rvalue, keyed by the node.
+    pub value_checks: alloc::collections::BTreeMap<ExprId, alloc::vec::Vec<ValueCheck>>,
+    /// The runtime check of the value a compound assignment or an increment
+    /// computes, before its store converts it, keyed by the node.
+    pub store_checks: alloc::collections::BTreeMap<ExprId, ValueCheck>,
+    /// The runtime check of the address a dereference, subscript or member
+    /// node accesses, keyed by the node.
+    pub access_checks: alloc::collections::BTreeMap<ExprId, ValueCheck>,
+}
+
+/// A runtime check of a node's value: the check, and what the value is
+/// held to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct ValueCheck {
+    pub check: SanitizeCheck,
+    pub test: ValueTest,
+}
+
+/// What a checked value is held to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ValueTest {
+    /// A subscript of an array of `len` elements: below `len`, or up to it
+    /// where only the address one past the last element is formed.
+    Index { len: u64, one_past: bool },
+    /// A `_Bool` loaded: its byte 0 or 1.
+    Bool,
+    /// An integer of `from`'s width and signedness converted to `to`'s,
+    /// narrower: the value it keeps there equal to the value it had.
+    Truncation { from: (u8, bool), to: (u8, bool) },
+    /// A variable-length array bound: above 0, or not 0 for an unsigned one.
+    Positive { signed: bool },
+    /// Not 0, reported with no value, or with the address of the data
+    /// object at `site` -- the `SourceLocation` a handler takes beside its
+    /// data.
+    NonZero { site: Option<i64> },
+    /// A floating value converted to an integer type: above `lo` (or at it,
+    /// `lo_inclusive`) and below `hi`, the bounds `f64` bit patterns; a
+    /// `float` value (`single`) compared as the `double` it widens to.
+    FloatRange {
+        lo: u64,
+        hi: u64,
+        lo_inclusive: bool,
+        single: bool,
+    },
+    /// An address accessed: not null where `null`, and with no bit of
+    /// `align_mask` set; never where `short`, the object it designates
+    /// having fewer bytes left than the access.
+    Pointer {
+        null: bool,
+        align_mask: u64,
+        short: bool,
+    },
+    /// A function pointer called: where not null and the function it
+    /// points to carries a `-fsanitize=function` prefix, the prefix's
+    /// hash equal to `hash`, the called type's.
+    FunctionType { hash: u32 },
+}
+
+/// A runtime check of the operation at a node (`-fsanitize=`): what it
+/// tests, the site data its handler reads, and the handler, or `None` to
+/// trap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct SanitizeCheck {
+    /// The [`crate::c5::compiler::sanitize::Check`] bits the node tests.
+    pub checks: u32,
+    /// Data offset of the site's handler data.
+    pub data: i64,
+    /// The handler's symbol, or `None` where the check traps.
+    pub handler: Option<u32>,
 }
 
 /// Every data-segment byte offset an AST's nodes hold, passed to `$f` through
@@ -1085,7 +1208,8 @@ macro_rules! visit_data_offsets {
                 | Expr::Simd { .. }
                 | Expr::ShuffleVector { .. }
                 | Expr::MsIntrinsic { .. }
-                | Expr::MemTransfer { .. } => {}
+                | Expr::MemTransfer { .. }
+                | Expr::MemLoop { .. } => {}
             }
         }
         for decl in $decls {
@@ -1169,12 +1293,38 @@ impl Ast {
 
     /// Apply `f` to every data-segment byte offset stored on AST nodes.
     fn for_each_data_offset(&mut self, f: &mut impl FnMut(&mut i64)) {
+        for check in self.checks.values_mut() {
+            f(&mut check.data);
+        }
+        for value in self.value_checks.values_mut().flatten() {
+            f(&mut value.check.data);
+        }
+        for value in self
+            .store_checks
+            .values_mut()
+            .chain(self.access_checks.values_mut())
+        {
+            f(&mut value.check.data);
+        }
         visit_data_offsets!(&mut self.exprs, &mut self.decls, f);
     }
 
     /// The offsets [`Self::for_each_data_offset`] rewrites, read in place.
     pub(crate) fn data_offsets(&self, mut f: impl FnMut(i64)) {
         let mut read = |off: &i64| f(*off);
+        for check in self.checks.values() {
+            read(&check.data);
+        }
+        for value in self.value_checks.values().flatten() {
+            read(&value.check.data);
+        }
+        for value in self
+            .store_checks
+            .values()
+            .chain(self.access_checks.values())
+        {
+            read(&value.check.data);
+        }
         visit_data_offsets!(&self.exprs, &self.decls, read);
     }
 
@@ -1407,6 +1557,7 @@ macro_rules! plain_ty_expr {
             | Expr::ShuffleVector { ty: $t, .. }
             | Expr::MsIntrinsic { ty: $t, .. }
             | Expr::MemTransfer { ty: $t, .. }
+            | Expr::MemLoop { ty: $t, .. }
     };
 }
 pub(crate) use plain_ty_expr;
@@ -1460,6 +1611,7 @@ impl crate::c5::layout::DataOffsets for FinishedFunction {
             is_noinline: _,
             is_naked: _,
             is_noreturn: _,
+            fenv_access: _,
             conv: _,
             n_locals: _,
             param_tys: _,

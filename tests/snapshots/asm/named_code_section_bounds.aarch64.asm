@@ -3,7 +3,7 @@ named_code_section_bounds.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -20,30 +20,30 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	cmp	x2, x0
-               	b.lo	<addr>
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	cmp	x2, x1
-               	b.hs	<addr>
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	cmp	x1, x0
+               	b.lo	<addr>
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	cmp	x2, x0
+               	cmp	x1, x2
+               	b.hs	<addr>
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	cmp	x1, x0
                	b.lo	<addr>
-               	cmp	x2, x1
+               	cmp	x1, x2
                	b.lo	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x2, <page>
-               	add	x2, x2, <lo12>
-               	cmp	x2, x0
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	cmp	x1, x0
                	b.lo	<addr>
-               	cmp	x2, x1
+               	cmp	x1, x2
                	b.hs	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp], #0x10

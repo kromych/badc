@@ -758,3 +758,65 @@ mod run {
         assert_eq!(fixture_exit("loop_idiom_version.c"), 0);
     }
 }
+
+const STRINGOPS: &str = "
+void var_set(char *p, int c, unsigned long n) { __builtin_memset(p, c, n); }
+void const_set(char *p) { __builtin_memset(p, 0x5a, 4096); }
+void var_copy(char *d, const char *s, unsigned long n) { memcpy(d, s, n); }
+void var_move(char *d, const char *s, unsigned long n) { memmove(d, s, n); }
+int var_cmp(const char *a, const char *b, unsigned long n) { return memcmp(a, b, n); }
+void idiom(char *p, unsigned long n) { for (unsigned long i = 0; i < n; i++) p[i] = 0; }
+";
+
+/// `-finline-stringops`: a call to a function it names becomes a loop
+/// whatever the length -- the builtin, the library call and the
+/// loop-idiom's fill alike -- and a function it leaves out is still
+/// called.
+#[test]
+fn inline_stringops_leaves_no_call_to_the_functions_it_names() {
+    use crate::InlineStringOps;
+    let every = CompileOptions::default()
+        .with_optimize(true)
+        .with_inline_stringops(InlineStringOps::ALL);
+    for name in [
+        "var_set",
+        "const_set",
+        "var_copy",
+        "var_move",
+        "var_cmp",
+        "idiom",
+    ] {
+        assert_eq!(
+            calls(&ssa_with(STRINGOPS, name, every.clone())),
+            0,
+            "{name}"
+        );
+    }
+    let memset = InlineStringOps::named("memset").unwrap();
+    let only = CompileOptions::default()
+        .with_optimize(true)
+        .with_inline_stringops(memset);
+    for (name, n) in [
+        ("var_set", 0),
+        ("idiom", 0),
+        ("var_copy", 1),
+        ("var_cmp", 1),
+    ] {
+        assert_eq!(calls(&ssa_with(STRINGOPS, name, only.clone())), n, "{name}");
+    }
+    let plain = CompileOptions::default().with_optimize(true);
+    for name in [
+        "var_set",
+        "const_set",
+        "var_copy",
+        "var_move",
+        "var_cmp",
+        "idiom",
+    ] {
+        assert_eq!(
+            calls(&ssa_with(STRINGOPS, name, plain.clone())),
+            1,
+            "{name}"
+        );
+    }
+}

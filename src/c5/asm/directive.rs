@@ -23,8 +23,7 @@ pub(crate) fn extract_asm_sections(
 
 /// What a function-scope template splits into: the code stream the arch
 /// backend encodes, the named-section blocks, and the symbol directives the
-/// code stream carried, which GNU as scopes to the unit rather than to a
-/// section.
+/// code stream carried, which apply to the unit rather than to a section.
 #[derive(Debug)]
 pub(crate) struct AsmExtract {
     pub code: alloc::string::String,
@@ -114,8 +113,8 @@ fn elf_reloc_type_by_name(name: &str) -> Option<u32> {
 
 /// Parse `.reloc offset, TYPE[, expression]`. The offset is a constant
 /// measured from the start of the section the directive sits in, or `.` and
-/// an optional constant, measured from the location counter, as GNU as takes
-/// both; the expression is a symbol with an optional constant addend, a bare
+/// an optional constant, measured from the location counter; the
+/// expression is a symbol with an optional constant addend, a bare
 /// constant (the section itself), or absent. The directive deposits no bytes.
 fn parse_reloc_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::String> {
     let bad = || alloc::format!("inline asm: `.reloc {rest}` is not `offset, TYPE[, expr]`");
@@ -173,7 +172,7 @@ fn parse_reloc_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::St
     })
 }
 
-/// Directives GNU as resolves against the unit's symbol table rather than
+/// Directives resolved against the unit's symbol table rather than
 /// against the section they sit in. An assignment is one: it defines a
 /// symbol of the unit, not a location in the stream it sits in.
 fn is_asm_sym_directive(tok: &str) -> bool {
@@ -256,8 +255,8 @@ fn sym_directive_items(
 }
 
 /// A bare section directive naming a well-known section (`.text` == `.section
-/// .text`). GNU as accepts these shorthands; file-scope asm uses them to place
-/// a trampoline body. The dotted-suffix form is not a shorthand.
+/// .text`). File-scope asm uses these shorthands to place a trampoline
+/// body. The dotted-suffix form is not a shorthand.
 fn base_section_shorthand(tok: &str) -> bool {
     matches!(
         tok,
@@ -271,7 +270,14 @@ fn extract_asm_sections_impl(
     file_scope: bool,
     errors: &mut alloc::vec::Vec<AsmError>,
 ) -> Option<AsmExtract> {
+    // Intel-syntax statements reach the rest of the pass in AT&T syntax.
+    let restated = match is_aarch64 {
+        true => None,
+        false => crate::c5::codegen::x86_64::intel::restate(text, errors),
+    };
+    let text = restated.as_deref().unwrap_or(text);
     if !file_scope
+        && restated.is_none()
         && !text.contains(".pushsection")
         && !text.contains(".section")
         && !text.contains(".subsection")
@@ -286,8 +292,8 @@ fn extract_asm_sections_impl(
     // and starts in `.text`), the stream the latest section change left,
     // which `.previous` swaps in, and the `.pushsection` frames. A frame
     // holds both as they stood at the push and `.popsection` restores both,
-    // as GNU as does, so a push/pop pair leaves a later `.previous` where the
-    // `.section` before the pair put it.
+    // so a push/pop pair leaves a later `.previous` where the `.section`
+    // before the pair put it.
     let mut now: Option<usize> = if file_scope {
         blocks.push(parse_section_args(".text").expect("`.text` is a section"));
         Some(0)
@@ -321,8 +327,8 @@ fn extract_asm_sections_impl(
         }
         // A bad statement is reported and left out; the rest assemble.
         let mut statement = || -> Result<(), alloc::string::String> {
-            // Peel any leading `name:` labels: GNU as treats them as statements
-            // preceding the rest of the line, so a section directive or an
+            // Peel any leading `name:` labels: they are statements preceding
+            // the rest of the line, so a section directive or an
             // instruction may follow a label on the same line, with or without
             // whitespace after the colon (`1:\t.pushsection ...`, `name:push %rcx`).
             // A label goes to the current stream; a leading token that is not a
@@ -351,7 +357,7 @@ fn extract_asm_sections_impl(
             }
             let (tok, rest) = split_first_token(stmt);
             // A `.rept` body collects items until its `.endr`; section switches
-            // inside it have no GNU as meaning worth carrying.
+            // inside it have no meaning worth carrying.
             if !rept_stack.is_empty() {
                 match tok {
                     ".endr" => {
@@ -410,13 +416,18 @@ fn extract_asm_sections_impl(
                     ".else" | ".elseif" => arms.push(AsmCondArm {
                         tok: alloc::string::String::from(if tok == ".else" { "" } else { ".if" }),
                         cond: alloc::string::String::from(rest.trim()),
-                        error: None,
+                        diags: alloc::vec::Vec::new(),
                     }),
-                    ".error" => {
+                    ".error" | ".warning" => {
+                        use crate::c5::diag::Code;
                         let arm = arms.last_mut().expect("an arm is open");
-                        if arm.error.is_none() {
+                        let code = match tok {
+                            ".error" => Code::ASSEMBLER,
+                            _ => Code::ASM_WARNING,
+                        };
+                        if !arm.diags.iter().any(|d| d.1 == Code::ASSEMBLER) {
                             let msg = alloc::string::String::from(rest.trim().trim_matches('"'));
-                            arm.error = Some((line, msg));
+                            arm.diags.push((line, code, msg));
                         }
                     }
                     _ => {
@@ -436,7 +447,7 @@ fn extract_asm_sections_impl(
                     alloc::vec![AsmCondArm {
                         tok: alloc::string::String::from(tok),
                         cond: alloc::string::String::from(rest.trim()),
-                        error: None,
+                        diags: alloc::vec::Vec::new(),
                     }],
                 ));
                 return Ok(());
@@ -455,7 +466,7 @@ fn extract_asm_sections_impl(
                         .map(|n| alloc::string::String::from(n.trim())),
                 );
             }
-            // gas: a common symbol in any section; a local one goes in `.bss`.
+            // A common symbol in any section; a local one goes in `.bss`.
             if matches!(tok, ".comm" | ".lcomm") {
                 let (name, size, align) = parse_common_args(tok, rest)?;
                 let local = tok == ".lcomm" || locals.contains(name);
@@ -525,7 +536,7 @@ fn extract_asm_sections_impl(
                     return Ok(());
                 }
                 // Before any section change there is nothing to return to, and
-                // GNU as ignores the directive.
+                // the directive is ignored.
                 ".previous" => {
                     if let Some(p) = prev {
                         prev = Some(now);
@@ -592,14 +603,14 @@ fn extract_asm_sections_impl(
                     code.push_str(stmt);
                     code.push('\n');
                 }
-                // GNU as assembles instructions in any section (an x86 replacement
+                // Instructions assemble in any section (an x86 replacement
                 // sequence in an `"ax"` section, a trampoline body in
                 // `.rodata`); the section flags set the object section's
                 // attributes, not whether code is admitted.
                 Some(idx) => {
                     // `.code16` / `.code32` / `.code64` is assembler state over the
-                    // linear input, not a property of a section: GNU as keeps it
-                    // across section switches. Blocks accumulate per section name,
+                    // linear input, not a property of a section: it holds across
+                    // section switches. Blocks accumulate per section name,
                     // so re-entering one re-asserts the mode in effect.
                     if is_code_mode_directive(tok) {
                         code_mode = Some(tok);
@@ -633,8 +644,8 @@ fn extract_asm_sections_impl(
     })
 }
 
-/// `.comm` / `.lcomm name, size[, align]` as gas reads them on ELF. TODO:
-/// Mach-O's `as` reads the alignment as a power of two.
+/// `.comm` / `.lcomm name, size[, align]` in the ELF syntax. TODO: Mach-O's
+/// `as` reads the alignment as a power of two.
 fn parse_common_args<'a>(
     tok: &str,
     rest: &'a str,
@@ -668,7 +679,7 @@ fn is_code_mode_directive(tok: &str) -> bool {
 }
 
 /// The block a `.section` / `.pushsection` with arguments `rest` opens.
-/// gas identifies a section by its name, its group and the section it is
+/// A section is identified by its name, its group and the section it is
 /// ordered after: entering one again without a flags string keeps its
 /// attributes, and with a different type, attributes or entry size is an
 /// error -- except for a special name, whose first attributes stand.
@@ -770,9 +781,8 @@ struct SectionWritten {
 /// Parse the argument list of `.pushsection` / `.section`:
 /// `name[,"flags"[,@type][,entsize][,link][,group[,comdat]]]`. The entry
 /// size follows when the flags hold `M`, the ordering section when they
-/// hold `o` and the group name when they hold `G`, in that order, as GNU as
-/// reads them; `M` without an entry size and `G` without a group name are
-/// dropped, as GNU as drops them.
+/// hold `o` and the group name when they hold `G`, in that order; `M`
+/// without an entry size and `G` without a group name are dropped.
 fn parse_section_args(rest: &str) -> Result<AsmSectionBlock, alloc::string::String> {
     parse_section_directive(rest).map(|(block, _)| block)
 }
@@ -835,7 +845,7 @@ fn parse_section_directive(
     } else {
         None
     };
-    // GNU as makes a `.gnu.linkonce` group without a linkage a COMDAT one.
+    // A `.gnu.linkonce` group without a linkage is a COMDAT one.
     let mut group = None;
     if flags.contains('G') {
         match parts.next().map(|g| unquote(g).unwrap_or(g)) {
@@ -884,7 +894,7 @@ enum SpecialRest {
     Any,
 }
 
-/// A name GNU as gives an ELF section type and attributes (bfd's
+/// A name that implies an ELF section type and attributes (bfd's
 /// `special_sections` table, first match wins).
 struct SpecialSection {
     prefix: &'static str,
@@ -950,8 +960,8 @@ fn special_section(name: &str) -> Option<&'static SpecialSection> {
 
 impl SpecialSection {
     /// The type a directive gives the section: the name's when the
-    /// directive gives none, and the name's array type over any other, as
-    /// gas overrides `@progbits` on `.init_array`.
+    /// directive gives none, and the name's array type over any other
+    /// (`@progbits` on `.init_array`).
     fn section_type(&self, given: Option<alloc::string::String>) -> Option<alloc::string::String> {
         let array = self.sh_type.ends_with("_array");
         match given {
@@ -960,7 +970,7 @@ impl SpecialSection {
         }
     }
 
-    /// gas adds the name's attributes to the written ones unless the
+    /// The name's attributes add to the written ones unless the
     /// written ones hold another attribute; the link-order, retain and
     /// exclude flags do not count, nor do `M` and `S` after a `.`-suffix
     /// (`.rodata.str1.1`).
@@ -1118,7 +1128,7 @@ pub(crate) fn parse_section_item(
         // `.cfi_*` describes unwind state to a DWARF consumer and deposits no
         // bytes in this section; it is carried to the frame-table builder,
         // which pairs it with the offset the materializer reaches it at.
-        // GNU as's `.def name; .scl n; .type n; .endef` block gives a COFF
+        // The `.def name; .scl n; .type n; .endef` block gives a COFF
         // symbol its storage class and type, which the symbol's own
         // definition and binding already decide here.
         ".def" | ".scl" | ".endef" => Ok(AsmSectionItem::Bytes(alloc::vec::Vec::new())),
@@ -1289,7 +1299,7 @@ pub(crate) fn parse_section_item(
 /// `.skip count[, fill]` and `.space count[, fill]` repeat one fill byte
 /// (zero by default). `.zero count` fixes the fill at zero. `.fill
 /// repeat[, size[, value]]` repeats the low `size` bytes of `value`, with
-/// `size` defaulting to one and clamped to eight as GNU as does. The count is
+/// `size` defaulting to one and clamped to eight. The count is
 /// kept as an expression: it may reference an operand constant, and is
 /// resolved once the operand values are known.
 pub(crate) fn parse_fill_operands<'a>(
@@ -1315,7 +1325,7 @@ pub(crate) fn parse_fill_operands<'a>(
             if size < 0 {
                 return Err(alloc::format!("inline asm: bad `.fill` size `{size}`"));
             }
-            // GNU as clamps a unit above eight rather than rejecting it.
+            // A unit above eight is clamped rather than rejected.
             (size.min(8) as u8, num(fields.next())?.unwrap_or(0) as u32)
         }
         ".zero" => (1u8, 0u32),
@@ -1334,11 +1344,11 @@ pub(crate) fn is_fill_directive(tok: &str) -> bool {
 
 /// `.ascii` / `.asciz` / `.string`: a comma-separated list of string
 /// operands. Adjacent literals within one operand concatenate; `.asciz` and
-/// `.string` append one NUL per operand, `.ascii` appends none (GNU as).
+/// `.string` append one NUL per operand, `.ascii` appends none.
 /// Escapes are the assembler's: the C parse already consumed one level, so
 /// `\\n` in source arrives here as `\n`.
 /// The text of a directive taking one quoted string (`.file`, `.ident`),
-/// with GNU as escape processing.
+/// with the assembler's escape processing.
 fn parse_quoted_text(
     tok: &str,
     rest: &str,
@@ -1404,7 +1414,7 @@ pub(crate) fn parse_string_directive(
                                 bytes.push(v as u8);
                             }
                             b'x' => {
-                                // GNU as folds any run of hex digits mod 256.
+                                // Any run of hex digits folds mod 256.
                                 let mut v = 0u32;
                                 let mut n = 0;
                                 while let Some(d) = b.get(i).and_then(|c| (*c as char).to_digit(16))
@@ -1461,7 +1471,7 @@ fn parse_fill_directive(tok: &str, rest: &str) -> Result<AsmSectionItem, alloc::
 }
 
 /// Resolve a `.skip` / `.fill` repetition count. A negative count emits
-/// nothing, as GNU as does for `.skip` of a negative expression.
+/// nothing.
 pub(crate) fn eval_fill_count(
     expr: &str,
     const_of: &dyn Fn(u8) -> Option<i64>,
@@ -1497,7 +1507,7 @@ pub(crate) fn eval_fill_count_with(
 }
 
 /// Append `count` repetitions of one fill unit: the low `unit` bytes of the
-/// value zero-extended to eight, little-endian, as GNU as renders it.
+/// value zero-extended to eight, little-endian.
 pub(crate) fn push_fill(out: &mut alloc::vec::Vec<u8>, count: i64, unit: u8, value: u32) {
     let bytes = (value as u64).to_le_bytes();
     for _ in 0..count {
@@ -1506,8 +1516,8 @@ pub(crate) fn push_fill(out: &mut alloc::vec::Vec<u8>, count: i64, unit: u8, val
 }
 
 /// Split a directive's leading symbol name from the rest of its operands.
-/// GNU as ends the name at the first non-symbol character and then skips one
-/// optional comma, so `name, rest` and `name rest` are the same input.
+/// The name ends at the first non-symbol character and one optional comma
+/// follows, so `name, rest` and `name rest` are the same input.
 fn split_symbol_operand(rest: &str) -> (&str, &str) {
     let rest = rest.trim();
     let end = rest
@@ -1518,8 +1528,8 @@ fn split_symbol_operand(rest: &str) -> (&str, &str) {
     (name, tail.strip_prefix(',').unwrap_or(tail).trim())
 }
 
-/// `.type name[,] type`. GNU as makes the comma optional and reads the type
-/// word bare or behind one `@` / `%` / `#` / `"` sigil, so `.type f STT_FUNC`
+/// `.type name[,] type`. The comma is optional and the type word stands
+/// bare or behind one `@` / `%` / `#` / `"` sigil, so `.type f STT_FUNC`
 /// and `.type f, @function` name the same type. Each ELF type has a bare and
 /// an `STT_` spelling; badc's symbol model covers function, object, and
 /// untyped, and any other type is rejected.
@@ -1578,9 +1588,10 @@ fn parse_size_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::Str
 }
 
 /// `.incbin "path"[, skip[, count]]`: splice the named file's raw bytes at
-/// this point in the section image. The path resolves as GNU as resolves it,
-/// against the assembler's working directory; badc compiles from the same
-/// directory, so a relative path reads relative to the compile cwd.
+/// this point in the section image, `count` of them (the rest of the file
+/// when omitted) from offset `skip`. The path resolves against the
+/// assembler's working directory, which is the compile's, so a relative
+/// path reads relative to the compile cwd.
 fn parse_incbin_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::String> {
     let rest = rest.trim();
     let (path, args) = rest
@@ -1589,13 +1600,35 @@ fn parse_incbin_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::S
         .ok_or_else(|| {
             alloc::format!("inline asm: `.incbin` expects a quoted path, got `{rest}`")
         })?;
-    let args = args.trim().trim_start_matches(',').trim();
-    if !args.is_empty() {
-        // TODO `.incbin` skip / count arguments.
+    let args = args.trim();
+    let args = match args.strip_prefix(',') {
+        Some(a) => super::gas::split_top_commas(a),
+        None if args.is_empty() => alloc::vec::Vec::new(),
+        None => {
+            return Err(alloc::format!(
+                "inline asm: `.incbin`: junk after the path (`{rest}`)"
+            ));
+        }
+    };
+    if args.len() > 2 {
         return Err(alloc::format!(
-            "inline asm: `.incbin` skip/count arguments are not supported (`{rest}`)"
+            "inline asm: `.incbin` takes a path, a skip and a count (`{rest}`)"
         ));
     }
+    let arg = |k: usize, what: &str| -> Result<Option<usize>, alloc::string::String> {
+        let Some(expr) = args.get(k) else {
+            return Ok(None);
+        };
+        eval_asm_count(expr, &|_| None)
+            .and_then(|n| usize::try_from(n).ok())
+            .map(Some)
+            .ok_or_else(|| {
+                alloc::format!(
+                    "inline asm: `.incbin` {what} `{expr}` is not a non-negative constant"
+                )
+            })
+    };
+    let (skip, count) = (arg(0, "skip")?.unwrap_or(0), arg(1, "count")?);
     #[cfg(feature = "std")]
     {
         let bytes = std::fs::read(path).map_err(|e| {
@@ -1604,10 +1637,24 @@ fn parse_incbin_directive(rest: &str) -> Result<AsmSectionItem, alloc::string::S
                 .unwrap_or_else(|_| alloc::string::String::from(path));
             alloc::format!("inline asm: `.incbin \"{path}\"`: cannot read `{resolved}`: {e}")
         })?;
-        Ok(AsmSectionItem::Bytes(bytes))
+        let end = count.map_or(Some(bytes.len()), |c| skip.checked_add(c));
+        match end {
+            Some(end) if skip <= bytes.len() && end <= bytes.len() => {
+                Ok(AsmSectionItem::Bytes(bytes[skip..end].to_vec()))
+            }
+            _ => Err(alloc::format!(
+                "inline asm: `.incbin \"{path}\"`: skip {skip} and count {} pass the end of \
+                 its {} bytes",
+                count.map_or(alloc::string::String::from("(rest)"), |c| alloc::format!(
+                    "{c}"
+                )),
+                bytes.len()
+            )),
+        }
     }
     #[cfg(not(feature = "std"))]
     {
+        let _ = (skip, count);
         Err(alloc::format!(
             "inline asm: `.incbin \"{path}\"` needs host filesystem access"
         ))
@@ -1872,8 +1919,8 @@ fn parse_reloc_expr(a: &str) -> Result<AsmSectionValue, alloc::string::String> {
     }
     let ident = |c: u8| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'$');
     let is_name = |s: &str| !s.is_empty() && s.bytes().all(ident);
-    // GNU as accepts a double-quoted symbol name wherever a bare one is
-    // valid; the quotes are not part of the name.
+    // A double-quoted symbol name is valid wherever a bare one is; the
+    // quotes are not part of the name.
     fn unquote(s: &str) -> Option<&str> {
         s.strip_prefix('"')
             .and_then(|r| r.strip_suffix('"'))

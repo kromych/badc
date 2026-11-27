@@ -1,7 +1,7 @@
 //! The scopes a jump leaves and enters. A jump runs the `cleanup` functions
 //! of the variables in scope at it and not at its label, latest declared
-//! first. It may not pass a VLA declaration (C99 6.8.6.1p1, 6.8.4.2p2) or, as
-//! clang rules, a cleanup declaration into its scope, nor enter a statement
+//! first. It may not pass a VLA declaration (C99 6.8.6.1p1, 6.8.4.2p2) or a
+//! cleanup declaration into its scope, nor enter a statement
 //! expression or a block of a `__try` statement, nor leave a `__finally`
 //! block.
 

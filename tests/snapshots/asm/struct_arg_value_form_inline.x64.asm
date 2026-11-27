@@ -3,7 +3,7 @@ struct_arg_value_form_inline.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -37,10 +37,11 @@ Disassembly of section .text:
                	andq	$0xff, %rdi
                	andq	$0xff, %rax
                	shlq	$0x8, %rax
-               	orq	%rdi, %rax
+               	orq	%rax, %rdi
                	andq	$0xff, %rcx
                	shlq	$0x10, %rcx
-               	orq	%rcx, %rax
+               	orq	%rcx, %rdi
+               	movq	%rdi, %rax
                	retq
 
 <take_pair>:

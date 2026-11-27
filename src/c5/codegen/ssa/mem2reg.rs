@@ -1793,17 +1793,29 @@ fn copy_words(func: &mut FunctionSsa) {
     }
 }
 
-/// A load through a phi of frame-object addresses becomes a load of each
-/// object in the predecessor that names it, merged by that phi: a
-/// conditional choosing between two objects, each written in its arm,
-/// reads the value its arm stored, and the objects' addresses, read by
-/// nothing else, no longer pin them to the frame. Each object is read at
-/// the end of its predecessor, or ahead of the compare a conditional
-/// terminator reads, and nothing between that point and the load may
-/// write memory. The load is in the phi's block or in one that block
-/// reaches by unconditional jumps into blocks with no other predecessor,
-/// as an inlined aggregate return's merge reaches the caller's copy.
-fn split_address_phi_loads(func: &mut FunctionSsa) {
+/// What one predecessor of an address phi reads: a frame object or memory
+/// through a pointer.
+#[derive(Clone, Copy)]
+enum Arm {
+    Object(i64),
+    Pointer(ValueId),
+}
+
+/// A load through a phi of addresses, a frame object's among them, becomes
+/// a load in each predecessor of what it names there, merged by a phi of
+/// its own: a conditional choosing between two objects, each written in
+/// its arm, reads the value its arm stored, and the objects' addresses,
+/// read by nothing but such loads, no longer pin them to the frame. An arm
+/// choosing memory elsewhere loads through its pointer, from a predecessor
+/// that jumps to the phi alone, so no path the load was not on takes it.
+/// Each arm is read
+/// at the end of its predecessor, or ahead of the compare a conditional
+/// terminator reads when that compare writes no memory, and nothing
+/// between that point and the load may write memory. The load is in the
+/// phi's block or in one that block reaches by unconditional jumps into
+/// blocks with no other predecessor, as an inlined aggregate return's
+/// merge reaches the caller's copy.
+fn split_address_phi_loads(func: &mut FunctionSsa) -> bool {
     let uses = super::reg_alloc::compute_use_counts(func);
     let preds = predecessors(func);
     let quiet = |inst: &Inst| {
@@ -1822,8 +1834,9 @@ fn split_address_phi_loads(func: &mut FunctionSsa) {
                     | Inst::LifetimeEnd(_)
             )
     };
-    // Per load: the phi, and per predecessor the object and where its read goes.
-    type Plan = (ValueId, ValueId, Vec<(i64, At)>);
+    // Per load: the phi, and per predecessor the object or the pointer it
+    // reads and where the read goes.
+    type Plan = (ValueId, ValueId, Vec<(Arm, At)>);
     let mut plans: Vec<Plan> = Vec::new();
     // Whether the phi `addr` is in block `b` or in a block reaching it
     // along such a chain, every block of which writes no memory. A chain
@@ -1879,36 +1892,64 @@ fn split_address_phi_loads(func: &mut FunctionSsa) {
             let Some(Inst::Phi { incoming, .. }) = func.insts.get(addr as usize) else {
                 continue;
             };
-            if !integer || uses.get(addr as usize) != Some(&1) || !reaches(b, addr) {
+            if !integer || !reaches(b, addr) {
                 continue;
             }
             let mut reads = Vec::with_capacity(incoming.len());
             for &(pred, v) in incoming {
-                let Some(&Inst::LocalAddr(off)) = func.insts.get(v as usize) else {
-                    break;
-                };
                 let p = &func.blocks[pred as usize];
+                // A pointer read here must be live already: reading a dead one
+                // revives what it reads, the address phi this split rewrites
+                // into the loaded values among them (a pointer local's phi
+                // around a loop reads its own back-edge value).
+                let arm = match func.insts.get(v as usize) {
+                    Some(&Inst::LocalAddr(off)) => Arm::Object(off),
+                    Some(_)
+                        if matches!(p.terminator, Terminator::Jmp(_)) && uses[v as usize] > 0 =>
+                    {
+                        Arm::Pointer(v)
+                    }
+                    _ => break,
+                };
                 let at = match p.inst_range.clone().last() {
                     None => At::Empty(pred),
                     Some(last) => {
                         let mut cond = NO_VALUE;
                         p.terminator.for_each_operand(|c| cond = c);
-                        if cond == last && !matches!(p.terminator, Terminator::Return(_)) {
+                        // Ahead of the condition its branch reads, unless it
+                        // is a phi, which heads its block.
+                        if cond == last
+                            && last != v
+                            && quiet(&func.insts[last as usize])
+                            && !matches!(func.insts[last as usize], Inst::Phi { .. })
+                            && !matches!(p.terminator, Terminator::Return(_))
+                        {
                             At::Before(last)
                         } else {
                             At::After(last)
                         }
                     }
                 };
-                reads.push((off, at));
+                reads.push((arm, at));
             }
-            if reads.len() == incoming.len() {
+            if reads.len() == incoming.len()
+                && reads.iter().any(|(arm, _)| matches!(arm, Arm::Object(_)))
+            {
                 plans.push((l, addr, reads));
             }
         }
     }
+    // The objects' reads replace every live use of the phi, or none. Each
+    // load, a dead one too, gets a phi of its own: one shared by two loads
+    // would merge the words of only one of them. The first takes the
+    // address phi itself, so no use of the objects' addresses is left.
+    let mut through: alloc::collections::BTreeMap<ValueId, u32> = Default::default();
+    for &(l, phi, _) in &plans {
+        *through.entry(phi).or_default() += u32::from(uses[l as usize] != 0);
+    }
+    plans.retain(|&(_, phi, _)| through[&phi] == uses[phi as usize]);
     if plans.is_empty() {
-        return;
+        return false;
     }
     // An aggregate is read through its address, as its other accesses
     // are, so the pass splitting aggregates still sees all of them.
@@ -1917,33 +1958,66 @@ fn split_address_phi_loads(func: &mut FunctionSsa) {
     let mut ins: Vec<Insertion> = Vec::new();
     // Per read, the insertion holding the value read.
     let mut values: Vec<usize> = Vec::new();
-    for &(l, _, ref reads) in &plans {
-        let Inst::Load { disp, kind, .. } = func.insts[l as usize] else {
+    // Per load, the insertion of the phi merging its reads; `None` for the
+    // address phi.
+    let mut merges: Vec<Option<usize>> = Vec::new();
+    let mut taken: BTreeSet<ValueId> = BTreeSet::new();
+    for &(l, phi, ref reads) in &plans {
+        let Inst::Load {
+            disp, kind, align, ..
+        } = func.insts[l as usize]
+        else {
             unreachable!()
         };
-        for &(off, at) in reads {
-            let inst = if aggregate.contains(&off) {
-                ins.push(Insertion {
-                    at,
-                    inst: Inst::LocalAddr(off),
-                    is_f32: false,
-                    copy_of: None,
-                });
-                Inst::Load {
-                    addr: (n_old + ins.len() - 1) as ValueId,
+        let Inst::Phi { ref incoming, .. } = func.insts[phi as usize] else {
+            unreachable!()
+        };
+        if taken.insert(phi) {
+            merges.push(None);
+        } else {
+            merges.push(Some(ins.len()));
+            ins.push(Insertion {
+                at: At::Before(phi),
+                inst: Inst::Phi {
+                    incoming: incoming.iter().map(|&(p, _)| (p, NO_VALUE)).collect(),
+                    kind: LoadKind::I64,
+                },
+                is_f32: false,
+                copy_of: None,
+            });
+        }
+        for &(arm, at) in reads {
+            let inst = match arm {
+                Arm::Pointer(addr) => Inst::Load {
+                    addr,
                     disp,
                     kind,
                     volatile: false,
-                    align: 0,
+                    align,
                     pc_rel: false,
+                },
+                Arm::Object(off) if aggregate.contains(&off) => {
+                    ins.push(Insertion {
+                        at,
+                        inst: Inst::LocalAddr(off),
+                        is_f32: false,
+                        copy_of: None,
+                    });
+                    Inst::Load {
+                        addr: (n_old + ins.len() - 1) as ValueId,
+                        disp,
+                        kind,
+                        volatile: false,
+                        align: 0,
+                        pc_rel: false,
+                    }
                 }
-            } else {
-                Inst::LoadLocal {
+                Arm::Object(off) => Inst::LoadLocal {
                     off,
                     disp,
                     kind,
                     volatile: false,
-                }
+                },
             };
             values.push(ins.len());
             ins.push(Insertion {
@@ -1956,28 +2030,126 @@ fn split_address_phi_loads(func: &mut FunctionSsa) {
     }
     let rewrite = super::tape::insert(func, &ins);
     let mut values = values.into_iter().map(|j| rewrite.ids[j]);
-    for (l, phi, reads) in plans {
-        let (l, phi) = (rewrite.remap[l as usize], rewrite.remap[phi as usize]);
-        if let Inst::Phi { incoming, kind } = &mut func.insts[phi as usize] {
+    for ((l, phi, reads), merge) in plans.into_iter().zip(merges) {
+        let l = rewrite.remap[l as usize];
+        let merge = merge.map_or(rewrite.remap[phi as usize], |j| rewrite.ids[j]);
+        if let Inst::Phi { incoming, kind } = &mut func.insts[merge as usize] {
             for (inc, _) in incoming.iter_mut().zip(&reads) {
                 inc.1 = values.next().expect("one value per read");
             }
             *kind = LoadKind::I64;
         }
         func.insts[l as usize] = Inst::Copy {
-            value: phi,
+            value: merge,
             is_fp: false,
         };
     }
+    true
 }
 
 /// Promote the function's promotable slots; returns them. A store of an
 /// undefined value to a slot left in memory goes, so the passes after do
-/// not take it for a write of the object.
+/// not take it for a write of the object. A phi of addresses the promotion
+/// forms -- a pointer local choosing an object -- is split as one already
+/// in the tape is, and the objects it frees are promoted.
 pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
-    let promoted = promote(func);
+    let mut promoted = promote(func);
+    if !promoted.is_empty() && split_address_phi_loads(func) {
+        promoted.extend(promote(func));
+    }
     drop_undefined_stores(func);
     promoted
+}
+
+/// A `LocalAddr` read only as the address of `Load`s and `Store`s at its
+/// slot -- `*(T *)&local` -- makes no pointer that outlives them: each
+/// becomes the `LoadLocal` / `StoreLocal` it is, so the slot is a candidate
+/// like one no address names. The forms are kept for a scalar slot whose
+/// every access is then whole and of one width; an aggregate's accesses,
+/// and one bounded below its width, keep the address
+/// ([`crate::c5::codegen::passes::index_fold::local_form`]).
+fn fold_direct_slot_accesses(func: &mut FunctionSsa) {
+    use crate::c5::codegen::passes::index_fold::{load_width, local_form, store_width};
+    let mut direct: Vec<bool> = (func.insts.iter())
+        .map(|i| matches!(i, Inst::LocalAddr(_)))
+        .collect();
+    if !direct.contains(&true) {
+        return;
+    }
+    let mut escape = |op: ValueId| {
+        if let Some(d) = direct.get_mut(op as usize) {
+            *d = false;
+        }
+    };
+    for inst in &func.insts {
+        let mut through = match inst {
+            Inst::Load { addr, .. } | Inst::Store { addr, .. } => {
+                local_form(inst, 0, true).map(|_| *addr)
+            }
+            _ => None,
+        };
+        super::reg_alloc::for_each_operand(inst, |op| {
+            // The address operand once; a stored address escapes.
+            if through == Some(op) {
+                through = None;
+            } else {
+                escape(op);
+            }
+        });
+    }
+    for block in &func.blocks {
+        block.terminator.for_each_operand(&mut escape);
+        if block.exit_acc != NO_VALUE {
+            escape(block.exit_acc);
+        }
+    }
+    let mut folded: Vec<(usize, Inst, i64)> = Vec::new();
+    for v in 0..func.insts.len() {
+        let (Inst::Load { addr, .. } | Inst::Store { addr, .. }) = func.insts[v] else {
+            continue;
+        };
+        if let (true, Some(&Inst::LocalAddr(off))) =
+            (direct[addr as usize], func.insts.get(addr as usize))
+            && let Some(local) = local_form(&func.insts[v], off, true)
+        {
+            folded.push((v, core::mem::replace(&mut func.insts[v], local), off));
+        }
+    }
+    if folded.is_empty() {
+        return;
+    }
+    // Per slot: the one width its accesses take, whole; 0 for another shape.
+    let mut width: alloc::collections::BTreeMap<i64, u8> = alloc::collections::BTreeMap::new();
+    for inst in &func.insts {
+        let (off, disp, w) = match *inst {
+            Inst::LoadLocal {
+                off, disp, kind, ..
+            } => (off, disp, load_width(kind)),
+            Inst::StoreLocal {
+                off, disp, kind, ..
+            } => (off, disp, store_width(kind)),
+            _ => continue,
+        };
+        let seen = width.entry(off).or_insert(w);
+        if disp != 0 || *seen != w {
+            *seen = 0;
+        }
+    }
+    let free = address_free_slots(func);
+    let aggregate = |off: i64| {
+        (func.multi_cell_slots.iter()).any(|&(base, cells)| (base..base + cells).contains(&off))
+            || func.array_slots.contains(&off)
+            || func.vector_objects.contains(&off)
+    };
+    let keep: BTreeSet<i64> = (folded.iter())
+        .map(|&(_, _, off)| off)
+        .filter(|&off| free.contains(&off) && width.get(&off) != Some(&0) && !aggregate(off))
+        .collect();
+    for (v, original, off) in folded {
+        if !keep.contains(&off) {
+            func.insts[v] = original;
+        }
+    }
 }
 
 fn promote(func: &mut FunctionSsa) -> Vec<i64> {
@@ -1988,7 +2160,8 @@ fn promote(func: &mut FunctionSsa) -> Vec<i64> {
     if std::env::var("BADC_NO_MEM2REG").is_ok() {
         return Vec::new();
     }
-    split_address_phi_loads(func);
+    let _ = split_address_phi_loads(func);
+    fold_direct_slot_accesses(func);
     // A non-zero `AllocaInit` moves sp at runtime, but both the fixed
     // locals and the allocator spills are then frame-pointer-relative
     // (`Frame::dynamic_sp`); only the alloca storage rides sp, reached
@@ -2692,6 +2865,7 @@ mod tests {
             tls_dynamic: false,
             section: None,
             patchable_entry: None,
+            type_hash: None,
             no_instrument: false,
             no_stack_protector: false,
             is_weak: false,
@@ -2726,12 +2900,45 @@ mod tests {
             has_returns_twice_call: false,
             did_unroll: false,
             did_inline: false,
+            frees_rbp: false,
+            fenv_access: false,
+            ret_low_word: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),
             extern_imm_code_refs: Vec::new(),
             extern_imm_data_refs: Vec::new(),
             extern_tls_refs: Vec::new(),
+        }
+    }
+
+    /// A predecessor whose branch reads the phi heading it takes the read a
+    /// load through an address phi splits into after that phi: `e && (*i =
+    /// h)` ends in a block of one phi its branch tests, and `*h` below reads
+    /// the objects the phi merges. The SSA check holds after every pass.
+    #[test]
+    fn a_split_read_follows_the_phi_its_predecessor_branches_on() {
+        let src = "int a(int *e) {\n\
+                       int **g = 0; int ***h = &g; int ****i = &h;\n\
+                       if (e && (*i = h)) ;\n\
+                       return 0 == *h;\n\
+                   }\n\
+                   int b(void) { int c; return a(&c); }\n";
+        for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+            let opts = crate::CompileOptions::default()
+                .with_no_entry_point(true)
+                .with_optimize(true);
+            let program =
+                crate::Compiler::with_options(alloc::string::String::from(src), target, opts)
+                    .compile()
+                    .expect("compile");
+            let native = crate::NativeOptions {
+                output_kind: crate::OutputKind::Relocatable,
+                ..crate::NativeOptions::new()
+                    .with_optimize()
+                    .with_verify_ssa()
+            };
+            crate::c5::codegen::lower_for(&program, target, native).expect("lower");
         }
     }
 
@@ -3062,6 +3269,190 @@ mod tests {
             "{:?}",
             f.insts
         );
+    }
+
+    /// Block 0 branches to blocks 1 and 2; block 1 stores 7 in object -1
+    /// and passes its address to block 3's phi, block 2 passes the pointer
+    /// parameter, and block 3 loads through the phi. `jump` is block 2's
+    /// terminator.
+    fn object_or_pointer(jump: Terminator) -> FunctionSsa {
+        let insts = alloc::vec![
+            Inst::ParamRef {
+                idx: 0,
+                kind: LoadKind::I64
+            }, // v0
+            Inst::ParamRef {
+                idx: 1,
+                kind: LoadKind::I64
+            }, // v1
+            Inst::Imm(7),        // v2
+            store(2),            // v3
+            Inst::LocalAddr(-1), // v4
+            Inst::Phi {
+                incoming: alloc::vec![(1, 4), (2, 1)],
+                kind: LoadKind::I64,
+            }, // v5
+            Inst::Load {
+                addr: 5,
+                disp: 0,
+                kind: LoadKind::I64,
+                volatile: false,
+                align: 0,
+                pc_rel: false,
+            }, // v6
+        ];
+        let blocks = alloc::vec![
+            block(
+                0..2,
+                Terminator::Bz {
+                    cond: 0,
+                    target: 2,
+                    fall_through: 1,
+                },
+            ),
+            block(2..5, Terminator::Jmp(3)),
+            block(5..5, jump),
+            block(5..7, Terminator::Return(6)),
+        ];
+        func_with(insts, blocks)
+    }
+
+    /// A phi choosing an object or memory elsewhere: the object's arm reads
+    /// the value stored and the other loads through its pointer at the end
+    /// of its predecessor, so the object keeps no address.
+    #[test]
+    fn a_phi_of_an_object_and_a_pointer_reads_each_arm() {
+        let mut f = object_or_pointer(Terminator::Jmp(3));
+        run(&mut f);
+        let value = |mut v: ValueId| {
+            while let Some(Inst::Copy { value, .. }) = f.insts.get(v as usize) {
+                v = *value;
+            }
+            f.insts.get(v as usize).cloned()
+        };
+        let Terminator::Return(r) = f.blocks[3].terminator else {
+            panic!("{:?}", f.blocks[3].terminator)
+        };
+        let Some(Inst::Phi { incoming, .. }) = value(r) else {
+            panic!("{:?}", f.insts)
+        };
+        let arms: Vec<_> = incoming.iter().map(|&(b, v)| (b, value(v))).collect();
+        assert!(
+            matches!(
+                arms.as_slice(),
+                [
+                    (1, Some(Inst::Imm(7))),
+                    (
+                        2,
+                        Some(Inst::Load {
+                            addr: 1,
+                            disp: 0,
+                            ..
+                        })
+                    )
+                ]
+            ),
+            "{:?}",
+            f.insts
+        );
+        let reads_through_pointer = (f.blocks[2].inst_range.clone())
+            .any(|v| matches!(f.insts[v as usize], Inst::Load { addr: 1, .. }));
+        assert!(reads_through_pointer, "{:?} {:?}", f.insts, f.blocks);
+        assert!(!reads_an_address(&f), "{:?}", f.insts);
+    }
+
+    /// Whether an operand names a frame object's address.
+    fn reads_an_address(f: &FunctionSsa) -> bool {
+        let mut any = false;
+        for inst in &f.insts {
+            inst.for_each_operand(|v| any |= matches!(f.insts[v as usize], Inst::LocalAddr(_)));
+        }
+        any
+    }
+
+    /// The pointer's predecessor branching elsewhere too keeps the load
+    /// through the phi: hoisted there, it would read memory on a path that
+    /// never read it.
+    #[test]
+    fn a_pointer_arm_from_a_conditional_predecessor_keeps_the_phi() {
+        let mut f = object_or_pointer(Terminator::Bnz {
+            cond: 0,
+            target: 3,
+            fall_through: 1,
+        });
+        run(&mut f);
+        let through_phi = |i: &Inst| match i {
+            Inst::Load { addr, .. } => matches!(f.insts[*addr as usize], Inst::Phi { .. }),
+            _ => false,
+        };
+        assert!(f.insts.iter().any(through_phi), "{:?}", f.insts);
+    }
+
+    /// A phi the promotion forms -- a pointer local set to an object's
+    /// address or to the pointer parameter -- is split as one already in
+    /// the tape is, and the object promotes.
+    #[test]
+    fn a_phi_the_promotion_forms_is_split() {
+        let ptr = |value| Inst::StoreLocal {
+            disp: 0,
+            off: -2,
+            value,
+            kind: StoreKind::I64,
+            volatile: false,
+            nsw: false,
+        };
+        let insts = alloc::vec![
+            Inst::ParamRef {
+                idx: 0,
+                kind: LoadKind::I64
+            }, // v0
+            Inst::ParamRef {
+                idx: 1,
+                kind: LoadKind::I64
+            }, // v1
+            Inst::Imm(7),        // v2
+            store(2),            // v3
+            Inst::LocalAddr(-1), // v4
+            ptr(4),              // v5
+            ptr(1),              // v6
+            Inst::LoadLocal {
+                disp: 0,
+                off: -2,
+                kind: LoadKind::I64,
+                volatile: false,
+            }, // v7
+            Inst::Load {
+                addr: 7,
+                disp: 0,
+                kind: LoadKind::I64,
+                volatile: false,
+                align: 0,
+                pc_rel: false,
+            }, // v8
+        ];
+        let blocks = alloc::vec![
+            block(
+                0..2,
+                Terminator::Bz {
+                    cond: 0,
+                    target: 2,
+                    fall_through: 1,
+                },
+            ),
+            block(2..6, Terminator::Jmp(3)),
+            block(6..7, Terminator::Jmp(3)),
+            block(7..9, Terminator::Return(8)),
+        ];
+        let mut f = func_with(insts, blocks);
+        f.locals = 2;
+        let promoted = run(&mut f);
+        assert!(
+            promoted.contains(&-1) && promoted.contains(&-2),
+            "{promoted:?}"
+        );
+        let in_frame = |i: &Inst| matches!(i, Inst::LoadLocal { .. } | Inst::StoreLocal { .. });
+        assert!(!f.insts.iter().any(in_frame), "{:?}", f.insts);
+        assert!(!reads_an_address(&f), "{:?}", f.insts);
     }
 
     #[test]

@@ -3,7 +3,7 @@ warn_dead_store.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -22,10 +22,10 @@ Disassembly of section .text:
                	ret
 
 <store_consumed_after_branch_is_silenced>:
-               	mov	x1, #0x1                // =1
-               	mov	x2, #0x2                // =2
                	cmp	w0, #0x0
-               	csel	x0, x2, x1, ne
+               	mov	x16, #0x2               // =2
+               	mov	x17, #0x1               // =1
+               	csel	x0, x16, x17, ne
                	ret
 
 <address_escapes_silences>:

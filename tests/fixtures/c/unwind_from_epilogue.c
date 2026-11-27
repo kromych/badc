@@ -7,9 +7,10 @@
 // unwinds the context it stopped in to `outer`'s frame, which must hold
 // `outer`'s registers, stack pointer and frame pointer. Each instruction
 // of each epilogue, from the first that moves sp or reloads the frame
-// record to the `ret` (Win64: or a tail call's `jmp`), takes its turn: an
+// record to the `ret` or a tail call's branch, takes its turn: an
 // ARM64 epilogue the `.xdata` epilog scopes describe, a Win64 one in the
-// form the unwinder recognizes. Elsewhere the program exits 0.
+// form the unwinder recognizes, `lea rsp`, `leave` or with no frame
+// pointer `add rsp`, then the pops. Elsewhere the program exits 0.
 
 #ifdef _WIN32
 #include <stdarg.h>
@@ -275,19 +276,67 @@ __attribute__((noinline)) static long va(int n, ...)
 
 __attribute__((noinline)) static long va_caller(long a) { return va(2, a, a + 1); }
 
+// Values live across a call, then a tail call: at -O the epilogue ends at
+// the branch to `leaf`. A listed function follows it, which bounds its
+// code where functions keep their source order.
+__attribute__((noinline)) static long tail(long a)
+{
+    long b = a * 3 + 1, c = b ^ 5;
+    long r = leaf(a);
+    return leaf(r + b + c);
+}
+
+// Floating-point values live across the call: Win64 saves xmm registers.
+__attribute__((noinline)) static long xmms(long a)
+{
+    double x = (double)a * 1.5, y = x + 2.25, z = y * x;
+    long r = leaf(a);
+    return r + (long)(x + y + z);
+}
+
+// Values live across a loop and no call: with no frame pointer the pushes
+// alone make the frame.
+__attribute__((noinline)) static long pushes(long a)
+{
+    long x = a * 3, y = a ^ 5, z = a + 7, w = a * 11, v = a - 13, u = a | 17;
+    for (long i = 0; i < (a & 7) + 2; i++) {
+        x += y;
+        y ^= z;
+        z += w;
+        w ^= v;
+        v += u;
+        u ^= x;
+    }
+    return x + y + z + w + v + u + sink;
+}
+
+// An allocation past a page, which a frame with no pointer probes ahead of
+// its `sub`.
+__attribute__((noinline)) static long paged(long a)
+{
+    volatile char buf[4064];
+    long b = a * 3 + 1;
+    buf[a & 1023] = (char)b;
+    long r = leaf(buf[(a + 1) & 1023]);
+    return r + b;
+}
+
 __attribute__((noinline)) static long via_leaf(long a) { return leaf(a) + 1; }
 
 // Every function here, the bounds of each one's code.
 static void *const functions[] = {
     (void *)outer, (void *)compare, (void *)put,      (void *)plant,   (void *)on_break,
     (void *)leaf,  (void *)fold,    (void *)top,      (void *)big,     (void *)exits,
-    (void *)dynamic, (void *)va,    (void *)va_caller, (void *)via_leaf,
+    (void *)dynamic, (void *)va,    (void *)va_caller, (void *)via_leaf, (void *)tail,
+    (void *)xmms,  (void *)pushes,  (void *)paged,
 };
 
+// `bare`: the function may be a full leaf, which has no epilogue.
 struct target {
     void *code;
     long (*run)(long);
     long args[3];
+    int bare;
 };
 
 static unsigned char *end_of(unsigned char *begin, unsigned char *main_at)
@@ -316,8 +365,9 @@ static int epilogues(unsigned char *begin, unsigned char *end, unsigned char **s
                 from--;
         } else if (w[i] != 0xD50323BF) // autiasp, a signed leaf's
             continue;
+        // ret, or the b of a tail call.
         int to = i;
-        while (to < count && w[to] != 0xD65F03C0)
+        while (to < count && w[to] != 0xD65F03C0 && (w[to] & 0xFC000000) != 0x14000000)
             to++;
         if (to == count)
             return -1;
@@ -335,6 +385,10 @@ static int epilogues(unsigned char *begin, unsigned char *end, unsigned char **s
             at[k++] = q, q += 7; // lea rsp, [rbp + disp32]
         else if (q < end && q[0] == 0xC9)
             at[k++] = q, q += 1; // leave
+        else if (q + 4 <= end && q[0] == 0x48 && q[1] == 0x83 && q[2] == 0xC4)
+            at[k++] = q, q += 4; // add rsp, imm8
+        else if (q + 7 <= end && q[0] == 0x48 && q[1] == 0x81 && q[2] == 0xC4)
+            at[k++] = q, q += 7; // add rsp, imm32
         for (;;) {
             if (k == 15)
                 break;
@@ -361,10 +415,12 @@ static int epilogues(unsigned char *begin, unsigned char *end, unsigned char **s
 int main(void)
 {
     static const struct target targets[] = {
-        {(void *)leaf, via_leaf, {1, 0, 0}},  {(void *)fold, fold, {1, 0, 0}},
+        {(void *)leaf, via_leaf, {1, 0, 0}, 1}, {(void *)fold, fold, {1, 0, 0}},
         {(void *)top, top, {1, 0, 0}},        {(void *)big, big, {1, 0, 0}},
         {(void *)exits, exits, {1, 2, 4}},    {(void *)dynamic, dynamic, {5, 0, 0}},
-        {(void *)va, va_caller, {1, 0, 0}},
+        {(void *)va, va_caller, {1, 0, 0}},   {(void *)tail, tail, {1, 0, 0}},
+        {(void *)xmms, xmms, {1, 0, 0}},      {(void *)pushes, pushes, {1, 0, 0}, 1},
+        {(void *)paged, paged, {1, 0, 0}},
     };
     unsigned char *lo = (unsigned char *)main, *hi = lo;
     for (unsigned i = 0; i < sizeof functions / sizeof *functions; i++) {
@@ -387,7 +443,7 @@ int main(void)
             return 4;
         int n = epilogues(begin, end, sites, 64);
         // A full leaf without return-address signing has no epilogue.
-        if (n < 0 || (n == 0 && t != 0))
+        if (n < 0 || (n == 0 && !targets[t].bare))
             return 60 + t;
         for (int s = 0; s < n; s++) {
             int before = hits;

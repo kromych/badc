@@ -41,20 +41,30 @@ use super::reg_alloc::{Allocation, Place};
 /// Format an entire function. Newline-terminated; one call per
 /// function in `BADC_DUMP_SSA` mode.
 pub(crate) fn dump_function(func: &FunctionSsa, alloc: &Allocation) -> String {
+    dump_ssa(func, Some(alloc))
+}
+
+/// [`dump_function`] for SSA the allocator has not placed: every value's
+/// place prints as `-`.
+pub(crate) fn dump_ssa(func: &FunctionSsa, alloc: Option<&Allocation>) -> String {
     let mut out = String::new();
     out.push_str(&format!(
         "fn ent_pc={} n_params={} variadic={} locals={}\n",
         func.ent_pc, func.n_params, func.is_variadic, func.locals,
     ));
-    out.push_str(&format!(
-        "  spill_count={} gpr_used={:?} fp_used={:?}\n",
-        alloc.spill_count, alloc.gpr_used, alloc.fp_used,
-    ));
+    if let Some(alloc) = alloc {
+        out.push_str(&format!(
+            "  spill_count={} gpr_used={:?} fp_used={:?}\n",
+            alloc.spill_count, alloc.gpr_used, alloc.fp_used,
+        ));
+    }
     for (b_idx, block) in func.blocks.iter().enumerate() {
         out.push_str(&format!("  block {b_idx}  start_pc={}\n", block.start_pc,));
         for v in block.inst_range.clone() {
             let inst = &func.insts[v as usize];
-            let place = alloc.places.get(v as usize).copied().unwrap_or(Place::None);
+            let place = alloc
+                .and_then(|a| a.places.get(v as usize).copied())
+                .unwrap_or(Place::None);
             let f32_mark = if func.f32_values.get(v as usize).copied().unwrap_or(false) {
                 " [f32]"
             } else {

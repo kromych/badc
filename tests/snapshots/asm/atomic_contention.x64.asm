@@ -3,7 +3,7 @@ atomic_contention.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -61,6 +61,7 @@ Disassembly of section .text:
                	leaq	<rip>, %rax # <addr>
                	movq	%rdx, %rcx
                	xchgl	%ecx, (%rax)
+               	nopl	(%rax)
                	testl	%ecx, %ecx
                	jne	<addr>
                	movq	<rip>, %rax # <addr>
@@ -69,10 +70,10 @@ Disassembly of section .text:
                	leaq	<rip>, %rax # <addr>
                	xorl	%ecx, %ecx
                	movl	%ecx, (%rax)
-               	leaq	<rip>, %rax # <addr>
-               	movq	%rdx, %rcx
-               	xchgb	%cl, (%rax)
-               	testb	$-0x1, %cl
+               	leaq	<rip>, %rcx # <addr>
+               	movq	%rdx, %rax
+               	xchgb	%al, (%rcx)
+               	testb	$-0x1, %al
                	jne	<addr>
                	movq	<rip>, %rax # <addr>
                	incq	%rax
@@ -87,21 +88,19 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	pushq	%r12
                	pushq	%rbx
                	xorl	%edi, %edi
                	movl	$0x2, %esi
                	callq	<addr>
                	movq	%rax, %r12
-               	leaq	<rip>, %rsi
                	movq	%r12, %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	movq	%rax, %rbx
-               	leaq	<rip>, %rsi
                	movq	%r12, %rdi
+               	leaq	<rip>, %rsi
                	callq	<addr>
                	movq	%rax, %r12
                	testq	%rbx, %rbx
@@ -111,49 +110,49 @@ Disassembly of section .text:
                	movl	$0x66, %eax
                	popq	%rbx
                	popq	%r12
-               	leave
+               	addq	$0x28, %rsp
                	retq
+               	leaq	0x10(%rsp), %rdi
                	xorl	%esi, %esi
-               	leaq	-0x20(%rbp), %rdi
                	leaq	-<rip>, %rdx # <addr>
-               	movq	%rsi, %rcx
+               	xorl	%ecx, %ecx
                	callq	*%rbx
                	testl	%eax, %eax
                	jne	<addr>
-               	movl	$0x1, %ecx
-               	leaq	-0x20(%rbp), %rax
+               	leaq	0x10(%rsp), %rax
                	leaq	0x8(%rax), %rdi
                	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
+               	movl	$0x1, %ecx
                	callq	*%rbx
                	testl	%eax, %eax
                	jne	<addr>
-               	movl	$0x2, %ecx
-               	leaq	-0x20(%rbp), %rax
+               	leaq	0x10(%rsp), %rax
                	leaq	0x10(%rax), %rdi
                	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
+               	movl	$0x2, %ecx
                	callq	*%rbx
                	testl	%eax, %eax
                	jne	<addr>
-               	movl	$0x3, %ecx
-               	leaq	-0x20(%rbp), %rax
+               	leaq	0x10(%rsp), %rax
                	leaq	0x18(%rax), %rdi
                	xorl	%esi, %esi
                	leaq	-<rip>, %rdx # <addr>
+               	movl	$0x3, %ecx
                	callq	*%rbx
                	testl	%eax, %eax
                	jne	<addr>
-               	movq	-0x20(%rbp), %rdi
+               	movq	0x10(%rsp), %rdi
                	xorl	%esi, %esi
                	callq	*%r12
-               	movq	-0x18(%rbp), %rdi
+               	movq	0x18(%rsp), %rdi
                	xorl	%esi, %esi
                	callq	*%r12
-               	movq	-0x10(%rbp), %rdi
+               	movq	0x20(%rsp), %rdi
                	xorl	%esi, %esi
                	callq	*%r12
-               	movq	-0x8(%rbp), %rdi
+               	movq	0x28(%rsp), %rdi
                	xorl	%esi, %esi
                	callq	*%r12
                	movq	<rip>, %rax # <addr>

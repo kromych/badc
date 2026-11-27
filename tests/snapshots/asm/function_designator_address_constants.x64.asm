@@ -3,7 +3,7 @@ function_designator_address_constants.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -34,9 +34,6 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
                	pushq	%rbx
                	movq	<rip>, %rax # <addr>
                	callq	*%rax
@@ -57,42 +54,42 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x1, %eax
                	popq	%rbx
-               	leave
                	retq
                	xorl	%edx, %edx
-               	leaq	<rip>, %rdi # <addr>
                	leaq	<rip>, %r8 # <addr>
+               	leaq	<rip>, %r9 # <addr>
                	leaq	-<rip>, %rsi # <addr>
-               	leaq	-<rip>, %r9 # <addr>
+               	leaq	-<rip>, %r10 # <addr>
                	imulq	$0x38, %rdx, %rax
-               	addq	%r8, %rax
-               	movq	(%rdi,%rdx,8), %rcx
-               	movq	(%rax), %rbx
-               	subq	%rsi, %rbx
-               	cmpq	%rcx, %rbx
+               	addq	%r9, %rax
+               	movq	(%r8,%rdx,8), %rcx
+               	movq	(%rax), %rdi
+               	subq	%rsi, %rdi
+               	nopl	(%rax,%rax)
+               	cmpq	%rcx, %rdi
                	jne	<addr>
-               	movq	0x8(%rax), %rbx
-               	subq	%rsi, %rbx
-               	cmpq	%rcx, %rbx
+               	movq	0x8(%rax), %rdi
+               	subq	%rsi, %rdi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
-               	movq	0x10(%rax), %rbx
-               	subq	%rsi, %rbx
-               	cmpq	%rcx, %rbx
+               	movq	0x10(%rax), %rdi
+               	subq	%rsi, %rdi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
-               	movq	0x18(%rax), %rbx
-               	subq	%rsi, %rbx
-               	cmpq	%rcx, %rbx
+               	movq	0x18(%rax), %rdi
+               	subq	%rsi, %rdi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
-               	movq	0x20(%rax), %rbx
-               	subq	%rsi, %rbx
-               	cmpq	%rcx, %rbx
+               	movq	0x20(%rax), %rdi
+               	subq	%rsi, %rdi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
-               	movq	0x28(%rax), %rbx
-               	subq	%rsi, %rbx
-               	cmpq	%rcx, %rbx
+               	movq	0x28(%rax), %rdi
+               	subq	%rsi, %rdi
+               	cmpq	%rcx, %rdi
                	jne	<addr>
                	movq	0x30(%rax), %rax
-               	subq	%r9, %rax
+               	subq	%r10, %rax
                	cmpq	%rcx, %rax
                	jne	<addr>
                	incq	%rdx
@@ -108,7 +105,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xc, %eax
                	popq	%rbx
-               	leave
                	retq
                	movq	<rip>, %rcx # <addr>
                	subq	%rax, %rcx
@@ -116,7 +112,6 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xe, %eax
                	popq	%rbx
-               	leave
                	retq
                	movq	<rip>, %rcx # <addr>
                	subq	%rax, %rcx
@@ -129,17 +124,13 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0xf, %eax
                	popq	%rbx
-               	leave
                	retq
                	xorl	%eax, %eax
                	popq	%rbx
-               	leave
                	retq
                	leaq	0x7(%rdx), %rax
                	popq	%rbx
-               	leave
                	retq
                	leaq	0x2(%rdx), %rax
                	popq	%rbx
-               	leave
                	retq

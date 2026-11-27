@@ -1,14 +1,12 @@
 //! Per-function SSA IR.
 //!
-//! The shape consumed by the linear-scan allocator
+//! The shape consumed by the register allocator
 //! ([`super::codegen::ssa::reg_alloc::allocate`]) and the per-arch SSA
-//! emitters. Two producers:
-//!
-//!   * The AST walker ([`super::irgen::walk_function`]) -- the
-//!     canonical source for every parser-produced function.
-//!   * The direct construction API
-//!     ([`super::ssa_build::SsaBuilder`]) -- used by
-//!     `emit_sys_trampolines` and other parser-side synthesis.
+//! emitters. Every function is built through
+//! [`super::codegen::ssa::build::SsaBuilder`]: by the AST walker
+//! ([`super::irgen::walk_function`]) for each parser-produced function,
+//! and by [`super::compiler::Compiler::emit_sys_trampolines`] for the
+//! forwarding body of a libc binding.
 //!
 //! Variants mirror the per-arch native instruction set wherever a
 //! single Inst lowers to a single instruction (one ldr per Load,
@@ -106,7 +104,7 @@ pub(crate) enum Inst {
     /// bytes. Zero means the access is naturally aligned for its width,
     /// which C99 6.3.2.3p7 guarantees for every well-formed object; a
     /// packed member or a packed bitfield storage unit records the lower
-    /// bound it actually has. Under [`NativeOptions::strict_align`] the
+    /// bound it actually has. Under [`super::codegen::NativeOptions::strict_align`] the
     /// lowering then composes the value from accesses no wider than
     /// that. A pass that rebuilds the access at the same address must
     /// carry the field across; one that retargets it to a different
@@ -405,6 +403,10 @@ pub(crate) enum Inst {
         /// call returning no aggregate, and for one whose `RetPart`s read
         /// the result registers.
         ret_slot_local: i64,
+        /// The parts of each argument given as an `Inst::AggParts`, read
+        /// here: the marshalling moves them from their places, so they live
+        /// up to the call whatever comes between it and the `AggParts`.
+        parts: Vec<ValueId>,
     },
     /// Indirect call: the target's address comes from `target`
     /// (typically the loaded value of a function pointer). Args
@@ -444,6 +446,8 @@ pub(crate) enum Inst {
         ret_agg: Option<u32>,
         /// See [`Self::Call::ret_slot_local`].
         ret_slot_local: i64,
+        /// See [`Self::Call::parts`].
+        parts: Vec<ValueId>,
     },
     /// External library call.
     CallExt {
@@ -779,6 +783,21 @@ impl Inst {
     /// A volatile load is an access the abstract machine performs even
     /// when the value is unused (C99 5.1.2.3p2, 6.7.3p6), so it is never
     /// pure.
+    /// Whether the instruction raises a floating-point exception flag or
+    /// reads a floating-point control mode (C17 7.6, F.9.1): floating
+    /// arithmetic and comparisons, scalar or vector, a fused multiply-add,
+    /// and every conversion but a bit move. A SIMD row is taken as one.
+    pub(crate) fn touches_fenv(&self) -> bool {
+        match self {
+            Inst::Binop { op, .. } | Inst::BinopI { op, .. } | Inst::VecBinop { op, .. } => {
+                is_fp_op(*op)
+            }
+            Inst::FpCast { kind, .. } => !matches!(kind, FpCastKind::FpBits | FpCastKind::BitsFp),
+            Inst::Fma { .. } | Inst::SimdVal { .. } => true,
+            _ => false,
+        }
+    }
+
     pub(crate) fn is_pure(&self) -> bool {
         matches!(
             self,
@@ -1033,8 +1052,12 @@ impl Inst {
             Inst::Bswap { value, .. } | Inst::BitCount { value, .. } => f(*value),
             Inst::Copy { value, .. } => f(*value),
             Inst::FpCast { value, .. } => f(*value),
-            Inst::Call { args, .. }
-            | Inst::CallExt { args, .. }
+            Inst::Call { args, parts, .. } => {
+                for &a in args.iter().chain(parts) {
+                    f(a);
+                }
+            }
+            Inst::CallExt { args, .. }
             | Inst::Intrinsic { args, .. }
             | Inst::Simd { args, .. }
             | Inst::SimdVal { args, .. } => {
@@ -1050,9 +1073,14 @@ impl Inst {
                     }
                 }
             }
-            Inst::CallIndirect { target, args, .. } => {
+            Inst::CallIndirect {
+                target,
+                args,
+                parts,
+                ..
+            } => {
                 f(*target);
-                for &a in args {
+                for &a in args.iter().chain(parts) {
                     f(a);
                 }
             }
@@ -1170,8 +1198,12 @@ impl Inst {
             Inst::Bswap { value, .. } | Inst::BitCount { value, .. } => f(value),
             Inst::Copy { value, .. } => f(value),
             Inst::FpCast { value, .. } => f(value),
-            Inst::Call { args, .. }
-            | Inst::CallExt { args, .. }
+            Inst::Call { args, parts, .. } => {
+                for a in args.iter_mut().chain(parts) {
+                    f(a);
+                }
+            }
+            Inst::CallExt { args, .. }
             | Inst::Intrinsic { args, .. }
             | Inst::Simd { args, .. }
             | Inst::SimdVal { args, .. } => {
@@ -1184,9 +1216,14 @@ impl Inst {
                     f(a);
                 }
             }
-            Inst::CallIndirect { target, args, .. } => {
+            Inst::CallIndirect {
+                target,
+                args,
+                parts,
+                ..
+            } => {
                 f(target);
-                for a in args {
+                for a in args.iter_mut().chain(parts) {
                     f(a);
                 }
             }
@@ -2023,14 +2060,17 @@ impl AsmBlock {
     }
 
     /// True when the template names the stack pointer (a token
-    /// [`sp_tokens`] finds). Such asm can capture or switch the stack
-    /// -- the setjmp / longjmp / stack-switch idioms -- so an activation
-    /// of the surrounding frame may stay live while later code in the
-    /// same frame runs, and may be resumed afterwards. Lifetimes are then
-    /// not bounded by the CFG or the C block structure, and frame-storage
-    /// sharing decisions must exclude the function.
+    /// [`sp_tokens`] finds) other than as text a directive keeps from every
+    /// instruction ([`directive_keeps_token`]). Such asm can capture or
+    /// switch the stack -- the setjmp / longjmp / stack-switch idioms -- so
+    /// an activation of the surrounding frame may stay live while later code
+    /// in the same frame runs, and may be resumed afterwards. Lifetimes are
+    /// then not bounded by the CFG or the C block structure, and
+    /// frame-storage sharing decisions must exclude the function.
     pub fn references_sp(&self) -> bool {
-        self.names_bound_operand(false) || sp_tokens(&self.template).next().is_some()
+        let t = &self.template;
+        self.names_bound_operand(false)
+            || sp_tokens(t).any(|(start, _)| !directive_keeps_token(t, start))
     }
 
     /// True when the template may leave the stack pointer moved, as a stack
@@ -2142,13 +2182,80 @@ fn sp_tokens(t: &[u8]) -> impl Iterator<Item = (usize, usize)> + '_ {
 /// first) or of a compare, test or push, or a mention in a directive. An exchange
 /// and BMI2 `mulx`, which writes two, count every operand as written. Labels ahead
 /// of the mnemonic, glued to it or not, are skipped; mnemonics match in any case.
-fn reads_sp_token(t: &[u8], start: usize, end: usize, syntax: crate::c5::asm::AsmComments) -> bool {
-    let x86 = syntax == crate::c5::asm::AsmComments::X86;
-    let att = start > 0 && t[start - 1] == b'%';
-    let line_start = t[..start]
+/// The statement holding `t[pos]`, split at newlines and `;`: its end, and
+/// the span of its first word past any labels -- the mnemonic or directive.
+fn statement_head(t: &[u8], pos: usize) -> (usize, usize, usize) {
+    let line_start = t[..pos]
         .iter()
         .rposition(|&b| b == b'\n' || b == b';')
         .map_or(0, |p| p + 1);
+    let line_end = t[pos..]
+        .iter()
+        .position(|&b| b == b'\n' || b == b';')
+        .map_or(t.len(), |p| pos + p);
+    let skip_blank = |at: usize| {
+        (at..line_end)
+            .find(|&k| !t[k].is_ascii_whitespace())
+            .unwrap_or(line_end)
+    };
+    let word_end = |at: usize| {
+        (at..line_end)
+            .find(|&k| t[k].is_ascii_whitespace())
+            .unwrap_or(line_end)
+    };
+    let label_byte =
+        |b: u8| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'$' | b'%' | b'=');
+    let mut at = skip_blank(line_start);
+    while let Some(colon) = (at..line_end)
+        .find(|&k| !label_byte(t[k]))
+        .filter(|&k| k > at && t[k] == b':')
+    {
+        at = skip_blank(colon + 1);
+    }
+    (line_end, at, word_end(at))
+}
+
+/// Whether the token at `t[start]` is text a directive keeps from every
+/// instruction: an argument of any directive but a repetition (`.irp`,
+/// `.irpc`) whose body, to its `.endr`, holds an instruction the token may
+/// be substituted into.
+fn directive_keeps_token(t: &[u8], start: usize) -> bool {
+    let (line_end, at, ops_at) = statement_head(t, start);
+    let word = &t[at..ops_at];
+    if !word.starts_with(b".") || ops_at > start {
+        return false;
+    }
+    let repeats = |w: &[u8]| {
+        [&b".irp"[..], b".irpc", b".rept"]
+            .iter()
+            .any(|d| w.eq_ignore_ascii_case(d))
+    };
+    if !repeats(word) {
+        return true;
+    }
+    let (mut depth, mut pos) = (1, line_end + 1);
+    while pos < t.len() {
+        let (end, at, ops_at) = statement_head(t, pos);
+        let w = &t[at..ops_at];
+        if repeats(w) {
+            depth += 1;
+        } else if w.eq_ignore_ascii_case(b".endr") {
+            depth -= 1;
+            if depth == 0 {
+                return true;
+            }
+        } else if !w.is_empty() && !w.starts_with(b".") {
+            return false;
+        }
+        pos = end + 1;
+    }
+    true
+}
+
+fn reads_sp_token(t: &[u8], start: usize, end: usize, syntax: crate::c5::asm::AsmComments) -> bool {
+    let x86 = syntax == crate::c5::asm::AsmComments::X86;
+    let att = start > 0 && t[start - 1] == b'%';
+    let (_, mut at, mut ops_at) = statement_head(t, start);
     let line_end = t[end..]
         .iter()
         .position(|&b| b == b'\n' || b == b';')
@@ -2163,16 +2270,6 @@ fn reads_sp_token(t: &[u8], start: usize, end: usize, syntax: crate::c5::asm::As
             .find(|&k| t[k].is_ascii_whitespace())
             .unwrap_or(line_end)
     };
-    let label_byte =
-        |b: u8| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'$' | b'%' | b'=');
-    let mut at = skip_blank(line_start);
-    while let Some(colon) = (at..start)
-        .find(|&k| !label_byte(t[k]))
-        .filter(|&k| k > at && t[k] == b':')
-    {
-        at = skip_blank(colon + 1);
-    }
-    let mut ops_at = word_end(at);
     let prefixes: [&[u8]; 6] = [b"lock", b"rep", b"repe", b"repne", b"repz", b"repnz"];
     if x86
         && prefixes
@@ -2519,8 +2616,8 @@ impl core::fmt::LowerHex for FpMask {
 /// argument / return classification. Interned per function in
 /// [`FunctionSsa::agg_descs`] and referenced by index from the call
 /// instructions' `arg_aggs` / `ret_agg` and the function's own
-/// `param_aggs` / `ret_agg`. Built by the walker via
-/// `Compiler::flatten_fields`; the per-arch emit feeds it to
+/// `param_aggs` / `ret_agg`. Built by
+/// [`super::compiler::host_abi_agg_desc`]; the per-arch emit feeds it to
 /// `abi_classify::classify_aggregate`.
 #[derive(Debug, Clone)]
 pub(crate) struct AggDesc {
@@ -2623,17 +2720,14 @@ pub(crate) struct FunctionSsa {
     /// `__attribute__((always_inline))` or MSVC `__forceinline` -- as
     /// opposed to the plain `inline` hint. Implies `is_inline`. No size
     /// or frame budget applies to it, and an unhonored request is
-    /// diagnosed rather than silently declined. gcc makes that an error
-    /// because its inliner admits nearly any callee shape; badc's
-    /// candidate filter is narrower, so it is a warning -- an error would
-    /// reject conforming programs over a coverage gap. A plain `inline`
+    /// diagnosed rather than silently declined, as a warning: the
+    /// candidate filter does not admit every callee shape, and an error
+    /// would reject conforming programs over a coverage gap. A plain `inline`
     /// that stays out of line is silent (it is only a hint).
     pub is_always_inline: bool,
-    /// True if the function carried `__attribute__((noinline))`. gcc's
-    /// documented way to hold a body out of line, and what its
-    /// `__builtin_return_address` wording directs a caller to when the
-    /// inlined result is not the wanted one. Suppresses every inline
-    /// request, mandatory or size-driven.
+    /// True if the function carried `__attribute__((noinline))`, which
+    /// holds the body out of line. Suppresses every inline request,
+    /// mandatory or size-driven.
     pub is_noinline: bool,
     /// True if the function carried `__attribute__((naked))`: emit no
     /// prologue/epilogue and no implicit return; the body (inline asm) is the
@@ -2675,6 +2769,9 @@ pub(crate) struct FunctionSsa {
     /// `__attribute__((patchable_function_entry(N, M)))`: the NOP area
     /// this function takes in place of the option's.
     pub patchable_entry: Option<(u32, u32)>,
+    /// The `-fsanitize=function` hash of the function's type, written with
+    /// its signature ahead of the entry ([`crate::c5::op::Intrinsic::FunctionPrefix`]).
+    pub type_hash: Option<u32>,
     /// `__attribute__((no_instrument_function))`: no profiling call.
     pub no_instrument: bool,
     /// `__attribute__((no_stack_protector))`: no canary.
@@ -2697,26 +2794,24 @@ pub(crate) struct FunctionSsa {
     /// entry block.
     pub blocks: Vec<Block>,
     /// Per-Inst extern symbol references: `(inst_idx, sym_idx)`
-    /// pairs where `sym_idx` is the parser-symbol index (into the
-    /// unit's `parser_symbols`) for an `Inst::Call::target_pc`
+    /// pairs where `sym_idx` indexes the unit's
+    /// [`super::program::Program::symbols`] for an `Inst::Call::target_pc`
     /// whose target lives in another translation unit. The walker
-    /// records the sym at parse time; the linker resolves each
-    /// pair after merging through the unit's `sym_remap` so
-    /// `Inst::Call::target_pc` lands on the defining unit's
+    /// records the symbol; the linker binds each pair by the symbol's
+    /// name so `Inst::Call::target_pc` lands on the defining unit's
     /// `ent_pc`. Empty for functions built outside the walker.
     pub extern_call_refs: Vec<(u32, u32)>,
     /// Per-Inst extern symbol references for `Inst::ImmCode(pc)`.
     /// Same shape as `extern_call_refs`; the linker resolves the
-    /// referenced sym to a `SymbolKind::Function`'s merged ent_pc.
+    /// referenced symbol to its function's merged ent_pc.
     pub extern_imm_code_refs: Vec<(u32, u32)>,
     /// Per-Inst extern symbol references for `Inst::ImmData(off)`.
     /// Same shape as `extern_call_refs`; the linker resolves the
-    /// referenced sym to a `SymbolKind::Data`'s merged data
-    /// offset.
+    /// referenced symbol to its object's merged data offset.
     pub extern_imm_data_refs: Vec<(u32, u32)>,
     /// Per-Inst extern symbol references for `Inst::TlsAddr(off)`.
     /// Same shape as `extern_call_refs`; the linker resolves the
-    /// referenced sym to a `SymbolKind::TlsData`'s merged TLS
+    /// referenced symbol to its thread-local object's merged TLS
     /// offset.
     pub extern_tls_refs: Vec<(u32, u32)>,
     /// Per-Inst single-precision marker, parallel to `insts`. `true`
@@ -2801,6 +2896,10 @@ pub(crate) struct FunctionSsa {
     /// tail-call conversion compares the caller's and callee's recipes
     /// and keeps the regular call-then-extend path when they differ.
     pub ret_type_tag: Option<i64>,
+    /// The return value rides the return register's low word
+    /// (`codegen::return_rides_low_word` at the target): no reader of the
+    /// returned value sees bits 32..63.
+    pub ret_low_word: bool,
     /// Negative frame slot holding the caller-supplied indirect-result
     /// address (AAPCS64 x8) for a function returning an aggregate
     /// larger than 16 bytes. The prologue stores x8 here; the callee
@@ -2832,7 +2931,7 @@ pub(crate) struct FunctionSsa {
     /// plus-alloca count here; every slot reserved afterward by
     /// `alloc_synthetic_local` / `alloc_synthetic_struct` has an offset
     /// magnitude greater than this. The declared/synthetic boundary:
-    /// `ssa_slot_coalesce` confines itself to the synthetic range when
+    /// `slot_coalesce` confines itself to the synthetic range when
     /// debug info is emitted (preserving per-local `DW_OP_fbreg`
     /// locations); without debug info it coalesces the declared range
     /// too. -1 for SSA built outside the walker, which disables coalescing.
@@ -2842,7 +2941,7 @@ pub(crate) struct FunctionSsa {
     /// synthetic aggregate (`alloc_synthetic_struct`). The group occupies
     /// `base_offset ..= base_offset + cells - 1` (base is the lowest
     /// address). Declared groups may overlap a reused slot across disjoint
-    /// scopes. `ssa_slot_coalesce` reserves these so a coalesced scalar never
+    /// scopes. `slot_coalesce` reserves these so a coalesced scalar never
     /// lands on an interior cell, which is referenced by no instruction, and
     /// `passes::sroa` reads them as its candidate set. Empty for SSA built
     /// outside the walker.
@@ -2903,6 +3002,15 @@ pub(crate) struct FunctionSsa {
     /// saw (the slot did not exist then), so the re-run promotes it. False
     /// for every function the inliner left unchanged.
     pub did_inline: bool,
+    /// The x86-64 frame keeps no frame pointer and rbp joins the
+    /// callee-saved bank, decided ahead of the allocation
+    /// (`x86_64::emit::frame_pointer_free`).
+    pub frees_rbp: bool,
+    /// Some of the body was translated with `#pragma STDC FENV_ACCESS ON`
+    /// (C17 7.6.1): its floating-point operations raise flags and read the
+    /// control modes the program may test or set, so none is folded,
+    /// removed, speculated or moved (`Inst::touches_fenv`).
+    pub fenv_access: bool,
     /// The `__try` regions.
     pub seh_scopes: Vec<SehScope>,
     /// Per block, the innermost region its code lies in; empty when
@@ -2949,8 +3057,7 @@ pub(crate) fn place_region(mut blocks: Vec<Vec<RegionMember>>) -> (Vec<RegionMem
 }
 
 /// What a function's declared automatic objects say about its exposure to
-/// a stack buffer overflow. Mirrors gcc's `stack_protect_classify_type` /
-/// `stack_protect_decl_p`: the facts are source-level, so a function keeps
+/// a stack buffer overflow. The facts are source-level, so a function keeps
 /// the protection its declarations ask for whatever the optimizer later
 /// does with the storage.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -2980,6 +3087,13 @@ impl SspFacts {
 }
 
 impl FunctionSsa {
+    /// [`Inst::is_pure`] in this function: under `FENV_ACCESS` on, an
+    /// instruction that [touches the floating-point environment](Inst::touches_fenv)
+    /// has that as an effect, so it is not removed, merged or moved.
+    pub(crate) fn is_pure(&self, inst: &Inst) -> bool {
+        inst.is_pure() && !(self.fenv_access && inst.touches_fenv())
+    }
+
     pub(crate) fn has_seh(&self) -> bool {
         !self.seh_scopes.is_empty()
     }
@@ -3259,6 +3373,7 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             is_internal: _,
             section: _,
             patchable_entry: _,
+            type_hash: _,
             no_instrument: _,
             no_stack_protector: _,
             const_params: _,
@@ -3297,6 +3412,9 @@ impl crate::c5::layout::DataOffsets for FunctionSsa {
             has_returns_twice_call: _,
             did_unroll: _,
             did_inline: _,
+            frees_rbp: _,
+            fenv_access: _,
+            ret_low_word: _,
         } = self;
         for i in insts.iter_mut() {
             i.remap_data_offsets(r);

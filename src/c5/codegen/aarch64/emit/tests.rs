@@ -344,7 +344,7 @@ fn file_scope_a64_dup_rbit_uxtw_match_gnu_as() {
     assert_eq!(sec.bytes, bytes);
 }
 
-/// A relocation specifier may carry GNU as's optional `#` and a constant
+/// A relocation specifier may carry an optional `#` and a constant
 /// addend. Byte- and relocation-identical to `as`: `add x1, x2, #:lo12:sym`
 /// is 0x91000041 with ADD_ABS_LO12_NC, and the addend rides the relocation
 /// rather than the immediate field.
@@ -420,9 +420,8 @@ fn materialize_one_section(text: &str) -> Result<AsmSectionSink, alloc::string::
 
 /// A bare section name is that section's start, so a `.set` over a
 /// section-local difference folds and the `:abs_g` halves resolve at
-/// assembly with no relocation, as GNU as resolves them. Words from
-/// `as`; the value is negative, so the signed group's `movz` becomes a
-/// `movn` over the complement.
+/// assembly with no relocation. Words from `as`; the value is negative,
+/// so the signed group's `movz` becomes a `movn` over the complement.
 #[test]
 fn file_scope_a64_abs_g_over_section_symbol_matches_gnu_as() {
     let text = ".pushsection .entry.tramp.text,\"ax\"\n\
@@ -467,7 +466,7 @@ fn file_scope_a64_abs_g_over_section_symbol_matches_gnu_as() {
 
 /// A `:abs_g` value that does not fold relocates, one relocation per
 /// half, against the named symbol. The placeholder words carry the
-/// group's shift and a zero immediate, as GNU as leaves them.
+/// group's shift and a zero immediate.
 #[test]
 fn file_scope_a64_abs_g_over_undefined_symbol_relocates() {
     let text = ".pushsection .t,\"ax\"\n\
@@ -544,7 +543,7 @@ fn file_scope_a64_abs_g_over_undefined_symbol_relocates() {
 
 /// The checked groups reject a folded value outside the width the
 /// specifier names, and the no-check groups truncate. Boundaries and
-/// messages follow GNU as: `:abs_g0_s:` admits [-0x8000, 0x8000),
+/// messages measured with `as`: `:abs_g0_s:` admits [-0x8000, 0x8000),
 /// `:abs_g0:` admits [0, 0x10000).
 #[test]
 fn file_scope_a64_abs_g_range_matches_gnu_as() {
@@ -605,8 +604,8 @@ fn file_scope_a64_abs_g_range_matches_gnu_as() {
 }
 
 /// A 32-bit destination clears the operand size bit and admits only
-/// the two groups that fit its width; GNU as rejects the rest for a
-/// `w` register. Words from `as`.
+/// the two groups that fit its width, the rest rejected for a `w`
+/// register. Words from `as`.
 #[test]
 fn file_scope_a64_abs_g_32bit_register_matches_gnu_as() {
     let one = |insn: &str| {
@@ -641,9 +640,9 @@ fn file_scope_a64_abs_g_32bit_register_matches_gnu_as() {
     }
 }
 
-/// GNU as defines `_s` only on `movz` (a `movk` has no `movn` form to
-/// carry a negative value) and defines no `:abs_g3_s:` / `:abs_g3_nc:`
-/// / `:abs_g0_s_nc:` spelling.
+/// `_s` applies only to `movz` (a `movk` has no `movn` form to carry a
+/// negative value), and there is no `:abs_g3_s:` / `:abs_g3_nc:` /
+/// `:abs_g0_s_nc:` spelling.
 #[test]
 fn file_scope_a64_abs_g_rejects_what_gnu_as_rejects() {
     let one = |insn: &str| {
@@ -721,9 +720,8 @@ fn file_scope_a64_label_difference_operand_matches_gnu_as() {
     );
 }
 
-/// An operand expression must reduce to an absolute value, as GNU as
-/// requires: an undefined symbol or a difference across sections has no
-/// relocation to carry it.
+/// An operand expression must reduce to an absolute value: an undefined
+/// symbol or a difference across sections has no relocation to carry it.
 #[test]
 fn file_scope_a64_operand_expression_rejects_what_gnu_as_rejects() {
     let one = |body: &str| {
@@ -835,8 +833,8 @@ fn file_scope_a64_location_counter_in_a_deferred_rept_is_rejected() {
     assert_eq!(sec.bytes, bytes);
 }
 
-/// The add/sub immediate field is unsigned, so GNU as encodes a negative
-/// immediate as the opposite operation on the negated value, `lsl #12`
+/// The add/sub immediate field is unsigned, so a negative immediate
+/// encodes as the opposite operation on the negated value, `lsl #12`
 /// included. The scalar 64-bit `add` / `sub` and `sha1h` are covered here
 /// too; all match `as` byte for byte.
 #[test]
@@ -1282,8 +1280,8 @@ fn file_scope_a64_literal_pool_widths_match_gnu_as() {
 }
 
 /// A pool of one width raises the section's alignment to that width and
-/// pads to it: GNU as gives the 4-, 8- and 16-byte cases alignment 4, 8
-/// and 16, and a `q` entry zero-extends its 64-bit value.
+/// pads to it: the 4-, 8- and 16-byte cases take alignment 4, 8 and 16,
+/// and a `q` entry zero-extends its 64-bit value.
 #[test]
 fn file_scope_a64_literal_pool_alignment_matches_gnu_as() {
     for (reg, value, align, want) in [
@@ -1317,8 +1315,8 @@ fn file_scope_a64_literal_pool_alignment_matches_gnu_as() {
     }
 }
 
-/// Every LDR (literal) destination view encodes as GNU as does, with the
-/// same-section target folded into the 19-bit displacement.
+/// Every LDR (literal) destination view encodes with the same-section
+/// target folded into the 19-bit displacement.
 #[test]
 fn file_scope_a64_ldr_literal_views_match_gnu_as() {
     let text = ".section .lit,\"ax\",@progbits\nlit0:\n.word 1\n\
@@ -1405,6 +1403,7 @@ fn emit_return_42() {
             text_data_ranges: &mut text_data_ranges,
             local_shift_bytes: &mut alloc::collections::BTreeMap::new(),
             frame_stack: &mut alloc::collections::BTreeMap::new(),
+            asm_warnings: &mut alloc::vec::Vec::new(),
             param_frame_offsets: &mut alloc::collections::BTreeMap::new(),
             region_frame_offsets: &mut alloc::collections::BTreeMap::new(),
             mcount_sites: &mut alloc::vec::Vec::new(),
@@ -2637,6 +2636,7 @@ fn emit_return_one_plus_two() {
             text_data_ranges: &mut text_data_ranges,
             local_shift_bytes: &mut alloc::collections::BTreeMap::new(),
             frame_stack: &mut alloc::collections::BTreeMap::new(),
+            asm_warnings: &mut alloc::vec::Vec::new(),
             param_frame_offsets: &mut alloc::collections::BTreeMap::new(),
             region_frame_offsets: &mut alloc::collections::BTreeMap::new(),
             mcount_sites: &mut alloc::vec::Vec::new(),
@@ -2741,6 +2741,7 @@ fn emit_if_else_returns() {
             text_data_ranges: &mut text_data_ranges,
             local_shift_bytes: &mut alloc::collections::BTreeMap::new(),
             frame_stack: &mut alloc::collections::BTreeMap::new(),
+            asm_warnings: &mut alloc::vec::Vec::new(),
             param_frame_offsets: &mut alloc::collections::BTreeMap::new(),
             region_frame_offsets: &mut alloc::collections::BTreeMap::new(),
             mcount_sites: &mut alloc::vec::Vec::new(),

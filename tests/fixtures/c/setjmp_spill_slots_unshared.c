@@ -11,6 +11,8 @@ jmp_buf env;
 int seed[64];
 int acc;
 
+__attribute__((noinline)) static void stir(void) { acc ^= 1; }
+
 int main(void) {
     for (int i = 0; i < 64; i++) {
         seed[i] = i + 1;
@@ -40,8 +42,8 @@ int main(void) {
         printf("ok\n");
         return 0;
     }
-    // First-return path: many simultaneously-live temporaries feeding
-    // a wide sum, forcing spills, then jump back.
+    // First-return path: temporaries live across a call spill whatever
+    // order the block takes, then jump back.
     int t0 = seed[16] * 5 + 1;
     int t1 = seed[17] * 5 + 2;
     int t2 = seed[18] * 5 + 3;
@@ -62,6 +64,7 @@ int main(void) {
     int t17 = seed[33] * 5 + 18;
     int t18 = seed[34] * 5 + 19;
     int t19 = seed[35] * 5 + 20;
+    stir();
     acc = t0 + t1 + t2 + t3 + t4 + t5 + t6 + t7 + t8 + t9 + t10 + t11 +
           t12 + t13 + t14 + t15 + t16 + t17 + t18 + t19;
     longjmp(env, 1);

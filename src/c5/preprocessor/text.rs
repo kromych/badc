@@ -174,13 +174,25 @@ struct Fuse<'a> {
     /// starts: the text a `<` reads for [`opens_header_name`].
     line_buf: Vec<u8>,
     seg_start: usize,
+    /// `(output offset, source offset)` where each retained span begins:
+    /// a span copies the source unchanged, so the pairs place every
+    /// retained byte (see [`Stripped::source_offset`]).
+    spans: Vec<(u32, u32)>,
 }
 
 impl<'a> Fuse<'a> {
     fn flush_to(&mut self, end: usize) {
         if end > self.copied {
+            self.note_span();
             self.out.push_str(&self.src[self.copied..end]);
         }
+    }
+
+    /// Record the span about to be copied. Out of line, so the per-byte
+    /// scan this is reached from keeps its size.
+    #[inline(never)]
+    fn note_span(&mut self) {
+        self.spans.push((self.out.len() as u32, self.copied as u32));
     }
 
     /// Advance the state over one content byte at `pos`, emitting the
@@ -364,7 +376,69 @@ pub(super) fn replace_trigraphs(source: &str) -> alloc::borrow::Cow<'_, str> {
 /// Fused phase-2 / phase-3 pass; see [`Fuse`]. Byte-identical to
 /// `strip_c_comments(&unfold_line_continuations(source))`, which the
 /// differential tests verify over the header corpus and fuzzed input.
+#[cfg(test)]
 pub(super) fn unfold_and_strip(source: &str) -> String {
+    unfold_and_strip_placed(source).text
+}
+
+/// The text phases 2 and 3 leave of a source, and where its retained
+/// bytes stand in the source.
+pub(super) struct Stripped {
+    pub text: String,
+    spans: Vec<(u32, u32)>,
+}
+
+impl Stripped {
+    /// The last span starting at or before `at`, found forward from
+    /// `cursor`, which a reader of the text in order keeps: a lookup costs
+    /// the spans it passes.
+    pub(super) fn span_at(&self, at: u32, cursor: &mut usize) -> Option<usize> {
+        if self.spans.get(*cursor).is_some_and(|s| s.0 > at) {
+            *cursor = 0;
+        }
+        while self.spans.get(*cursor + 1).is_some_and(|s| s.0 <= at) {
+            *cursor += 1;
+        }
+        self.spans
+            .get(*cursor)
+            .is_some_and(|s| s.0 <= at)
+            .then_some(*cursor)
+    }
+
+    /// The source offset of the retained byte at `at` in `text`, which the
+    /// span `span` holds ([`Self::span_at`]). A byte phase 3 inserted (a
+    /// comment's space, the newlines it keeps) reads as the span it follows,
+    /// or ahead of the buffer's first span, as that span read back.
+    pub(super) fn offset_in(&self, span: Option<usize>, at: u32) -> u32 {
+        match span.map(|k| self.spans[k]) {
+            Some((o, s)) => s + (at - o),
+            None => match self.spans.first() {
+                Some(&(o, s)) => s.saturating_sub(o.saturating_sub(at)),
+                None => at,
+            },
+        }
+    }
+
+    /// The text offsets below `to` where the spans after `span` begin.
+    pub(super) fn starts_after(
+        &self,
+        span: Option<usize>,
+        to: u32,
+    ) -> impl Iterator<Item = u32> + '_ {
+        (self.spans[span.map_or(0, |k| k + 1)..].iter())
+            .take_while(move |&&(o, _)| o < to)
+            .map(|&(o, _)| o)
+    }
+
+    /// [`Self::offset_in`] of the span a search finds.
+    pub(super) fn source_offset(&self, at: u32) -> u32 {
+        let k = self.spans.partition_point(|&(o, _)| o <= at);
+        self.offset_in(k.checked_sub(1), at)
+    }
+}
+
+/// [`unfold_and_strip`] with the positions of the retained bytes.
+pub(super) fn unfold_and_strip_placed(source: &str) -> Stripped {
     let bytes = source.as_bytes();
     let n = bytes.len();
     let mut f = Fuse {
@@ -379,6 +453,7 @@ pub(super) fn unfold_and_strip(source: &str) -> String {
         commented: false,
         line_buf: Vec::new(),
         seg_start: 0,
+        spans: Vec::new(),
     };
     // Blank lines owed after the current logical line, one per spliced
     // or comment-joined physical line, preserving the line count.
@@ -503,7 +578,10 @@ pub(super) fn unfold_and_strip(source: &str) -> String {
     } else {
         f.flush_to(n);
     }
-    f.out
+    Stripped {
+        text: f.out,
+        spans: f.spans,
+    }
 }
 
 /// Incremental scan state for `unfold_line_continuations`. It advances

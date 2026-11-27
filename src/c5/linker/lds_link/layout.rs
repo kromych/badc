@@ -35,9 +35,9 @@ fn pad_bytes(fill: &Option<Vec<u8>>, machine: u16, code: bool, len: u64) -> Vec<
     }
 }
 
-/// Padding bytes for a gap a script gave no fill for: bfd takes them
-/// from the architecture (`bfd/cpu-*.c`), which is a NOP sequence in a
-/// code section and zeros everywhere else, so padding a control-flow
+/// Padding bytes for a gap a script gave no fill for: the architecture's,
+/// a NOP sequence in a code section and zeros everywhere else, so padding
+/// a control-flow
 /// path reaches is not an instruction stream of its own.
 fn arch_fill(machine: u16, code: bool, len: usize) -> Vec<u8> {
     if !code || len == 0 {
@@ -254,8 +254,8 @@ impl<'a> LdsLinker<'a> {
         let explicit_zero = matches!(address, Some(Expr::Number(0)));
         let non_alloc_inputs = inputs.flags & SHF_ALLOC == 0;
         let info_type = stype == Some(OutputSectionType::Info);
-        // An orphan takes its input's allocation: bfd creates the
-        // output section from the input's flags, so a non-allocated
+        // An orphan takes its input's allocation: the output section is
+        // created from the input's flags, so a non-allocated
         // input never joins the load image.
         let orphan_non_alloc = self.outs[oi].orphan && non_alloc_inputs && inputs.any;
         let alloc = !info_type && !(explicit_zero && non_alloc_inputs) && !orphan_non_alloc;
@@ -490,9 +490,9 @@ impl<'a> LdsLinker<'a> {
             SHT_PROGBITS
         };
         // A group is an input-side construct and its member index does
-        // not survive the link, so bfd clears SHF_GROUP; the retain
+        // not survive the link, so SHF_GROUP is cleared; the retain
         // flag describes the content and does survive. Link order is
-        // a property of the whole output section, so bfd takes it from
+        // a property of the whole output section, so it comes from
         // the section opening the output and from no other.
         let mut flags = inputs.flags & !(SHF_GROUP | SHF_INFO_LINK | SHF_EXCLUDE | SHF_LINK_ORDER);
         if self
@@ -544,8 +544,7 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// Bound an output section whose name is a C identifier with
-    /// `__start_<name>` / `__stop_<name>`, as bfd's
-    /// `lang_init_start_stop` does. Both follow PROVIDE's rule -- a
+    /// `__start_<name>` / `__stop_<name>`. Both follow PROVIDE's rule -- a
     /// referenced, otherwise-undefined name only -- and take the
     /// section's binding and visibility, not the script-symbol
     /// defaults: GLOBAL PROTECTED, matching `-z

@@ -49,9 +49,9 @@ pub(crate) enum AsmSectionValue {
     Expr(alloc::string::String),
     /// A general expression over locations -- labels, the location counter
     /// `.`, and constants under the full operator set (`(end - .) / 8`).
-    /// Evaluated at materialize time under GNU as value rules: a same-space
-    /// difference folds, a lone location or symbol relocates, a base minus a
-    /// location of the deposit space is PC-relative.
+    /// Evaluated at materialize time under the location-value rules: a
+    /// same-space difference folds, a lone location or symbol relocates, a
+    /// base minus a location of the deposit space is PC-relative.
     LocExpr(alloc::string::String),
     /// A relocation whose base is an `i`-class operand naming a link-time
     /// address (`%cN`) or an `asm goto` label (`%lN`), optionally with a
@@ -67,7 +67,7 @@ pub(crate) enum AsmSectionValue {
         /// when absent.
         addend: alloc::string::String,
         /// The location subtracted, `.` or a label of the section being
-        /// assembled, which makes the field PC-relative as GNU as makes it.
+        /// assembled, which makes the field PC-relative.
         minus: Option<alloc::string::String>,
     },
     /// `sym@OP + addend`: a field the gas relocation operator relocates.
@@ -89,7 +89,7 @@ pub(crate) enum AsmSectionItem {
     /// An alignment directive. `spec` is the byte alignment, or the
     /// expression the layout resolves one from. `fill` is an explicit fill
     /// unit; `None` selects the default (the target NOP in an executable
-    /// section, zero otherwise). `max` is the GNU as maximum skip: the
+    /// section, zero otherwise). `max` is the maximum skip: the
     /// alignment is dropped when it would need more than `max` bytes.
     /// `nops` is the no-op set the default fill takes, which on x86 the
     /// encoding mode in effect where the directive stands selects.
@@ -125,7 +125,7 @@ pub(crate) enum AsmSectionItem {
     /// `.skip` / `.space` / `.zero` / `.fill`: `count` repetitions of the low
     /// `unit` bytes of `value`. `.skip n, f` and `.space n, f` repeat the fill
     /// byte, `.zero n` fixes the value at zero, `.fill r, s, v` gives all
-    /// three. GNU as renders the value as the low bytes of a zero-extended
+    /// three. The value renders as the low bytes of a zero-extended
     /// 32-bit number, so a unit above four pads with zeros. `count` is an
     /// expression resolved at materialize time.
     Fill {
@@ -143,7 +143,7 @@ pub(crate) enum AsmSectionItem {
     Global(alloc::string::String),
     /// `.file "name"`: the unit's STT_FILE symbol name. The numbered
     /// DWARF form (`.file N "name"`) is line-table input and stays
-    /// ignored, as it sets no symbol in GNU as either.
+    /// ignored: it sets no symbol.
     File(alloc::string::String),
     /// `.ident "text"`: one `.comment` string.
     Ident(alloc::string::String),
@@ -217,7 +217,7 @@ pub(crate) enum AsmSectionItem {
         name: alloc::string::String,
         expr: alloc::string::String,
     },
-    /// `.set name, <constant>`, which GNU as records as an absolute symbol.
+    /// `.set name, <constant>`, which defines an absolute symbol.
     /// The expander folds a constant assignment into the expressions that
     /// read it and re-emits the statement only for a name the unit gave
     /// external linkage, which is where the symbol is what a reader needs.
@@ -228,13 +228,12 @@ pub(crate) enum AsmSectionItem {
     /// An AArch64 literal pool: the values the `ldr Rt, =value` loads since
     /// the previous flush deposit here. Parsed from `.ltorg` with no entries;
     /// the arch backend assigns them before layout, and also appends one at
-    /// the end of each section, which is where GNU as flushes what `.ltorg`
-    /// did not.
+    /// the end of each section to flush what `.ltorg` did not.
     LiteralPool(alloc::vec::Vec<AsmPoolEntry>),
     /// A `.if` whose condition reads section labels and whose branches emit
     /// no bytes, so the layout that values the condition cannot depend on the
     /// outcome. Evaluated after layout; the first arm whose condition holds
-    /// raises its `.error`.
+    /// raises its diagnostics.
     CondDiag(alloc::vec::Vec<AsmCondArm>),
     /// A `.cfi_*` directive. It deposits no bytes; the section offset it
     /// reaches is the point its unwind rule takes effect from, so the
@@ -263,38 +262,68 @@ pub(crate) struct AsmLineItem {
 }
 
 /// Replace a `Code` item with what `encode` makes of its text. A bad
-/// instruction's error goes to `errors` and leaves the item with no bytes.
+/// instruction's error goes to `errors` and leaves the item with no bytes;
+/// a width the encoding defaulted goes there as a warning.
 pub(crate) fn encode_code_item(
     item: &mut AsmSectionItem,
     line: u32,
     errors: &mut alloc::vec::Vec<AsmError>,
-    encode: impl FnOnce(&str) -> Result<AsmSectionItem, alloc::string::String>,
+    encode: impl FnOnce(&str) -> Result<Encoded, alloc::string::String>,
 ) {
     let AsmSectionItem::Code(text) = item else {
         return;
     };
-    let encoded = encode(text).unwrap_or_else(|m| {
-        errors.push(AsmError::at(
-            line,
-            alloc::format!("{m} (instruction `{text}`)"),
-        ));
-        AsmSectionItem::CodeBytes {
-            bytes: alloc::vec::Vec::new(),
-            relocs: alloc::vec::Vec::new(),
-            short: None,
+    let encoded = match encode(text) {
+        Ok(Encoded { item, warning }) => {
+            if let Some(text) = warning {
+                errors.push(AsmError::coded(
+                    crate::c5::diag::Code::ASM_OPERAND_SIZE,
+                    line,
+                    text,
+                ));
+            }
+            item
         }
-    });
+        Err(m) => {
+            errors.push(AsmError::at(
+                line,
+                alloc::format!("{m} (instruction `{text}`)"),
+            ));
+            AsmSectionItem::CodeBytes {
+                bytes: alloc::vec::Vec::new(),
+                relocs: alloc::vec::Vec::new(),
+                short: None,
+            }
+        }
+    };
     *item = encoded;
 }
 
+/// An encoded statement, and the warning its encoding raised: a memory
+/// operand width it chose by default.
+pub(crate) struct Encoded {
+    pub item: AsmSectionItem,
+    pub warning: Option<alloc::string::String>,
+}
+
+impl From<AsmSectionItem> for Encoded {
+    fn from(item: AsmSectionItem) -> Self {
+        Encoded {
+            item,
+            warning: None,
+        }
+    }
+}
+
 /// One branch of a deferred conditional. `tok` is the `.if`-family directive
-/// that opened the branch, empty for `.else`; `error` is the line and the
-/// diagnostic the branch raises, absent when it raises none.
+/// that opened the branch, empty for `.else`; `diags` are the line, code and
+/// text of each diagnostic the branch raises, in order: its `.warning`s and
+/// its first `.error`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AsmCondArm {
     pub tok: alloc::string::String,
     pub cond: alloc::string::String,
-    pub error: Option<(u32, alloc::string::String)>,
+    pub diags: alloc::vec::Vec<(u32, crate::c5::diag::Code, alloc::string::String)>,
 }
 
 /// One AArch64 literal-pool entry. `label` is the synthetic symbol the
@@ -320,9 +349,9 @@ pub(crate) enum AsmPoolValue {
 }
 
 /// Offsets a literal pool's entries take when flushed at `at`, and the
-/// offset just past the pool. GNU as deposits the entries in width-ascending
-/// groups, keeps first-reference order within a group, and aligns each group
-/// to its own width.
+/// offset just past the pool. The entries go in width-ascending groups, in
+/// first-reference order within a group, each group aligned to its own
+/// width.
 pub(crate) fn literal_pool_layout(
     entries: &[AsmPoolEntry],
     at: i64,
@@ -392,7 +421,7 @@ impl AsmSectionBlock {
 /// data field described by `pcrel` / `branch` / `signed`; the AArch64
 /// kinds name the instruction field the value patches. The PC-relative
 /// kinds resolve at materialize time when the target is a local label of
-/// the same section (GNU as emits no relocation there; a global or weak
+/// the same section (no relocation is emitted there; a global or weak
 /// name may bind to another definition at link time, so a reference to
 /// one keeps its relocation); the page/lo12 kinds always reach the
 /// object writer.
@@ -414,10 +443,14 @@ pub(crate) enum AsmRelocKind {
     A64AddLo12,
     /// Load/store `:lo12:` scaled immediate; the access size in bytes.
     A64LdstLo12(u8),
+    /// `adrp Xd, :got:sym` -- the page of the symbol's GOT slot.
+    A64GotPage21,
+    /// `ldr Xt, [Xn, :got_lo12:sym]` -- the slot's offset in its page.
+    A64GotLo12,
     /// `ldr Rt, label` 19-bit literal load displacement.
     A64LdrLit19,
     /// `movz` / `movk` with `:abs_gN[_s|_nc]:` -- one 16-bit group of an
-    /// absolute value. `check` is the value width GNU as admits when the
+    /// absolute value. `check` is the value width admitted when the
     /// expression folds here; the link applies the ABI's own, which is
     /// wider for the signed forms.
     A64MovwAbs {
@@ -425,8 +458,8 @@ pub(crate) enum AsmRelocKind {
         signed: bool,
         check: Option<u32>,
     },
-    /// A relaxable x86 jump displacement (`jmp` / `jcc`). GNU as computes it
-    /// while relaxing the branch, which resolves any same-section target
+    /// A relaxable x86 jump displacement (`jmp` / `jcc`), computed while
+    /// relaxing the branch, which resolves any same-section target
     /// whatever its binding; only a weak one, which the link may rebind,
     /// keeps the long form and its relocation. `call` is not relaxable and
     /// takes `Data`, where a global target does keep its relocation.
@@ -437,6 +470,48 @@ pub(crate) enum AsmRelocKind {
     /// A field a gas relocation operator names (`sym@GOTPCREL`); the object
     /// writer picks the type for the psABI and the field's width.
     Op { op: AsmRelocOp, relax: AsmGotRelax },
+}
+
+impl AsmRelocKind {
+    /// Whether the field reaches the symbol itself rather than an address,
+    /// so the relocation names the symbol, never its section: a gas
+    /// operator's, or an aarch64 GOT access, whose addend would offset the
+    /// slot.
+    pub(crate) fn names_own_symbol(self) -> bool {
+        matches!(
+            self,
+            AsmRelocKind::Op { .. } | AsmRelocKind::A64GotPage21 | AsmRelocKind::A64GotLo12
+        )
+    }
+}
+
+/// The direct form of an aarch64 GOT access, for an image that holds no
+/// GOT: `adrp :got:s` addresses `s`'s page and the `ldr :got_lo12:s` that
+/// reads the slot becomes `add :lo12:s`, as a link relaxes the pair for a
+/// symbol it binds locally. Other kinds are returned unchanged.
+pub(crate) fn relax_a64_got(
+    kind: AsmRelocKind,
+    code: &mut [u8],
+    at: usize,
+) -> Result<AsmRelocKind, alloc::string::String> {
+    match kind {
+        AsmRelocKind::A64GotPage21 => Ok(AsmRelocKind::A64AdrpPage21),
+        AsmRelocKind::A64GotLo12 => {
+            let field = code
+                .get_mut(at..at + 4)
+                .ok_or_else(|| alloc::string::String::from("`:got_lo12:` site past the code"))?;
+            let word = u32::from_le_bytes([field[0], field[1], field[2], field[3]]);
+            // `ldr Xt, [Xn, #imm]` (unsigned offset) to `add Xt, Xn, #0`.
+            if word & 0xFFC0_0000 != 0xF940_0000 {
+                return Err(alloc::format!(
+                    "`:got_lo12:` site {word:#010x} is not a 64-bit `ldr`"
+                ));
+            }
+            field.copy_from_slice(&(0x9100_0000 | (word & 0x3FF)).to_le_bytes());
+            Ok(AsmRelocKind::A64AddLo12)
+        }
+        k => Ok(k),
+    }
 }
 
 /// A gas x86 relocation operator written on a symbol (`sym@PLT`).
@@ -464,7 +539,7 @@ pub(crate) enum AsmGotRelax {
 }
 
 /// `sym@OP...`: the expression without its relocation operator, and the
-/// operator, which gas reads in either case.
+/// operator, read in either case.
 pub(crate) fn split_reloc_op(expr: &str) -> Option<(alloc::string::String, AsmRelocOp)> {
     let at = expr.find('@')?;
     let after = &expr[at + 1..];
@@ -533,9 +608,8 @@ pub(crate) struct AsmSectionReloc {
 /// the long one. The two differ only in the displacement field's width, so
 /// a single relocation describes the short form; the layout selects it when
 /// the target is a label of the branch's own section within the narrow
-/// field's reach. GNU as makes the same choice by the same rule; a
-/// non-branch field's width is settled earlier, when the instruction is
-/// parsed ([`AsmParseFold`]).
+/// field's reach. A non-branch field's width is settled earlier, when the
+/// instruction is parsed ([`AsmParseFold`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AsmShortBranch {
     pub bytes: alloc::vec::Vec<u8>,
@@ -612,8 +686,8 @@ pub(crate) enum AsmSpace {
 }
 
 /// Patch a PC-relative instruction field whose target resolved within the
-/// section, so no relocation is emitted (as GNU as resolves same-section
-/// fixups). `disp` is target plus addend minus the field's own offset.
+/// section, so no relocation is emitted. `disp` is target plus addend
+/// minus the field's own offset.
 /// Returns `false` for a kind that must keep its relocation: an absolute
 /// data field, and the page / lo12 forms whose value is a link-time
 /// address.
@@ -688,6 +762,8 @@ pub(crate) fn patch_asm_insn_field(
         AsmRelocKind::A64AdrpPage21
         | AsmRelocKind::A64AddLo12
         | AsmRelocKind::A64LdstLo12(_)
+        | AsmRelocKind::A64GotPage21
+        | AsmRelocKind::A64GotLo12
         | AsmRelocKind::A64MovwAbs { .. }
         | AsmRelocKind::Explicit(_)
         | AsmRelocKind::Op { .. } => Ok(false),
@@ -719,7 +795,7 @@ pub(crate) fn store_asm_insn_const(
         return Ok(());
     }
     // A MOVW group has a constant form: the value's own group goes in the
-    // immediate, as GNU as resolves it when the expression folds. The
+    // immediate when the expression folds. The
     // checked forms reject a value outside the width the specifier names.
     if let AsmRelocKind::A64MovwAbs {
         group,
@@ -764,7 +840,7 @@ pub(crate) struct AsmSection {
     /// that merge into one section. A fresh section starts at the
     /// assembler's section-start boundary.
     pub after_insn: bool,
-    /// The mapping state GNU as tracks per section: none before any
+    /// The mapping state tracked per section: none before any
     /// content, then data or instructions. On AArch64 an instruction
     /// emitted while it is data is aligned to 4 first.
     pub map_state: Option<MapClass>,
@@ -806,9 +882,9 @@ pub(crate) enum AsmSymValue {
     Sym(alloc::string::String, i64),
 }
 
-/// A symbol directive an asm template carried outside any section. GNU as
-/// scopes `.globl` / `.local` / `.weak` / `.type` / `.size` and the
-/// assignments to the unit, so the name may be defined by this template's
+/// A symbol directive an asm template carried outside any section.
+/// `.globl` / `.local` / `.weak` / `.type` / `.size` and the assignments
+/// apply to the unit, so the name may be defined by this template's
 /// code stream, by another statement's section, by C, or by nothing in the
 /// unit. TODO `.globl` on a C symbol of the unit: the linkage split is
 /// decided from the parse, which a function-scope template runs after. The
@@ -840,7 +916,7 @@ pub(crate) struct AsmSectionLabel {
     /// `st_size` from a `.size` directive; `None` leaves it zero.
     pub size: Option<u64>,
     /// Value of a `.set` / `=` assignment that folded to a constant. The
-    /// symbol is `SHN_ABS` and `offset` does not apply, as in GNU as.
+    /// symbol is `SHN_ABS` and `offset` does not apply.
     pub absolute: Option<i64>,
 }
 
@@ -857,6 +933,7 @@ pub(crate) struct AsmSectionsSnapshot {
     /// Recorded `.cfi_*` directives at the snapshot, so a re-laid-out
     /// function does not describe its frame twice.
     pub(crate) cfi: usize,
+    pub(crate) warnings: usize,
     /// Per section: bytes, relocs, labels, alignment, instruction-boundary
     /// state, mapping state.
     pub(crate) per_section: alloc::vec::Vec<(usize, usize, usize, u32, bool, Option<MapClass>)>,
@@ -876,8 +953,8 @@ pub(crate) fn section_key(b: &AsmSectionBlock) -> alloc::string::String {
 }
 
 /// Identity of the AArch64 literal pool a block's `ldr Rt, =value` loads
-/// take entries from. GNU as keeps one pool per section and subsection,
-/// flushed at the end of that subsection's content.
+/// take entries from: one pool per section and subsection, flushed at the
+/// end of that subsection's content.
 pub(crate) fn literal_pool_key(b: &AsmSectionBlock) -> alloc::string::String {
     alloc::format!("{}\u{0}{}", section_key(b), b.subsection)
 }

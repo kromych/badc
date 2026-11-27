@@ -236,9 +236,19 @@ fn moves_rsp(mnemonic: &str, operands: &str) -> bool {
 
 /// The frame rules over one function's instructions.
 fn check_function(name: &str, insts: &[(String, String)], what: &str) {
-    let frame_at = insts
-        .iter()
-        .position(|(m, o)| m.starts_with("push") && o == "%rbp");
+    // The frame record: `push %rbp` and `mov %rsp, %rbp`, or Win64's block,
+    // which ends in `lea d(%rsp), %rbp`. With no frame pointer, rbp is pushed
+    // as any callee-saved register.
+    let win64 = what.starts_with("windows");
+    let frame_at = (0..insts.len()).find(|&k| {
+        let sets_rbp = insts
+            .get(k + 1)
+            .is_some_and(|(m, o)| m.starts_with("mov") && o == "%rsp, %rbp");
+        let block = insts[k + 1..]
+            .iter()
+            .any(|(m, o)| m.starts_with("lea") && o.ends_with("(%rsp), %rbp"));
+        insts[k].0.starts_with("push") && insts[k].1 == "%rbp" && (win64 && block || sets_rbp)
+    });
     match frame_at {
         Some(k) => {
             for (m, o) in &insts[..k] {
@@ -249,21 +259,45 @@ fn check_function(name: &str, insts: &[(String, String)], what: &str) {
             }
         }
         None => {
+            // With no frame pointer, rsp descends only in the prologue's run
+            // of pushes and `sub`s, and each `add` leads only pops and `add`s
+            // to the return or the tail jump.
+            let entry = insts
+                .iter()
+                .position(|(m, _)| {
+                    !(m == "endbr64" || m.starts_with("nop") || m.starts_with("call"))
+                })
+                .unwrap_or(0);
+            let prologue_end = entry
+                + insts[entry..]
+                    .iter()
+                    .take_while(|(m, o)| {
+                        m.starts_with("push") || (m.starts_with("sub") && moves_rsp(m, o))
+                    })
+                    .count();
             let first_push = insts.iter().position(|(m, _)| m.starts_with("push"));
             for (j, (m, o)) in insts.iter().enumerate() {
                 assert!(
                     !(m.starts_with("pop") && first_push.is_none_or(|p| j < p)),
                     "{what}: {name}: `{m} {o}` pops with nothing pushed"
                 );
+                let opens = j < prologue_end && m.starts_with("sub");
+                let closes = m.starts_with("add")
+                    && insts[j + 1..]
+                        .iter()
+                        .take_while(|(m, _)| !(m.starts_with("ret") || m.starts_with("jmp")))
+                        .all(|(m, o)| {
+                            m.starts_with("pop") || (m.starts_with("add") && moves_rsp(m, o))
+                        });
                 assert!(
-                    !moves_rsp(m, o) && m != "leave",
-                    "{what}: {name}: `{m} {o}` moves rsp without a frame"
+                    (!moves_rsp(m, o) || opens || closes) && m != "leave",
+                    "{what}: {name}: `{m} {o}` moves rsp outside the frame's entry and exits"
                 );
             }
         }
     }
     for (j, (m, o)) in insts.iter().enumerate() {
-        if m == "leave" || (m.starts_with("pop") && o == "%rbp") {
+        if m == "leave" || (frame_at.is_some() && m.starts_with("pop") && o == "%rbp") {
             let next = insts.get(j + 1).map(|(m, _)| m.as_str()).unwrap_or("");
             assert!(
                 next.starts_with("ret") || next.starts_with("jmp"),
@@ -280,7 +314,7 @@ fn x86_64_prologue_and_epilogue_keep_the_return_address_in_place() {
     std::fs::write(&src, SHAPES).expect("write source");
     let mut checked = 0;
     for target in ["linux-x64", "windows-x64"] {
-        for opt in [&[][..], &["-O"][..]] {
+        for opt in [&[][..], &["-O"][..], &["-O", "-fno-omit-frame-pointer"][..]] {
             let obj = dir.join(format!("shapes-{target}{}.o", opt.join("")));
             run(
                 badc()
@@ -303,21 +337,47 @@ fn x86_64_prologue_and_epilogue_keep_the_return_address_in_place() {
                 check_function(name, insts, &what);
             }
             // The stack-passed parameters are read where the caller left
-            // them, above the return address.
+            // them, above the return address: through rbp, or with no frame
+            // pointer through rsp, past the frame and the return address,
+            // and on Win64 past the four home slots.
             let stack7 = &funcs.iter().find(|(n, _)| n == "stack7").unwrap().1;
-            let incoming = if target == "linux-x64" {
-                "0x18(%rbp)"
-            } else {
-                "0x48(%rbp)"
+            let sets_rbp =
+                (stack7.iter()).any(|(_, o)| o == "%rsp, %rbp" || o.ends_with("(%rsp), %rbp"));
+            let below = stack7
+                .iter()
+                .take_while(|(m, o)| m.starts_with("push") || moves_rsp(m, o))
+                .map(|(m, o)| match m.starts_with("push") {
+                    true => 8,
+                    false => immediate(o),
+                })
+                .sum::<u64>();
+            let incoming = match (target, sets_rbp) {
+                ("linux-x64", true) => "0x18(%rbp)".to_string(),
+                ("linux-x64", false) => format!("{:#x}(%rsp)", below + 16),
+                (_, true) => "0x48(%rbp)".to_string(),
+                (_, false) => format!("{:#x}(%rsp)", below + 64),
             };
             assert!(
-                stack7.iter().any(|(_, o)| o.starts_with(incoming)),
+                stack7.iter().any(|(_, o)| o.starts_with(incoming.as_str())),
                 "{what}: stack7 does not read its last parameter at {incoming}"
             );
             checked += 1;
         }
     }
-    assert_eq!(checked, 4);
+    assert_eq!(checked, 6);
+}
+
+/// The value of an AT&T `$imm, reg` operand pair's immediate.
+fn immediate(operands: &str) -> u64 {
+    let imm = operands
+        .trim_start_matches('$')
+        .split(',')
+        .next()
+        .unwrap_or("");
+    match imm.strip_prefix("0x") {
+        Some(hex) => u64::from_str_radix(hex, 16).unwrap_or(0),
+        None => imm.parse().unwrap_or(0),
+    }
 }
 
 /// Whether `operands` names an argument register. The parameter homes are
@@ -581,7 +641,7 @@ fn x86_64_debug_frame_follows_each_prologue_instruction() {
     let dir = tempdir("cfi");
     let src = dir.join("shapes.c");
     std::fs::write(&src, SHAPES).expect("write source");
-    for opt in [&[][..], &["-O"][..]] {
+    for opt in [&[][..], &["-O", "-fno-omit-frame-pointer"][..], &["-O"][..]] {
         let exe = dir.join(format!("shapes{}", opt.join("")));
         run(
             badc()
@@ -600,19 +660,37 @@ fn x86_64_debug_frame_follows_each_prologue_instruction() {
         let what = opt.join(" ");
         let fdes = text.matches("FDE cie=").count();
         let framed = text.matches("DW_CFA_def_cfa_register: RBP").count();
-        let min_framed = if opt.is_empty() { 12 } else { 6 };
+        // With no frame pointer only the variadic and the alloca frames keep rbp.
+        let (min_framed, min_pointerless) = match opt.len() {
+            0 => (12, 0),
+            1 => (2, 4),
+            _ => (6, 0),
+        };
         assert!(
             framed >= min_framed,
             "{what}: {framed} framed FDEs of {fdes}:\n{text}"
         );
-        // Past `push rbp` the CFA moves to rsp + 16 with rbp saved below
-        // it; the coarse post-prologue rule never appears.
-        assert_eq!(
-            text.matches("DW_CFA_def_cfa_offset: +16").count(),
-            framed,
-            "{what}:\n{text}"
+        let mut pointerless = 0;
+        for fde in text.split("FDE cie=").skip(1) {
+            if fde.contains("DW_CFA_def_cfa_register: RBP") {
+                // Past `push rbp` the CFA moves to rsp + 16 with rbp saved
+                // below it.
+                assert!(fde.contains("DW_CFA_def_cfa_offset: +16"), "{what}:\n{fde}");
+                assert!(fde.contains("DW_CFA_offset: RBP -16"), "{what}:\n{fde}");
+            } else if fde.contains("DW_CFA_def_cfa_offset") {
+                // The CFA follows rsp down through the prologue and back to
+                // the entry's rsp + 8 at the end of each exit.
+                pointerless += 1;
+                let exits = fde.matches("DW_CFA_remember_state").count();
+                let back = fde.matches("DW_CFA_def_cfa_offset: +8\n").count();
+                assert!(back >= exits.max(1), "{what}:\n{fde}");
+            }
+        }
+        assert!(
+            pointerless >= min_pointerless,
+            "{what}: {pointerless} with no frame pointer:\n{text}"
         );
-        assert_eq!(text.matches("DW_CFA_offset: RBP -16").count(), framed);
+        // The coarse post-prologue rule never appears.
         assert!(!text.contains("DW_CFA_def_cfa: RBP"), "{what}:\n{text}");
         // A frameless leaf keeps the entry rule throughout: at -O `leaf`,
         // `regs` and `modify` have no frame.
@@ -1234,4 +1312,67 @@ fn neon_wrappers_inline_into_a_large_frame() {
     assert!(!body.contains("Call {"), "a wrapper call remains:\n{body}");
     let report = stderr.lines().find(|l| l.contains("function `fold`"));
     assert!(report.is_none(), "{report:?}");
+}
+
+/// Functions with a short character array, a large one, a variable-length
+/// array, an `alloca` buffer, an `int` array, and a variable-length array
+/// opted out of the protector.
+const SSP_NOTES: &str = "void use(char *);
+void small(void) { char b[4]; use(b); }
+void big(void) { char b[64]; use(b); }
+void vla(int n) { char b[n]; use(b); }
+void al(int n) { char *b = __builtin_alloca(n); use(b); }
+int ints(void) { int a[8]; use((char *)a); return a[1]; }
+__attribute__((no_stack_protector)) void off(int n) { char b[n]; use(b); }
+";
+
+/// `-Wstack-protector` notes, by line: under
+/// `-fstack-protector` a function whose character arrays are all shorter
+/// than `--param ssp-buffer-size=`, which it leaves unprotected, and in every
+/// mode a variable-length buffer, which lies below the other locals. A
+/// function opted out takes none, and without the option there are none.
+#[test]
+fn stack_protector_notes_the_buffers_gcc_notes() {
+    let dir = tempdir("ssp-notes");
+    let src = dir.join("ssp.c");
+    std::fs::write(&src, SSP_NOTES).expect("write source");
+    let notes = |args: &[&str]| -> Vec<String> {
+        let out = badc()
+            .args(["--target=linux-x64", "-O", "-c", "-o"])
+            .arg(dir.join("ssp.o"))
+            .args(args)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stderr)
+            .lines()
+            .filter(|l| l.contains("[B4009]"))
+            .map(|l| l.split_once("ssp.c:").map_or(l, |(_, r)| r).to_string())
+            .collect()
+    };
+    let vla = |line: u32| {
+        format!(
+            "{line}: warning: stack protector not protecting local variables: variable length \
+             buffer [B4009] [-Wstack-protector]"
+        )
+    };
+    let small = "2: warning: stack protector not protecting function: all local arrays are less \
+                 than 8 bytes long [B4009] [-Wstack-protector]";
+    assert_eq!(
+        notes(&["-fstack-protector", "-Wstack-protector"]),
+        [small.to_string(), vla(4), vla(5)]
+    );
+    for mode in ["-fstack-protector-strong", "-fstack-protector-all"] {
+        assert_eq!(
+            notes(&[mode, "-Wstack-protector"]),
+            [vla(4), vla(5)],
+            "{mode}"
+        );
+    }
+    assert!(notes(&["-fstack-protector"]).is_empty());
 }

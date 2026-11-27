@@ -3,7 +3,7 @@ struct_initializers.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -97,7 +97,7 @@ Disassembly of section .text:
                	ret
                	ldr	x2, [x0, #0x8]
                	mov	x0, #0x1                // =1
-               	mov	x1, x0
+               	mov	x1, #0x1                // =1
                	blr	x2
                	cmp	w0, #0x2
                	b.eq	<addr>

@@ -3,7 +3,7 @@ call_conv_typedef_scopes.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -96,10 +96,9 @@ Disassembly of section .text:
                	bl	<addr>
                	ldr	x16, [sp, #0x18]
                	add	x0, x16, x0
-               	mov	x1, #0x7                // =7
-               	mov	x2, #0x0                // =0
                	cmp	x0, #0x2e
-               	csel	x0, x1, x2, ne
+               	mov	x16, #0x7               // =7
+               	csel	x0, x16, xzr, ne
                	ldp	x29, x30, [sp, #0x20]
                	ldp	x20, x21, [sp], #0x30
                	ret

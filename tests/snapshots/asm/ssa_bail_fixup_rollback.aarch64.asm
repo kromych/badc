@@ -3,7 +3,7 @@ ssa_bail_fixup_rollback.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -52,11 +52,11 @@ Disassembly of section .text:
                	ldrb	w1, [x3, #0x7]
                	sturb	w1, [x29, #-0x49]
                	sub	x21, x29, #0x40
+               	mov	x0, x21
+               	mov	x2, x22
                	sub	x1, x29, #0x50
                	adrp	x3, <addr>
                	add	x3, x3, <lo12>
-               	mov	x0, x21
-               	mov	x2, x22
                	bl	<addr>
                	mov	x1, #0x0                // =0
                	ldrb	w0, [x21, x1]
@@ -96,10 +96,9 @@ Disassembly of section .text:
                	sub	x4, x29, #0x60
                	bl	<addr>
                	ldurb	w0, [x29, #-0x40]
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x1                // =1
                	cmp	w0, #0x4d
-               	csel	x0, x1, x2, eq
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, eq
                	add	sp, sp, #0x70
                	ldp	x29, x30, [sp], #0x10
                	ret

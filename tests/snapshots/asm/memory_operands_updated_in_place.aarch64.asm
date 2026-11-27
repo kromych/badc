@@ -3,7 +3,7 @@ memory_operands_updated_in_place.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -74,14 +74,14 @@ Disassembly of section .text:
                	bl	<addr>
                	sub	x0, x29, #0x10
                	bl	<addr>
-               	sub	x0, x29, #0x10
-               	ldursw	x1, [x29, #-0x10]
-               	cmp	w1, #0x3
+               	ldursw	x0, [x29, #-0x10]
+               	cmp	w0, #0x3
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	sub	x0, x29, #0x10
                	bl	<addr>
                	cbnz	w0, <addr>
                	sub	x0, x29, #0x10
@@ -114,14 +114,14 @@ Disassembly of section .text:
                	sub	x0, x29, #0x10
                	mov	x1, #0xc                // =12
                	bl	<addr>
-               	sub	x0, x29, #0x10
-               	ldursh	x1, [x29, #-0xc]
-               	cmn	w1, #0x2
+               	ldursh	x0, [x29, #-0xc]
+               	cmn	w0, #0x2
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x20
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	sub	x0, x29, #0x10
                	mov	x1, #0xff               // =255
                	movk	x1, #0xff, lsl #16
                	mov	x2, #0x5                // =5

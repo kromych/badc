@@ -3,7 +3,7 @@ inline_asm_x64_string_ops.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -53,13 +53,13 @@ Disassembly of section .text:
                	movw	$0x0, -0x20(%rbp)
                	movw	$0x6463, -0x26(%rbp)    # imm = 0x6463
                	movw	$0x0, -0x1e(%rbp)
+               	leaq	-0x28(%rbp), %rax
+               	leaq	-0x20(%rbp), %rcx
                	movw	$0x6665, -0x24(%rbp)    # imm = 0x6665
                	movw	$0x0, -0x1c(%rbp)
-               	leaq	-0x20(%rbp), %rax
-               	leaq	-0x28(%rbp), %rcx
                	movl	$0x6, %edx
-               	movq	%rax, %rdi
-               	movq	%rcx, %rsi
+               	movq	%rcx, %rdi
+               	movq	%rax, %rsi
                	movq	%rdx, %rcx
                	rep		movsb	(%rsi), %es:(%rdi)
                	movsbq	-0x20(%rbp), %rax

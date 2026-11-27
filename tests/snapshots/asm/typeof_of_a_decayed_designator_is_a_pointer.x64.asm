@@ -3,7 +3,7 @@ typeof_of_a_decayed_designator_is_a_pointer.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -30,21 +30,16 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x8(%rbp)
+               	pushq	%rax
                	callq	<addr>
                	cmpq	$0x7, %rax
                	jne	<addr>
-               	movq	-0x8(%rbp), %rax
-               	callq	*%rax
+               	callq	<addr>
                	cmpq	$0x7, %rax
                	jne	<addr>
                	xorl	%eax, %eax
-               	leave
+               	popq	%r11
                	retq
                	movl	$0x1, %eax
-               	leave
+               	popq	%r11
                	retq

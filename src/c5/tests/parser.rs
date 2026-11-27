@@ -894,7 +894,7 @@ fn unresolved_goto_label() {
     expect_compile_error("int main() { goto nowhere; return 0; }", "unresolved label");
 }
 
-// GNU C local labels (`__label__`). The accept/reject split below follows
+// GNU C local labels (`__label__`). The accept/reject split below is
 // gcc's; clang differs on one case, noted at that test.
 
 #[test]
@@ -1306,7 +1306,7 @@ fn thread_local_compiles_to_op_tlslea() {
         let p = super::Compiler::with_target(super::with_prelude(src), target)
             .compile()
             .unwrap_or_else(|e| panic!("`{target:?}` compile failed: {e}"));
-        assert_eq!(p.tls_data.len(), 4, "single 4-byte TLS slot for {target:?}");
+        assert_eq!(p.tls_len(), 4, "single 4-byte TLS slot for {target:?}");
         super::super::object::emit_native_single_tu_for_test(
             &p,
             target,
@@ -2024,10 +2024,10 @@ fn valid_numeric_literals_still_compile() {
     assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
 }
 
-/// MSVC's sized integer suffixes on the PE targets, as clang 22 reads them
-/// for a windows-msvc triple: `[u]i8` ... `[u]i64` name `char` (unsigned
-/// `char`), `short`, `int` and `long long`, the value must fit the width
-/// and is read at the suffix's signedness, and `#if` takes them unchanged.
+/// MSVC's sized integer suffixes on the PE targets: `[u]i8` ... `[u]i64`
+/// name `char` (unsigned `char`), `short`, `int` and `long long`, the value
+/// must fit the width and is read at the suffix's signedness, and `#if`
+/// takes them unchanged.
 /// The four erroneous constants are rejected; the other targets reject the
 /// suffixes.
 #[test]
@@ -2586,6 +2586,103 @@ fn declarator_asm_label_renames_the_emitted_symbol() {
     );
 }
 
+/// An asm label belongs to the binding that states it: a declaration in an
+/// inner scope takes its own and the enclosing binding's comes back at the
+/// scope's exit (C99 6.2.1p4). A block-scope declaration with linkage names
+/// the entity outside the function and shares its assembler name, which a
+/// label it states gives that entity for the rest of the unit (6.2.2p4).
+#[test]
+fn an_asm_label_belongs_to_the_binding_that_states_it() {
+    let p = super::compile_str_bare_for(
+        "int y = 1;\n\
+         int y2 asm(\"lbl_y2\") = 1;\n\
+         int f(void) { { static int y asm(\"a_y\") = 2; return y++; } }\n\
+         int g(void) { static int y asm(\"b_y\") = 3; return y++; }\n\
+         int h(void) { { static int y2 asm(\"inner\") = 2; return y2++; } }\n\
+         int k(void) { { static int y2 = 2; return y2++; } }\n\
+         int e asm(\"E\");\n\
+         int m(void) { int e = 1; { extern int e; return e; } }\n\
+         int q(void);\n\
+         int r(void) { int q(void) asm(\"Q\"); return q(); }\n\
+         int q(void) { return 0; }\n\
+         int main(void) { return f() + g() + h() + k() + y + y2 + m() + r(); }",
+        crate::Target::LinuxX64,
+    );
+    let format = p.target.binary_format();
+    let links = |name: &str| {
+        let named = p.symbols.iter().filter(|s| s.name == name);
+        named
+            .map(|s| asm_symbol_spelling(format, s.link_name()).into_owned())
+            .collect::<alloc::vec::Vec<_>>()
+    };
+    for (name, link) in [("y", "y"), ("y2", "lbl_y2"), ("e", "E"), ("q", "Q")] {
+        assert_eq!(links(name), [link], "{name}");
+    }
+    for name in ["a_y", "b_y", "inner"] {
+        assert_eq!(links(name), [name], "{name}");
+    }
+    assert!(p.symbols.iter().any(|s| s.name.starts_with("y2.")));
+}
+
+/// A file-scope function declaration records where it is, as an object's
+/// does: a prototype in a bundled header, bound to the C library or not,
+/// names that header and its line.
+#[test]
+fn a_function_declaration_records_its_file_and_line() {
+    let p = super::compile_str_bare_for(
+        "#include <aio.h>\nint local(void);\nint main(void) { return local(); }\n",
+        crate::Target::LinuxX64,
+    );
+    let site = |name: &str| {
+        let s = p.symbols.iter().find(|s| s.name == name).expect("declared");
+        let file = p.source_files[s.binding.decl_file as usize].clone();
+        (file, s.binding.decl_line)
+    };
+    let (file, line) = site("aio_read");
+    assert!(file == "aio.h" && line > 0, "{file}:{line}");
+    assert_eq!(site("local").1, 2);
+}
+
+/// Every declarator of a declaration that derives nothing from its `void`
+/// base type is bare `void`, wherever it stands in the list: a typedef of
+/// it makes `(T)` the empty parameter list (C99 6.7.5.3p10) at file and
+/// block scope, past a pointer and a function declarator before it.
+#[test]
+fn every_bare_void_declarator_of_a_list_is_a_void_typedef() {
+    let p = super::compile_str_bare(
+        "typedef void *P, V;\n\
+         typedef void F(int), W;\n\
+         int f(V);\n\
+         int f(void) { return 3; }\n\
+         int g(W) { return 4; }\n\
+         int h(void);\n\
+         int main(void) {\n\
+           typedef void *Q, X;\n\
+           int h(X);\n\
+           return f() + g() + h();\n\
+         }\n\
+         int h(void) { return 5; }\n",
+    );
+    assert_eq!(super::Vm::new(p).run().unwrap(), 12);
+}
+
+/// A block-scope object that hides a file-scope register variable is an
+/// ordinary object: only the outer binding names the register.
+#[test]
+fn a_local_hiding_a_global_register_variable_is_not_bound_to_it() {
+    use crate::Target;
+    for (t, reg) in [(Target::LinuxX64, "rsp"), (Target::LinuxAarch64, "sp")] {
+        let src = alloc::format!(
+            "register unsigned long sp asm(\"{reg}\");\n\
+             long g(long a) {{ long r = 0; {{ long sp = a; r += sp; }}\n\
+               {{ {{ long sp = a * 2; r += sp * 100; }} }} return r; }}\n\
+             int main(void) {{ return g(4) == 804 ? 0 : 1; }}\n"
+        );
+        let program = Compiler::with_target(src, t).compile().unwrap();
+        assert_eq!(super::Vm::new(program).run().unwrap(), 0, "{t:?}");
+    }
+}
+
 #[test]
 fn register_asm_binding_constraints() {
     // `register T name asm("reg")` requires the `register` storage
@@ -3063,6 +3160,19 @@ fn asm_output_operand_lvalue_matrix() {
     );
 }
 
+/// A file-scope `asm` the assembler rejects is reported at its own line,
+/// not at the line after the `;` that ends it.
+#[test]
+fn a_file_scope_asm_error_names_its_line() {
+    let src =
+        "int x;\n__asm__(\".section .data\\n.bogus 1\\n.text\");\nint main(void) { return 0; }\n";
+    let e = Compiler::new(src.to_string()).compile().unwrap_err();
+    let lines: Vec<u32> = (e.diagnostics().iter())
+        .filter_map(|d| d.loc.as_ref().map(|l| l.line))
+        .collect();
+    assert_eq!(lines, [2], "{e}");
+}
+
 #[test]
 fn file_scope_asm_constraints() {
     // `asm("...")` between declarations accepts section data
@@ -3091,8 +3201,8 @@ fn file_scope_asm_constraints() {
     ok("static int f(void) { return 0; }\n\
          asm(\".pushsection .a,\\\"a\\\"\\n.quad 1\\n.popsection\\n.globl f\");\n\
          int main(void) { return f(); }");
-    // A bare instruction at file scope assembles into `.text`, as GNU as does
-    // (`asm("nop")` emits a nop into the current section). File-scope
+    // A bare instruction at file scope assembles into the current section,
+    // `.text` (`asm("nop")` emits a nop there). File-scope
     // instruction assembly is x86-only, so pin the target rather than the host.
     Compiler::with_target(
         "asm(\"nop\"); int main(void) { return 0; }".to_string(),
@@ -4061,19 +4171,16 @@ fn struct_array_compound_literal_counts_elements_not_leaves() {
     assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
 
     // The excess is counted in elements: three brace groups, and six
-    // elided leaves folding into three elements, both over a bound of 2.
-    expect_compile_error(
-        "struct s { int a; int b; };\n\
-         int main(void) { const struct s *p = (const struct s[2]){ {1,2},{3,4},{5,6} };\n\
-             return p[0].a; }",
-        "too many initializers for compound literal (3 > 2)",
-    );
-    expect_compile_error(
-        "struct s { int a; int b; };\n\
-         int main(void) { const struct s *p = (const struct s[2]){ 1,2,3,4,5,6 };\n\
-             return p[0].a; }",
-        "too many initializers for compound literal (3 > 2)",
-    );
+    // elided leaves folding into three elements, both over a bound of 2,
+    // drop the third (C17 6.7.9p2).
+    for groups in ["{1,2},{3,4},{5,6}", "1,2,3,4,5,6"] {
+        let src = format!(
+            "struct s {{ int a; int b; }};\n\
+             int main(void) {{ const struct s *p = (const struct s[2]){{ {groups} }};\n\
+                 return p[1].b; }}"
+        );
+        assert_eq!(run_main(&src), 4, "{src}");
+    }
     // A designator past the bound keeps its own diagnostic, as the named
     // array declaration reports it.
     expect_compile_error(
@@ -4085,17 +4192,17 @@ fn struct_array_compound_literal_counts_elements_not_leaves() {
 }
 
 #[test]
-fn union_initializer_list_rejects_a_second_positional_value() {
+fn union_initializer_list_drops_a_second_positional_value() {
     // C99 6.7.8p17: a union's initializer list initializes its first
-    // named member, so a second positional value has no object (6.7.8p2).
-    // The fill had stored it over the first member's storage.
-    expect_compile_error(
-        "int main(void) { union u { int a; int b; } x = {1, 2}; return x.a; }",
-        "too many initializers for union u",
+    // named member, so a second positional value has no object (6.7.8p2):
+    // it is dropped, not stored over the first member's storage.
+    assert_eq!(
+        run_main("int main(void) { union u { int a; int b; } x = {1, 2}; return x.a; }"),
+        1
     );
-    expect_compile_error(
-        "int main(void) { union u { int a; int b; } x = {.a = 1, 2}; return x.a; }",
-        "too many initializers for union u",
+    assert_eq!(
+        run_main("int main(void) { union u { int a; int b; } x = {.a = 1, 2}; return x.a; }"),
+        1
     );
     // 6.7.8p19: a later designator overrides; brace elision inside a
     // struct still hands the union exactly one value.
@@ -4156,6 +4263,82 @@ fn address_of_a_thread_local_is_not_a_constant_expression() {
     .compile()
     .expect("a thread-local initialized with an ordinary object's address stays legal");
     assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0);
+}
+
+/// A statement expression the parser scans ahead over and then parses
+/// applies the pragmas inside it once: the matching pop after it leaves
+/// the state as before the push, for `#pragma`, `_Pragma` and `GCC
+/// visibility` alike.
+#[test]
+fn a_rescanned_statement_expression_applies_its_pragmas_once() {
+    let packed = Compiler::new(
+        "#define PUSH1 _Pragma(\"pack(push, 1)\")\n\
+         #define POP _Pragma(\"pack(pop)\")\n\
+         int main(void) {\n\
+             __auto_type n = ({\n\
+         #pragma pack(push, 1)\n\
+                 struct T { char c; int i; }; (int)sizeof(struct T); });\n\
+         #pragma pack(pop)\n\
+             struct S { char c; int i; };\n\
+             int a[] = { 1, ({\n\
+         #pragma pack(push, 1)\n\
+                 struct U { char c; int i; }; (int)sizeof(struct U); }) };\n\
+         #pragma pack(pop)\n\
+             struct V { char c; int i; };\n\
+             __auto_type m = ({ PUSH1 struct W { char c; int i; }; (int)sizeof(struct W); });\n\
+             POP\n\
+             struct X { char c; int i; };\n\
+             return (n != 5) + 2 * (sizeof(struct S) != 8) + 4 * (a[1] != 5)\n\
+                 + 8 * (sizeof(struct V) != 8) + 16 * (m != 5) + 32 * (sizeof(struct X) != 8);\n\
+         }\n"
+        .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    assert_eq!(crate::c5::Vm::new(packed).run().unwrap(), 0);
+    let hidden = Compiler::new(
+        "int f(void) {\n\
+             __auto_type n = ({\n\
+         #pragma GCC visibility push(hidden)\n\
+                 1; });\n\
+         #pragma GCC visibility pop\n\
+             return n;\n\
+         }\n\
+         int after(void) { return 2; }\n\
+         int main(void) { return f() + after(); }\n"
+            .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    let after = hidden
+        .symbols
+        .iter()
+        .find(|s| s.name == "after")
+        .expect("after");
+    assert_eq!(after.visibility, None, "the pop restored the default");
+}
+
+/// An `__int128` constant keeps its high half where it decides a condition
+/// -- `_Static_assert`, `__builtin_choose_expr` in an initializer and in an
+/// expression -- and an unsigned one converts to floating as unsigned when
+/// a `const` local folds (C17 6.3.1.4p2).
+#[test]
+fn int128_constants_keep_their_high_half() {
+    let program = Compiler::new(
+        "_Static_assert((__int128)1 << 64, \"the high half is non-zero\");\n\
+         static int chosen = __builtin_choose_expr((__int128)1 << 64, 1, 2);\n\
+         int main(void) {\n\
+             const double d = (unsigned __int128)-1;\n\
+             int r = 0;\n\
+             switch (1) { case (d > 0): r = 1; }\n\
+             int e = __builtin_choose_expr((__int128)1 << 64, 1, 2);\n\
+             return (chosen != 1) + 2 * (e != 1) + 4 * (r != 1);\n\
+         }\n"
+        .to_string(),
+    )
+    .compile()
+    .expect("compile");
+    assert_eq!(crate::c5::Vm::new(program).run().unwrap(), 0);
 }
 
 #[test]
@@ -4562,22 +4745,22 @@ fn thread_local_is_in_every_declaration_of_an_object_or_in_none() {
 }
 
 #[test]
-fn static_local_array_initializer_over_bound_rejected() {
+fn static_local_array_surplus_stays_out_of_the_next_object() {
     // C99 6.7.8p2: an initializer may not provide a value for an object
     // outside the entity being initialized. The static-local allocator
-    // reserves storage from the declared bound, so a longer list was written
-    // past it, over whatever the initializer's own parse had staged above the
-    // reservation -- and off the end of `.data` when nothing had been, which
-    // panicked on the write index. The file-scope, automatic and
-    // compound-literal paths already rejected the same shapes.
-    expect_compile_error(
-        "int main(void) { static int a[1] = {1, 2, 3, 4}; return a[0]; }",
-        "too many initializers for array `a` (4 > 1)",
+    // reserves storage from the declared bound; the surplus is dropped, so
+    // nothing is written past it into the object the next declaration
+    // reserves, nor off the end of `.data`.
+    assert_eq!(
+        run_main("int main(void) { static int a[1] = {1, 2, 3, 4}; return a[0]; }"),
+        1
     );
-    expect_compile_error(
-        "int main(void) { static int a[1] = {1, 2}; static int b[2] = {3, 4};\n\
-         return a[0] + b[0]; }",
-        "too many initializers for array `a` (2 > 1)",
+    assert_eq!(
+        run_main(
+            "int main(void) { static int a[1] = {1, 2}; static int b[2] = {3, 4};\n\
+             return a[0] * 10 + b[0]; }"
+        ),
+        13
     );
     // The exactly-filling and short forms stay legal: 6.7.8p14 drops the
     // terminator on an exact fit, 6.7.8p21 zero-fills the tail.
@@ -4667,6 +4850,67 @@ fn a_string_longer_than_its_array_warns_and_is_truncated() {
         let warnings = prog.warnings.iter().map(|w| w.to_string());
         let n = warnings.filter(|w| w.contains("[B3013]")).count();
         assert_eq!(n, warned, "{src}");
+        assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0, "{src}");
+    }
+}
+
+/// C17 6.7.9p2: an initializer element with no object of the entity to
+/// initialize -- past an array's, a row's, a struct's or a scalar's end, a
+/// union's second, an element after a braced string -- is reported once per
+/// list as `-Wexcess-initializers`, at file and block scope, in a compound
+/// literal, and dropped unevaluated.
+#[test]
+fn a_surplus_initializer_element_warns_and_is_dropped() {
+    let types = "struct S { int x, y; }; union U { int i; char c; };\n\
+                 int side; int bump(void) { return ++side; }\n";
+    for (globals, body) in [
+        ("int a[2] = {1, 2, 3};", "return a[1] != 2;"),
+        ("struct S s = {1, 2, 3};", "return s.y != 2;"),
+        ("union U u = {1, 2};", "return u.i != 1;"),
+        (
+            "int m[2][2] = {{1, 2, 3}, {4}};",
+            "return m[0][1] != 2 || m[1][0] != 4;",
+        ),
+        ("int n[2][2] = {1, 2, 3, 4, 5};", "return n[1][1] != 4;"),
+        ("struct S sa[1] = {{1, 2}, {3, 4}};", "return sa[0].y != 2;"),
+        (
+            "char c[] = {\"ab\", \"cd\"};",
+            "return sizeof c != 3 || c[1] != 'b';",
+        ),
+        ("int i = {1, 2};", "return i != 1;"),
+        (
+            "",
+            "int la[2] = {1, 2, bump()}; return la[1] != 2 || side != 0;",
+        ),
+        ("", "static int ls[2] = {1, 2, 3}; return ls[1] != 2;"),
+        (
+            "",
+            "struct S l = {1, 2, bump()}; return l.y != 2 || side != 0;",
+        ),
+        (
+            "",
+            "int *p = (int[2]){1, 2, bump()}; return p[1] != 2 || side != 0;",
+        ),
+        (
+            "",
+            "struct S l[1] = {{1, 2}, {3, bump()}}; return l[0].y != 2 || side != 0;",
+        ),
+        ("", "union U l = {7, bump()}; return l.i != 7 || side != 0;"),
+        (
+            "",
+            "int l[2][2] = {{1, 2, bump()}, {4}}; return l[0][1] != 2 || side != 0;",
+        ),
+        ("", "int j = {5, bump()}; return j != 5 || side != 0;"),
+    ] {
+        let src = format!("{types}{globals}\nint main(void) {{ {body} }}\n");
+        let prog = Compiler::new(src.clone())
+            .compile()
+            .unwrap_or_else(|e| panic!("{src}: {e}"));
+        let warnings = prog.warnings.iter().map(|w| w.to_string());
+        let n = warnings
+            .filter(|w| w.contains("excess elements in") && w.contains("[B3013]"))
+            .count();
+        assert_eq!(n, 1, "{src}");
         assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 0, "{src}");
     }
 }
@@ -5001,16 +5245,21 @@ fn a_member_read_through_an_address_is_not_a_constant() {
 #[test]
 fn a_braced_scalar_initializer_holds_one_value() {
     // C99 6.7.8p11: the braces around a scalar initializer hold a single
-    // expression, at file scope, at block scope and in a member.
-    for decl in [
-        "int x = {1, 2};",
-        "void f(void) { static int x = {1, 2}; }",
-        "struct { int a; } x = {{1, 2}};",
+    // expression, at file scope, at block scope and in a member; a further
+    // one is reported and dropped (6.7.8p2).
+    for (decl, value) in [
+        ("int x = {1, 2};", "x"),
+        ("int f(void) { static int x = {1, 2}; return x; }", "f()"),
+        ("struct { int a; } x = {{1, 2}};", "x.a"),
     ] {
-        expect_compile_error(
-            &format!("{decl}\nint main(void) {{ return 0; }}"),
-            "scalar initializer wrapped in `{ ... }` must hold a single value",
-        );
+        let src = format!("{decl}\nint main(void) {{ return {value}; }}");
+        let prog = Compiler::new(src.clone()).compile().expect(&src);
+        let warned = prog.warnings.iter().any(|w| {
+            w.to_string()
+                .contains("excess elements in scalar initializer")
+        });
+        assert!(warned, "{src}");
+        assert_eq!(crate::c5::Vm::new(prog).run().unwrap(), 1, "{src}");
     }
 }
 
@@ -5559,8 +5808,8 @@ fn fall_off_end_sees_block_scope_noreturn_and_constant_conditions() {
 }
 
 /// A condition whose known operands decide it leaves the other branch
-/// dead for the fall-off analysis, as gcc 16.2.1 folds it for
-/// -Wreturn-type at -O0 and -O2: `x || 1`, `x | 1`, `!(x && 0)`,
+/// dead for the fall-off analysis (checked against gcc 16.2.1's
+/// -Wreturn-type at -O0 and -O2): `x || 1`, `x | 1`, `!(x && 0)`,
 /// `(x & 0) == 0`, `!(x * 0)`, `x | ~0u`, `(x ^ x) == 0`, `x - x + 1` and
 /// `(x, 1)` are true whatever `x`; `x && 0` and `x * 0` false; `x || 0`,
 /// `x | 0` and `!x` undecided.
@@ -5755,16 +6004,19 @@ fn a_rejected_array_designator_reports_one_diagnostic() {
         "int f(int n) { return (int[4]){ [n] = 1 }[0]; }",
         "constant integer expected (got identifier `n`)",
     );
-    // An index past the declared extent of a named array is reported as the
-    // element count the initializer would need; the levels that know the
-    // extent when the subscript is parsed report it as the bound.
+    // An index past the declared extent is reported against its bound, an
+    // inner subscript's against its row's.
     expect_compile_error(
         "int a[4] = { [9] = 1 };",
-        "too many initializers for array `a` (10 > 4)",
+        "array designator index 9 out of bounds [0, 4)",
     );
     expect_compile_error(
         "int f(void) { return (int[4]){ [9] = 1 }[0]; }",
-        "too many initializers for compound literal (10 > 4)",
+        "array designator index 9 out of bounds [0, 4)",
+    );
+    expect_compile_error(
+        "int a[2][2] = { [0][3] = 1 };",
+        "array designator index 3 out of bounds [0, 2)",
     );
     for scope in [
         "struct s { int v[3]; }; struct s x = { DESIG };",
@@ -6830,8 +7082,8 @@ fn implicit_fallthrough_reports_where_gcc_does() {
 }
 
 /// `-Wvla-larger-than=N` reports a variable-length array whose size the
-/// size expression does not bound by N bytes, under optimization, as gcc
-/// 16 -O2 reports the same declarations (measured). A signed size may be
+/// size expression does not bound by N bytes, under optimization; gcc 16
+/// -O2 reports the same declarations (measured). A signed size may be
 /// negative, so it bounds nothing.
 #[test]
 fn vla_larger_than_reports_the_arrays_gcc_does() {
@@ -6944,7 +7196,7 @@ fn a_static_initializers_diagnostic_is_reported_once() {
         [2, 3, 4, 5, 6]
     );
     // The arithmetic parse reports the compound literal's conversion as the
-    // undone one did, as clang 22 reports it (-Wconstant-conversion).
+    // undone one did.
     assert_eq!(lines(crate::c5::diag::Code::CONSTANT_CONVERSION), [7]);
 }
 

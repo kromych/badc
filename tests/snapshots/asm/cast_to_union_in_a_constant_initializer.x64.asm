@@ -3,7 +3,7 @@ cast_to_union_in_a_constant_initializer.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -30,8 +30,7 @@ Disassembly of section .text:
                	cmpl	$0x3, %eax
                	jne	<addr>
                	movsd	<rip>, %xmm0 # <addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movq	<rip>, %rax # <addr>
@@ -65,8 +64,7 @@ Disassembly of section .text:
                	cmpl	$0x1, %eax
                	jne	<addr>
                	movsd	<rip>, %xmm0 # <addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	jne	<addr>
                	movq	<rip>, %rax # <addr>

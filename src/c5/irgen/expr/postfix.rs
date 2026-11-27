@@ -69,9 +69,10 @@ impl<'a> Walker<'a> {
     ) -> Result<ValueId, WalkError> {
         let callee_conv = self.callee_conv(callee);
         // A dllimport function is called through the address its import
-        // slot holds.
+        // slot holds, and under `-fno-plt` one the link resolves through
+        // the address its GOT entry holds.
         let through_slot = matches!(self.ast.expr(callee), Expr::Ident { sym, .. }
-            if self.symbols.get(*sym as usize).is_some_and(|s| s.dllimport));
+            if self.symbols.get(*sym as usize).is_some_and(|s| s.dllimport || self.named_refs.calls_through_got(s)));
         // A host-ABI aggregate return carries no hidden argument and
         // takes the normal path below, which tags the call's `ret_agg` /
         // `ret_slot` instead.
@@ -129,6 +130,12 @@ impl<'a> Walker<'a> {
             if *class == Token::Sys as i64 {
                 return self.call_binding(b, *sym, *val, call_args);
             }
+        }
+        if through_slot
+            && let Expr::Ident { sym, .. } = self.ast.expr(callee)
+            && crate::c5::ir::returns_twice_fn_name(&self.symbols[*sym as usize].name)
+        {
+            b.mark_returns_twice();
         }
         self.call_through_pointer(b, callee, indirect_target, call_args)
     }
@@ -913,6 +920,7 @@ impl<'a> Walker<'a> {
         } else {
             base
         };
+        self.check_access(b, id, addr);
         // C99 6.3.2.1p3: an array-typed field decays to a pointer to
         // its first element, so the field's address is the rvalue, as
         // it is for a struct-value field.
@@ -935,15 +943,8 @@ impl<'a> Walker<'a> {
         idx: ExprId,
         ty: i64,
     ) -> Result<ValueId, WalkError> {
-        let arr = self.walk_expr_rvalue(b, array)?;
-        let i = self.walk_expr_rvalue(b, idx)?;
-        // The parser already scaled `idx` by the element size, and for
-        // a literal index that walk folds to a single `Imm`, so the
-        // address is `arr + Imm` and takes the immediate form.
-        let addr = match b.peek_imm(i) {
-            Some(k) => b.binop_imm(BinOp::Add, arr, k),
-            None => b.binop(BinOp::Add, arr, i),
-        };
+        let addr = self.index_address(b, id, array, idx)?;
+        self.check_access(b, id, addr);
         // C99 6.5.2.1p2 with the address-as-value rule: for a
         // struct-value element `arr[i]` yields the element's address
         // and the enclosing site handles the bytes.
@@ -953,6 +954,31 @@ impl<'a> Walker<'a> {
         let kind = load_kind_for(ty, self.target);
         let seg = self.access_seg(id, ty)?;
         Ok(load_place(b, addr, kind, seg, self.expr_is_volatile(id), 0))
+    }
+
+    /// The address the subscript node `id` designates, `array` stepped by
+    /// the scaled index `idx`, checked where `-fsanitize=pointer-overflow`
+    /// checks the step.
+    pub(super) fn index_address(
+        &mut self,
+        b: &mut SsaBuilder,
+        id: ExprId,
+        array: ExprId,
+        idx: ExprId,
+    ) -> Result<ValueId, WalkError> {
+        let arr = self.walk_expr_rvalue(b, array)?;
+        if let Some(&check) = self.ast.checks.get(&id) {
+            let offset = self.pointer_offset(b, idx)?;
+            return Ok(self.checked_pointer_step(b, check, arr, offset, false));
+        }
+        // The parser already scaled `idx` by the element size, and for a
+        // literal index that walk folds to a single `Imm`, so the address
+        // is `arr + Imm` and takes the immediate form.
+        let i = self.walk_expr_rvalue(b, idx)?;
+        Ok(match b.peek_imm(i) {
+            Some(k) => b.binop_imm(BinOp::Add, arr, k),
+            None => b.binop(BinOp::Add, arr, i),
+        })
     }
 
     /// C99 6.5.2.4 / 6.5.3.1: step an lvalue by `by`. The expression's
@@ -965,15 +991,18 @@ impl<'a> Walker<'a> {
         lvalue: ExprId,
         by: i64,
         ty: i64,
-        post: bool,
-        nsw: bool,
+        (yields, nsw): (crate::c5::irgen::Yields, bool),
+        (check, stored): (
+            Option<crate::c5::ast::SanitizeCheck>,
+            Option<crate::c5::ast::ValueCheck>,
+        ),
     ) -> Result<ValueId, WalkError> {
         let lvalue_ty = crate::c5::ast::expr_ty(self.ast.expr(lvalue)).unwrap_or(ty);
         if is_atomic_object_ty(lvalue_ty) {
-            return self.walk_atomic_inc(b, lvalue, by, lvalue_ty, post);
+            return self.walk_atomic_inc(b, lvalue, by, lvalue_ty, yields);
         }
         if self.is_int128_value_ty(ty) {
-            return self.walk_int128_inc(b, lvalue, by, post);
+            return self.walk_int128_inc(b, lvalue, by, yields);
         }
         let RmwOpen {
             place,
@@ -982,7 +1011,33 @@ impl<'a> Walker<'a> {
             vol,
             old,
         } = self.rmw_open(b, lvalue, ty)?;
+        // A pointer's step is checked as `p + by`.
+        if let Some(check) = check.filter(|&c| Self::is_pointer_step(c)) {
+            let offset = crate::c5::irgen::builtin::PointerOffset {
+                value: b.imm(by),
+                signed: true,
+                overflow: None,
+            };
+            let stepped = self.checked_pointer_step(b, check, old, offset, false);
+            place.store_marked(b, stepped, store_kind, vol, nsw);
+            return Ok(match yields {
+                crate::c5::irgen::Yields::Old => old,
+                crate::c5::irgen::Yields::New => stepped,
+            });
+        }
+        // A decrement reports `x - 1`, which its handler words.
+        if let Some(check) = check {
+            let step = b.imm(by);
+            let raw = b.binop(BinOp::Add, old, step);
+            let flag = self.overflow_flag(b, BinOp::Add, (old, step), raw, ty);
+            let shown = b.imm(by.abs());
+            self.report_failed_check(b, check, flag, &[old, shown]);
+        }
         let stepped = self.increment_value(b, old, by, ty);
+        // The step taken in the promoted type, before the store narrows it.
+        if let Some(stored) = stored {
+            self.check_value(b, stored, stepped);
+        }
         // C99 6.5.3.1p2: a bit-field's new value is the one it now holds.
         if let RmwPlace::Bitfield {
             addr,
@@ -992,10 +1047,13 @@ impl<'a> Walker<'a> {
         } = place
         {
             let stored = self.store_into_bitfield(b, addr, bf, stepped, seg, vol, align);
-            return Ok(if post { old } else { stored });
+            return Ok(match yields {
+                crate::c5::irgen::Yields::Old => old,
+                crate::c5::irgen::Yields::New => stored,
+            });
         }
         place.store_marked(b, stepped, store_kind, vol, nsw);
-        if post {
+        if yields == crate::c5::irgen::Yields::Old {
             return Ok(old);
         }
         // A sub-64-bit lvalue reloads through `kind`, so a surrounding

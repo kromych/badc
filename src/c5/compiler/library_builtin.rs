@@ -81,7 +81,7 @@ impl Compiler {
     }
 
     /// The return type, parameters and `_Noreturn` of `size_t(const char *)`.
-    fn prototype_types(&mut self, proto: &str) -> (i64, FnParams, bool) {
+    pub(super) fn prototype_types(&mut self, proto: &str) -> (i64, FnParams, bool) {
         let spaced = proto
             .replace('(', " ( ")
             .replace(')', " ) ")

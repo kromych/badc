@@ -3,7 +3,7 @@
 //! `-no-pie` and `--freestanding`). The dynamic tables are present when the
 //! loader has work in the image: a position-independent placement, or a
 //! shared-library binding; an executable among them also names the loader
-//! in `PT_INTERP`. An `ET_DYN` image is linked at 0, as GNU ld links it.
+//! in `PT_INTERP`. An `ET_DYN` image is linked at 0.
 
 use crate::c5::diag::Code;
 use alloc::format;
@@ -408,8 +408,7 @@ impl SectionPlan {
     }
 
     /// The header an address in `s` is placed against when `s` has none:
-    /// the nearest one before it outside the TLS template, as bfd moves a
-    /// symbol off an output section it removes.
+    /// the nearest one before it outside the TLS template.
     fn holder_of(&self, s: Sec) -> u16 {
         let at = SECTION_ORDER.iter().position(|&x| x == s).unwrap();
         let mut end = self.index_of(s);
@@ -512,7 +511,7 @@ fn pad_with_traps(machine: Machine, code: &mut Vec<u8>, len: usize) {
         Machine::X86_64 => code.resize(len, 0xCC),
         Machine::Aarch64 => {
             while code.len() + 4 <= len {
-                aarch64::emit(code, 0xd420_0020);
+                aarch64::put(code, aarch64::enc_brk(1));
             }
             code.resize(len, 0);
         }
@@ -555,13 +554,13 @@ fn emit_entry_adapter(
             use aarch64::Reg;
             let arg0 = Reg(abi.int_arg_regs[0]);
             let arg1 = Reg(abi.int_arg_regs[1]);
-            aarch64::emit(code, aarch64::enc_movz(Reg(29), 0, 0));
-            aarch64::emit(code, aarch64::enc_add_imm(arg0, Reg::SP, 0));
-            aarch64::emit(
+            aarch64::put(code, aarch64::enc_movz(Reg(29), 0, 0));
+            aarch64::put(code, aarch64::enc_add_imm(arg0, Reg::SP, 0));
+            aarch64::put(
                 code,
                 aarch64::enc_movz(arg1, (image_off & 0xffff) as u16, 0),
             );
-            aarch64::emit(
+            aarch64::put(
                 code,
                 aarch64::enc_movk(arg1, ((image_off >> 16) & 0xffff) as u16, 1),
             );
@@ -571,8 +570,8 @@ fn emit_entry_adapter(
             let b_pc = code.len() as u64;
             let target = stub_len + entry_off;
             let rel_insns = ((target as i64 - b_pc as i64) / 4) as i32;
-            aarch64::emit(code, aarch64::enc_b(rel_insns));
-            aarch64::emit(code, 0xd420_0020);
+            aarch64::put(code, aarch64::enc_b(rel_insns));
+            aarch64::put(code, aarch64::enc_brk(1));
         }
     }
     debug_assert_eq!(code.len() as u64, stub_len);
@@ -601,13 +600,15 @@ fn start_stub_len(machine: Machine, libc_exit: bool) -> u64 {
 fn emit_start_stub(
     machine: Machine,
     abi: Abi,
-    code: &mut Vec<u8>,
+    out: &mut Vec<u8>,
     entry_off: u64,
     libc_exit: bool,
 ) -> Option<usize> {
     let stub_len = start_stub_len(machine, libc_exit);
     let fixup = match machine {
         Machine::X86_64 => {
+            let mut buf = crate::c5::codegen::ssa::code_buf::CodeBuf::from(core::mem::take(out));
+            let code = &mut buf;
             let (argc, argv) = (
                 x86_64::Reg(abi.int_arg_regs[0]),
                 x86_64::Reg(abi.int_arg_regs[1]),
@@ -624,7 +625,7 @@ fn emit_start_stub(
                 (stub_len as i64 + entry_off as i64 - after_call) as i32,
             );
             x86_64::emit_mov_rr(code, argc, x86_64::Reg::RAX);
-            if libc_exit {
+            let exit = if libc_exit {
                 let at = code.len();
                 x86_64::emit_call_qword_rip32(code, 0);
                 Some(at)
@@ -632,31 +633,34 @@ fn emit_start_stub(
                 // mov eax, 231 (sys_exit_group); syscall.
                 code.extend_from_slice(&[0xb8, 0xe7, 0x00, 0x00, 0x00, 0x0f, 0x05]);
                 None
-            }
+            };
+            *out = buf.into_bytes();
+            exit
         }
         Machine::Aarch64 => {
             use aarch64::Reg;
+            let code = &mut *out;
             let (argc, argv) = (Reg(abi.int_arg_regs[0]), Reg(abi.int_arg_regs[1]));
-            aarch64::emit(code, aarch64::enc_ldr_imm(argc, Reg::SP, 0));
-            aarch64::emit(code, aarch64::enc_add_imm(argv, Reg::SP, 8));
+            aarch64::put(code, aarch64::enc_ldr_imm(argc, Reg::SP, 0));
+            aarch64::put(code, aarch64::enc_add_imm(argv, Reg::SP, 8));
             let bl_pc = code.len() as i64;
             let target = stub_len as i64 + entry_off as i64;
-            aarch64::emit(code, aarch64::enc_bl(((target - bl_pc) / 4) as i32));
+            aarch64::put(code, aarch64::enc_bl(((target - bl_pc) / 4) as i32));
             if libc_exit {
                 let at = code.len();
-                aarch64::emit(code, aarch64::enc_adrp(Reg::X16, 0));
-                aarch64::emit(code, aarch64::enc_ldr_imm(Reg::X16, Reg::X16, 0));
-                aarch64::emit(code, aarch64::enc_blr(Reg::X16));
+                aarch64::put(code, aarch64::enc_adrp(Reg::X16, 0));
+                aarch64::put(code, aarch64::enc_ldr_imm(Reg::X16, Reg::X16, 0));
+                aarch64::put(code, aarch64::enc_blr(Reg::X16));
                 Some(at)
             } else {
                 // sys_exit_group, with the status already in x0.
-                aarch64::emit(code, aarch64::enc_movz(Reg::X8, 94, 0));
-                aarch64::emit(code, aarch64::enc_svc(0));
+                aarch64::put(code, aarch64::enc_movz(Reg::X8, 94, 0));
+                aarch64::put(code, aarch64::enc_svc(0));
                 None
             }
         }
     };
-    debug_assert_eq!(code.len() as u64, stub_len);
+    debug_assert_eq!(out.len() as u64, stub_len);
     fixup
 }
 
@@ -1461,6 +1465,9 @@ struct Segments {
     eh_hdr_len: u64,
     ro_total: u64,
     has_rodata: bool,
+    /// The relro region rides a read-only load: in a placed image, and in
+    /// one whose loader writes none of its slots.
+    relro_ro: bool,
     n_program_headers: u64,
     phoff: u64,
     phsize: u64,
@@ -1629,7 +1636,7 @@ pub(super) fn write(
     program: &Program,
     build: &Build,
     machine: Machine,
-) -> Result<Vec<u8>, C5Error> {
+) -> Result<super::NativeImage, C5Error> {
     let mut w = ElfImageWriter::new(program, build, machine)?;
     w.collect_exports()?;
     w.build_dynamic_tables();
@@ -1651,7 +1658,12 @@ pub(super) fn write(
     w.emit_tail_headers();
     w.patch_fixups()?;
     w.fill_build_id();
-    Ok(w.out)
+    let placement = w.placement();
+    Ok(super::NativeImage {
+        image: w.out,
+        pdb: None,
+        placement,
+    })
 }
 
 impl<'a> ElfImageWriter<'a> {
@@ -2177,12 +2189,19 @@ impl<'a> ElfImageWriter<'a> {
         let n_tls_relocs = self.tls_got_relocs().0.len() as u64;
         let dynamic = &self.dynamic;
         let seg = &mut self.seg;
-        seg.has_tls = !build.tls_data.is_empty();
+        seg.has_tls = build.tls_len() > 0;
         seg.ro_len = build.data_ro_len.min(build.data.len()) as u64;
         seg.relro_total = build
             .data_relro_len
             .clamp(build.data_ro_len, build.data.len()) as u64;
         seg.relro_size = seg.relro_total - seg.ro_len;
+        let relro = seg.ro_len..seg.relro_total;
+        let loader_writes_relro = (build.data_relocs.iter().map(|r| r.data_offset))
+            .chain(build.code_relocs.iter().map(|r| r.data_offset))
+            .chain(build.label_relocs.iter().map(|r| r.data_offset))
+            .chain(build.data_import_binds.iter().map(|b| b.data_offset))
+            .any(|off| relro.contains(&off));
+        seg.relro_ro = placed || (seg.relro_size > 0 && !loader_writes_relro);
         seg.jt_len = build.rodata.bytes.len() as u64;
         seg.jt_off = if seg.jt_len > 0 {
             round_up(seg.ro_len, 8)
@@ -2197,7 +2216,7 @@ impl<'a> ElfImageWriter<'a> {
         } else {
             seg.rodata_len
         };
-        seg.has_rodata = seg.ro_total > 0;
+        seg.has_rodata = seg.ro_total > 0 || (seg.relro_ro && seg.relro_size > 0);
         seg.n_program_headers = N_BASE_PROGRAM_HEADERS
             + if self.loader_tables {
                 N_LOADER_PROGRAM_HEADERS
@@ -2298,7 +2317,9 @@ impl<'a> ElfImageWriter<'a> {
     /// region joins the read-execute load too: every slot in it holds a
     /// link-time address and the loader writes none of them, so nothing
     /// needs `PT_GNU_RELRO` to re-protect it, which a static image lacks.
-    /// Each load's `p_align` covers its strictest content, as GNU ld sets it.
+    /// A position-independent image's relro region joins its read-only load
+    /// on the same condition. Each load's `p_align` covers its strictest
+    /// content.
     fn layout_data_segments(&mut self) -> Result<(), C5Error> {
         let build = self.build;
         let placed = self.placed();
@@ -2347,13 +2368,19 @@ impl<'a> ElfImageWriter<'a> {
             seg.rw_bias = seg.rw_seg_align;
         } else {
             seg.ro_seg_align = data_load_align;
-            seg.rodata_off = if seg.ro_total > 0 {
+            let ro_load = seg.ro_total + if seg.relro_ro { seg.relro_size } else { 0 };
+            seg.rodata_off = if ro_load > 0 {
                 round_up(seg.segment1_filesize, seg.ro_seg_align)
             } else {
                 round_up(seg.segment1_filesize, seg.align)
             };
-            seg.rodata_end = if seg.ro_total > 0 {
-                round_up(seg.rodata_off + seg.ro_total, seg.align)
+            let mut ro_end = seg.rodata_off + seg.ro_total;
+            if seg.relro_ro {
+                seg.relro_off = round_up(ro_end, seg.data_align);
+                ro_end = seg.relro_off + seg.relro_size;
+            }
+            seg.rodata_end = if ro_load > 0 {
+                round_up(ro_end, seg.align)
             } else {
                 seg.rodata_off
             };
@@ -2366,8 +2393,8 @@ impl<'a> ElfImageWriter<'a> {
         let got_end = seg.got_off + seg.got_size;
         // The rw load's relro part: `.dynamic`, `.got` and, in a
         // position-independent image, the relro region.
-        let rw_relro_size = if placed { 0 } else { seg.relro_size };
-        if !placed {
+        let rw_relro_size = if seg.relro_ro { 0 } else { seg.relro_size };
+        if !seg.relro_ro {
             seg.relro_off = if seg.relro_size > 0 {
                 round_up(got_end, seg.data_align)
             } else {
@@ -2381,7 +2408,7 @@ impl<'a> ElfImageWriter<'a> {
         } else {
             RELRO_EMPTY_END_ALIGN
         };
-        let rw_relro_start = if placed { got_end } else { seg.relro_off };
+        let rw_relro_start = if seg.relro_ro { got_end } else { seg.relro_off };
         seg.relro_end = round_up(rw_relro_start + rw_relro_size, relro_end_align);
         seg.data_off = round_up(seg.relro_end, seg.data_align);
         seg.data_size = build.data.len() as u64 - seg.relro_total;
@@ -2395,7 +2422,7 @@ impl<'a> ElfImageWriter<'a> {
             seg.data_off + seg.data_size
         };
         seg.tdata_size = build.tls_init_size as u64;
-        seg.tbss_size = build.tls_data.len() as u64 - seg.tdata_size;
+        seg.tbss_size = build.tls_len() as u64 - seg.tdata_size;
         seg.segment2_filesize = seg.tdata_off + seg.tdata_size - seg.segment2_off;
         seg.bss_align = crate::c5::layout::bss_image_align(build.data_align) as u64;
         seg.bss_off = seg.segment2_off + seg.segment2_filesize + seg.tbss_size;
@@ -2431,6 +2458,24 @@ impl<'a> ElfImageWriter<'a> {
 
     fn data_off_to_vaddr(&self, off: u64) -> u64 {
         data_region_addr(&self.data_regions(), off)
+    }
+
+    /// Where the streams landed, for the link map.
+    fn placement(&self) -> super::StreamPlacement {
+        let seg = &self.seg;
+        let code = self.va(seg.code_off);
+        super::StreamPlacement {
+            format: match (self.machine, self.build.elf_class) {
+                (Machine::X86_64, crate::c5::object::elf_class::ElfClass::Elf32) => "elf32-i386",
+                (Machine::X86_64, _) => "elf64-x86-64",
+                (Machine::Aarch64, _) => "elf64-littleaarch64",
+            },
+            text: self.text_vmaddr(),
+            stub: (self.stub_len > 0).then_some((code, code + self.stub_len)),
+            data: self.data_regions().to_vec(),
+            bss: Some(seg.bss_vmaddr),
+            tls: seg.has_tls.then(|| self.va(seg.tdata_off)),
+        }
     }
 
     /// The section a data-stream byte falls in.
@@ -2718,7 +2763,8 @@ impl<'a> ElfImageWriter<'a> {
     /// local `STT_FUNC` per PLT trampoline (so a debugger's `b malloc`
     /// resolves to the trampoline) and per defined function, the section
     /// symbols the relocation tables reference right after the sentinel,
-    /// and `_GLOBAL_OFFSET_TABLE_` as bfd defines it.
+    /// `_GLOBAL_OFFSET_TABLE_`, and the entry stub as
+    /// `_start`, the name crt1's entry has, unless the program defines one.
     fn build_static_symtab(&mut self) {
         let build = self.build;
         let rela_text = self.build_rela(&self.tail.er_text);
@@ -2730,6 +2776,8 @@ impl<'a> ElfImageWriter<'a> {
         let text_vmaddr = self.text_vmaddr();
         let text_shndx = self.dynamic.text_shndx;
         let image_rows = self.image_symbol_rows();
+        let entry_stub = (self.stub_len > 0 && !image_rows.iter().any(|(n, _)| *n == "_start"))
+            .then(|| (self.va(self.seg.code_off), self.stub_len - self.text_gap));
         let tail = &mut self.tail;
         let (mut symtab, mut strtab) = if !build.plt_trampoline_offsets.is_empty() {
             build_plt_symtab(build, text_vmaddr, trampoline_size, text_shndx)
@@ -2792,6 +2840,21 @@ impl<'a> ElfImageWriter<'a> {
                 strtab.push(0);
                 locals += u64::from(sym.st_info >> 4 == STB_LOCAL);
                 write_struct(&mut symtab, &sym);
+            }
+            if let Some((st_value, st_size)) = entry_stub {
+                let st_name = strtab.len() as u32;
+                strtab.extend_from_slice(b"_start\0");
+                write_struct(
+                    &mut symtab,
+                    &Elf64Sym {
+                        st_name,
+                        st_info: (STB_GLOBAL << 4) | STT_FUNC,
+                        st_other: 0,
+                        st_shndx: text_shndx,
+                        st_value,
+                        st_size,
+                    },
+                );
             }
         }
         tail.symtab_locals = locals as u32;
@@ -3006,7 +3069,7 @@ impl<'a> ElfImageWriter<'a> {
         e_ident[4] = ELFCLASS64;
         e_ident[5] = ELFDATA2LSB;
         e_ident[6] = EV_CURRENT;
-        // bfd marks an image defining an `STB_GNU_UNIQUE` symbol GNU.
+        // `STB_GNU_UNIQUE` is a GNU extension, so its image is ELFOSABI_GNU.
         e_ident[7] = match self.build.unique_symbols.is_empty() {
             true => ELFOSABI_SYSV,
             false => ELFOSABI_GNU,
@@ -3069,14 +3132,20 @@ impl<'a> ElfImageWriter<'a> {
             seg.code_seg_align,
         );
         if seg.has_rodata && !self.placed() {
+            let relro_end = if seg.relro_ro {
+                seg.relro_off + seg.relro_size
+            } else {
+                0
+            };
+            let size = (seg.rodata_off + seg.ro_total).max(relro_end) - seg.rodata_off;
             write_phdr(
                 &mut out,
                 PT_LOAD,
                 PF_R,
                 seg.rodata_off,
                 self.va(seg.rodata_off),
-                seg.ro_total,
-                seg.ro_total,
+                size,
+                size,
                 seg.ro_seg_align,
             );
         }
@@ -3435,8 +3504,8 @@ impl<'a> ElfImageWriter<'a> {
             )?;
         }
         // `.eh_frame_hdr`, which `fill_eh_frame_hdr` writes once
-        // `.eh_frame` is relocated, and a placed image's relro bytes, which
-        // `emit_rw_segment` bakes.
+        // `.eh_frame` is relocated, and a read-only relro region's bytes,
+        // which `emit_rw_segment` bakes.
         out.resize(seg.segment2_off as usize, 0);
         Ok(())
     }
@@ -3562,10 +3631,9 @@ impl<'a> ElfImageWriter<'a> {
                 }
             }
         }
-        let placed = self.placed();
         let out = &mut self.out;
         let relro = &data[..seg.relro_size as usize];
-        if placed {
+        if seg.relro_ro {
             let at = seg.relro_off as usize;
             out[at..at + relro.len()].copy_from_slice(relro);
         }
@@ -3576,7 +3644,7 @@ impl<'a> ElfImageWriter<'a> {
         }
         let out = &mut self.out;
         out.extend_from_slice(&got);
-        if !placed {
+        if !seg.relro_ro {
             out.resize(seg.relro_off as usize, 0);
             debug_assert_eq!(out.len() as u64, seg.relro_off);
             out.extend_from_slice(relro);
@@ -3642,8 +3710,8 @@ impl<'a> ElfImageWriter<'a> {
     /// The headers of `slot`'s named sections, which follow its family
     /// header.
     fn named_shdrs(&mut self, slot: Sec) {
-        // A placed image's relro region joins the read-execute load.
-        let read_only = slot == Sec::RelRo && self.placed();
+        // A relro region on a read-only load.
+        let read_only = slot == Sec::RelRo && self.seg.relro_ro;
         let named: Vec<Elf64Shdr> = self
             .named_in(slot)
             .map(|n| Elf64Shdr {
@@ -3943,7 +4011,7 @@ impl<'a> ElfImageWriter<'a> {
                 alloc_shdr(
                     ".data.rel.ro",
                     SHT_PROGBITS,
-                    if self.placed() {
+                    if seg.relro_ro {
                         SHF_ALLOC
                     } else {
                         SHF_ALLOC | SHF_WRITE
@@ -4281,18 +4349,22 @@ impl<'a> ElfImageWriter<'a> {
             )?;
         }
         for fx in &build.base_fixups {
-            if fx.base != crate::c5::codegen::ImageAddr::GotBase {
-                return Err(C5Error::hard(
-                    Code::OBJECT_FORMAT,
-                    "`__ImageBase` names a PE construct; an ELF image has none",
-                ));
-            }
+            let base = match fx.base {
+                crate::c5::codegen::ImageAddr::ImportSlot(i) => got_vmaddr + (i as u64) * 8,
+                crate::c5::codegen::ImageAddr::GotBase => got_vmaddr,
+                _ => {
+                    return Err(C5Error::hard(
+                        Code::OBJECT_FORMAT,
+                        "`__ImageBase` names a PE construct; an ELF image has none",
+                    ));
+                }
+            };
             patch_addr_load(
                 machine,
                 &mut self.out,
                 code,
                 stub_len + fx.instr_offset as u64,
-                got_vmaddr.wrapping_add(fx.offset as u64),
+                base.wrapping_add(fx.offset as u64),
                 fx.part,
                 "GOT base fixup",
             )?;
@@ -4515,7 +4587,10 @@ mod tests {
         // opcode and gets imm12 = low-12 offset scaled by the 2-byte
         // access.
         let ldrh: u32 = 0x7940_0000; // ldrh w0, [x0]
-        let mut out = aarch64::enc_adrp(aarch64::Reg(0), 0).to_le_bytes().to_vec();
+        let mut out = aarch64::enc_adrp(aarch64::Reg(0), 0)
+            .word
+            .to_le_bytes()
+            .to_vec();
         out.extend_from_slice(&ldrh.to_le_bytes());
         patch_adrp_add(&mut out, PLACE_1000, 0, 0x2008, AddrPart::Whole, "test").unwrap();
         let ldst = u32::from_le_bytes([out[4], out[5], out[6], out[7]]);
@@ -4526,8 +4601,11 @@ mod tests {
         );
         assert_eq!((ldst >> 10) & 0xFFF, 4, "imm12 = 8 / 2");
 
-        let addi = aarch64::enc_add_imm(aarch64::Reg(0), aarch64::Reg(0), 0);
-        let mut out2 = aarch64::enc_adrp(aarch64::Reg(0), 0).to_le_bytes().to_vec();
+        let addi = aarch64::enc_add_imm(aarch64::Reg(0), aarch64::Reg(0), 0).word;
+        let mut out2 = aarch64::enc_adrp(aarch64::Reg(0), 0)
+            .word
+            .to_le_bytes()
+            .to_vec();
         out2.extend_from_slice(&addi.to_le_bytes());
         patch_adrp_add(&mut out2, PLACE_1000, 0, 0x2008, AddrPart::Whole, "test").unwrap();
         let add = u32::from_le_bytes([out2[4], out2[5], out2[6], out2[7]]);
@@ -4608,20 +4686,26 @@ mod tests {
 
     #[test]
     fn writes_elf_magic() {
-        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64)
+            .unwrap()
+            .image;
         assert_eq!(&bytes[0..4], &ELFMAG);
     }
 
     #[test]
     fn class_is_64_bit_le() {
-        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64)
+            .unwrap()
+            .image;
         assert_eq!(bytes[4], ELFCLASS64);
         assert_eq!(bytes[5], ELFDATA2LSB);
     }
 
     #[test]
     fn machine_is_aarch64() {
-        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64)
+            .unwrap()
+            .image;
         let e_machine = u16::from_le_bytes(bytes[18..20].try_into().unwrap());
         assert_eq!(e_machine, EM_AARCH64);
     }
@@ -4646,7 +4730,9 @@ mod tests {
 
     #[test]
     fn program_header_table_self_describes() {
-        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64)
+            .unwrap()
+            .image;
         let phoff = read_u64(&bytes, 32);
         let phentsize = u16::from_le_bytes(bytes[54..56].try_into().unwrap()) as u64;
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
@@ -4669,7 +4755,9 @@ mod tests {
 
     #[test]
     fn pt_load_covers_entry_point() {
-        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64)
+            .unwrap()
+            .image;
         let e_entry = read_u64(&bytes, 24);
         let phoff = read_u64(&bytes, 32);
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
@@ -4697,7 +4785,9 @@ mod tests {
 
     #[test]
     fn interp_string_is_correct() {
-        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64)
+            .unwrap()
+            .image;
         let phoff = read_u64(&bytes, 32);
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
         for i in 0..phnum {
@@ -4716,7 +4806,9 @@ mod tests {
 
     #[test]
     fn dynamic_section_present_and_terminated() {
-        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64)
+            .unwrap()
+            .image;
         let phoff = read_u64(&bytes, 32);
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
         let mut dyn_off = 0u64;
@@ -4756,9 +4848,8 @@ mod tests {
         out
     }
 
-    /// `DF_1_PIE` marks a position-independent executable, as GNU ld and
-    /// lld mark a `-pie` link; a placed image and a shared object carry
-    /// no `DT_FLAGS_1`.
+    /// `DF_1_PIE` marks a position-independent executable (a `-pie` link);
+    /// a placed image and a shared object carry no `DT_FLAGS_1`.
     #[test]
     fn only_a_position_independent_executable_carries_df_1_pie() {
         use crate::Compiler;
@@ -4783,7 +4874,7 @@ mod tests {
                 };
                 let mut build = super::super::lower_for(&program, target, opts).expect("lower");
                 build.exec_form = form;
-                let bytes = write(&tiny_program(), &build, machine).unwrap();
+                let bytes = write(&tiny_program(), &build, machine).unwrap().image;
                 let tags = dynamic_entries(&bytes);
                 assert!(
                     tags.contains(&(DT_NULL, 0)),
@@ -4811,7 +4902,9 @@ mod tests {
             fini: Some((8, 8)),
             ..Default::default()
         };
-        let bytes = write(&tiny_program(), &build, Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &build, Machine::Aarch64)
+            .unwrap()
+            .image;
         let dyn_ = dynamic_entries(&bytes);
         let val = |tag| dyn_.iter().find(|(t, _)| *t == tag).map(|(_, v)| *v);
         assert_eq!(val(DT_INIT_ARRAYSZ), Some(8), "DT_INIT_ARRAYSZ");
@@ -4819,7 +4912,9 @@ mod tests {
         assert!(val(DT_INIT_ARRAY).is_some(), "DT_INIT_ARRAY present");
         assert!(val(DT_FINI_ARRAY).is_some(), "DT_FINI_ARRAY present");
 
-        let plain = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let plain = write(&tiny_program(), &tiny_build(), Machine::Aarch64)
+            .unwrap()
+            .image;
         let pd = dynamic_entries(&plain);
         assert!(!pd.iter().any(|(t, _)| *t == DT_INIT_ARRAY));
         assert!(!pd.iter().any(|(t, _)| *t == DT_FINI_ARRAY));
@@ -4831,9 +4926,11 @@ mod tests {
         // patching.
         for rd in [0u8, 5, 16] {
             let mut out = Vec::new();
-            out.extend_from_slice(&aarch64::enc_adrp(aarch64::Reg(rd), 0).to_le_bytes());
+            out.extend_from_slice(&aarch64::enc_adrp(aarch64::Reg(rd), 0).word.to_le_bytes());
             out.extend_from_slice(
-                &aarch64::enc_ldr_imm(aarch64::Reg(rd), aarch64::Reg(rd), 0).to_le_bytes(),
+                &aarch64::enc_ldr_imm(aarch64::Reg(rd), aarch64::Reg(rd), 0)
+                    .word
+                    .to_le_bytes(),
             );
             patch_adrp_ldr(&mut out, PLACE_1000, 0, 0x5008, AddrPart::Whole, "test").unwrap();
             let adrp = u32::from_le_bytes(out[0..4].try_into().unwrap());
@@ -4873,7 +4970,9 @@ mod tests {
     #[test]
     fn rela_dyn_targets_got_slots() {
         // Each .rela.dyn entry must target a valid GOT slot.
-        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64)
+            .unwrap()
+            .image;
         let phoff = read_u64(&bytes, 32);
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
 
@@ -4927,7 +5026,7 @@ mod tests {
     /// Walk the program-header table for the first phdr matching `p_type`.
     /// An `ET_DYN` image is linked at 0 and an `ET_EXEC` one at its
     /// placement; only an executable names the loader in `PT_INTERP`, and
-    /// `DT_RELA` appears with a non-empty `.rela.dyn`, as under GNU ld.
+    /// `DT_RELA` appears with a non-empty `.rela.dyn`.
     #[test]
     fn a_shared_object_is_linked_at_zero_and_names_no_loader() {
         use crate::Compiler;
@@ -4958,7 +5057,7 @@ mod tests {
                 };
                 let mut build = super::super::lower_for(program, target, opts).expect("lower");
                 build.exec_form = form;
-                let bytes = write(&tiny_program(), &build, machine).unwrap();
+                let bytes = write(&tiny_program(), &build, machine).unwrap().image;
                 let what = format!("{machine:?} {form:?} shared={shared}");
                 let load = find_phdr(&bytes, PT_LOAD).expect("PT_LOAD");
                 assert_eq!(read_u64(&bytes, load + 16), base, "{what}: first load");
@@ -5009,7 +5108,7 @@ mod tests {
         ] {
             let mut b = tiny_build();
             b.abi = target.abi();
-            let bytes = write(&tiny_program(), &b, machine).unwrap();
+            let bytes = write(&tiny_program(), &b, machine).unwrap().image;
             assert!(
                 find_phdr(&bytes, PT_TLS).is_none(),
                 "{machine:?}: unexpected PT_TLS phdr in TLS-free image"
@@ -5032,7 +5131,7 @@ mod tests {
             b.imports.imports.clear();
             b.imports.dylibs.clear();
             b.entry_offset = 4;
-            let bytes = write(&tiny_program(), &b, machine).unwrap();
+            let bytes = write(&tiny_program(), &b, machine).unwrap().image;
             let eh: Elf64Ehdr = read_struct(&bytes, 0);
             assert_eq!(eh.e_type, ET_EXEC, "{machine:?}");
             for p_type in [PT_PHDR, PT_INTERP, PT_DYNAMIC, PT_GNU_RELRO] {
@@ -5073,7 +5172,7 @@ mod tests {
             // `.text` covers the prologue and the code blob, so what the
             // section adds to the input is the prologue's length.
             let image = |b: &Build| -> (u64, u64, u64) {
-                let bytes = write(&program, b, machine).unwrap();
+                let bytes = write(&program, b, machine).unwrap().image;
                 let eh: Elf64Ehdr = read_struct(&bytes, 0);
                 let (_, _, addr, size, _) = find_section(&bytes, ".text").expect(".text");
                 (eh.e_entry, addr, size - b.text.len() as u64)
@@ -5135,7 +5234,7 @@ mod tests {
             target_anchor: 8,
             target_sym: None,
         });
-        let bytes = write(&tiny_program(), &b, Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &b, Machine::Aarch64).unwrap().image;
         let eh: Elf64Ehdr = read_struct(&bytes, 0);
         assert_eq!(eh.e_type, ET_EXEC);
         assert!(find_phdr(&bytes, PT_INTERP).is_some(), "PT_INTERP");
@@ -5179,7 +5278,7 @@ mod tests {
             tv.real_symbol = "tv".into();
             tv.kind = ImportKind::ThreadLocal;
             b.imports.imports.push(tv);
-            let bytes = write(&tiny_program(), &b, machine).unwrap();
+            let bytes = write(&tiny_program(), &b, machine).unwrap().image;
             let dynsym = section_file_off(&bytes, ".dynsym").expect(".dynsym") as usize;
             let st_info = |i: usize| bytes[dynsym + i * ELF64_SYM_SIZE as usize + 4];
             assert_eq!(
@@ -5247,7 +5346,7 @@ mod tests {
             })
             .to_vec();
             b.static_tls = true;
-            let bytes = write(&tiny_program(), &b, machine).unwrap();
+            let bytes = write(&tiny_program(), &b, machine).unwrap().image;
             let (_, _, got, _, _) = find_section(&bytes, ".got").expect(".got");
             let n_imports = b.imports.imports.len() as u64;
             let base = got + n_imports * 8;
@@ -5326,7 +5425,7 @@ mod tests {
             });
             let w = ElfImageWriter::new(&program, &b, machine).unwrap();
             assert!(matches!(w.entry, Entry::Adapter(0)), "{machine:?}: adapter");
-            let bytes = write(&program, &b, machine).unwrap();
+            let bytes = write(&program, &b, machine).unwrap().image;
             let eh: Elf64Ehdr = read_struct(&bytes, 0);
             assert_eq!(eh.e_type, ET_EXEC, "{machine:?}");
             assert!(
@@ -5398,7 +5497,7 @@ mod tests {
                     target_anchor: 0,
                     target_sym: None,
                 });
-                let bytes = write(&tiny_program(), &b, machine).unwrap();
+                let bytes = write(&tiny_program(), &b, machine).unwrap().image;
                 let (_, flags, addr, _, _) =
                     find_section(&bytes, ".data.rel.ro").expect(".data.rel.ro");
                 let (_, _, ro_addr, _, _) = find_section(&bytes, ".rodata").expect(".rodata");
@@ -5458,7 +5557,7 @@ mod tests {
     }
 
     /// `--build-id`: a note the loader maps, whose descriptor is the SHA-1
-    /// of the image with the descriptor zero, as GNU ld computes it.
+    /// of the image with the descriptor zero.
     #[test]
     fn a_build_id_note_holds_the_image_digest() {
         type Digest = fn(&[u8]) -> Vec<u8>;
@@ -5468,7 +5567,7 @@ mod tests {
             for (style, len, digest) in [(BuildId::Sha1, 20, sha1), (BuildId::Fast, 8, fast)] {
                 let mut b = pie_with_pointers(machine, 2);
                 b.elf.build_id = style;
-                let bytes = write(&tiny_program(), &b, machine).unwrap();
+                let bytes = write(&tiny_program(), &b, machine).unwrap().image;
                 let (sh_type, flags, addr, size, _) =
                     find_section(&bytes, ".note.gnu.build-id").expect("the note");
                 assert_eq!(
@@ -5484,7 +5583,7 @@ mod tests {
                 let mut zeroed = bytes.clone();
                 zeroed[off + 16..off + 16 + len].fill(0);
                 assert_eq!(bytes[off + 16..off + 16 + len], digest(&zeroed));
-                let again = write(&tiny_program(), &b, machine).unwrap();
+                let again = write(&tiny_program(), &b, machine).unwrap().image;
                 assert_eq!(
                     again, bytes,
                     "{machine:?} {style:?}: the same image, the same id"
@@ -5501,11 +5600,13 @@ mod tests {
     #[test]
     fn relative_relocations_pack_into_relr() {
         for machine in [Machine::Aarch64, Machine::X86_64] {
-            let plain = write(&tiny_program(), &pie_with_pointers(machine, 5), machine).unwrap();
+            let plain = write(&tiny_program(), &pie_with_pointers(machine, 5), machine)
+                .unwrap()
+                .image;
             let mut b = pie_with_pointers(machine, 5);
             b.elf.pack_relative_relocs = true;
             b.elf.no_apply_dynamic_relocs = true;
-            let bytes = write(&tiny_program(), &b, machine).unwrap();
+            let bytes = write(&tiny_program(), &b, machine).unwrap().image;
             let rela = |img: &[u8]| find_section(img, ".rela.dyn").unwrap().3;
             assert_eq!(
                 rela(&plain) - rela(&bytes),
@@ -5540,7 +5641,7 @@ mod tests {
             assert_eq!(read_u64(&bytes, slot), data_addr, "{machine:?}");
             let mut b = pie_with_pointers(machine, 1);
             b.elf.no_apply_dynamic_relocs = true;
-            let bytes = write(&tiny_program(), &b, machine).unwrap();
+            let bytes = write(&tiny_program(), &b, machine).unwrap().image;
             let slot = section_file_off(&bytes, ".data").unwrap() as usize;
             assert_eq!(read_u64(&bytes, slot), 0, "{machine:?}: RELA fills it");
         }
@@ -5553,7 +5654,7 @@ mod tests {
         let mut b = pie_with_pointers(Machine::X86_64, 1);
         b.elf.max_page_size = Some(0x1_0000);
         b.elf.exec_stack = true;
-        let bytes = write(&tiny_program(), &b, Machine::X86_64).unwrap();
+        let bytes = write(&tiny_program(), &b, Machine::X86_64).unwrap().image;
         let phoff = read_u64(&bytes, 32);
         let phnum = u16::from_le_bytes(bytes[56..58].try_into().unwrap()) as u64;
         let loads: Vec<usize> = (0..phnum)
@@ -5594,7 +5695,9 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes = write(&tiny_program(), &build, Machine::Aarch64).expect("write ELF");
+        let bytes = write(&tiny_program(), &build, Machine::Aarch64)
+            .expect("write ELF")
+            .image;
 
         let phdr_off = find_phdr(&bytes, PT_TLS).expect("expected PT_TLS phdr");
         let p_flags = read_u32(&bytes, phdr_off + 4);
@@ -5610,7 +5713,7 @@ mod tests {
         );
         assert_eq!(
             p_memsz,
-            build.tls_data.len() as u64,
+            build.tls_len() as u64,
             "PT_TLS p_memsz must equal .tdata + .tbss size"
         );
         assert_eq!(p_memsz, 8, "two int TLS vars => 8 bytes per thread");
@@ -5657,7 +5760,9 @@ mod tests {
             super::super::NativeOptions::default(),
         )
         .expect("lower");
-        let bytes = write(&tiny_program(), &build, Machine::X86_64).expect("write ELF");
+        let bytes = write(&tiny_program(), &build, Machine::X86_64)
+            .expect("write ELF")
+            .image;
 
         let phdr_off = find_phdr(&bytes, PT_TLS).expect("expected PT_TLS phdr");
         let p_filesz = read_u64(&bytes, phdr_off + 32);
@@ -5668,7 +5773,7 @@ mod tests {
         );
         assert_eq!(
             p_memsz,
-            build.tls_data.len() as u64,
+            build.tls_len() as u64,
             "PT_TLS p_memsz must equal .tdata + .tbss size"
         );
         assert_eq!(p_memsz, 4, "single int TLS var => 4 bytes per thread");
@@ -5696,8 +5801,10 @@ mod tests {
             let build =
                 super::super::lower_for(&program, target, super::super::NativeOptions::default())
                     .expect("lower");
-            assert_eq!((build.tls_data.len(), build.tls_align), (65, 32));
-            let bytes = write(&tiny_program(), &build, machine).expect("write ELF");
+            assert_eq!((build.tls_len(), build.tls_align), (65, 32));
+            let bytes = write(&tiny_program(), &build, machine)
+                .expect("write ELF")
+                .image;
             let phdr_off = find_phdr(&bytes, PT_TLS).expect("expected PT_TLS phdr");
             let p_vaddr = read_u64(&bytes, phdr_off + 16);
             let p_memsz = read_u64(&bytes, phdr_off + 40);
@@ -5759,7 +5866,9 @@ mod tests {
             let build =
                 super::super::lower_for(&program, target, super::super::NativeOptions::default())
                     .expect("lower");
-            let bytes = write(&tiny_program(), &build, machine).expect("write ELF");
+            let bytes = write(&tiny_program(), &build, machine)
+                .expect("write ELF")
+                .image;
             assert!(
                 bytes.len() < max_bytes,
                 "{machine:?} executable is {} bytes; a single page at the R+E/RW boundary plus a compact \
@@ -5802,7 +5911,9 @@ mod tests {
             for form in [ExecForm::Pie, ExecForm::Placed] {
                 let placed = form.placed();
                 build.exec_form = form;
-                let b = write(&tiny_program(), &build, machine).expect("write ELF");
+                let b = write(&tiny_program(), &build, machine)
+                    .expect("write ELF")
+                    .image;
                 let (phoff, phentsize, phnum) = (
                     le64(&b, 0x20) as usize,
                     le16(&b, 0x36) as usize,
@@ -5871,7 +5982,9 @@ mod tests {
             build.tls_init_size = 12;
             for form in [ExecForm::Pie, ExecForm::Placed] {
                 build.exec_form = form;
-                let b = write(&tiny_program(), &build, machine).expect("write ELF");
+                let b = write(&tiny_program(), &build, machine)
+                    .expect("write ELF")
+                    .image;
                 let phoff = read_u64(&b, 32);
                 let phnum = u16::from_le_bytes(b[56..58].try_into().unwrap()) as u64;
                 let loads: Vec<(u64, u64, u64, u64)> = (0..phnum)
@@ -5909,10 +6022,12 @@ mod tests {
 
     /// `DT_DEBUG` is the slot the loader writes its `r_debug` into, where a
     /// debugger finds the link map: an executable carries it in a load the
-    /// loader can write, a shared object carries none, as under GNU ld.
+    /// loader can write, a shared object carries none.
     #[test]
     fn an_executable_gives_the_loader_its_debug_slot() {
-        let exe = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let exe = write(&tiny_program(), &tiny_build(), Machine::Aarch64)
+            .unwrap()
+            .image;
         let entries = dynamic_entries(&exe);
         assert!(entries.contains(&(DT_DEBUG, 0)), "{entries:x?}");
         let at = find_phdr(&exe, PT_DYNAMIC).expect("PT_DYNAMIC");
@@ -5930,7 +6045,9 @@ mod tests {
         assert!(writable, "DT_DEBUG at {slot:#x} lies in a writable load");
         let mut lib = tiny_build();
         lib.output_kind = super::super::OutputKind::SharedLibrary;
-        let lib = write(&tiny_program(), &lib, Machine::Aarch64).unwrap();
+        let lib = write(&tiny_program(), &lib, Machine::Aarch64)
+            .unwrap()
+            .image;
         let entries = dynamic_entries(&lib);
         assert!(!entries.iter().any(|e| e.0 == DT_DEBUG), "{entries:x?}");
     }
@@ -5960,7 +6077,9 @@ mod tests {
                 super::super::NativeOptions::new().with_shared_library(),
             )
             .expect("lower");
-            let bytes = write(&tiny_program(), &build, machine).expect("write ELF");
+            let bytes = write(&tiny_program(), &build, machine)
+                .expect("write ELF")
+                .image;
 
             let e_type = u16::from_le_bytes(bytes[16..18].try_into().unwrap());
             assert_eq!(e_type, ET_DYN, "{machine:?}: expected ET_DYN");
@@ -6079,7 +6198,9 @@ mod tests {
         let mut build = tiny_build();
         build.data = vec![1u8, 2, 3, 4, 5, 6, 7, 8];
         build.bss_size = 4096;
-        let bytes = write(&tiny_program(), &build, Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &build, Machine::Aarch64)
+            .unwrap()
+            .image;
         let (sh_type, sh_flags, sh_addr, sh_size, sh_align) =
             find_section(&bytes, ".bss").expect("`.bss` section header");
         assert_eq!(sh_type, SHT_NOBITS, ".bss must be SHT_NOBITS");
@@ -6138,8 +6259,8 @@ mod tests {
     }
 
     /// A label past the last data byte of an image without `.bss` is
-    /// placed against `.data`, the section bfd moves a symbol of a removed
-    /// output section to, not against the header after it.
+    /// placed against `.data`, the nearest section before it, not against
+    /// the header after it.
     #[test]
     fn a_label_at_the_end_of_data_without_bss_is_placed_against_data() {
         use crate::Compiler;
@@ -6161,7 +6282,7 @@ mod tests {
                 info: 0,
                 other: 0,
             });
-            let bytes = write(&tiny_program(), &build, machine).unwrap();
+            let bytes = write(&tiny_program(), &build, machine).unwrap().image;
             assert!(find_section(&bytes, ".bss").is_none(), "{machine:?}: .bss");
             let data = section_index(&bytes, ".data").expect(".data");
             assert_eq!(symtab_shndx(&bytes, "data_end"), data, "{machine:?}");
@@ -6226,7 +6347,7 @@ mod tests {
                     import: 0,
                     addend: 8,
                 });
-            let bytes = write(&tiny_program(), &b, machine).unwrap();
+            let bytes = write(&tiny_program(), &b, machine).unwrap().image;
             let slot = find_section(&bytes, ".data").expect(".data").2 + 16;
             let rela = rela_dyn(&bytes);
             let at_slot: Vec<_> = rela.iter().filter(|r| r.0 == slot).collect();
@@ -6269,7 +6390,7 @@ mod tests {
                 is_data_load: false,
             });
             b.canonical_imports = vec![0];
-            let bytes = write(&tiny_program(), &b, machine).unwrap();
+            let bytes = write(&tiny_program(), &b, machine).unwrap().image;
             let stub = symtab_value(&bytes, "exit");
             let dynsym = section_file_off(&bytes, ".dynsym").expect(".dynsym") as usize;
             assert_eq!(read_u64(&bytes, dynsym + 24 + 8), stub, "{machine:?}");
@@ -6304,7 +6425,9 @@ mod tests {
 
     #[test]
     fn no_bss_section_header_when_bss_empty() {
-        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64).unwrap();
+        let bytes = write(&tiny_program(), &tiny_build(), Machine::Aarch64)
+            .unwrap()
+            .image;
         assert!(
             find_section(&bytes, ".bss").is_none(),
             "no .bss section header when bss_size == 0"

@@ -3,7 +3,7 @@ float_literal_variadic_printf.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -17,13 +17,13 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x40
+               	fmov	d0, #1.50000000
+               	adrp	x16, <page>
+               	ldr	d1, [x16, #0x20]
                	sub	x0, x29, #0x40
                	mov	x1, #0x40               // =64
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	fmov	d0, #1.50000000
-               	adrp	x16, <page>
-               	ldr	d1, [x16, #0x20]
                	bl	<addr>
                	sub	x0, x29, #0x40
                	adrp	x1, <page>

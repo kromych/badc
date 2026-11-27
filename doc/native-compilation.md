@@ -26,6 +26,7 @@ code-generation options for kernel and firmware builds.
 - [Hardening and code-model knobs](#hardening-and-code-model-knobs)
   - [Reserved registers](#reserved-registers)
   - [Stack protector](#stack-protector)
+  - [Stack clash protection](#stack-clash-protection)
   - [Automatic variable initialization](#automatic-variable-initialization)
   - [Frame size](#frame-size)
   - [AArch64 branch protection](#aarch64-branch-protection)
@@ -92,19 +93,21 @@ On x86-64 the 32-byte GNU vectors are values in the ymm registers, and a
 function holding one executes `vzeroupper` before each call and return that
 passes no such vector in a register. On System V a named 32-byte vector
 argument or result travels in a ymm register, counted with the xmm argument
-registers, as gcc passes it under AVX; an unnamed one goes in memory.
+registers, as the psABI passes `__m256` under AVX; an unnamed one goes in
+memory.
 
 Feature macros:
 
 - x86-64 predefines the x86-64 base set: `__MMX__`, `__SSE__`, `__SSE2__`, `__SSE_MATH__`,
   `__SSE2_MATH__`, and `__FXSR__`. The x86-64-v3 macros (`__AVX2__`, `__FMA__`,
   ...) are predefined only for the extensions `-march=` and `-m<ext>` select,
-  combined as gcc combines them; under AVX `__BIGGEST_ALIGNMENT__`, which a bare
+  each with the extensions it implies; under AVX `__BIGGEST_ALIGNMENT__`, which a bare
   `aligned` attribute takes, is 32. `-m<ext>` takes the extensions whose
   intrinsics the headers carry -- SSE3 to SSE4.2, POPCNT, CRC32, AVX, AVX2,
   FMA, F16C, AES, PCLMUL, SHA, VAES, VPCLMULQDQ, RDRND, RDSEED, BMI, BMI2,
-  LZCNT, ADX, XSAVE, CLFLUSHOPT, CLWB, PRFCHW, SAHF, and AVX-512F, BW, DQ, VL,
-  CD, and VNNI -- and refuses any other. Under AVX-512F
+  LZCNT, ADX, XSAVE, CLFLUSHOPT, CLWB, PRFCHW, SAHF, CX16, and AVX-512F, BW,
+  DQ, VL, CD, and VNNI -- and refuses any other; `-march=native` selects the
+  host's. Under AVX-512F
   `__BIGGEST_ALIGNMENT__` is 64 and the 64-byte GNU vectors are values in
   the zmm registers. `-mno-sse` and `-mgeneral-regs-only` remove `__SSE__`,
   `__SSE2__`, `__SSE_MATH__`, and `__SSE2_MATH__` and leave the extension set
@@ -149,7 +152,11 @@ source. For every target the object is an ELF64 `ET_REL` file: machine code in
 relocations, and a `.note.badc` section of records badc's linker reads. The
 target is fixed at compile time. A Linux object also links with GNU ld or lld.
 The address of an external symbol, and a data load from one, go through the
-GOT, so the object links into a PIE the system toolchain builds.
+GOT, so the object links into a PIE the system toolchain builds. Under
+`-fno-plt` (`-fplt` restores the default), a call to a library binding or to
+a function the unit declares without defining loads the callee from its GOT
+entry and calls through it, in x86-64 objects and in aarch64 objects under
+`-fPIC`; a hidden callee keeps the direct call.
 
 The linker also reads ELF objects from other compilers, Mach-O `MH_OBJECT`
 files, PE/COFF objects and import libraries, ar archives, and shared libraries
@@ -158,10 +165,41 @@ an archive holding a Mach-O object takes the BSD form Apple's `ar` writes, a
 `__.SYMDEF SORTED` index with each member name inline (`#1/<len>`), which
 ld64 reads.
 A PE link sizes the initial thread's stack under `--stack <reserve>[,<commit>]`,
-link.exe's `/STACK` (default 8 MiB reserved, one page committed).
+link.exe's `/STACK` (default 8 MiB reserved, one page committed), and sets
+`IMAGE_DLLCHARACTERISTICS_FORCE_INTEGRITY` under `--force-integrity`,
+link.exe's `/INTEGRITYCHECK`, which a driver registering process, thread or
+object callbacks needs.
+Under `--guard-cf` (link.exe's `/guard:cf`, also `-mguard=cf-nochecks`), a PE
+image claims Control Flow Guard (`IMAGE_DLLCHARACTERISTICS_GUARD_CF`) and lists
+the functions an indirect call may enter: each one a reference other than a
+call names, or, from an object compiled with `/guard:cf`, its `.gfids$y` list;
+the constructor-table, TLS-callback and `__try` handler entries; the exported
+functions; the entry point; and the call stub of an import whose address the
+image takes. The loader reads the table through the load-config directory's
+guard fields, which `__guard_fids_table`, `__guard_fids_count` and
+`__guard_flags` fill; an image no library gives a directory takes the
+runtime's. Such an image loads in a process that requires the guard, as one
+created under strict Control Flow Guard does, and the system's checks of calls
+into it hold; the system enforces the guard in any process whose program image
+claims it. Under `-mguard=cf` the image checks its own indirect calls as
+MSVC's `/guard:cf` makes them: on x86-64 a call moves its target to rax and
+calls through `__guard_dispatch_icall_fptr`, which checks the target and jumps
+to it; on AArch64 the target moves to x15, `__guard_check_icall_fptr` checks
+it, and `blr x15` calls it. A call under the System V convention to a variadic
+callee, which passes a count in al, keeps the plain call. The system's table
+covers code in 16-byte blocks, and a listed function off a block's start opens
+the whole block, so a `-mguard=` or `--guard-cf` compile starts every function
+on one.
 A PE DLL link writes the DLL's import library under `--out-implib=<file>`,
 as link.exe writes one beside a DLL: an archive of short import members, a
 data export's naming only its `__imp_` slot.
+An import library's CONST member names the import's address slot by the
+plain name as well as by `__imp_`, as link.exe binds it: a reference to the
+name reads the slot or takes its address, the declaration a pointer to the
+DLL's object (the WDK's `extern PBOOLEAN KdDebuggerEnabled;`).
+A PE link includes a library's `_load_config_used`, the load-config
+structure the image's directory names, whether or not an input refers to it,
+as link.exe does.
 A COFF weak external or `/alternatename:` resolves a name nothing defines to its
 alternate, a definition or a DLL import; an archive member holding a weak
 external of the alias kind is pulled for its name, as link.exe pulls the
@@ -213,7 +251,8 @@ Named `ar` or `*-ar`, or run as `badc --ar <key>`, badc is a POSIX `ar`; named
 `ranlib` it indexes archives.
 
 `-l<name>` is searched in the `-L` directories, in order, then in the standard
-directories under `--sysroot=<dir>`:
+directories under `--sysroot=<dir>`; `-l:<file>` searches them for the file
+itself, with no `lib` prefix or suffix added, as GNU ld does:
 
 | image  | directories under the sysroot                                              |
 |--------|----------------------------------------------------------------------------|
@@ -228,9 +267,15 @@ same image on every host. The sysroot's include directories supply the headers
 the bundled set lacks (`<zlib.h>`). They are searched after the bundled
 headers, so a standard header keeps the bundled copy. For a Mach-O target
 `$SDKROOT` is the default sysroot, as for Apple's tools; `--sysroot=` with no
-directory withdraws it. A Mach-O image records the macOS 11.0 deployment target
-and, in `LC_BUILD_VERSION`, the SDK version the sysroot's `SDKSettings.json`
-names, or 26.0 when no sysroot names one. libSystem selects its
+directory withdraws it. The deployment target is the version
+`-mmacosx-version-min=` (or `-mmacos-version-min=`) gives, else
+`$MACOSX_DEPLOYMENT_TARGET`, else 11.0. The
+`__ENVIRONMENT_MAC_OS_X_VERSION_MIN_REQUIRED__` and
+`__ENVIRONMENT_OS_VERSION_MIN_REQUIRED__` predefines spell it in the encoding
+the SDK headers compare against (`10.15` is `101500`), and a Mach-O image records it in `LC_BUILD_VERSION`, 11.0
+at least, the first macOS on arm64, as ld64 records it. That command also
+records the SDK version the sysroot's `SDKSettings.json` names, or 26.0 when no
+sysroot names one. libSystem selects its
 linked-on-or-after behaviors, the small-block allocator among them, by that SDK
 version.
 
@@ -247,11 +292,22 @@ which has the compiler and the in-process JIT but no native output; see
 ## Linking
 
 The driver passes link options with `-Wl,` and `-Xlinker`. It takes GNU ld's
-linker scripts (`-T` / `--script`, with `.o` and `.a` inputs only) and link
-maps (`-Map`, `--print-map`) for an ELF target, and `--emit-relocs`, `-z`
+linker scripts (`-T` / `--script`, with `.o` and `.a` inputs only) for an ELF
+target, link maps (`-Map`, `--print-map`) in GNU ld's layout for every target,
+with a Mach-O section named `segment,section`, and `--emit-relocs`, `-z`
 keywords, `--build-id`, `--whole-archive` spans, `--start-group` / `--end-group`, and
-export control (`--export-all`, `--export-data`). `--help` lists the image
-options. A link option badc does not implement is refused by name.
+export control (`--export-all`, `--export-data`). For a Mach-O target it
+takes ld64's `-headerpad <hex>`, the least free space after the load
+commands; `-headerpad_max_install_names`, room for `install_name_tool` to
+rewrite each dylib path in place; and `-search_paths_first`, the order badc
+searches by default. `-Wl,-v` prints the linker's version line. `--help`
+lists the image options. A link option badc does not implement is refused by
+name.
+
+A Mach-O image ends in the ad-hoc code signature ld64 writes (`adhoc,
+linker-signed`): a SHA-256 hash of each 4 KiB page, with the install name or
+`a.out` as the identifier. An arm64 macOS image therefore runs as written,
+whichever host built it.
 
 Invoked as `ld`, `ld.badc`, or `<prefix>-ld`, or as `badc --ld`, badc takes GNU
 ld's command line with its own flag table. That is how it serves as `LD=` in
@@ -306,8 +362,8 @@ the main executable, which no load command names.
   generator records each prologue and epilogue step as it emits it; an object
   carries the steps to the link in its `.note.badc` section. The `.pdata` and
   `.xdata` of a COFF object from another compiler join the exception
-  directory. An assembly function's `.seh_*` directives give it its record,
-  as GNU as writes one. `__try` / `__except` / `__finally` are in
+  directory. An assembly function's `.seh_*` directives give it its record.
+  `__try` / `__except` / `__finally` are in
   [`std-conformance.md`](std-conformance.md).
 - Mach-O: a `__TEXT,__unwind_info` compact unwind table.
 - ELF: badc's code has no `.eh_frame`. With `-g`, its CFI is in
@@ -411,6 +467,12 @@ UCRT's own entry points: the inline formatters and scanners call
 bundled `<stdio.h>` binds these to `ucrtbase.dll`, and a reference without a
 binding resolves to the library its name is bound to, `msvcrt.dll` or
 `ucrtbase.dll`, so such an object links without `ucrt.lib`.
+
+An object compiled against glibc's headers by another toolchain calls glibc's
+own entry points as well: under `_FORTIFY_SOURCE` its checking functions
+(`__printf_chk`, `__memcpy_chk`, `__read_chk`, `__open_2`, ...), and in C23
+mode on glibc 2.38 and later the `__isoc23_` functions, whose `strtol` and
+`%i` take a `0b` prefix. The bundled headers bind them to `libc.so.6`.
 
 A cl object's `/DEFAULTLIB:` naming one of the MSVC C runtime's libraries
 (`libcmt`, `msvcrt`, `libvcruntime`, `ucrt`, and their debug forms) is not
@@ -573,7 +635,15 @@ functions, and lets locals whose lifetimes do not overlap share a stack slot.
 scalar replacement of aggregates, inlining, constant folding and propagation,
 branch simplification, loop rotation, unrolling of constant-trip loops,
 common-subexpression elimination, store-to-load forwarding, division by
-constants, tail-call and tail-recursion elimination, and block layout. It
+constants, rotates and byte reversals spelled with shifts and masks as one
+instruction, tail-call and tail-recursion elimination, and block layout. On
+x86-64 targets a function keeps no frame pointer unless it needs one
+(`-fomit-frame-pointer` in
+[command-line compatibility](std-conformance.md#command-line-compatibility)),
+and the jumps, calls and returns inside loops and in functions that call
+themselves keep off 32-byte boundaries
+([`-mbranches-within-32B-boundaries`](#hardening-and-code-model-knobs)).
+`-fno-unroll-loops` keeps the constant-trip loops rolled. It
 predefines `__OPTIMIZE__=1` and leaves `NDEBUG`, which removes `assert`, to
 `-D`. `-O1`, `-O2`, `-O3`, `-Os`, `-Oz`, `-Ofast`, and `-Og` select the same
 single level; `-O0` turns it off.
@@ -611,7 +681,7 @@ implement is refused, so a configure-time probe gets a true answer.
 | `-mharden-sls=none\|return\|indirect-jmp\|all` | straight-line-speculation barriers (x86-64) |
 | `-fcf-protection=none\|branch` | `endbr64` landing pads (x86-64); `return` and `full` are refused |
 | `-mbranch-protection=none\|bti\|pac-ret[+leaf]\|standard` | AArch64 only; see [below](#aarch64-branch-protection) |
-| `-mbranches-within-32B-boundaries` | x86-64: every function starts at a multiple of 32 bytes, and NOPs keep a jump or fused compare-and-jump from crossing or ending on a 32-byte boundary |
+| `-m[no-]branches-within-32B-boundaries` | x86-64: every function starts at a multiple of 32 bytes, and NOPs keep every jump and fused compare-and-jump from crossing or ending on a 32-byte boundary; or neither. Under `-O`, unless given, functions start on 32 bytes and only the jumps of blocks inside a loop, or of a function that calls itself, are kept off the boundaries. The calls and returns of those blocks are kept off them with the option or without it: the decoding cost falls where a transfer repeats, and padding every call and return grows the code for transfers that mostly run once |
 | `-fno-zero-initialized-in-bss` | an object initialized to zero stays in `.data`; only one with no initializer goes to `.bss` |
 | `-fconserve-stack` | the inliner keeps the caller's frame within 100 bytes or 400% growth over its own, in place of 256 bytes and 1000% |
 
@@ -661,9 +731,32 @@ with `-mstack-protector-guard-reg=`, `-mstack-protector-guard-offset=`, and
 - `sysreg` (AArch64) reads it at an offset above a system register, such as
   `-mstack-protector-guard-reg=sp_el0 -mstack-protector-guard-offset=N`.
 
+`-Wstack-protector` (B4009, off by default) notes what gcc notes: under
+`-fstack-protector` a function whose character arrays are all shorter than
+the bound, which stays unprotected, and in every mode a variable-length array
+or `alloca` buffer, which lies below the other locals, so the canary catches
+its overflow only past them.
+
 The protector needs a linked image, since the failure path is a relocation
 against `__stack_chk_fail`. `--jit` and `--interp` refuse it, as do the
 Windows targets, whose C library exports neither symbol.
+
+### Stack clash protection
+
+Every stack allocation probes the pages it enters, on every target and
+whatever `-fstack-clash-protection` or `-fno-stack-clash-protection` says:
+
+- A fixed frame, a realignment, or an outgoing-argument area of more than a
+  page less 16 bytes descends a page at a time with a store through the stack
+  pointer after each step, unrolled up to four steps and a counted loop past
+  them.
+- `alloca` and a variable-length array take the same walk in a loop over the
+  requested size.
+- An allocation of at most a page less 16 bytes leaves the stack pointer within
+  the page the next store, or a callee's pushed return address, touches.
+
+That is gcc's x86-64 guarantee (a 4 KiB probe interval) and more than its
+AArch64 one, which assumes a 64 KiB guard region.
 
 ### Automatic variable initialization
 

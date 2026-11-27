@@ -21,9 +21,9 @@ use super::{
 /// than an address. `size_dynamic_sections` rewrites the address-width
 /// form to `R_*_RELATIVE`; no dynamic form writes a narrower field.
 /// The `*_ABS_LO12_NC` group is excluded: it takes only the target's
-/// page offset, which a page-aligned load base leaves alone. GNU ld
-/// writes an i386 `R_386_16` / `R_386_8` with the link-time value,
-/// subject to the field's overflow check, so none is refused there.
+/// page offset, which a page-aligned load base leaves alone. An i386
+/// `R_386_16` / `R_386_8` takes the link-time value, subject to the
+/// field's overflow check, so none is refused there.
 fn narrow_absolute(machine: u16, rtype: u32) -> bool {
     match machine {
         EM_386 => false,
@@ -139,8 +139,8 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// The imports, and the ones a call reaches. A shared object also
-    /// imports a default-visibility weak reference nothing defines, as bfd
-    /// does: the loader writes 0 or another component's definition.
+    /// imports a default-visibility weak reference nothing defines: the
+    /// loader writes 0 or another component's definition.
     fn bind_shared_libraries(&mut self) {
         // The script's own definitions satisfy a reference on their
         // own, whether or not a library exports the same name.
@@ -230,11 +230,11 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// The undefined weak names an executable linked against a library
-    /// makes dynamic, as bfd does, so that a component the loader finds
+    /// makes dynamic, so that a component the loader finds
     /// can define them: those it reaches through the GOT or a call, and in
     /// an aarch64 PIE through an address-width word. x86 resolves one
     /// that code also addresses directly to 0 instead. Second, the names
-    /// an i386 PIE's `R_386_PC32` names, which bfd leaves to a dynamic
+    /// an i386 PIE's `R_386_PC32` names, which take a dynamic
     /// relocation against the name wherever the field lies.
     fn dynamic_weak_names(&self) -> (HashSet<String>, HashSet<String>) {
         let pie = self.opts.emit == LdsEmit::Dyn;
@@ -286,7 +286,7 @@ impl<'a> LdsLinker<'a> {
     /// function's address, so it compares equal to the library's. A
     /// position-dependent executable's direct reference takes one, as do
     /// an x86-64 PIE's `R_X86_64_PC32` in writable data and an aarch64
-    /// executable's `R_AARCH64_ABS64`, as GNU ld links them.
+    /// executable's `R_AARCH64_ABS64`.
     fn function_pointer(&self, name: &str, r: &RawReloc, flags: u64) -> Option<bool> {
         if !self.is_function_export(name) || self.opts.shared {
             return None;
@@ -307,7 +307,7 @@ impl<'a> LdsLinker<'a> {
     /// Whether a PC-relative field naming the import `name` takes a
     /// dynamic relocation of its own type: in a shared object, in an
     /// executable for a data object it holds no copy of, and in a PIE for
-    /// an i386 function or an undefined weak name, as GNU ld links them.
+    /// an i386 function or an undefined weak name.
     pub(super) fn import_pc_dynamic(&self, name: &str, rtype: u32) -> bool {
         let pie = self.opts.emit == LdsEmit::Dyn;
         let i386_function = self.machine == EM_386 && self.is_function_export(name);
@@ -320,7 +320,7 @@ impl<'a> LdsLinker<'a> {
 
     /// Whether an address-width word naming the canonical import `name`
     /// holds its PLT entry: in a position-dependent executable. A PIE's
-    /// word takes a relocation against the symbol, as bfd links it.
+    /// word takes a relocation against the symbol.
     pub(super) fn word_binds_canonical(&self, name: &str) -> bool {
         self.opts.emit == LdsEmit::Exec && self.canonical.contains(name)
     }
@@ -354,7 +354,7 @@ impl<'a> LdsLinker<'a> {
     /// `flags` resolves to: its PLT entry for a call or where the entry is
     /// its address, its GOT slot for a load through one. An x86
     /// PC-relative field is a call only in a position-dependent
-    /// executable's code, as bfd reads one.
+    /// executable's code.
     pub(super) fn import_target(&self, name: &str, rtype: u32, flags: u64) -> Option<u64> {
         if !self.import_of.contains_key(name) {
             return None;
@@ -391,7 +391,7 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// An undefined default-visibility weak reference that nothing in
-    /// the link satisfies. bfd exports it as a dynamic symbol and
+    /// the link satisfies. It is exported as a dynamic symbol and
     /// keeps a symbol-based reloc for its sites and GOT slot.
     pub(super) fn undefweak_dynamic(&self, oi: usize, si: usize) -> bool {
         let sym = &self.objects[oi].symbols[si];
@@ -480,7 +480,7 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// Refusal for an absolute field narrower than an address naming an
-    /// import, as GNU ld refuses one: in a PIE, and on x86-64 in a
+    /// import: in a PIE, and on x86-64 in a
     /// position-dependent executable's writable data, which takes no copy.
     pub(super) fn narrow_import_refusal(
         &self,
@@ -529,7 +529,7 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// Refusal for a PIE's PC-relative field naming an undefined weak name
-    /// the link resolves to 0, as GNU ld refuses one: on x86-64 in
+    /// the link resolves to 0: on x86-64 in
     /// read-only memory, and on aarch64, in a dynamically linked PIE, for a
     /// default-visibility name.
     pub(super) fn weak_pc_refusal(&self, oi: usize, si: usize, r: &RawReloc) -> Option<String> {
@@ -558,8 +558,8 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// The value an aarch64 PC-relative field at `p` takes for an undefined
-    /// weak name the link resolves to 0: GNU ld places the name at the
-    /// field, the page of it for `adrp`, so that the field holds 0.
+    /// weak name the link resolves to 0: the name is placed at the field,
+    /// the page of it for `adrp`, so that the field holds 0.
     pub(super) fn weak_pc_value(&self, oi: usize, r: &RawReloc, p: u64, sa: u64) -> u64 {
         if self.machine != EM_AARCH64
             || !aarch64_pc_field(r.rtype)
@@ -605,9 +605,9 @@ impl<'a> LdsLinker<'a> {
                         // In a merge pool a section symbol's addend picks
                         // the entry, so the combined offset is remapped; a
                         // named symbol anchors at its own entry and the
-                        // addend applies to the remapped address (matches
-                        // bfd -- an addend past the entry, e.g. one past a
-                        // string's NUL, must stay relative to that entry).
+                        // addend applies to the remapped address (an
+                        // addend past the entry, e.g. one past a string's
+                        // NUL, must stay relative to that entry).
                         let off = if sym.kind() == STT_SECTION {
                             self.placed_off(i, sym.value.wrapping_add(addend as u64))?
                         } else {
@@ -639,11 +639,9 @@ impl<'a> LdsLinker<'a> {
         }
     }
 
-    /// Whether the backend's GOT section is `.got.plt`. bfd defines
-    /// `_GLOBAL_OFFSET_TABLE_` on the section it creates for the GOT
-    /// and reserves that section's first slot for the `.dynamic`
-    /// address; the x86 targets set `elf_backend_want_got_plt`, so for
-    /// them both live on `.got.plt`.
+    /// Whether the backend's GOT section is `.got.plt`.
+    /// `_GLOBAL_OFFSET_TABLE_` sits on the GOT section, whose first slot
+    /// holds the `.dynamic` address; on x86 both live on `.got.plt`.
     pub(super) fn got_on_got_plt(&self) -> bool {
         matches!(self.machine, EM_386 | EM_X86_64)
     }

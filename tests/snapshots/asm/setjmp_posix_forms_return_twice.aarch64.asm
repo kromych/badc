@@ -3,7 +3,7 @@ setjmp_posix_forms_return_twice.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -96,7 +96,7 @@ Disassembly of section .text:
                	str	w0, [sp, #0x8]
                	mov	x0, #0x0                // =0
                	sub	x1, x29, #0x100
-               	mov	x2, x0
+               	mov	x2, #0x0                // =0
                	bl	<addr>
                	bl	<addr>
                	brk	#0x1

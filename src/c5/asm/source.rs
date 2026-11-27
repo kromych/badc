@@ -1,29 +1,40 @@
-//! Source positions of an assembler unit and the errors reported at them.
-//! GNU as reports each error at `file:line` and goes on with the next
-//! statement; the passes collect [`AsmError`]s the same way.
+//! Source positions of an assembler unit and the diagnostics reported at
+//! them. Each is reported at `file:line` and assembly goes on with the
+//! next statement; the passes collect [`AsmError`]s for that.
 
-use crate::c5::diag::Loc;
+use crate::c5::diag::{Code, Level, Loc};
 
-/// An error at a line, from 1, of the text a pass read (0 when no statement
-/// owns it), and the macro invocations it was expanded from, innermost first.
+/// A diagnostic at a line, from 1, of the text a pass read (0 when no
+/// statement owns it), and the macro invocations it was expanded from,
+/// innermost first. `code` is [`Code::ASSEMBLER`] for an error.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AsmError {
     pub line: u32,
     pub invoked_at: alloc::vec::Vec<u32>,
     pub text: alloc::string::String,
+    pub code: Code,
 }
 
 impl AsmError {
     pub(crate) fn at(line: u32, text: alloc::string::String) -> Self {
+        Self::coded(Code::ASSEMBLER, line, text)
+    }
+
+    pub(crate) fn coded(code: Code, line: u32, text: alloc::string::String) -> Self {
         AsmError {
             line,
             invoked_at: alloc::vec::Vec::new(),
             text,
+            code,
         }
+    }
+
+    pub(crate) fn is_error(&self) -> bool {
+        self.code.default_level() == Level::Error
     }
 }
 
-/// A pass's errors; never empty.
+/// A pass's diagnostics, at least one of them an error.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AsmErrors(pub alloc::vec::Vec<AsmError>);
 
@@ -32,17 +43,24 @@ impl AsmErrors {
         AsmErrors(alloc::vec![AsmError::at(line, text)])
     }
 
+    /// For a pass that reports errors alone.
     pub(crate) fn check(errors: alloc::vec::Vec<AsmError>) -> Result<(), AsmErrors> {
-        if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(AsmErrors(errors))
+        Self::split(errors).map(|warnings| debug_assert!(warnings.is_empty(), "{warnings:?}"))
+    }
+
+    /// The warnings when no row is an error, else every row.
+    pub(crate) fn split(
+        rows: alloc::vec::Vec<AsmError>,
+    ) -> Result<alloc::vec::Vec<AsmError>, AsmErrors> {
+        match rows.iter().any(AsmError::is_error) {
+            true => Err(AsmErrors(rows)),
+            false => Ok(rows),
         }
     }
 }
 
 /// Each prepared line's input line and the macro invocation that wrote it:
-/// gas reports a body line with a note for each invocation.
+/// an error in a body line carries a note for each invocation.
 pub(crate) struct AsmOrigin {
     lines: alloc::vec::Vec<(u32, u32)>,
     /// Each context's invoking line and enclosing context; 0 is the input.
@@ -118,7 +136,10 @@ impl From<&str> for AsmErrors {
 /// The first error, for a caller reporting at a position of its own.
 impl From<AsmErrors> for alloc::string::String {
     fn from(e: AsmErrors) -> Self {
-        e.0.into_iter().next().map(|e| e.text).unwrap_or_default()
+        e.0.into_iter()
+            .find(AsmError::is_error)
+            .map(|e| e.text)
+            .unwrap_or_default()
     }
 }
 
@@ -149,7 +170,7 @@ pub(crate) fn source_message(text: &str) -> &str {
 }
 
 /// The file and line each line of a source stands for: a marker
-/// `# N "file" [flags]` makes the next line line N of `file`, as in gas.
+/// `# N "file" [flags]` makes the next line line N of `file`.
 pub(crate) struct AsmSourceMap {
     files: alloc::vec::Vec<alloc::string::String>,
     /// Each line's file in `files` and line there; empty with no marker.
@@ -157,7 +178,7 @@ pub(crate) struct AsmSourceMap {
 }
 
 impl AsmSourceMap {
-    /// Map `text`, named `file`, blanking its markers. gas takes a marker
+    /// Map `text`, named `file`, blanking its markers. A marker counts
     /// only when it names a file; gcc's `# 0 "" 2` after an inline-asm block
     /// returns to the physical position.
     pub(crate) fn read(text: &str, file: &str) -> (alloc::string::String, Self) {

@@ -3,7 +3,7 @@ vfscanf_and_vscanf_take_a_va_list.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -109,15 +109,15 @@ Disassembly of section .text:
                	stur	wzr, [x29, #-0x30]
                	stur	wzr, [x29, #-0x28]
                	sturh	wzr, [x29, #-0x20]
-               	sub	x1, x29, #0x18
-               	str	xzr, [x1]
+               	sub	x0, x29, #0x18
+               	str	xzr, [x0]
                	sturb	wzr, [x29, #-0x10]
                	sub	x0, x29, #0x8
                	str	wzr, [x0]
                	cbz	x20, <addr>
+               	mov	x1, x20
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
-               	mov	x1, x20
                	bl	<addr>
                	sxtw	x0, w0
                	cmp	x0, #0x0
@@ -128,6 +128,7 @@ Disassembly of section .text:
                	ret
                	mov	x0, x20
                	bl	<addr>
+               	mov	x0, x20
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	sub	x2, x29, #0x30
@@ -136,7 +137,6 @@ Disassembly of section .text:
                	sub	x5, x29, #0x8
                	sub	x6, x29, #0x28
                	sub	x7, x29, #0x20
-               	mov	x0, x20
                	bl	<addr>
                	cmp	w0, #0x5
                	b.eq	<addr>
@@ -176,10 +176,10 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp, #0x40]
                	ldr	x20, [sp], #0x50
                	ret
+               	mov	x0, x20
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	sub	x2, x29, #0x30
-               	mov	x0, x20
                	bl	<addr>
                	cmn	w0, #0x1
                	b.eq	<addr>

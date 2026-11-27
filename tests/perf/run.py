@@ -3,9 +3,15 @@
 reference compilers on a small fixture set.
 
 Each fixture is compiled with every available compiler, the result is
-run three times, and the median wall-clock is reported. The table goes
-to stdout in GitHub-Flavored-Markdown so the CI job can route it into
-$GITHUB_STEP_SUMMARY.
+run three times, and more up to nine while the runs spread by more than
+3%, and the median wall-clock is reported. The table goes to stdout in
+GitHub-Flavored-Markdown so the CI job can route it into
+$GITHUB_STEP_SUMMARY, followed by how far the runs spread.
+
+On Linux the runs go to one CPU, a core of the highest capacity where
+the cores differ, whose clock is held where a governor ramps it with
+load: a short run's time otherwise depends on how far the clock had
+ramped. The output states what holds it, or why nothing does.
 
 Exit status:
 * 0 -- table printed; every binary built and ran successfully.
@@ -60,6 +66,14 @@ REPO_ROOT = PERF_DIR.parent.parent
 WIN = sys.platform == "win32"
 EXE = ".exe" if WIN else ""
 RUNS_PER_FIXTURE = 3
+# A median takes runs past RUNS_PER_FIXTURE, up to MAX_RUNS, while its
+# runs spread by more than SPREAD_TOLERANCE (the largest time over the
+# smallest, less one).
+MAX_RUNS = 9
+SPREAD_TOLERANCE = 0.03
+# The cpufreq governors that set a CPU's clock from its recent load, so
+# that a short run's time depends on how far the clock had ramped.
+RAMPING_GOVERNORS = ("schedutil", "ondemand", "conservative")
 TIMING_LINE_RE = re.compile(r"in\s+(\d+(?:\.\d+)?)\s+ms")
 # The record contract `scripts/perf_publish.py` files: 3 states each
 # leg's flags and the level it pins, so two legs of one compiler are two
@@ -205,6 +219,9 @@ class Result:
     binary_bytes: int
     median_ms: float
     compile_ms: float
+    # The spread of the runs the median took, and how many there were.
+    spread: float = 0.0
+    runs: int = 0
 
 
 def host_arch(arch: str = "") -> str:
@@ -468,10 +485,6 @@ def compile_one(c: Compiler, src: Path, out: Path) -> float | None:
             file=sys.stderr,
         )
         return None
-    # macOS sometimes refuses unsigned binaries with SIGKILL; sign with
-    # the ad-hoc identity if we just produced an aarch64 binary.
-    if sys.platform == "darwin" and platform.machine() == "arm64":
-        subprocess.run(["codesign", "-s", "-", str(out)], check=False)
     return compile_ms
 
 
@@ -495,11 +508,83 @@ def fastest_cpus(cpu_root: Path = CPU_ROOT) -> list[int]:
     return sorted(c for c, v in caps.items() if v == top)
 
 
-def run_one(out: Path, pin: int | None = None) -> float | None:
-    """The median of the binary's timed runs, each on CPU `pin` when set."""
+def governor(cpu: int, cpu_root: Path = CPU_ROOT) -> str:
+    """The frequency governor Linux CPU `cpu` runs, or empty without one."""
+    try:
+        return (cpu_root / f"cpu{cpu}" / "cpufreq" / "scaling_governor").read_text().strip()
+    except OSError:
+        return ""
+
+
+def clock_cpu(pin: int | None, cpu_root: Path = CPU_ROOT) -> int | None:
+    """The CPU the runs go to: `pin`, else on Linux, where a ramping
+    governor clocks the CPUs, the last one this process may run on, so that
+    its clock can be held; none where the runs need not stay on one CPU."""
+    if pin is not None or not sys.platform.startswith("linux"):
+        return pin
+    cpu = max(os.sched_getaffinity(0))
+    return cpu if governor(cpu, cpu_root) in RAMPING_GOVERNORS else None
+
+
+def hold_clock(cpu: int | None, cpu_root: Path = CPU_ROOT
+               ) -> tuple[str, subprocess.Popen | None, str]:
+    """Keep CPU `cpu` at speed through the runs where its governor ramps the
+    clock with load, which splits a short run's time by how far the clock
+    had ramped. The performance governor holds it where the setting is
+    writable; otherwise an idle-class busy loop on `cpu`, which every run
+    preempts. Returns what holds the clock, or why nothing does, the busy
+    loop, and the governor to restore."""
+    if cpu is None:
+        return ("not held: the runs are not pinned to a CPU whose governor "
+                "this host exposes", None, "")
+    gov = governor(cpu, cpu_root)
+    if gov not in RAMPING_GOVERNORS:
+        return (f"CPU {cpu} runs {f'the {gov} governor' if gov else 'without a governor'}, "
+                "left as it is", None, "")
+    path = cpu_root / f"cpu{cpu}" / "cpufreq" / "scaling_governor"
+    try:
+        path.write_text("performance")
+        return f"CPU {cpu} set to the performance governor for the runs", None, gov
+    except OSError:
+        pass
+
+    def idle() -> None:
+        os.sched_setaffinity(0, {cpu})
+        os.sched_setscheduler(0, os.SCHED_IDLE, os.sched_param(0))
+    try:
+        spinner = subprocess.Popen([sys.executable, "-c", "while True: pass"],
+                                   preexec_fn=idle)
+    except (OSError, subprocess.SubprocessError) as e:
+        return f"not held: CPU {cpu} runs the {gov} governor ({e})", None, ""
+    time.sleep(0.5)
+    if spinner.poll() is not None:
+        return f"not held: CPU {cpu} runs the {gov} governor", None, ""
+    return f"CPU {cpu} held by an idle-class busy loop ({gov} governor)", spinner, ""
+
+
+def release_clock(cpu: int | None, spinner: subprocess.Popen | None, gov: str,
+                  cpu_root: Path = CPU_ROOT) -> None:
+    """Stop the busy loop `hold_clock` started and restore the governor it set."""
+    if spinner is not None:
+        spinner.kill()
+        spinner.wait()
+    if gov and cpu is not None:
+        (cpu_root / f"cpu{cpu}" / "cpufreq" / "scaling_governor").write_text(gov)
+
+
+def spread(times: list[float]) -> float:
+    """The largest of `times` over the smallest, less one."""
+    return max(times) / min(times) - 1 if times and min(times) > 0 else 0.0
+
+
+def run_one(out: Path, pin: int | None = None) -> tuple[float, float, int] | None:
+    """The median of the binary's timed runs, each on CPU `pin` when set,
+    their spread and their count: RUNS_PER_FIXTURE runs, and more up to
+    MAX_RUNS while they spread past SPREAD_TOLERANCE."""
     pinned = None if pin is None else (lambda: os.sched_setaffinity(0, {pin}))
-    times = []
-    for _ in range(RUNS_PER_FIXTURE):
+    times: list[float] = []
+    while len(times) < RUNS_PER_FIXTURE or (
+            spread(times) > SPREAD_TOLERANCE and len(times) < MAX_RUNS):
         r = subprocess.run([str(out)], capture_output=True, text=True,
                            errors="replace", preexec_fn=pinned)
         if r.returncode != 0:
@@ -516,7 +601,25 @@ def run_one(out: Path, pin: int | None = None) -> float | None:
             print(r.stdout, file=sys.stderr)
             return None
         times.append(float(m.group(1)))
-    return statistics.median(times)
+    return statistics.median(times), spread(times), len(times)
+
+
+def spread_summary(results: list[Result]) -> str:
+    """How far the runs behind the table's medians spread: the median and
+    the largest spread, and the rows still past SPREAD_TOLERANCE after
+    MAX_RUNS runs."""
+    if not results:
+        return ""
+    worst = max(results, key=lambda r: r.spread)
+    wide = [r for r in results if r.spread > SPREAD_TOLERANCE]
+    lines = [f"\nRun spread (largest time over smallest, less one): median "
+             f"{statistics.median(r.spread for r in results):.1%}, largest "
+             f"{worst.spread:.1%} ({worst.fixture}, {worst.compiler}); "
+             f"{len(wide)} of {len(results)} rows above {SPREAD_TOLERANCE:.0%} "
+             f"after up to {MAX_RUNS} runs."]
+    lines += [f"- {r.fixture}, {r.compiler}: {r.spread:.1%} over {r.runs} runs"
+              for r in sorted(wide, key=lambda r: -r.spread)]
+    return "\n".join(lines)
 
 
 def render_table(fixtures: list[str], results: list[Result],
@@ -650,7 +753,8 @@ def named_compiler(c: Compiler) -> dict:
 
 
 def write_json(path: Path, compilers: list[Compiler], fixtures: list[str],
-               results: list[Result], pin: int | None = None) -> None:
+               results: list[Result], pin: int | None = None,
+               clock: str = "") -> None:
     """The run as data, for the page that charts it: what ran where, and one
     record per (fixture, compiler) with the three measurements.
 
@@ -667,6 +771,7 @@ def write_json(path: Path, compilers: list[Compiler], fixtures: list[str],
         # The CI step overrides this with the runner's label.
         "runner": "local",
         "pinned_cpu": pin,
+        "clock": clock,
     }
     doc = {
         "schema": SCHEMA,
@@ -682,7 +787,7 @@ def write_json(path: Path, compilers: list[Compiler], fixtures: list[str],
                 "run_ms": round(r.median_ms, 2),
                 "compile_ms": round(r.compile_ms, 1),
                 "binary_bytes": r.binary_bytes,
-            }
+            } | ({"run_spread": round(r.spread, 4), "runs": r.runs} if r.runs else {})
             for r in results
         ],
     }
@@ -899,6 +1004,31 @@ def self_test() -> int:
         (cpus / "cpu1" / "cpu_capacity").write_text("1024\n")
         assert fastest_cpus(cpus) == []
         assert fastest_cpus(d / "absent") == []
+
+        # A CPU without a governor or on the performance one needs no hold;
+        # a writable governor is set to performance and restored.
+        assert "without a governor" in hold_clock(1, cpus)[0]
+        assert clock_cpu(3, cpus) == 3
+        gov = cpus / "cpu2" / "cpufreq" / "scaling_governor"
+        gov.parent.mkdir()
+        gov.write_text("performance\n")
+        assert hold_clock(2, cpus) == ("CPU 2 runs the performance governor, left as it is",
+                                       None, "")
+        gov.write_text("schedutil\n")
+        note, spinner, restore = hold_clock(2, cpus)
+        assert (spinner, restore, governor(2, cpus)) == (None, "schedutil", "performance"), note
+        release_clock(2, spinner, restore, cpus)
+        assert governor(2, cpus) == "schedutil"
+        assert hold_clock(None, cpus)[0].startswith("not held")
+        assert abs(spread([100.0, 103.0, 110.0]) - 0.1) < 1e-12
+        write_json(out, legs, ["fib.c"],
+                   [Result(compiler="badc -O", fixture="fib.c", binary_bytes=1,
+                           median_ms=1.0, compile_ms=1.0, spread=0.0123, runs=4)],
+                   clock="CPU 2 runs the performance governor")
+        doc = json.loads(out.read_text())
+        assert doc["results"][0]["run_spread"] == 0.0123, doc["results"]
+        assert doc["results"][0]["runs"] == 4, doc["results"]
+        assert doc["machine"]["clock"].startswith("CPU 2"), doc["machine"]
     print("[perf run] self-test OK")
     return 0
 
@@ -920,7 +1050,7 @@ def main() -> int:
         print("error: no compilers found", file=sys.stderr)
         return 1
     fastest = fastest_cpus() if sys.platform.startswith("linux") else []
-    pin = fastest[0] if fastest else None
+    pin = clock_cpu(fastest[0] if fastest else None)
 
     fixtures = [
         "fib.c",
@@ -969,42 +1099,51 @@ def main() -> int:
     out_dir = PERF_DIR / "build" / "bins"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    for fix in fixtures:
-        src = PERF_DIR / fix
-        if not src.is_file():
-            print(f"missing fixture: {src}", file=sys.stderr)
-            any_fail = True
-            continue
-        for c in compilers:
-            if skips(fix, c.name):
-                continue
-            out = out_dir / f"{src.stem}-{SLUG_OK.sub('_', c.name)}{EXE}"
-            compile_ms = compile_one(c, src, out)
-            if compile_ms is None:
+    clock, spinner, restore = hold_clock(pin)
+    try:
+        for fix in fixtures:
+            src = PERF_DIR / fix
+            if not src.is_file():
+                print(f"missing fixture: {src}", file=sys.stderr)
                 any_fail = True
                 continue
-            t = run_one(out, pin)
-            if t is None:
-                any_fail = True
-                continue
-            results.append(
-                Result(
-                    compiler=c.name,
-                    fixture=fix,
-                    binary_bytes=out.stat().st_size,
-                    median_ms=t,
-                    compile_ms=compile_ms,
+            for c in compilers:
+                if skips(fix, c.name):
+                    continue
+                out = out_dir / f"{src.stem}-{SLUG_OK.sub('_', c.name)}{EXE}"
+                compile_ms = compile_one(c, src, out)
+                if compile_ms is None:
+                    any_fail = True
+                    continue
+                t = run_one(out, pin)
+                if t is None:
+                    any_fail = True
+                    continue
+                results.append(
+                    Result(
+                        compiler=c.name,
+                        fixture=fix,
+                        binary_bytes=out.stat().st_size,
+                        median_ms=t[0],
+                        compile_ms=compile_ms,
+                        spread=t[1],
+                        runs=t[2],
+                    )
                 )
-            )
+    finally:
+        release_clock(pin, spinner, restore)
 
     print("## perf comparison")
     print()
     if pin is not None:
-        print(f"Runs pinned to CPU {pin}, a core of the highest capacity.")
-        print()
+        why = "a core of the highest capacity" if fastest else "the CPU whose clock is held"
+        print(f"Runs pinned to CPU {pin}, {why}.")
+    print(f"Clock: {clock}.")
+    print()
     print(render_table(fixtures, results, [c.name for c in compilers]))
+    print(spread_summary(results))
     if args.json:
-        write_json(args.json, compilers, fixtures, results, pin)
+        write_json(args.json, compilers, fixtures, results, pin, clock)
         print(f"\nwrote {args.json}")
     return 1 if any_fail else 0
 

@@ -3,7 +3,7 @@ inline_asm_x64_setjmp_region_slices.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,23 +26,23 @@ Disassembly of section .text:
                	int3
 
 <deep_touch>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x100, %rsp            # imm = 0x100
+               	subq	$0x108, %rsp            # imm = 0x108
                	xorl	%eax, %eax
-               	leaq	-0x100(%rbp), %rcx
+               	leaq	(%rsp), %rcx
                	addq	%rax, %rcx
                	leaq	(%rdi,%rax), %rdx
                	movb	%dl, (%rcx)
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpl	$0x100, %eax            # imm = 0x100
                	jl	<addr>
                	testl	%edi, %edi
                	jle	<addr>
                	decq	%rdi
                	callq	<addr>
-               	movsbq	-0x100(%rbp), %rax
-               	leave
+               	movsbq	(%rsp), %rax
+               	nop
+               	addq	$0x108, %rsp            # imm = 0x108
                	retq
 
 <main>:

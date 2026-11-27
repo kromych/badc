@@ -4,6 +4,7 @@
 
 #include <fenv.h>
 #include <string.h>
+#pragma STDC FENV_ACCESS ON
 int main(void) {
     unsigned in = 0x7f800001, back;
     float f;

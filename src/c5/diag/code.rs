@@ -92,7 +92,7 @@ impl Status {
 
 /// The group selectors a row belongs to. `DEFAULT` is what a bare
 /// `badc file.c` reports; the rest are what `-Wall`, `-Wextra` and
-/// `-Wpedantic` turn on, following gcc's split.
+/// `-Wpedantic` turn on.
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub struct Groups(u8);
 

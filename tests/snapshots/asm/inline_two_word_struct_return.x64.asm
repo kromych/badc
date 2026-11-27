@@ -3,7 +3,7 @@ inline_two_word_struct_return.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,11 +26,9 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x80, %rsp
+               	subq	$0x88, %rsp
                	xorl	%eax, %eax
-               	leaq	-0x80(%rbp), %rcx
+               	leaq	(%rsp), %rcx
                	movq	%rax, %rdx
                	shlq	$0x4, %rdx
                	addq	%rdx, %rcx
@@ -40,35 +38,35 @@ Disassembly of section .text:
                	incq	%rax
                	cmpl	$0x8, %eax
                	jl	<addr>
-               	movslq	-0x80(%rbp), %rax
-               	movq	-0x78(%rbp), %rcx
+               	movslq	(%rsp), %rax
+               	movq	0x8(%rsp), %rcx
                	addq	%rcx, %rax
-               	movslq	-0x70(%rbp), %rcx
-               	movq	-0x68(%rbp), %rdx
+               	movslq	0x10(%rsp), %rcx
+               	movq	0x18(%rsp), %rdx
                	addq	%rdx, %rcx
                	addq	%rcx, %rax
-               	movslq	-0x60(%rbp), %rcx
-               	movq	-0x58(%rbp), %rdx
+               	movslq	0x20(%rsp), %rcx
+               	movq	0x28(%rsp), %rdx
                	addq	%rdx, %rcx
                	addq	%rcx, %rax
-               	movslq	-0x50(%rbp), %rcx
-               	movq	-0x48(%rbp), %rdx
+               	movslq	0x30(%rsp), %rcx
+               	movq	0x38(%rsp), %rdx
                	addq	%rdx, %rcx
                	addq	%rcx, %rax
-               	movslq	-0x40(%rbp), %rcx
-               	movq	-0x38(%rbp), %rdx
+               	movslq	0x40(%rsp), %rcx
+               	movq	0x48(%rsp), %rdx
                	addq	%rdx, %rcx
                	addq	%rcx, %rax
-               	movslq	-0x30(%rbp), %rcx
-               	movq	-0x28(%rbp), %rdx
+               	movslq	0x50(%rsp), %rcx
+               	movq	0x58(%rsp), %rdx
                	addq	%rdx, %rcx
                	addq	%rcx, %rax
-               	movslq	-0x20(%rbp), %rcx
-               	movq	-0x18(%rbp), %rdx
+               	movslq	0x60(%rsp), %rcx
+               	movq	0x68(%rsp), %rdx
                	addq	%rdx, %rcx
                	addq	%rcx, %rax
-               	movslq	-0x10(%rbp), %rcx
-               	movq	-0x8(%rbp), %rdx
+               	movslq	0x70(%rsp), %rcx
+               	movq	0x78(%rsp), %rdx
                	addq	%rdx, %rcx
                	addq	%rcx, %rax
                	addq	$0x16665, %rax          # imm = 0x16665
@@ -77,5 +75,5 @@ Disassembly of section .text:
                	cmpq	$0x16785, %rax          # imm = 0x16785
                	movq	%rdx, %rax
                	cmoveq	%rcx, %rax
-               	leave
+               	addq	$0x88, %rsp
                	retq

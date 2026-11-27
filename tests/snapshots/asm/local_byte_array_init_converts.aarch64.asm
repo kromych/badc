@@ -3,7 +3,7 @@ local_byte_array_init_converts.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -27,9 +27,9 @@ Disassembly of section .text:
                	mov	x1, #0x0                // =0
                	mov	x0, x1
                	ldrb	w3, [x2, x0]
-               	mov	x4, #0x1                // =1
                	cmp	w0, #0x1
-               	csel	x4, x1, x4, eq
+               	mov	x17, #0x1               // =1
+               	csel	x4, x1, x17, eq
                	cmp	w3, w4
                	b.ne	<addr>
                	add	x0, x0, #0x1

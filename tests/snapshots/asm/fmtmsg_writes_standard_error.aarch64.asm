@@ -3,7 +3,7 @@ fmtmsg_writes_standard_error.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -44,8 +44,8 @@ Disassembly of section .text:
                	mov	x0, #0x2                // =2
                	bl	<addr>
                	mov	x21, x0
-               	mov	x1, #0x2                // =2
                	mov	x0, x20
+               	mov	x1, #0x2                // =2
                	bl	<addr>
                	mov	x0, #0x14a              // =330
                	adrp	x1, <page>
@@ -64,23 +64,23 @@ Disassembly of section .text:
                	mov	x2, #0x4                // =4
                	adrp	x3, <page>
                	add	x3, x3, <lo12>
-               	mov	x4, x1
-               	mov	x5, x1
+               	mov	x4, #0x0                // =0
+               	mov	x5, #0x0                // =0
                	bl	<addr>
                	mov	x23, x0
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	ldr	x0, [x0]
                	bl	<addr>
+               	mov	x0, x21
                	mov	x1, #0x2                // =2
-               	mov	x0, x21
                	bl	<addr>
                	mov	x0, x21
                	bl	<addr>
+               	mov	x0, x20
                	sub	x1, x29, #0x100
                	mov	x2, #0xff               // =255
                	mov	x3, #0x0                // =0
-               	mov	x0, x20
                	bl	<addr>
                	mov	x21, x0
                	mov	x0, x20
@@ -107,10 +107,9 @@ Disassembly of section .text:
                	add	x1, x1, <lo12>
                	bl	<addr>
                	sxtw	x0, w0
-               	mov	x1, #0x4                // =4
-               	mov	x2, #0x0                // =0
                	cmp	x0, #0x0
-               	csel	x0, x1, x2, ne
+               	mov	x16, #0x4               // =4
+               	csel	x0, x16, xzr, ne
                	ldp	x29, x30, [sp, #0x140]
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x150

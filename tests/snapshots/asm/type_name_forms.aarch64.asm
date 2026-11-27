@@ -3,7 +3,7 @@ type_name_forms.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -154,6 +154,7 @@ Disassembly of section .text:
                	mov	x0, #0x3                // =3
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	add	x6, x3, #0xc
                	mov	x0, #0x2                // =2
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
@@ -161,8 +162,8 @@ Disassembly of section .text:
                	add	x2, x2, <lo12>
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
-               	add	x6, x3, #0xc
-               	mov	x5, x2
+               	adrp	x5, <page>
+               	add	x5, x5, <lo12>
                	bl	<addr>
                	cmp	x0, #0xcc
                	b.eq	<addr>

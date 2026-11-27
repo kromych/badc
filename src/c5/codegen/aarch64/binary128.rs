@@ -22,6 +22,7 @@ use super::emit::{
     Frame, borrow_regs, bound_base, emit_agg_load_int, emit_mem, emit_reg_disp, enc_store_unit,
     object_base,
 };
+use super::encode::Insn;
 use super::encode::RegShift::{Asr, Lsl, Lsr};
 use super::encode::{
     ADD_REG, BIC_REG, Cond, LDR_X, LogicalOp, ORR_REG, Reg, STR_X, emit, emit_add_sp_imm,
@@ -31,6 +32,7 @@ use super::encode::{
     enc_mov_reg, enc_movz, enc_orr_reg, enc_ret, enc_rrr_shifted, enc_stp_off, enc_str_imm,
     enc_sub_imm, enc_sub_imm_lsl12, enc_sub_reg, enc_subs_imm,
 };
+use crate::c5::codegen::ssa::code_buf::CodeBuf;
 use crate::c5::codegen::ssa::emit_common::Emit;
 
 /// The exponent bias difference between binary128 and binary64, less
@@ -45,7 +47,7 @@ pub(super) const WIDEN_BORROW_BYTES: u32 = 48;
 
 /// Save `regs` at `[sp, #0]`; returns how far sp was lowered for them
 /// ([`Frame::sp_lowering`]).
-fn save(code: &mut Vec<u8>, regs: &[Reg], frame: Frame) -> u32 {
+fn save(code: &mut CodeBuf, regs: &[Reg], frame: Frame) -> u32 {
     let lowered = frame.sp_lowering((regs.len().div_ceil(2) * 16) as u32);
     emit_sub_sp_imm(code, lowered);
     let mut i = 0;
@@ -63,7 +65,7 @@ fn save(code: &mut Vec<u8>, regs: &[Reg], frame: Frame) -> u32 {
 }
 
 /// Mirror of [`save`]; `lowered` is how far it moved sp down.
-fn restore(code: &mut Vec<u8>, regs: &[Reg], lowered: u32) {
+fn restore(code: &mut CodeBuf, regs: &[Reg], lowered: u32) {
     let mut i = 0;
     while i + 1 < regs.len() {
         emit(
@@ -78,7 +80,8 @@ fn restore(code: &mut Vec<u8>, regs: &[Reg], lowered: u32) {
     emit_add_sp_imm(code, lowered);
 }
 
-/// Retarget the placeholder branch at `at` to the end of `code`.
+/// Retarget the placeholder branch at `at` to the end of `code`; its
+/// text reads the field.
 fn patch(code: &mut [u8], at: usize) {
     let delta = ((code.len() - at) / 4) as i32;
     let w = u32::from_le_bytes(code[at..at + 4].try_into().unwrap());
@@ -91,32 +94,32 @@ fn patch(code: &mut [u8], at: usize) {
 }
 
 /// Emit a placeholder branch and return its offset for [`patch`].
-fn branch(code: &mut Vec<u8>, word: u32) -> usize {
+fn branch(code: &mut CodeBuf, insn: Insn) -> usize {
     let at = code.len();
-    emit(code, word);
+    emit(code, insn);
     at
 }
 
 /// `rd = rn & ((1 << bits) - 1)`.
-fn mask_low(code: &mut Vec<u8>, rd: Reg, rn: Reg, bits: u8) {
+fn mask_low(code: &mut CodeBuf, rd: Reg, rn: Reg, bits: u8) {
     logical_imm(code, LogicalOp::And, rd, rn, (1 << bits) - 1);
 }
 
 /// `rd = rn <op> #value` for a bitmask immediate `value`.
-fn logical_imm(code: &mut Vec<u8>, op: LogicalOp, rd: Reg, rn: Reg, value: u64) {
+fn logical_imm(code: &mut CodeBuf, op: LogicalOp, rd: Reg, rn: Reg, value: u64) {
     let word = enc_logical_imm(op, true, rd, rn, value);
     emit(code, word.expect("a bitmask immediate"));
 }
 
 /// `cmp rn, #imm` through a scratch, for immediates past the 12-bit
 /// field.
-fn cmp_imm16(code: &mut Vec<u8>, rn: Reg, tmp: Reg, imm: u16) {
+fn cmp_imm16(code: &mut CodeBuf, rn: Reg, tmp: Reg, imm: u16) {
     emit(code, enc_movz(tmp, imm, 0));
     emit(code, enc_cmp_reg(rn, tmp));
 }
 
 /// Add (or subtract, when `sub`) `BIAS_DELTA` to `rd`.
-fn bias(code: &mut Vec<u8>, rd: Reg, sub: bool) {
+fn bias(code: &mut CodeBuf, rd: Reg, sub: bool) {
     let (hi, lo) = (BIAS_DELTA / 4096, BIAS_DELTA % 4096);
     if sub {
         emit(code, enc_sub_imm_lsl12(rd, rd, hi));
@@ -144,7 +147,7 @@ pub(super) type HelperCall = (usize, Helper);
 pub(super) type HelperCalls = Option<Vec<HelperCall>>;
 
 /// `x16 = addr + disp`.
-fn address_in_x16(code: &mut Vec<u8>, addr: Reg, disp: i64) {
+fn address_in_x16(code: &mut CodeBuf, addr: Reg, disp: i64) {
     if addr == Reg::X16 && disp.unsigned_abs() >= 1 << 24 {
         emit_reg_disp(code, Reg::X17, addr, disp);
         emit(code, enc_mov_reg(Reg::X16, Reg::X17));
@@ -154,7 +157,7 @@ fn address_in_x16(code: &mut Vec<u8>, addr: Reg, disp: i64) {
 }
 
 /// A `bl` to `helper`, recorded in `calls`.
-fn call(code: &mut Vec<u8>, helper: Helper, calls: &mut Vec<HelperCall>) {
+fn call(code: &mut CodeBuf, helper: Helper, calls: &mut Vec<HelperCall>) {
     calls.push((code.len(), helper));
     emit(code, enc_bl(0));
 }
@@ -163,7 +166,7 @@ fn call(code: &mut Vec<u8>, helper: Helper, calls: &mut Vec<HelperCall>) {
 /// d-register `dd`. `bound` caps the access width when the storage is
 /// under-aligned; such an access converts in place.
 pub(super) fn emit_narrow_load(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dd: u8,
     addr: Reg,
     disp: i64,
@@ -206,7 +209,7 @@ fn narrow_regs(avoid: &[u8], frame: Frame) -> Emit<[Reg; 7]> {
 
 /// Narrow the binary128 in `r[0]` (low half) and `r[1]` (high half) to
 /// binary64 bits in `r[5]`, rounding to nearest with ties to even.
-fn narrow(code: &mut Vec<u8>, r: &[Reg; 7]) {
+fn narrow(code: &mut CodeBuf, r: &[Reg; 7]) {
     let (lo, hi, sgn, exp, tmp, acc, aux) = (r[0], r[1], r[2], r[3], r[4], r[5], r[6]);
     emit(code, enc_lsr_imm(sgn, hi, 63));
     emit(code, enc_lsl_imm(sgn, sgn, 63));
@@ -286,7 +289,7 @@ fn narrow(code: &mut Vec<u8>, r: &[Reg; 7]) {
 /// `dn` is left untouched -- the c5 store rule keeps the stored value
 /// in the accumulator. `bound` as for [`emit_narrow_load`].
 pub(super) fn emit_widen_store(
-    code: &mut Vec<u8>,
+    code: &mut CodeBuf,
     dn: u8,
     addr: Reg,
     disp: i64,
@@ -329,7 +332,7 @@ fn widen_regs(avoid: &[u8], frame: Frame) -> Emit<[Reg; 5]> {
 
 /// Widen the binary64 bits in `r[0]` to the binary128 in `r[0]` (low
 /// half) and `r[1]` (high half); exact.
-fn widen(code: &mut Vec<u8>, r: &[Reg; 5]) {
+fn widen(code: &mut CodeBuf, r: &[Reg; 5]) {
     let (lo, hi, exp, man, tmp) = (r[0], r[1], r[2], r[3], r[4]);
     emit(code, enc_lsr_imm(hi, lo, 63));
     emit(code, enc_lsl_imm(hi, hi, 63));
@@ -375,7 +378,7 @@ fn widen(code: &mut Vec<u8>, r: &[Reg; 5]) {
 }
 
 /// Append the helpers `calls` reach and point each call at its helper.
-pub(super) fn emit_helpers(code: &mut Vec<u8>, frame: Frame, calls: &[HelperCall]) -> Emit {
+pub(super) fn emit_helpers(code: &mut CodeBuf, frame: Frame, calls: &[HelperCall]) -> Emit {
     for helper in [Helper::Narrow, Helper::Widen] {
         if !calls.iter().any(|&(_, h)| h == helper) {
             continue;
@@ -401,15 +404,14 @@ pub(super) fn emit_helpers(code: &mut Vec<u8>, frame: Frame, calls: &[HelperCall
         }
         emit(code, enc_ret(Reg::X30));
         for &(site, _) in calls.iter().filter(|&&(_, h)| h == helper) {
-            let word = enc_bl(((at - site) / 4) as i32);
-            code[site..site + 4].copy_from_slice(&word.to_le_bytes());
+            super::encode::patch(code, site, enc_bl(((at - site) / 4) as i32));
         }
     }
     Ok(())
 }
 
 /// Write the 8 bytes of `rs` to `[addr + off]` in `align`-wide pieces.
-fn store_bounded(code: &mut Vec<u8>, rs: Reg, addr: Reg, off: u32, align: u32, tmp: Reg) {
+fn store_bounded(code: &mut CodeBuf, rs: Reg, addr: Reg, off: u32, align: u32, tmp: Reg) {
     for (i, (o, w)) in crate::c5::codegen::access_pieces(off, 8, align, true).enumerate() {
         let src = if i == 0 {
             rs

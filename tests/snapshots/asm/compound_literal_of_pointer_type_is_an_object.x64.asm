@@ -3,7 +3,7 @@ compound_literal_of_pointer_type_is_an_object.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -30,95 +30,51 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x50, %rsp
-               	leaq	-0x48(%rbp), %rax
+               	subq	$0x68, %rsp
+               	leaq	(%rsp), %rax
                	leaq	<rip>, %rcx
                	movl	(%rcx), %r10d
                	movl	%r10d, (%rax)
-               	movl	$0x7, -0x40(%rbp)
-               	leaq	-0x38(%rbp), %rcx
-               	leaq	<rip>, %rdx
-               	movl	(%rdx), %r10d
-               	movl	%r10d, (%rcx)
-               	movq	%rax, -0x30(%rbp)
-               	leaq	-0x30(%rbp), %r8
-               	leaq	0x1(%rax), %rdx
-               	movq	%rdx, -0x28(%rbp)
-               	movq	%rax, -0x20(%rbp)
-               	leaq	-0x40(%rbp), %rsi
-               	movq	%rsi, -0x18(%rbp)
-               	movq	%rcx, -0x10(%rbp)
-               	movq	$0x0, -0x8(%rbp)
-               	cmpq	%rax, %r8
+               	movq	%rax, 0x8(%rsp)
+               	leaq	0x8(%rsp), %rcx
+               	cmpq	%rax, %rcx
                	je	<addr>
-               	movsbq	(%rdx), %rdx
-               	cmpl	$0x69, %edx
-               	jne	<addr>
-               	movsbq	(%rax), %rax
-               	cmpl	$0x6c, %eax
-               	je	<addr>
-               	movl	$0x1, %eax
-               	leave
-               	retq
-               	movl	(%rsi), %eax
-               	cmpl	$0x7, %eax
-               	jne	<addr>
-               	movl	(%rcx), %eax
-               	cmpl	$0x9, %eax
-               	jne	<addr>
-               	leaq	-0x40(%rbp), %rax
-               	movq	%rax, -0x8(%rbp)
-               	movl	(%rax), %eax
-               	cmpl	$0x7, %eax
-               	je	<addr>
-               	movl	$0x2, %eax
-               	leave
-               	retq
-               	movq	-0x30(%rbp), %rax
                	addq	$0x2, %rax
-               	movq	%rax, -0x30(%rbp)
+               	movq	%rax, 0x8(%rsp)
                	movsbq	(%rax), %rax
                	cmpl	$0x74, %eax
                	jne	<addr>
                	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x18(%rbp)
-               	leaq	-0x18(%rbp), %rcx
-               	movq	%rax, -0x10(%rbp)
-               	movq	%rax, -0x8(%rbp)
+               	movq	%rax, 0x8(%rsp)
                	cmpq	%rax, %rcx
                	je	<addr>
                	callq	<addr>
                	cmpq	$0x2a, %rax
                	jne	<addr>
-               	movq	-0x10(%rbp), %rax
-               	callq	*%rax
-               	cmpq	$0x2a, %rax
-               	jne	<addr>
-               	movq	-0x8(%rbp), %rax
-               	callq	*%rax
-               	cmpq	$0x2a, %rax
-               	je	<addr>
-               	movl	$0x4, %eax
-               	leave
-               	retq
-               	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x8(%rbp)
                	callq	<addr>
                	cmpq	$0x2a, %rax
                	jne	<addr>
-               	leaq	-<rip>, %rax # <addr>
-               	movq	%rax, -0x8(%rbp)
+               	callq	<addr>
+               	cmpq	$0x2a, %rax
+               	je	<addr>
+               	movl	$0x4, %eax
+               	addq	$0x68, %rsp
+               	retq
+               	callq	<addr>
+               	cmpq	$0x2a, %rax
+               	jne	<addr>
                	callq	<addr>
                	cmpq	$0x2a, %rax
                	je	<addr>
                	movl	$0x5, %eax
-               	leave
+               	addq	$0x68, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x68, %rsp
                	retq
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x68, %rsp
+               	retq
+               	movl	$0x1, %eax
+               	addq	$0x68, %rsp
                	retq

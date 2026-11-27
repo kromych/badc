@@ -3,7 +3,7 @@ switch_no_jump_tables.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -115,9 +115,9 @@ Disassembly of section .text:
                	b	<addr>
                	add	x1, x1, #0x4
                	b	<addr>
-               	mov	x2, #0x1                // =1
                	cmp	w0, #0x1
-               	csel	x0, x2, x1, lt
+               	mov	x16, #0x1               // =1
+               	csel	x0, x16, x1, lt
                	add	x1, x0, #0x2
                	b	<addr>
 

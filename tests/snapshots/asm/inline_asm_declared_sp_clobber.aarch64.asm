@@ -3,7 +3,7 @@ inline_asm_declared_sp_clobber.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -226,21 +226,21 @@ Disassembly of section .text:
                	add	x29, sp, #0x30
                	adrp	x0, <page>
                	ldr	x1, [x0, #0x10]
-               	add	x21, x1, x1, lsl #2
+               	add	x22, x1, x1, lsl #2
                	ldr	x1, [x0, #0x10]
                	mov	x17, #0x99              // =153
-               	eor	x22, x1, x17
+               	eor	x23, x1, x17
                	ldr	x1, [x0, #0x10]
-               	add	x23, x1, #0x4d
+               	add	x24, x1, #0x4d
                	ldr	x1, [x0, #0x10]
-               	add	x24, x1, x1, lsl #1
+               	add	x25, x1, x1, lsl #1
                	ldr	x20, [x0, #0x10]
                	mov	x0, x20
                	bl	<addr>
-               	mov	x25, x0
+               	mov	x21, x0
                	mov	x0, x20
                	bl	<addr>
-               	cmp	x25, x0
+               	cmp	x21, x0
                	b.eq	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x30]
@@ -248,13 +248,13 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x40
                	ret
-               	cmp	x21, #0x23
+               	cmp	x22, #0x23
                	b.ne	<addr>
-               	cmp	x22, #0x9e
+               	cmp	x23, #0x9e
                	b.ne	<addr>
-               	cmp	x23, #0x54
+               	cmp	x24, #0x54
                	b.ne	<addr>
-               	cmp	x24, #0x15
+               	cmp	x25, #0x15
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	ldp	x29, x30, [sp, #0x30]

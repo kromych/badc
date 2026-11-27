@@ -3,7 +3,7 @@ void_return.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -78,22 +78,17 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	$0xffffffff, -0x8(%rbp) # imm = 0xFFFFFFFF
-               	leaq	-0x8(%rbp), %rcx
-               	movl	$0x0, -0x8(%rbp)
-               	movl	$0x1, -0x8(%rbp)
-               	movl	$0x1, -0x8(%rbp)
-               	movl	$0x2, -0x8(%rbp)
-               	movl	$0x3, -0x8(%rbp)
-               	movl	$0x4, -0x8(%rbp)
-               	movq	%rcx, %rdi
+               	subq	$0x18, %rsp
+               	movl	$0xffffffff, 0x8(%rsp)  # imm = 0xFFFFFFFF
+               	movl	$0x0, 0x8(%rsp)
+               	movl	$0x1, 0x8(%rsp)
+               	movl	$0x1, 0x8(%rsp)
+               	movl	$0x4, 0x8(%rsp)
+               	leaq	0x8(%rsp), %rdi
                	callq	<addr>
                	movl	$0x3, %edi
-               	leaq	-0x8(%rbp), %rsi
+               	leaq	0x8(%rsp), %rsi
                	callq	<addr>
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

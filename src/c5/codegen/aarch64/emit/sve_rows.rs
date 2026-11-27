@@ -8,7 +8,7 @@
 use super::super::ssa::sve_alloc::{
     PRED_HOLD, PRED_OPERAND, PRED_STAGE, PredPlace, encoded_operand, encoded_operands,
 };
-use super::table::{self, Opnd};
+use super::table::Opnd;
 use super::*;
 use crate::c5::aarch64_sve::SveImm;
 use crate::c5::simd::{self, Form, SvePred, SveShape, SveTest};
@@ -25,7 +25,7 @@ struct Operands<'a> {
 
 impl Operands<'_> {
     /// The Z register of vector `v`, a spilled one reloaded into FP scratch `k`.
-    fn z(&self, code: &mut Vec<u8>, v: u32, k: usize) -> Emit<u8> {
+    fn z(&self, code: &mut CodeBuf, v: u32, k: usize) -> Emit<u8> {
         match place_of(self.alloc, v) {
             Place::FpReg(r) => Ok(r),
             Place::Spill(s) => {
@@ -39,7 +39,7 @@ impl Operands<'_> {
 
     /// The register a governing predicate `v` is read in: its own, of
     /// p0-p6, else p7, which a reload or a move fills.
-    fn governing(&self, code: &mut Vec<u8>, v: u32) -> Emit<u8> {
+    fn governing(&self, code: &mut CodeBuf, v: u32) -> Emit<u8> {
         match self.alloc.sve.pred_place(v) {
             Some(PredPlace::Reg(r)) if r < 8 => Ok(r),
             Some(p) => {
@@ -52,7 +52,7 @@ impl Operands<'_> {
 
     /// The register predicate operand `k`, `v`, is read in from a 4-bit
     /// field: its own, else its stage, which a reload fills.
-    fn pred(&self, code: &mut Vec<u8>, v: u32, k: usize) -> Emit<u8> {
+    fn pred(&self, code: &mut CodeBuf, v: u32, k: usize) -> Emit<u8> {
         match self.alloc.sve.pred_place(v) {
             Some(PredPlace::Reg(r)) => Ok(r),
             Some(p) => {
@@ -73,7 +73,7 @@ impl Operands<'_> {
         }
     }
 
-    fn pred_done(&self, code: &mut Vec<u8>, (p, slot): (u8, Option<u32>)) {
+    fn pred_done(&self, code: &mut CodeBuf, (p, slot): (u8, Option<u32>)) {
         if let Some(j) = slot {
             super::sve::pred_move(code, self.frame, PredPlace::Reg(p), PredPlace::Slot(j));
         }
@@ -89,7 +89,7 @@ impl Operands<'_> {
         }
     }
 
-    fn z_done(&self, code: &mut Vec<u8>, dst: Place, r: u8) {
+    fn z_done(&self, code: &mut CodeBuf, dst: Place, r: u8) {
         if let Place::Spill(s) = dst {
             super::sve::z_slot(code, self.frame, false, r, s, Reg(16));
         }
@@ -118,12 +118,9 @@ fn immediate(i: SveImm) -> Opnd {
     }
 }
 
-fn word(code: &mut Vec<u8>, mnem: &str, ops: &[Opnd]) -> Emit {
-    match table::encode(mnem, ops) {
-        Ok(w) => {
-            emit(code, w);
-            Ok(())
-        }
+fn word(code: &mut CodeBuf, mnem: &str, ops: &[Opnd]) -> Emit {
+    match super::encode::emit_table(code, mnem, ops) {
+        Ok(()) => Ok(()),
         Err(e) => fail(alloc::format!("SVE row `{mnem}`: {e}")),
     }
 }

@@ -3,7 +3,7 @@ dead_reads_across_calls.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -151,15 +151,15 @@ Disassembly of section .text:
                	ldp	x22, x23, [sp, #0x10]
                	ldp	x20, x21, [sp], #0x50
                	ret
-               	mov	x2, #0x3                // =3
                	mov	x0, x20
                	mov	x1, x21
+               	mov	x2, #0x3                // =3
                	bl	<addr>
                	cmp	x0, #0x2a
                	b.ne	<addr>
-               	mov	x2, #0x0                // =0
                	mov	x0, x20
                	mov	x1, x21
+               	mov	x2, #0x0                // =0
                	bl	<addr>
                	cmp	x0, #0x3
                	b.eq	<addr>

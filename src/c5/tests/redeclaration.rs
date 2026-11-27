@@ -857,10 +857,10 @@ fn a_repeated_dllimport_object_declaration_is_no_definition() {
     }
 }
 
-/// `dllimport` follows gcc on the PE targets: a redeclaration without it
-/// drops it, a type or an inline function ignores it, dllexport overrides
-/// it, and a definition, internal linkage or an address constant is an
-/// error. Elsewhere the attribute is ignored.
+/// `dllimport` on the PE targets: a redeclaration without it drops it, a
+/// type or an inline function ignores it, dllexport overrides it, and a
+/// definition, internal linkage or an address constant is an error.
+/// Elsewhere the attribute is ignored.
 #[test]
 fn dllimport_follows_gcc_on_redeclarations_and_misuse() {
     let src = "typedef __declspec(dllimport) int ti;\n\

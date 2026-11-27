@@ -27,11 +27,7 @@ type Pick = (ValueId, ValueId, ValueId, LoadKind);
 
 pub(crate) fn run(funcs: &mut [FunctionSsa], target: Target) {
     for func in funcs {
-        let mut changed = false;
-        while convert_one(func, target) {
-            changed = true;
-        }
-        if changed {
+        if convert_all(func, target) {
             prune_unreachable::run_one(func);
         }
     }
@@ -72,101 +68,152 @@ fn arm_join(
     uses: &[u32],
     head: BlockId,
     b: BlockId,
+    converted: &[bool],
 ) -> Option<BlockId> {
     let block = &func.blocks[b as usize];
     let Terminator::Jmp(join) = block.terminator else {
         return None;
     };
+    // A converted head's insertions are still pending, so its code is not
+    // all on the tape.
+    if converted[b as usize] {
+        return None;
+    }
     let live = live_values(func, uses, b);
     let pure = (block.inst_range.clone()).all(|v| {
         let inst = &func.insts[v as usize];
-        speculable(inst) || (inst.is_pure() && !live.contains(&v))
+        speculable(inst) || (func.is_pure(inst) && !live.contains(&v))
     });
     (preds[b as usize] == [head] && live.len() <= ARM_INSTS && pure).then_some(join)
 }
 
-/// Convert the first qualifying branch; whether one was converted.
-fn convert_one(func: &mut FunctionSsa, target: Target) -> bool {
+/// One conversion: the branch block, its condition, the arms' live values
+/// in order, the join, its phis that take a select and those nothing
+/// reads, and the condition's tail.
+struct Conversion {
+    head: BlockId,
+    cond: ValueId,
+    arm_values: Vec<ValueId>,
+    join: BlockId,
+    picks: Vec<Pick>,
+    dead: Vec<ValueId>,
+    tail: Vec<ValueId>,
+}
+
+/// Convert every qualifying branch in one sweep over the blocks; whether
+/// one was converted. A conversion changes nothing another one reads: the
+/// blocks, use counts and predecessors each tests are its own, the head's
+/// branch becomes a jump at once, and the copies and selects of all of
+/// them go into the tape in one insertion.
+fn convert_all(func: &mut FunctionSsa, target: Target) -> bool {
     let preds = predecessors(func);
     let uses = crate::c5::codegen::ssa::reg_alloc::compute_use_counts(func);
+    let mut converted = alloc::vec![false; func.blocks.len()];
+    let mut plan: Vec<Conversion> = Vec::new();
     for head in 0..func.blocks.len() as BlockId {
-        let (cond, on_true, on_false) = match func.blocks[head as usize].terminator {
-            Terminator::Bnz {
-                cond,
-                target,
-                fall_through,
-            } => (cond, target, fall_through),
-            Terminator::Bz {
-                cond,
-                target,
-                fall_through,
-            } => (cond, fall_through, target),
-            _ => continue,
-        };
-        if on_true == on_false || on_true == head || on_false == head {
-            continue;
-        }
-        // Both successors arms of one join, or one an arm of the other.
-        let t_join = arm_join(func, &preds, &uses, head, on_true);
-        let f_join = arm_join(func, &preds, &uses, head, on_false);
-        let (arms, join, from_true, from_false) = match (t_join, f_join) {
-            (Some(j), Some(k)) if j == k => (alloc::vec![on_true, on_false], j, on_true, on_false),
-            (Some(j), _) if j == on_false => (alloc::vec![on_true], j, on_true, head),
-            (_, Some(k)) if k == on_true => (alloc::vec![on_false], k, head, on_false),
-            _ => continue,
-        };
-        let mut join_preds = preds[join as usize].clone();
-        join_preds.sort_unstable();
-        let mut want = alloc::vec![from_true, from_false];
-        want.sort_unstable();
-        if join_preds != want || join == head {
-            continue;
-        }
-        let jrange = func.blocks[join as usize].inst_range.clone();
-        // A phi nothing reads makes its incomes dead too, so an arm may
-        // leave them uncopied: it takes no select.
-        let (phis, dead): (Vec<ValueId>, Vec<ValueId>) = (jrange.clone())
-            .take_while(|&v| matches!(func.insts[v as usize], Inst::Phi { .. }))
-            .partition(|&v| uses.get(v as usize).copied().unwrap_or(0) > 0);
-        if phis.is_empty() || phis.len() > JOIN_PHIS {
-            continue;
-        }
-        let incoming = |phi: ValueId, from: BlockId| match &func.insts[phi as usize] {
-            Inst::Phi { incoming, .. } => incoming.iter().find(|e| e.0 == from).map(|e| e.1),
-            _ => None,
-        };
-        let mut picks: Vec<Pick> = Vec::new();
-        for &phi in &phis {
-            let Inst::Phi { kind, .. } = func.insts[phi as usize] else {
-                unreachable!()
-            };
-            let fp = matches!(kind, LoadKind::F32 | LoadKind::F64);
-            if fp && target.is_x86_64()
-                || !matches!(kind, LoadKind::I64 | LoadKind::F32 | LoadKind::F64)
-            {
-                picks.clear();
-                break;
+        if let Some(c) = qualify(func, target, &preds, &uses, &converted, head) {
+            converted[head as usize] = true;
+            let block = &mut func.blocks[head as usize];
+            block.terminator = Terminator::Jmp(c.join);
+            if block.exit_acc == c.cond {
+                block.exit_acc = NO_VALUE;
             }
-            match (incoming(phi, from_true), incoming(phi, from_false)) {
-                (Some(a), Some(b)) => picks.push((phi, a, b, kind)),
-                _ => {
-                    picks.clear();
-                    break;
-                }
-            }
+            plan.push(c);
         }
-        if picks.len() != phis.len() {
-            continue;
-        }
-        let arm_values: Vec<ValueId> = arms
-            .iter()
-            .flat_map(|&b| live_values(func, &uses, b))
-            .collect();
-        let tail = condition_tail(func, &uses, head, cond);
-        apply(func, head, cond, &arm_values, join, (&picks, &dead), &tail);
-        return true;
     }
-    false
+    if plan.is_empty() {
+        return false;
+    }
+    apply(func, &plan);
+    true
+}
+
+/// The conversion of the branch ending `head`, when it qualifies.
+fn qualify(
+    func: &FunctionSsa,
+    target: Target,
+    preds: &[Vec<BlockId>],
+    uses: &[u32],
+    converted: &[bool],
+    head: BlockId,
+) -> Option<Conversion> {
+    let (cond, on_true, on_false) = match func.blocks[head as usize].terminator {
+        Terminator::Bnz {
+            cond,
+            target,
+            fall_through,
+        } => (cond, target, fall_through),
+        Terminator::Bz {
+            cond,
+            target,
+            fall_through,
+        } => (cond, fall_through, target),
+        _ => return None,
+    };
+    if on_true == on_false || on_true == head || on_false == head {
+        return None;
+    }
+    // Both successors arms of one join, or one an arm of the other.
+    let t_join = arm_join(func, preds, uses, head, on_true, converted);
+    let f_join = arm_join(func, preds, uses, head, on_false, converted);
+    let (arms, join, from_true, from_false) = match (t_join, f_join) {
+        (Some(j), Some(k)) if j == k => (alloc::vec![on_true, on_false], j, on_true, on_false),
+        (Some(j), _) if j == on_false => (alloc::vec![on_true], j, on_true, head),
+        (_, Some(k)) if k == on_true => (alloc::vec![on_false], k, head, on_false),
+        _ => return None,
+    };
+    let mut join_preds = preds[join as usize].clone();
+    join_preds.sort_unstable();
+    let mut want = alloc::vec![from_true, from_false];
+    want.sort_unstable();
+    if join_preds != want || join == head {
+        return None;
+    }
+    let jrange = func.blocks[join as usize].inst_range.clone();
+    // A phi nothing reads makes its incomes dead too, so an arm may
+    // leave them uncopied: it takes no select.
+    let (phis, dead): (Vec<ValueId>, Vec<ValueId>) = (jrange.clone())
+        .take_while(|&v| matches!(func.insts[v as usize], Inst::Phi { .. }))
+        .partition(|&v| uses.get(v as usize).copied().unwrap_or(0) > 0);
+    if phis.is_empty() || phis.len() > JOIN_PHIS {
+        return None;
+    }
+    let incoming = |phi: ValueId, from: BlockId| match &func.insts[phi as usize] {
+        Inst::Phi { incoming, .. } => incoming.iter().find(|e| e.0 == from).map(|e| e.1),
+        _ => None,
+    };
+    let mut picks: Vec<Pick> = Vec::new();
+    for &phi in &phis {
+        let Inst::Phi { kind, .. } = func.insts[phi as usize] else {
+            unreachable!()
+        };
+        let fp = matches!(kind, LoadKind::F32 | LoadKind::F64);
+        if fp && target.is_x86_64()
+            || !matches!(kind, LoadKind::I64 | LoadKind::F32 | LoadKind::F64)
+        {
+            return None;
+        }
+        picks.push((
+            phi,
+            incoming(phi, from_true)?,
+            incoming(phi, from_false)?,
+            kind,
+        ));
+    }
+    let arm_values: Vec<ValueId> = arms
+        .iter()
+        .flat_map(|&b| live_values(func, uses, b))
+        .collect();
+    let tail = condition_tail(func, uses, head, cond);
+    Some(Conversion {
+        head,
+        cond,
+        arm_values,
+        join,
+        picks,
+        dead,
+        tail,
+    })
 }
 
 /// What follows the arms' copies at the end of `head`, so the condition's
@@ -206,79 +253,76 @@ fn condition_tail(func: &FunctionSsa, uses: &[u32], head: BlockId, cond: ValueId
     }
 }
 
-/// Copy the arms' values to the end of `head`, then the condition's tail
-/// ([`condition_tail`]), then the selects.
-fn apply(
-    func: &mut FunctionSsa,
-    head: BlockId,
-    cond: ValueId,
-    arm_values: &[ValueId],
-    join: BlockId,
-    (picks, dead): (&[Pick], &[ValueId]),
-    tail: &[ValueId],
-) {
+/// Copy each conversion's arm values to the end of its head, then the
+/// condition's tail ([`condition_tail`]), then the selects, in one tape
+/// insertion; then point the phis' readers at the selects.
+fn apply(func: &mut FunctionSsa, plan: &[Conversion]) {
     let n_old = func.insts.len() as ValueId;
-    let hrange = func.blocks[head as usize].inst_range.clone();
-    let at = if hrange.is_empty() {
-        At::Empty(head)
-    } else {
-        At::After(hrange.end - 1)
-    };
-    // A copied value's readers name its copy, an insertion past the tape.
-    let mut copies: Vec<(ValueId, ValueId)> = Vec::new();
     let mut ins: Vec<Insertion> = Vec::new();
-    for &v in arm_values.iter().chain(tail) {
-        let mut inst = func.insts[v as usize].clone();
-        inst.for_each_operand_mut(|o| {
-            if let Some(&(_, c)) = copies.iter().find(|e| e.0 == *o) {
-                *o = c;
-            }
-        });
-        copies.push((v, n_old + ins.len() as ValueId));
-        ins.push(Insertion {
-            at,
-            inst,
-            is_f32: func.f32_values.get(v as usize).copied().unwrap_or(false),
-            copy_of: Some(v),
-        });
-    }
-    let mapped = |v: ValueId| copies.iter().find(|e| e.0 == v).map_or(v, |e| e.1);
-    let first_select = ins.len();
-    for &(phi, a, b, kind) in picks {
-        ins.push(Insertion {
-            at,
-            inst: Inst::Select {
-                cond: mapped(cond),
-                a: mapped(a),
-                b: mapped(b),
-                kind,
-            },
-            is_f32: func.f32_values.get(phi as usize).copied().unwrap_or(false),
-            copy_of: None,
-        });
+    // Per phi that takes a select, the select's index in `ins`.
+    let mut selects: Vec<(ValueId, usize, LoadKind)> = Vec::new();
+    for c in plan {
+        let hrange = func.blocks[c.head as usize].inst_range.clone();
+        let at = if hrange.is_empty() {
+            At::Empty(c.head)
+        } else {
+            At::After(hrange.end - 1)
+        };
+        // A copied value's readers name its copy, an insertion past the tape.
+        let mut copies: Vec<(ValueId, ValueId)> = Vec::new();
+        for &v in c.arm_values.iter().chain(&c.tail) {
+            let mut inst = func.insts[v as usize].clone();
+            inst.for_each_operand_mut(|o| {
+                if let Some(&(_, k)) = copies.iter().find(|e| e.0 == *o) {
+                    *o = k;
+                }
+            });
+            copies.push((v, n_old + ins.len() as ValueId));
+            ins.push(Insertion {
+                at,
+                inst,
+                is_f32: func.f32_values.get(v as usize).copied().unwrap_or(false),
+                copy_of: Some(v),
+            });
+        }
+        let mapped = |v: ValueId| copies.iter().find(|e| e.0 == v).map_or(v, |e| e.1);
+        for &(phi, a, b, kind) in &c.picks {
+            selects.push((phi, ins.len(), kind));
+            ins.push(Insertion {
+                at,
+                inst: Inst::Select {
+                    cond: mapped(c.cond),
+                    a: mapped(a),
+                    b: mapped(b),
+                    kind,
+                },
+                is_f32: func.f32_values.get(phi as usize).copied().unwrap_or(false),
+                copy_of: None,
+            });
+        }
     }
     let rewrite = tape::insert(func, &ins);
-    for &phi in dead {
+    for &phi in plan.iter().flat_map(|c| &c.dead) {
         func.insts[rewrite.remap[phi as usize] as usize] = Inst::Imm(0);
     }
     // The phis' readers read the selects; each phi is left an unread copy.
-    let mut to: Vec<(ValueId, ValueId)> = Vec::with_capacity(picks.len());
-    for (k, &(phi, _, _, kind)) in picks.iter().enumerate() {
+    let mut to: Vec<ValueId> = alloc::vec![NO_VALUE; func.insts.len()];
+    for &(phi, k, kind) in &selects {
         let at = rewrite.remap[phi as usize];
-        let select = rewrite.ids[first_select + k];
+        let select = rewrite.ids[k];
         func.insts[at as usize] = Inst::Copy {
             value: select,
             is_fp: matches!(kind, LoadKind::F32 | LoadKind::F64),
         };
-        to.push((at, select));
+        to[at as usize] = select;
     }
     let redirect = |o: &mut ValueId| {
-        if let Some(&(_, s)) = to.iter().find(|e| e.0 == *o) {
+        if let Some(&s) = to.get(*o as usize).filter(|&&s| s != NO_VALUE) {
             *o = s;
         }
     };
-    for inst in func.insts.iter_mut() {
-        if !matches!(inst, Inst::Copy { value, .. } if to.iter().any(|e| e.1 == *value)) {
+    for (v, inst) in func.insts.iter_mut().enumerate() {
+        if to[v] == NO_VALUE {
             inst.for_each_operand_mut(redirect);
         }
     }
@@ -287,11 +331,6 @@ fn apply(
             redirect(&mut block.exit_acc);
         }
         block.terminator.for_each_operand_mut(redirect);
-    }
-    let block = &mut func.blocks[head as usize];
-    block.terminator = Terminator::Jmp(join);
-    if block.exit_acc == cond {
-        block.exit_acc = NO_VALUE;
     }
 }
 

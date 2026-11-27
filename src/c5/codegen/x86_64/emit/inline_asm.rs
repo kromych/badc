@@ -22,8 +22,9 @@ pub(super) struct AsmGotoCtx<'a> {
 
 /// Access width of a template memory operand. A memory reference carries no
 /// width of its own: a `%N` size modifier wins, else the AT&T size suffix,
-/// else a GP register operand of the same instruction. `None` leaves the
-/// choice to the caller's default.
+/// else a GP register operand of the same instruction but a shift's count,
+/// `%cl`, else the one width the catalog gives the instruction's memory
+/// operand. `None` leaves the choice to the caller's default.
 fn asm_mem_size(
     modifier: Option<super::super::ir::AsmRegSize>,
     insn: &super::asm::AsmInsn,
@@ -32,22 +33,88 @@ fn asm_mem_size(
 ) -> Option<super::super::ir::AsmRegSize> {
     use super::super::ir::{AsmConstraint, AsmRegSize};
     use super::asm::AsmOpnd;
-    modifier.or(insn.suffix).or_else(|| {
-        insn.operands.iter().find_map(|o| match *o {
-            AsmOpnd::Reg { reg, size } if reg < super::asm::XMM_BASE => Some(size),
-            AsmOpnd::HighReg(_) | AsmOpnd::HighRef(_) => Some(AsmRegSize::Byte),
-            AsmOpnd::Ref { idx, size }
-                if op_reg.get(idx as usize).copied().flatten().is_some()
-                    && !matches!(
-                        operands[idx as usize].constraint,
-                        AsmConstraint::Fp | AsmConstraint::Mem
-                    ) =>
-            {
-                Some(size.unwrap_or(AsmRegSize::from_width(operands[idx as usize].width)))
+    let counted = super::asm::shifts_by_count(insn.mnemonic) && insn.operands.len() > 1;
+    let sizing = &insn.operands[usize::from(counted)..];
+    modifier
+        .or(insn.suffix)
+        .or_else(|| {
+            sizing.iter().find_map(|o| match *o {
+                AsmOpnd::Reg { reg, size } if reg < super::asm::XMM_BASE => Some(size),
+                AsmOpnd::HighReg(_) | AsmOpnd::HighRef(_) => Some(AsmRegSize::Byte),
+                AsmOpnd::Ref { idx, size }
+                    if op_reg.get(idx as usize).copied().flatten().is_some()
+                        && !matches!(
+                            operands[idx as usize].constraint,
+                            AsmConstraint::Fp | AsmConstraint::Mem
+                        ) =>
+                {
+                    Some(size.unwrap_or(AsmRegSize::from_width(operands[idx as usize].width)))
+                }
+                _ => None,
+            })
+        })
+        .or_else(|| match insn.mnemonic {
+            super::asm::Mnemonic::Table(name) => {
+                super::table::sole_memory_width(name).map(AsmRegSize::from_width)
             }
             _ => None,
         })
-    })
+}
+
+/// The width of a memory operand nothing in the instruction sizes, as
+/// [`super::table::unsized_memory_width`] gives it under `mode`.
+fn unsized_mem_size(
+    insn: &super::asm::AsmInsn,
+    mode: super::table::Mode,
+) -> Option<super::super::ir::AsmRegSize> {
+    super::asm::table_name(insn.mnemonic)
+        .and_then(|name| super::table::unsized_memory_width(name, mode))
+        .map(super::super::ir::AsmRegSize::from_width)
+}
+
+/// The warning for an instruction encoded at a default width: it has a
+/// memory operand its operation takes in more than one width, and neither
+/// a suffix nor a register operand (`sized`) picks one.
+fn defaulted_width_warning(
+    insn: &super::asm::AsmInsn,
+    ops: &[super::asm::Concrete],
+    sized: bool,
+    mode: super::table::Mode,
+) -> Option<alloc::string::String> {
+    use super::asm::{Concrete, MemRm, Mnemonic};
+    if !ops.iter().any(|o| MemRm::of(o).is_some()) {
+        return None;
+    }
+    let (name, form) = match insn.mnemonic {
+        Mnemonic::X87 { op, width: None } => (op.name, op.defaulted_form()?),
+        Mnemonic::X87 { .. } => return None,
+        // The accumulator operand sizes a string operation; `(%dx)` does not.
+        Mnemonic::StringOp { opcode, opw: 0, .. } => {
+            if ops
+                .iter()
+                .any(|o| matches!(o, Concrete::Reg { reg: 0, .. }))
+            {
+                return None;
+            }
+            let name = super::asm::string_op_name(opcode)?;
+            (name, alloc::format!("{name}l"))
+        }
+        m => {
+            let name = super::asm::table_name(m)?;
+            if sized || insn.suffix.is_some() || !super::table::memory_width_is_defaulted(name) {
+                return None;
+            }
+            let suffix = match mode.opsize() {
+                2 => 'w',
+                8 => 'q',
+                _ => 'l',
+            };
+            (name, alloc::format!("{name}{suffix}"))
+        }
+    };
+    Some(alloc::format!(
+        "no suffix or register operand sizes the memory operand of `{name}`; encoded as `{form}`"
+    ))
 }
 
 /// RIP-relative target of an inline-asm `%a` address operand: an
@@ -156,7 +223,7 @@ fn encode_x86_asm_section_code(
     goto_block: &dyn Fn(u8) -> Option<u32>,
     op_reg: &[Option<u8>],
     operands: &[super::super::ir::AsmOperand],
-) -> Result<(), crate::c5::asm::AsmErrors> {
+) -> Result<alloc::vec::Vec<crate::c5::asm::AsmError>, crate::c5::asm::AsmErrors> {
     use super::super::ir::Inst;
     use crate::c5::asm::AsmSectionTarget;
     // A same-TU function operand is an `ImmCode` whose ent_pc reverses to its
@@ -220,7 +287,7 @@ fn encode_x86_asm_section_code(
             fold.note_item(&li.item, &imm_of);
         }
     }
-    crate::c5::asm::AsmErrors::check(errors)
+    crate::c5::asm::AsmErrors::split(errors)
 }
 
 /// Encode a file-scope inline-asm section's instructions with an empty
@@ -231,7 +298,7 @@ fn encode_x86_asm_section_code(
 pub(crate) fn encode_x86_file_asm_section_code(
     blocks: &mut [crate::c5::asm::AsmSectionBlock],
     class: crate::c5::ElfClass,
-) -> Result<(), crate::c5::asm::AsmErrors> {
+) -> Result<alloc::vec::Vec<crate::c5::asm::AsmError>, crate::c5::asm::AsmErrors> {
     use crate::c5::asm::{AsmError, AsmSectionItem, AsmSectionTarget, encode_code_item};
     let operand_target = |_: u8| -> Option<AsmSectionTarget> { None };
     let goto_block = |_: u8| -> Option<u32> { None };
@@ -308,7 +375,7 @@ pub(crate) fn encode_x86_file_asm_section_code(
             fold.note_item(&li.item, &imm_of);
         }
     }
-    crate::c5::asm::AsmErrors::check(errors)
+    crate::c5::asm::AsmErrors::split(errors)
 }
 
 /// Record on an alignment directive the encoding mode it stands in, which
@@ -337,7 +404,7 @@ pub(crate) fn short_branch_opcode(mnem: &str) -> Option<u8> {
 /// Address-size prefix of an `E3 rel8` branch. The counter the name spells is
 /// the instruction's address size: the mode's default takes no prefix, the
 /// mode's other address size takes `67`, and a width the mode cannot address
-/// has no encoding, as GNU as rejects it.
+/// has no encoding.
 fn e3_branch_prefix(
     mnem: &str,
     mode: super::table::Mode,
@@ -376,8 +443,8 @@ fn branch_section_target(text: &str) -> crate::c5::asm::AsmSectionTarget {
 }
 
 /// The `rel8` encoding of a direct branch: `EB` for `jmp`, `70+cc` for a
-/// `jcc`. GNU as takes it whenever the target is a label of the branch's own
-/// section within a signed-byte displacement, in every code-size mode; the
+/// `jcc`, taken whenever the target is a label of the branch's own section
+/// within a signed-byte displacement, in every code-size mode; the
 /// layout makes that choice, so both forms are handed to it. A `call` has no
 /// short form.
 fn short_branch_form(
@@ -400,7 +467,7 @@ fn short_branch_form(
     }
 }
 
-/// Legacy prefixes in GNU as order: segment, address size, operand size, then
+/// Legacy prefixes in the order segment, address size, operand size, then
 /// repeat / lock. `body` carries the size prefixes at its front and `pending`
 /// the bytes prefix statements deposited. Returns the count of `body` bytes
 /// taken; the rest is the caller's to append.
@@ -454,7 +521,7 @@ struct SectionOperandRefs<'a> {
     /// The value an operand expression already has at this point of the
     /// stream, when the walk's [`AsmParseFold`] can prove it is a constant.
     /// A folded immediate or displacement encodes as a literal, taking the
-    /// narrow field GNU as picks at the same point.
+    /// narrow field.
     fold: &'a dyn Fn(&str) -> Option<i64>,
     /// File-scope / `.S`-unit text is basic asm, where `%kN` is an opmask
     /// register; an extended-asm statement's section text keeps the
@@ -474,7 +541,7 @@ fn encode_one_x86_section_insn(
     operand_target: &dyn Fn(u8) -> Option<crate::c5::asm::AsmSectionTarget>,
     goto_block: &dyn Fn(u8) -> Option<u32>,
     refs: &SectionOperandRefs<'_>,
-) -> Result<crate::c5::asm::AsmSectionItem, alloc::string::String> {
+) -> Result<crate::c5::asm::Encoded, alloc::string::String> {
     use super::asm::{AsmOpnd, Mnemonic};
     use crate::c5::asm::AsmSectionItem;
     // An encoding-mode directive sets the state the rest of the stream
@@ -490,7 +557,8 @@ fn encode_one_x86_section_insn(
             bytes: alloc::vec::Vec::new(),
             relocs: alloc::vec::Vec::new(),
             short: None,
-        });
+        }
+        .into());
     }
     let mode = *mode;
     let insns = if refs.file_scope {
@@ -526,7 +594,7 @@ fn encode_one_x86_section_insn(
         refs,
     };
     // REX is a 64-bit-mode prefix; the other modes read the byte as an
-    // instruction, so GNU as rejects it there.
+    // instruction, so it is refused there.
     if mode != super::table::Mode::Bits64
         && (insn.rex.is_some()
             || matches!(insn.mnemonic, Mnemonic::Prefix(b) if (0x40..=0x4F).contains(&b)))
@@ -546,16 +614,21 @@ fn encode_one_x86_section_insn(
         return Err(si.err("prefix on a branch"));
     }
     if let Some(item) = si.goto_branch(goto_block)? {
-        return Ok(item);
+        return Ok(item.into());
     }
     if let Some(item) = si.short_branch()? {
-        return Ok(item);
+        return Ok(item.into());
     }
     if let Some(item) = si.direct_branch(operand_target)? {
-        return Ok(item);
+        return Ok(item.into());
     }
     let ops = si.resolve_operands()?;
-    si.encode(ops)
+    let sized = asm_mem_size(None, insn, refs.operands, refs.op_reg).is_some();
+    let warning = defaulted_width_warning(insn, &ops.concrete, sized, mode);
+    Ok(crate::c5::asm::Encoded {
+        item: si.encode(ops)?,
+        warning,
+    })
 }
 
 /// One replacement instruction of a section, parsed, with the mode it
@@ -593,7 +666,7 @@ impl SectionInsn<'_> {
     /// A jmp / jcc to an `asm goto` label (`%lK`), as `jmp %l[t_no]` in a
     /// pushed executable section: the rel32 form with a `PC32` relocation
     /// deferred as `TextBlock` and rewritten to the block's text offset after
-    /// layout, the GNU as cross-section branch (addend -4).
+    /// layout, as a cross-section branch (addend -4).
     fn goto_branch(
         &self,
         goto_block: &dyn Fn(u8) -> Option<u32>,
@@ -666,9 +739,9 @@ impl SectionInsn<'_> {
                 relocs: alloc::vec![AsmSectionReloc {
                     offset: bytes.len() as u32 - 1,
                     width: 1,
-                    // Not `JumpRel`: these have no wider form, so GNU as
-                    // fixes them up rather than relaxing them, and a global
-                    // target keeps its relocation as it does for `call`.
+                    // Not `JumpRel`: these have no wider form, so they are
+                    // fixed up rather than relaxed, and a global target keeps
+                    // its relocation as for `call`.
                     kind: AsmRelocKind::Data,
                     pcrel: true,
                     branch: false,
@@ -804,9 +877,10 @@ impl SectionInsn<'_> {
     /// mode's default operand size, which the near-branch and stack group
     /// promotes to 64 bits in long mode and leaves at 32 or 16 outside it.
     fn mem_size(&self) -> super::super::ir::AsmRegSize {
-        asm_mem_size(None, self.insn, self.refs.operands, self.refs.op_reg).unwrap_or(
-            super::super::ir::AsmRegSize::from_width(self.mode.stack_opsize()),
-        )
+        use super::super::ir::AsmRegSize;
+        asm_mem_size(None, self.insn, self.refs.operands, self.refs.op_reg)
+            .or_else(|| unsized_mem_size(self.insn, self.mode))
+            .unwrap_or(AsmRegSize::from_width(self.mode.stack_opsize()))
     }
 
     /// A template operand's register, or its `i`-class constant.
@@ -1266,7 +1340,7 @@ impl SectionInsn<'_> {
 
     /// Encode the body behind its prefixes and locate the symbolic fields: a
     /// `$symbol` immediate settles its width and signedness first, the widest
-    /// probe that encodes winning as under GNU as; a symbolic displacement is
+    /// probe that encodes winning; a symbolic displacement is
     /// found by re-encoding with a distinct displacement, exactly those bytes
     /// differing.
     fn encode(
@@ -1404,7 +1478,7 @@ impl SectionInsn<'_> {
     }
 }
 
-/// gas's test for a relaxable GOT load: `mov` (8B), `test` (85), the binary
+/// The psABI's relaxable GOT loads: `mov` (8B), `test` (85), the binary
 /// operations' loads, and `call` / `jmp` through `FF /2`, `FF /4`.
 fn got_relax(bytes: &[u8]) -> crate::c5::asm::AsmGotRelax {
     use crate::c5::asm::AsmGotRelax;
@@ -1478,7 +1552,7 @@ struct SymImmField {
 /// Probe pairs for locating a symbol immediate's field, widest first; the
 /// members of a pair differ in every byte and stay inside the signed range
 /// of their width. The 8-byte pair comes last, so a form with a 4-byte
-/// variant takes it, as under GNU as, and only `movabsq` falls through.
+/// variant takes it and only `movabsq` falls through.
 const IMM_PROBE: [(u8, i64, i64); 4] = [
     (4, 0x5B3D_71A7, 0x24C2_8E58),
     (2, 0x5B3D, 0x24C2),
@@ -1549,7 +1623,7 @@ fn template_expr_value(
     measure: &crate::c5::asm::SectionLabelOffsets,
 ) -> Option<i64> {
     let resolve = |name: &str| -> Option<i64> {
-        // A bare decimal is an integer literal; a GNU as numeric label is
+        // A bare decimal is an integer literal; a numeric label is
         // referenced only as `Nb` / `Nf`. Leave literals for the evaluator.
         if name.bytes().all(|c| c.is_ascii_digit()) {
             return None;
@@ -1707,12 +1781,14 @@ struct AsmTemplate {
     code: alloc::string::String,
     blocks: alloc::vec::Vec<crate::c5::asm::AsmSectionBlock>,
     insns: alloc::vec::Vec<super::asm::AsmInsn>,
+    /// The warnings the macro directives and the section blocks raised.
+    warnings: alloc::vec::Vec<(crate::c5::diag::Code, alloc::string::String)>,
 }
 
 /// Expand `%=` once so the code text and any `.pushsection` content share
 /// one instance number, rename multiply defined numeric labels, print the
-/// `%zN` size suffixes, assign the operand registers, expand the GNU as
-/// macro directives, split off the section blocks and encode their
+/// `%zN` size suffixes, assign the operand registers, expand the macro
+/// directives, split off the section blocks and encode their
 /// replacement instructions, then parse the code text.
 fn prepare_template(
     stmt: &AsmStmt,
@@ -1762,7 +1838,10 @@ fn prepare_template(
         Ok(e) => e,
         Err(m) => return fail(m),
     };
-    let text = gas.as_deref().unwrap_or(text);
+    let mut warnings: alloc::vec::Vec<_> = (gas.warnings.into_iter())
+        .map(|w| (crate::c5::diag::Code::ASM_WARNING, w))
+        .collect();
+    let text = gas.text.as_deref().unwrap_or(text);
     let multidef = crate::c5::asm::rewrite_multidef_local_labels(text);
     let text = multidef.as_deref().unwrap_or(text);
     let mut extracted = match crate::c5::asm::extract_asm_sections(text, false) {
@@ -1788,8 +1867,8 @@ fn prepare_template(
         section_goto_ks.borrow_mut().push(k as usize);
         Some(bid)
     };
-    if let Some(ex) = extracted.as_mut()
-        && let Err(m) = encode_x86_asm_section_code(
+    if let Some(ex) = extracted.as_mut() {
+        match encode_x86_asm_section_code(
             &mut ex.blocks,
             stmt.func,
             stmt.args,
@@ -1799,9 +1878,10 @@ fn prepare_template(
             &goto_block,
             &op_reg,
             &asm.operands,
-        )
-    {
-        return fail(alloc::string::String::from(m));
+        ) {
+            Ok(w) => warnings.extend(w.into_iter().map(|e| (e.code, e.text))),
+            Err(m) => return fail(alloc::string::String::from(m)),
+        }
     }
     let (code, blocks) = match extracted {
         Some(ex) => (ex.code, ex.blocks),
@@ -1819,10 +1899,11 @@ fn prepare_template(
         code,
         blocks,
         insns,
+        warnings,
     })
 }
 
-/// The text a template operand reference substitutes to in a GNU as macro
+/// The text a template operand reference substitutes to in a macro
 /// directive: a register operand's assigned AT&T name, so the macro's
 /// register-name comparisons resolve, or an `i`-class constant.
 fn gas_operand_subst(
@@ -1972,7 +2053,7 @@ fn bind_operands(stmt: &AsmStmt) -> Emit<BoundOperands> {
 }
 
 /// Load an `x` operand of `width` bytes into `xmm`: a scalar into the low lane.
-fn emit_xmm_load(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32, width: u8) {
+fn emit_xmm_load(code: &mut CodeBuf, xmm: Reg, base: Reg, disp: i32, width: u8) {
     match width {
         4 => super::encode::emit_movss_xmm_mem(code, xmm, base, disp),
         8 => super::encode::emit_movsd_xmm_mem(code, xmm, base, disp),
@@ -1981,7 +2062,7 @@ fn emit_xmm_load(code: &mut Vec<u8>, xmm: Reg, base: Reg, disp: i32, width: u8) 
 }
 
 /// Store the `width` bytes of an `x` operand held in `xmm`.
-fn emit_xmm_store(code: &mut Vec<u8>, base: Reg, disp: i32, xmm: Reg, width: u8) {
+fn emit_xmm_store(code: &mut CodeBuf, base: Reg, disp: i32, xmm: Reg, width: u8) {
     match width {
         4 => super::encode::emit_movss_mem_xmm(code, base, disp, xmm),
         8 => super::encode::emit_movsd_mem_xmm(code, base, disp, xmm),
@@ -2218,7 +2299,7 @@ impl AsmScratch {
             })
     }
 
-    fn emit_saves(&self, code: &mut Vec<u8>) {
+    fn emit_saves(&self, code: &mut CodeBuf) {
         for (k, &r) in self.fp_save_list.iter().enumerate() {
             super::encode::emit_movups_mem_xmm(
                 code,
@@ -2484,7 +2565,7 @@ impl AsmScratch {
 
     /// Store output register `r` to spill slot `slot` after the template:
     /// an `x` output of `xmm` bytes, a vector's in the 16-byte area.
-    fn store_spilled(&self, code: &mut Vec<u8>, stmt: &AsmStmt, r: u8, slot: u32, xmm: Option<u8>) {
+    fn store_spilled(&self, code: &mut CodeBuf, stmt: &AsmStmt, r: u8, slot: u32, xmm: Option<u8>) {
         let (base, disp) = if xmm == Some(16) {
             v128_spill_addr(stmt.frame, slot)
         } else {
@@ -2497,7 +2578,7 @@ impl AsmScratch {
         }
     }
 
-    fn emit_restore(&self, code: &mut Vec<u8>) {
+    fn emit_restore(&self, code: &mut CodeBuf) {
         for (k, &r) in self.save_list.iter().enumerate() {
             super::encode::emit_mov_r_mem(code, Reg(r), self.anchor, self.gp_off(k));
         }
@@ -2620,6 +2701,7 @@ impl AsmPass<'_> {
 
     fn mem_size_or_quad(&self, insn: &super::asm::AsmInsn) -> super::super::ir::AsmRegSize {
         self.mem_size(None, insn)
+            .or_else(|| unsized_mem_size(insn, super::table::Mode::Bits64))
             .unwrap_or(super::super::ir::AsmRegSize::Quad)
     }
 
@@ -2668,7 +2750,7 @@ impl AsmPass<'_> {
     fn emit_directive(
         &self,
         insn: &super::asm::AsmInsn,
-        code: &mut Vec<u8>,
+        code: &mut CodeBuf,
         text_align: &mut usize,
         layout: &mut AsmLayout,
     ) -> Option<Emit> {
@@ -2679,10 +2761,10 @@ impl AsmPass<'_> {
             return Some(Ok(()));
         }
         // `.align` / `.p2align` / `.balign` pad the unit's text stream to the
-        // boundary as GNU as does section-relative, raising the section
-        // alignment above the default when needed; the default fill is the GNU
-        // as multi-byte NOP sequence. A label operand resolves against the
-        // definitions already emitted.
+        // boundary section-relative, raising the section alignment above the
+        // default when needed; the default fill is the multi-byte NOP
+        // sequence. A label operand resolves against the definitions already
+        // emitted.
         if let Some(crate::c5::asm::AsmSectionItem::Align {
             spec,
             fill,
@@ -2710,12 +2792,15 @@ impl AsmPass<'_> {
             {
                 return Some(fail(e));
             }
+            code.describe(at, || alloc::format!(".balign {n}"));
             return Some(Ok(()));
         }
         // A raw-byte piece (a hex-byte run or a `.byte` family directive) is
         // data as far as alignment is concerned.
         if insn.mnemonic == Mnemonic::RawBytes {
+            let at = code.len();
             code.extend_from_slice(&insn.bytes);
+            code.describe(at, || t::data(1, &insn.bytes));
             layout.after_insn = false;
             return Some(Ok(()));
         }
@@ -2736,9 +2821,19 @@ impl AsmPass<'_> {
             } else {
                 &insn.bytes
             };
+            let at = code.len();
             for _ in 0..count {
                 code.extend_from_slice(unit);
             }
+            code.describe(at, || {
+                alloc::format!(".fill {count}, {}, {:#x}", unit.len(), {
+                    let mut v = 0u64;
+                    for (i, b) in unit.iter().enumerate() {
+                        v |= u64::from(*b) << (8 * i);
+                    }
+                    v
+                })
+            });
             layout.after_insn = false;
             return Some(Ok(()));
         }
@@ -2773,7 +2868,9 @@ impl AsmPass<'_> {
                     }
                     _ => return Some(fail("inline asm: unsupported data-directive value")),
                 };
+                let at = code.len();
                 code.extend_from_slice(&(v as u64).to_le_bytes()[..w as usize]);
+                code.describe(at, || t::data(w, &(v as u64).to_le_bytes()[..w as usize]));
             }
             layout.after_insn = false;
             return Some(Ok(()));
@@ -2854,8 +2951,7 @@ impl AsmPass<'_> {
                         ));
                     }
                 }
-                out.cx.code.push(if is_call { 0xE8 } else { 0xE9 });
-                out.cx.code.extend_from_slice(&[0u8; 4]);
+                push_rel32(out.cx.code, is_call);
             }
             _ => {
                 return Some(fail(
@@ -2896,10 +2992,9 @@ impl AsmPass<'_> {
         // it; a target outside the stream keeps rel32 for the section pass.
         if let Some(&AsmOpnd::Label { num, forward }) = insn.operands.first() {
             // A `call` to a local label is the rel32 near call, which has no
-            // shorter form (GNU as: any code-address operand takes a label).
+            // shorter form.
             if matches!(insn.mnemonic, Mnemonic::Table("call" | "callq")) {
-                code.push(0xE8);
-                code.extend_from_slice(&[0u8; 4]);
+                push_rel32(code, true);
                 match self.weak_target_name(num) {
                     Some(n) => out.cx.asm_sym_fixups.push(super::AsmSymFixup {
                         instr_offset: code.len() - 4,
@@ -3031,8 +3126,7 @@ impl AsmPass<'_> {
                         is_tail: !is_call,
                     }),
             }
-            code.push(if is_call { 0xE8 } else { 0xE9 });
-            code.extend_from_slice(&[0u8; 4]);
+            push_rel32(code, is_call);
             layout.after_insn = true;
             return Some(Ok(()));
         }
@@ -3541,6 +3635,15 @@ impl AsmPass<'_> {
         if let Err(m) = super::asm::encode(&mut body, addr, insn.mnemonic, insn.suffix, concrete) {
             return fail(m);
         }
+        let sized = self.mem_size(None, insn).is_some();
+        if let Some(w) = defaulted_width_warning(insn, concrete, sized, super::table::Mode::Bits64)
+        {
+            (out.cx.asm_warnings).push((
+                self.stmt.site,
+                crate::c5::diag::Code::ASM_OPERAND_SIZE,
+                w,
+            ));
+        }
         let sizes = push_legacy_prefixes(code, &body, insn.seg.or(resolved.operand_seg), &pending);
         code.extend_from_slice(&body[sizes..]);
         if let Some(rex) = insn.rex
@@ -3633,6 +3736,27 @@ impl AsmPass<'_> {
                 }
             }
         }
+        let seg = insn.seg.or(resolved.operand_seg);
+        let end = out.cx.code.len();
+        out.cx.code.describe(insn_at, || {
+            // A catalog instruction reads as the lowering's own do; another
+            // as the template spells it.
+            let field = riprel_field(&body, concrete, addr, insn)
+                .map(|(f, _)| (end - (body.len() - f) - insn_at) as u8);
+            let mut text = t::asm_text(&insn.name, insn.mnemonic, insn.suffix, concrete, field);
+            if let Some(p) = seg {
+                t::segment(&mut text, p);
+            }
+            // A segment override reads on the memory operand, another
+            // prefix ahead of the mnemonic.
+            for &b in pending.iter().rev() {
+                match b {
+                    0x26 | 0x2E | 0x36 | 0x3E | 0x64 | 0x65 => t::segment(&mut text, b),
+                    _ => text.insert(0, &alloc::format!("{} ", t::prefix_name(b))),
+                }
+            }
+            text
+        });
         layout.after_insn = true;
         Ok(())
     }
@@ -3654,8 +3778,7 @@ impl AsmPass<'_> {
 
     /// The main-stream definition a label reference at `at` binds to: a
     /// named label has one definition; a forward `Nf` takes the nearest
-    /// after `at`, a backward `Nb` the nearest at or before it (the GNU as
-    /// local-label rule).
+    /// after `at`, a backward `Nb` the nearest at or before it.
     fn resolve_label(
         &self,
         layout: &AsmLayout,
@@ -3740,9 +3863,9 @@ impl AsmPass<'_> {
         Ok(deferred)
     }
 
-    /// A named label defined in the main stream is a definition of the unit,
-    /// as for GNU as: the writers emit a local `.text` symbol and bind a
-    /// same-name C reference to it. `.L`-prefixed names are assembler-local
+    /// A named label defined in the main stream is a definition of the unit:
+    /// the writers emit a local `.text` symbol and bind a same-name C
+    /// reference to it. `.L`-prefixed names are assembler-local
     /// (the renames of multiply defined numeric labels carry that prefix).
     fn record_text_labels(
         &self,
@@ -3845,6 +3968,9 @@ impl AsmPass<'_> {
             Ok(d) => d,
             Err(m) => return fail(alloc::string::String::from(m)),
         };
+        let warnings = core::mem::take(&mut out.cx.asm_sections.warnings);
+        let site = self.stmt.site;
+        (out.cx.asm_warnings).extend(warnings.into_iter().map(|w| (site, w.code, w.text)));
         let label_name = |num: u32| -> Option<alloc::string::String> {
             if num >= super::asm::NAMED_LABEL_BASE {
                 self.label_names
@@ -3892,7 +4018,7 @@ impl AsmPass<'_> {
     /// so each `=@cc<cond>` materializes with `set<cond>` into its
     /// register's low byte, zero-extended. Runs before the store-backs,
     /// whose `mov`s would otherwise follow the template first.
-    fn emit_flag_outputs(&self, code: &mut Vec<u8>) -> Emit {
+    fn emit_flag_outputs(&self, code: &mut CodeBuf) -> Emit {
         use super::super::ir::AsmConstraint;
         for (i, op) in self.stmt.asm.operands.iter().enumerate() {
             let AsmConstraint::Flags(nibble) = op.constraint else {
@@ -4029,6 +4155,18 @@ struct GotoExits {
 }
 
 /// A `jmp` / `jcc` in the rel32 form with a zero displacement.
+/// A template's `call` (E8) or `jmp` (E9) with a zero rel32 a fixup or a
+/// relocation fills; the template's own branches are not the lowering's.
+fn push_rel32(code: &mut CodeBuf, is_call: bool) {
+    let at = code.len();
+    code.push(if is_call { 0xE8 } else { 0xE9 });
+    code.extend_from_slice(&[0u8; 4]);
+    code.describe(at, || {
+        let name = if is_call { "callq " } else { "jmp " };
+        t::Text::with(name, t::Operand::PcRel { field: 1, width: 4 }, "")
+    });
+}
+
 fn emit_rel32_branch(code: &mut CodeBuf, cc: Option<Cc>) {
     match cc {
         Some(cc) => super::encode::emit_jcc_rel32(code, cc, 0),
@@ -4105,6 +4243,7 @@ fn emit_inline_asm_once(
         &section_goto_ks,
         bound.as_ref().map(|b| b.op_reg.as_slice()),
     )?;
+    (out.cx.asm_warnings).extend(tpl.warnings.iter().map(|(c, w)| (site, *c, w.clone())));
     let label_names = super::asm::scan_label_names(&tpl.code);
     let weak_names = crate::c5::asm::asm_weak_only_names(&tpl.blocks, out.cx.asm_sections);
     let stream_defs: alloc::vec::Vec<(u32, usize)> = tpl
@@ -4195,7 +4334,7 @@ pub(crate) fn jcc_cond(name: &str) -> Option<super::encode::Cc> {
 }
 
 /// Load the low `width` bytes at `[base]` into `dst` (zero-extended).
-fn emit_asm_load_width(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32, width: u8) {
+fn emit_asm_load_width(code: &mut CodeBuf, dst: Reg, base: Reg, disp: i32, width: u8) {
     match width {
         1 => super::encode::emit_movzx_r_mem8(code, dst, base, disp),
         2 => super::encode::emit_movzx_r_mem16(code, dst, base, disp),
@@ -4205,7 +4344,7 @@ fn emit_asm_load_width(code: &mut Vec<u8>, dst: Reg, base: Reg, disp: i32, width
 }
 
 /// Store the low `width` bytes of `src` to `[base + disp]`.
-fn emit_asm_store_width(code: &mut Vec<u8>, base: Reg, disp: i32, src: Reg, width: u8) {
+fn emit_asm_store_width(code: &mut CodeBuf, base: Reg, disp: i32, src: Reg, width: u8) {
     match width {
         1 => super::encode::emit_mov_mem_r8(code, base, disp, src),
         2 => super::encode::emit_mov_mem_r16(code, base, disp, src),

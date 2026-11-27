@@ -3,7 +3,7 @@ init_padding_zero.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,17 +26,16 @@ Disassembly of section .text:
                	int3
 
 <dirty>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x800, %rsp            # imm = 0x800
+               	subq	$0x808, %rsp            # imm = 0x808
                	xorl	%eax, %eax
-               	leaq	-0x800(%rbp), %rcx
+               	leaq	(%rsp), %rcx
                	addq	%rax, %rcx
                	movb	$-0x56, (%rcx)
                	incq	%rax
+               	nopw	%cs:(%rax,%rax)
                	cmpl	$0x800, %eax            # imm = 0x800
                	jb	<addr>
-               	leave
+               	addq	$0x808, %rsp            # imm = 0x808
                	retq
 
 <or_bytes>:
@@ -49,149 +48,127 @@ Disassembly of section .text:
                	movzbq	(%r8), %r8
                	orq	%r8, %rax
                	incq	%rcx
+               	nopl	(%rax,%rax)
                	cmpl	%edx, %ecx
                	jb	<addr>
                	retq
 
 <struct_const>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rdi
+               	subq	$0x18, %rsp
+               	leaq	0x8(%rsp), %rdi
                	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %r10
                	movq	%r10, (%rdi)
                	leaq	<rip>, %rsi # <addr>
                	movl	$0x3, %edx
                	callq	<addr>
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <struct_runtime>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rdi
+               	subq	$0x18, %rsp
+               	leaq	0x8(%rsp), %rdi
                	movq	$0x0, (%rdi)
-               	movb	$0x1, -0x8(%rbp)
-               	movl	$0x1, -0x4(%rbp)
+               	movb	$0x1, 0x8(%rsp)
+               	movl	$0x1, 0xc(%rsp)
                	leaq	<rip>, %rsi # <addr>
                	movl	$0x3, %edx
                	callq	<addr>
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <struct_runtime_partial>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rdi
+               	subq	$0x18, %rsp
+               	leaq	(%rsp), %rdi
                	movq	$0x0, (%rdi)
                	movl	$0x0, 0x8(%rdi)
-               	movb	$0x1, -0x10(%rbp)
+               	movb	$0x1, (%rsp)
                	leaq	<rip>, %rsi # <addr>
                	movl	$0x4, %edx
                	callq	<addr>
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <struct_designated>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rdi
+               	subq	$0x18, %rsp
+               	leaq	(%rsp), %rdi
                	movq	$0x0, (%rdi)
                	movl	$0x0, 0x8(%rdi)
-               	movw	$0x1, -0x6(%rbp)
+               	movw	$0x1, 0xa(%rsp)
                	leaq	<rip>, %rsi # <addr>
                	movl	$0x4, %edx
                	callq	<addr>
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <struct_empty>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x10(%rbp), %rdi
+               	subq	$0x18, %rsp
+               	leaq	(%rsp), %rdi
                	movq	$0x0, (%rdi)
                	movl	$0x0, 0x8(%rdi)
                	leaq	<rip>, %rsi # <addr>
                	movl	$0x4, %edx
                	callq	<addr>
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <union_const>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rdi
+               	subq	$0x18, %rsp
+               	leaq	0x8(%rsp), %rdi
                	leaq	<rip>, %rax # <addr>
                	movq	(%rax), %r10
                	movq	%r10, (%rdi)
                	leaq	<rip>, %rsi # <addr>
                	movl	$0x7, %edx
                	callq	<addr>
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <union_runtime>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rdi
+               	subq	$0x18, %rsp
+               	leaq	0x8(%rsp), %rdi
                	movq	$0x0, (%rdi)
-               	movb	$0x1, -0x8(%rbp)
+               	movb	$0x1, 0x8(%rsp)
                	leaq	<rip>, %rsi # <addr>
                	movl	$0x7, %edx
                	callq	<addr>
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <compound_literal>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rdi
+               	subq	$0x18, %rsp
+               	leaq	0x8(%rsp), %rdi
                	movq	$0x0, (%rdi)
-               	movb	$0x1, -0x8(%rbp)
-               	movl	$0x1, -0x4(%rbp)
+               	movb	$0x1, 0x8(%rsp)
+               	movl	$0x1, 0xc(%rsp)
                	leaq	<rip>, %rsi # <addr>
                	movl	$0x3, %edx
                	callq	<addr>
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <by_value>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movq	%rdi, -0x8(%rbp)
-               	leaq	-0x8(%rbp), %rdi
+               	subq	$0x18, %rsp
+               	movq	%rdi, 0x8(%rsp)
+               	leaq	0x8(%rsp), %rdi
                	leaq	<rip>, %rsi # <addr>
                	movl	$0x3, %edx
                	callq	<addr>
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <struct_by_value>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	leaq	-0x8(%rbp), %rdi
+               	subq	$0x18, %rsp
+               	leaq	0x8(%rsp), %rdi
                	movq	$0x0, (%rdi)
-               	movb	$0x1, -0x8(%rbp)
-               	movl	$0x1, -0x4(%rbp)
+               	movb	$0x1, 0x8(%rsp)
+               	movl	$0x1, 0xc(%rsp)
                	movq	(%rdi), %rdi
                	callq	<addr>
-               	leave
+               	addq	$0x18, %rsp
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
                	pushq	%rbx
                	callq	<addr>
                	callq	<addr>
@@ -237,5 +214,4 @@ Disassembly of section .text:
                	callq	<addr>
                	orq	%rbx, %rax
                	popq	%rbx
-               	leave
                	retq

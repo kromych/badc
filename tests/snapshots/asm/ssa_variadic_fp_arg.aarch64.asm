@@ -3,7 +3,7 @@ ssa_variadic_fp_arg.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -16,10 +16,10 @@ Disassembly of section .text:
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
+               	adrp	x0, <page>
+               	ldr	d0, [x0, #0x10]
                	adrp	x0, <addr>
                	add	x0, x0, <lo12>
-               	adrp	x1, <page>
-               	ldr	d0, [x1, #0x10]
                	bl	<addr>
                	adrp	x16, <addr>
                	ldr	d0, [x16, #0x18]
@@ -27,11 +27,11 @@ Disassembly of section .text:
                	add	x0, x0, <lo12>
                	bl	<addr>
                	adrp	x0, <addr>
+               	ldr	d0, [x0]
+               	adrp	x0, <page>
+               	ldr	d1, [x0, #0x10]
+               	adrp	x0, <addr>
                	add	x0, x0, <lo12>
-               	adrp	x1, <addr>
-               	ldr	d0, [x1]
-               	adrp	x1, <page>
-               	ldr	d1, [x1, #0x10]
                	bl	<addr>
                	adrp	x0, <page>
                	ldr	d0, [x0, #0x10]

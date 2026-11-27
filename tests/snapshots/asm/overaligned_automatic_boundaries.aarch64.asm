@@ -3,7 +3,7 @@ overaligned_automatic_boundaries.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -27,8 +27,8 @@ Disassembly of section .text:
                	str	x1, [sp]
                	tst	x0, #0x1f
                	mov	x0, #0x0                // =0
-               	mov	x2, #0x1                // =1
-               	csel	x1, x0, x2, ne
+               	mov	x17, #0x1               // =1
+               	csel	x1, x0, x17, ne
                	cbz	x1, <addr>
                	ldrsw	x0, [sp, #0x4]
                	cmp	w0, #0xa
@@ -104,8 +104,8 @@ Disassembly of section .text:
                	strb	w1, [sp, #0xfff]
                	tst	x0, #0xfff
                	mov	x0, #0x0                // =0
-               	mov	x2, #0x1                // =1
-               	csel	x1, x0, x2, ne
+               	mov	x17, #0x1               // =1
+               	csel	x1, x0, x17, ne
                	cbz	x1, <addr>
                	ldrb	w0, [sp, #0xfff]
                	cmp	w0, #0x2
@@ -140,8 +140,8 @@ Disassembly of section .text:
                	strb	w3, [x2]
                	tst	x0, #0x3f
                	mov	x0, #0x0                // =0
-               	mov	x4, #0x1                // =1
-               	csel	x3, x0, x4, ne
+               	mov	x17, #0x1               // =1
+               	csel	x3, x0, x17, ne
                	cbz	x3, <addr>
                	ldrb	w1, [x1]
                	cmp	w1, #0x2
@@ -168,9 +168,8 @@ Disassembly of section .text:
                	mov	x1, #0x4                // =4
                	strh	w1, [sp]
                	tst	x0, #0x1f
-               	mov	x1, #0x0                // =0
-               	mov	x2, #0x1                // =1
-               	csel	x0, x1, x2, ne
+               	mov	x17, #0x1               // =1
+               	csel	x0, xzr, x17, ne
                	mov	sp, x29
                	ldp	x29, x30, [sp], #0x10
                	ret

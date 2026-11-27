@@ -192,13 +192,13 @@ fn off_windows_the_seh_words_are_identifiers() {
 const CAUGHT: &str = "int f(void) { int r = 0; __try { r = ext(); } __except (1) { r = (int)GetExceptionCode(); } return r; }";
 
 /// A program whose `main` calls [`CAUGHT`]'s function.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 const PROGRAM: &str = "#include <windows.h>\nint g;\nint ext(void) { return g + 5; }\n\
     int f(void) { int r = 0; __try { r = ext(); } __except (1) { r = (int)GetExceptionCode(); } return r; }\n\
     int main(void) { return f(); }\n";
 
 /// The emit error for `body` as a relocatable object, else `None`.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn object_error(body: &str, target: Target) -> Option<alloc::string::String> {
     let program = Compiler::with_target(unit(body), target)
         .compile()
@@ -214,7 +214,7 @@ fn object_error(body: &str, target: Target) -> Option<alloc::string::String> {
 
 /// Funclets inside a `__finally` block, and a `__finally` block that
 /// allocates on its stack, lower to objects on both PE targets.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn nested_and_allocating_funclets_compile() {
     let rows = [
@@ -235,7 +235,7 @@ fn nested_and_allocating_funclets_compile() {
 /// a scope table of its own, whose row names a filter funclet of its own;
 /// on x64 the function's record carries UNW_FLAG_UHANDLER and the funclet's
 /// UNW_FLAG_EHANDLER.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn a_try_inside_a_finally_block_gives_its_funclet_a_scope_table() {
     let src = "#include <windows.h>\nint g;\nint ext(void) { return g + 5; }\n\
@@ -273,7 +273,7 @@ fn a_try_inside_a_finally_block_gives_its_funclet_a_scope_table() {
 
 /// An image written in one step has no stub for the language handler, and
 /// the interpreter has no exception dispatch: both refuse a region.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn an_unlinked_image_and_the_interpreter_refuse_a_region() {
     for target in WINDOWS {
@@ -302,7 +302,7 @@ fn an_unlinked_image_and_the_interpreter_refuse_a_region() {
 /// language handler (x64 UNW_FLAG_EHANDLER, arm64 X bit) through a stub
 /// that jumps through its import slot, and a scope table whose rows give
 /// the constant filter 1 and a handler inside the function.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn a_linked_image_carries_the_scope_table() {
     for target in WINDOWS {
@@ -332,7 +332,7 @@ fn a_linked_image_carries_the_scope_table() {
 /// EXCEPTION_CONTINUE_SEARCH included, is a funclet of its own, as cl
 /// compiles it: the row's HandlerAddress is the start of a function with
 /// its own unwind entry, outside the function the region lies in.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn a_filter_is_a_funclet_the_scope_table_names() {
     let src = "#include <windows.h>\nint g;\nint ext(void) { return g + 5; }\n\
@@ -364,7 +364,7 @@ fn a_filter_is_a_funclet_the_scope_table_names() {
 /// JumpTarget 0, and an x64 unwind record carries UNW_FLAG_UHANDLER for it,
 /// with UNW_FLAG_EHANDLER too where an `__except` region shares the
 /// function: 0x11 and 0x19 in the header byte, as cl writes them.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn a_finally_row_names_its_funclet_and_no_target() {
     let src = "#include <windows.h>\nint g;\nint ext(void) { return g + 5; }\n\
@@ -403,7 +403,7 @@ fn a_finally_row_names_its_funclet_and_no_target() {
 /// directory gives, and every unwind record an entry points to lies in
 /// `.rdata`, where link.exe and lld-link place `.xdata`: a reader that takes
 /// the section as the array, as llvm-readobj does, reads each entry.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn pdata_holds_the_array_alone_and_the_unwind_records_lie_in_rdata() {
     let src = "#include <windows.h>\nint g;\nint ext(void) { return g + 5; }\n\
@@ -452,12 +452,13 @@ fn pdata_holds_the_array_alone_and_the_unwind_records_lie_in_rdata() {
 }
 
 /// In a linked Windows on ARM64 image, every `ret` of a function with an
-/// `.xdata` record ends an epilog scope as the unwinder locates it: one in
-/// the header (E bit) ends the function, one in the list starts at its
-/// offset, and either spans its codes up to `end` plus the `ret`. Folded,
+/// `.xdata` record ends an epilog scope as the unwinder locates it, and so
+/// does a tail call's `b`: one in the header (E bit) ends the function, one
+/// in the list starts at its offset, and either spans its codes up to `end`
+/// plus the `ret` or `b`. Folded,
 /// top-block, frame-only, large, dynamic and variadic frames, with one exit
 /// and several, at -O0 and -O, with and without `-mbranch-protection`.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn every_arm64_return_ends_an_epilog_scope() {
     let src = "long ext(long);\n\
@@ -511,9 +512,12 @@ fn every_arm64_return_ends_an_epilog_scope() {
                 .filter(|&r| word(text + r as usize) == RET)
                 .collect();
             let ends: alloc::vec::Vec<u32> = scopes.iter().map(|&(s, size)| s + size - 4).collect();
-            assert_eq!(
-                rets, ends,
-                "{hardening:?} -O={optimize}: {begin:#x} {scopes:x?}"
+            // A scope ends at a `ret` or at a tail call's `b`.
+            let exit = |w: u32| w == RET || w & 0xFC00_0000 == 0x1400_0000;
+            assert!(
+                rets.iter().all(|r| ends.contains(r))
+                    && ends.iter().all(|&e| exit(word(text + e as usize))),
+                "{hardening:?} -O={optimize}: {begin:#x} {scopes:x?} rets {rets:x?}"
             );
             let packed = word(at) & 1 << 21 != 0;
             header += usize::from(packed);
@@ -530,7 +534,7 @@ fn every_arm64_return_ends_an_epilog_scope() {
 /// The function length of the ARM64 `.xdata` record at the start of `x`,
 /// and each epilog scope's offset and size in bytes, its `ret` included,
 /// as the unwinder computes them from the codes.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn arm64_epilog_scopes(x: &[u8]) -> (u32, alloc::vec::Vec<(u32, u32)>) {
     let word = |at: usize| u32::from_le_bytes(x[at..at + 4].try_into().unwrap());
     let h = word(0);
@@ -567,7 +571,7 @@ fn arm64_epilog_scopes(x: &[u8]) -> (u32, alloc::vec::Vec<(u32, u32)>) {
 }
 
 /// The header byte of each x64 unwind record with a handler flag.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn pe_handler_flags(pe: &[u8]) -> alloc::vec::Vec<u8> {
     let (start, count, entry) = exception_table(pe, true);
     let word = |at: usize| u32::from_le_bytes(pe[at..at + 4].try_into().unwrap());
@@ -579,7 +583,7 @@ fn pe_handler_flags(pe: &[u8]) -> alloc::vec::Vec<u8> {
 }
 
 /// The begin RVA of each entry of the exception table.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn pe_function_starts(pe: &[u8], x64: bool) -> alloc::vec::Vec<u32> {
     let (start, count, entry) = exception_table(pe, x64);
     let word = |at: usize| u32::from_le_bytes(pe[at..at + 4].try_into().unwrap());
@@ -587,7 +591,7 @@ fn pe_function_starts(pe: &[u8], x64: bool) -> alloc::vec::Vec<u32> {
 }
 
 /// The file offset of the exception table, its entry count and entry size.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn exception_table(pe: &[u8], x64: bool) -> (usize, usize, usize) {
     let word = |at: usize| u32::from_le_bytes(pe[at..at + 4].try_into().unwrap());
     let pe_off = word(0x3c) as usize;
@@ -599,7 +603,7 @@ fn exception_table(pe: &[u8], x64: bool) -> (usize, usize, usize) {
 }
 
 /// The file offset of `rva`.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn pe_rva_offset(pe: &[u8], rva: u32) -> Option<usize> {
     let word = |at: usize| u32::from_le_bytes(pe[at..at + 4].try_into().unwrap());
     let pe_off = word(0x3c) as usize;
@@ -614,7 +618,7 @@ fn pe_rva_offset(pe: &[u8], rva: u32) -> Option<usize> {
 
 /// Per function whose unwind record carries a language handler: its
 /// begin and end RVAs and its scope-table rows.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn pe_scope_tables(pe: &[u8], x64: bool) -> alloc::vec::Vec<(u32, u32, alloc::vec::Vec<[u32; 4]>)> {
     let word = |at: usize| u32::from_le_bytes(pe[at..at + 4].try_into().unwrap());
     // Data directory 3: the exception table.

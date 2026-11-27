@@ -3,7 +3,7 @@ x86_fma_nan_operands_keep_their_sign.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,21 +26,17 @@ Disassembly of section .text:
                	int3
 
 <bits>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movss	%xmm0, -0x8(%rbp)
-               	movl	-0x8(%rbp), %eax
-               	leave
+               	subq	$0x18, %rsp
+               	movss	%xmm0, 0x8(%rsp)
+               	movl	0x8(%rsp), %eax
+               	addq	$0x18, %rsp
                	retq
 
 <val>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movl	%edi, -0x8(%rbp)
-               	movss	-0x8(%rbp), %xmm0
-               	leave
+               	subq	$0x18, %rsp
+               	movl	%edi, 0x8(%rsp)
+               	movss	0x8(%rsp), %xmm0
+               	addq	$0x18, %rsp
                	retq
 
 <main>:
@@ -161,6 +157,7 @@ Disassembly of section .text:
                	movss	(%rax), %xmm0
                	vzeroupper
                	callq	<addr>
+               	nopw	%cs:(%rax,%rax)
                	cmpl	$0x7fc00001, %eax       # imm = 0x7FC00001
                	jne	<addr>
                	leaq	(%rsp), %rax
@@ -168,6 +165,7 @@ Disassembly of section .text:
                	movss	0x4(%rax), %xmm0
                	vzeroupper
                	callq	<addr>
+               	nop
                	cmpl	$0xffc00002, %eax       # imm = 0xFFC00002
                	jne	<addr>
                	leaq	(%rsp), %rax
@@ -262,6 +260,7 @@ Disassembly of section .text:
                	movss	0x18(%rax), %xmm0
                	vzeroupper
                	callq	<addr>
+               	nopl	(%rax)
                	cmpl	$0x7fc00003, %eax       # imm = 0x7FC00003
                	jne	<addr>
                	leaq	(%rsp), %rax
@@ -269,14 +268,15 @@ Disassembly of section .text:
                	movss	0x1c(%rax), %xmm0
                	vzeroupper
                	callq	<addr>
+               	nop
                	cmpl	$0x7fc00001, %eax       # imm = 0x7FC00001
                	jne	<addr>
                	incq	%rbx
                	cmpl	$0x3, %ebx
                	jl	<addr>
-               	movabsq	$0x7ff8000000000001, %rdi # imm = 0x7FF8000000000001
+               	movabsq	$0x7ff8000000000001, %rsi # imm = 0x7FF8000000000001
                	movabsq	$-0x7fffffffffffe, %rcx # imm = 0xFFF8000000000002
-               	movq	%rdi, %xmm15
+               	movq	%rsi, %xmm15
                	vmovq	%xmm15, %r11
                	vmovq	%r11, %xmm0
                	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
@@ -307,11 +307,9 @@ Disassembly of section .text:
                	movq	%rax, %xmm15
                	vmovq	%xmm15, %r11
                	vmovq	%r11, %xmm0
-               	movabsq	$-0x7fffffffffffe, %rax # imm = 0xFFF8000000000002
-               	movq	%rax, %xmm15
+               	movq	%rcx, %xmm15
                	vmovq	%xmm15, %r11
                	vpinsrq	$0x1, %r11, %xmm0, %xmm0
-               	movabsq	$0x3ff0000000000000, %rax # imm = 0x3FF0000000000000
                	movq	%rax, %xmm15
                	vmovq	%xmm15, %r11
                	vmovq	%r11, %xmm3
@@ -322,7 +320,7 @@ Disassembly of section .text:
                	vinserti128	$0x1, %xmm3, %ymm0, %ymm3
                	vmovaps	%ymm3, %ymm0
                	vfnmsub231pd	%ymm2, %ymm1, %ymm0 # ymm0 = -(ymm1 * ymm2) - ymm0
-               	leaq	(%rsp), %r8
+               	leaq	(%rsp), %rdi
                	vmovups	%ymm0, (%rsp)
                	vmovaps	%ymm3, %ymm0
                	vfmsub231pd	%ymm2, %ymm1, %ymm0 # ymm0 = (ymm1 * ymm2) - ymm0
@@ -336,25 +334,24 @@ Disassembly of section .text:
                	xorl	%eax, %eax
                	movq	%rax, %rdx
                	shlq	$0x5, %rdx
-               	leaq	(%r8,%rdx), %rsi
-               	movsd	(%rsi), %xmm0
-               	movq	%xmm0, %r9
-               	cmpq	%rdi, %r9
+               	addq	%rdi, %rdx
+               	movsd	(%rdx), %xmm0
+               	movq	%xmm0, %r8
+               	cmpq	%rsi, %r8
                	jne	<addr>
-               	movsd	0x8(%rsi), %xmm0
-               	movq	%xmm0, %rsi
-               	cmpq	%rcx, %rsi
+               	movsd	0x8(%rdx), %xmm0
+               	movq	%xmm0, %r8
+               	nopl	(%rax)
+               	cmpq	%rcx, %r8
                	jne	<addr>
-               	leaq	(%rsp), %rsi
-               	addq	%rsi, %rdx
                	movsd	0x10(%rdx), %xmm0
                	movq	%xmm0, %rdx
                	cmpq	%rcx, %rdx
                	jne	<addr>
                	leaq	(%rsp), %rdx
-               	movq	%rax, %rsi
-               	shlq	$0x5, %rsi
-               	addq	%rsi, %rdx
+               	movq	%rax, %r8
+               	shlq	$0x5, %r8
+               	addq	%r8, %rdx
                	movsd	0x18(%rdx), %xmm0
                	movq	%xmm0, %rdx
                	cmpq	%rcx, %rdx
@@ -370,7 +367,7 @@ Disassembly of section .text:
                	vmovaps	%xmm14, %xmm0
                	vpermilpd	$0x0, %xmm0, %xmm1 # xmm1 = xmm0[0,0]
                	movq	%xmm1, %rax
-               	cmpq	%rdi, %rax
+               	cmpq	%rsi, %rax
                	jne	<addr>
                	vpermilpd	$0x1, %xmm0, %xmm0 # xmm0 = xmm0[1,0]
                	movq	%xmm0, %rax

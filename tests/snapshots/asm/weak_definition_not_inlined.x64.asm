@@ -3,7 +3,7 @@ weak_definition_not_inlined.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -30,14 +30,11 @@ Disassembly of section .text:
                	retq
 
 <weak_scale>:
+               	shlq	%rdi
                	movq	%rdi, %rax
-               	shlq	%rax
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x8, %rsp
                	pushq	%rbx
                	callq	<addr>
                	movq	%rax, %rbx
@@ -46,5 +43,4 @@ Disassembly of section .text:
                	addq	%rbx, %rax
                	incq	%rax
                	popq	%rbx
-               	leave
                	retq

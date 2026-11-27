@@ -3,7 +3,7 @@ mixed_sign_word_equality.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -34,8 +34,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	pushq	%r12
                	pushq	%rbx
                	xorl	%ebx, %ebx
@@ -75,59 +74,58 @@ Disassembly of section .text:
                	cmpl	%eax, %r12d
                	jne	<addr>
                	cmpl	$0x80000000, %eax       # imm = 0x80000000
-               	sete	%al
-               	movzbq	%al, %rax
-               	movl	(%rdx,%rbx,4), %ecx
-               	cmpl	$0x80000000, %ecx       # imm = 0x80000000
                	sete	%cl
                	movzbq	%cl, %rcx
-               	cmpl	%ecx, %eax
+               	movl	(%rdx,%rbx,4), %eax
+               	cmpl	$0x80000000, %eax       # imm = 0x80000000
+               	sete	%dl
+               	movzbq	%dl, %rdx
+               	cmpl	%edx, %ecx
                	jne	<addr>
                	cmpl	$0x80000000, %r12d      # imm = 0x80000000
-               	sete	%al
-               	movzbq	%al, %rax
-               	leaq	<rip>, %rcx # <addr>
-               	movl	(%rcx,%rbx,4), %ecx
-               	cmpl	$0x80000000, %ecx       # imm = 0x80000000
                	sete	%cl
                	movzbq	%cl, %rcx
-               	cmpl	%ecx, %eax
+               	cmpl	$0x80000000, %eax       # imm = 0x80000000
+               	sete	%al
+               	movzbq	%al, %rax
+               	cmpl	%eax, %ecx
                	jne	<addr>
                	incq	%rbx
+               	nopw	(%rax,%rax)
                	cmpl	$0x6, %ebx
                	jl	<addr>
                	xorl	%eax, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x6, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x5, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x4, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x3, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x2, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x1, %eax
                	popq	%rbx
                	popq	%r12
-               	popq	%rbp
+               	popq	%r11
                	retq

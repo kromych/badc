@@ -3,7 +3,7 @@ temp_files_truncate_sleep.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -30,17 +30,17 @@ Disassembly of section .text:
                	cbnz	x20, <addr>
                	adrp	x20, <page>
                	add	x20, x20, <lo12>
+               	mov	x3, x20
                	sub	x0, x29, #0x658
                	mov	x1, #0x200              // =512
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mov	x3, x20
                	bl	<addr>
+               	mov	x3, x20
                	sub	x0, x29, #0x458
                	mov	x1, #0x200              // =512
                	adrp	x2, <page>
                	add	x2, x2, <lo12>
-               	mov	x3, x20
                	bl	<addr>
                	sub	x0, x29, #0x658
                	bl	<addr>
@@ -58,10 +58,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x6a0
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
                	mov	x2, #0x6                // =6
-               	mov	x0, x20
                	bl	<addr>
                	cmp	x0, #0x6
                	b.eq	<addr>
@@ -70,14 +70,14 @@ Disassembly of section .text:
                	add	sp, sp, #0x6a0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0x2                // =2
                	mov	x0, x20
+               	mov	x1, #0x2                // =2
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
+               	mov	x0, x20
                	mov	x1, #0x0                // =0
                	mov	x2, #0x2                // =2
-               	mov	x0, x20
                	bl	<addr>
                	cmp	x0, #0x2
                	b.eq	<addr>
@@ -86,14 +86,14 @@ Disassembly of section .text:
                	add	sp, sp, #0x6a0
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x1, #0xa                // =10
                	mov	x0, x20
+               	mov	x1, #0xa                // =10
                	bl	<addr>
                	sxtw	x0, w0
                	cbnz	x0, <addr>
+               	mov	x0, x20
                	mov	x1, #0x0                // =0
                	mov	x2, #0x2                // =2
-               	mov	x0, x20
                	bl	<addr>
                	cmp	x0, #0xa
                	b.eq	<addr>
@@ -120,9 +120,9 @@ Disassembly of section .text:
                	add	sp, sp, #0x6a0
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, x20
                	mov	x1, #0x0                // =0
                	mov	x2, #0x2                // =2
-               	mov	x0, x20
                	bl	<addr>
                	str	x0, [sp, #0x18]
                	mov	x0, x20
@@ -258,12 +258,11 @@ Disassembly of section .text:
                	ldr	x2, [sp, #0x30]
                	sub	x1, x1, x2
                	add	x0, x0, x1
-               	mov	x1, #0xe                // =14
-               	mov	x2, #0x0                // =0
                	mov	x17, #0x8480            // =33920
                	movk	x17, #0x1e, lsl #16
                	cmp	x0, x17
-               	csel	x0, x1, x2, lt
+               	mov	x16, #0xe               // =14
+               	csel	x0, x16, xzr, lt
                	ldr	x20, [sp]
                	add	sp, sp, #0x6a0
                	ldp	x29, x30, [sp], #0x10

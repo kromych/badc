@@ -3,7 +3,7 @@ library_function_address_is_one_pointer.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,9 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	movq	<rip>, %rcx # <addr>
                	movq	<rip>, %rax # <addr>
                	cmpq	%rcx, %rax
@@ -37,19 +35,19 @@ Disassembly of section .text:
                	cmpq	%rax, %rcx
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	leaq	<rip>, %rdi
                	callq	*%rax
                	movq	%rax, 0x8(%rsp)
-               	leaq	<rip>, %rdi
                	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi
                	callq	*%rax
                	movq	0x8(%rsp), %r10
                	addq	%rax, %r10
                	movq	%r10, 0x8(%rsp)
-               	leaq	<rip>, %rdi
                	movq	<rip>, %rax # <addr>
+               	leaq	<rip>, %rdi
                	callq	*%rax
                	movq	%rax, %r10
                	movq	0x8(%rsp), %rax
@@ -59,5 +57,5 @@ Disassembly of section .text:
                	cmpq	$0x6, %rax
                	cmovneq	%rdx, %rcx
                	movq	%rcx, %rax
-               	leave
+               	addq	$0x18, %rsp
                	retq

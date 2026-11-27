@@ -3,7 +3,7 @@ vector_arithmetic_in_whole_registers.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -232,16 +232,16 @@ Disassembly of section .text:
                	sub	x3, x29, #0x50
                	stur	q0, [x29, #-0x50]
                	mov	x0, #0x0                // =0
+               	sub	x4, x29, #0x120
                	ldrsb	x1, [x20, x0]
                	ldrsb	x2, [x21, x0]
-               	add	x4, x1, x2
-               	sxtb	x4, w4
+               	add	x5, x1, x2
+               	sxtb	x5, w5
                	sub	x2, x1, x2
                	sxtb	x2, w2
-               	eor	x2, x4, x2
-               	sub	x4, x29, #0x120
-               	ldrsb	x4, [x4, x0]
-               	and	x1, x1, x4
+               	eor	x2, x5, x2
+               	ldrsb	x5, [x4, x0]
+               	and	x1, x1, x5
                	orr	x1, x2, x1
                	ldrsb	x2, [x3, x0]
                	sxtb	x1, w1

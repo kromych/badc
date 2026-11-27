@@ -3,7 +3,7 @@ fenv_raise_test_clear.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -18,17 +18,16 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x10]
                	add	x29, sp, #0x10
                	mov	x20, #0x0               // =0
-               	mov	x21, #0x1f              // =31
-               	mov	x0, x21
-               	bl	<addr>
-               	sxtw	x0, w0
-               	cbnz	x0, <addr>
-               	mov	x0, x21
-               	bl	<addr>
-               	sxtw	x0, w0
-               	cbnz	x0, <addr>
                	adrp	x21, <addr>
                	add	x21, x21, <lo12>
+               	mov	x0, #0x1f               // =31
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cbnz	x0, <addr>
+               	mov	x0, #0x1f               // =31
+               	bl	<addr>
+               	sxtw	x0, w0
+               	cbnz	x0, <addr>
                	ldrsw	x0, [x21, x20, lsl #2]
                	bl	<addr>
                	sxtw	x0, w0

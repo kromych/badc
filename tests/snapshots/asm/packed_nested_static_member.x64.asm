@@ -3,7 +3,7 @@ packed_nested_static_member.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -45,30 +45,28 @@ Disassembly of section .text:
                	movslq	%edi, %rdi
                	leaq	<rip>, %rax # <addr>
                	imulq	$0x19, %rdi, %rcx
-               	addq	%rcx, %rax
-               	leaq	0xa(%rdi), %rcx
-               	movl	%ecx, 0x1(%rax)
+               	addq	%rax, %rcx
+               	leaq	0xa(%rdi), %rax
+               	movl	%eax, 0x1(%rcx)
                	movw	$0x14, <rip> # <addr>
-               	movl	0x1(%rax), %eax
                	addq	$0x14, %rax
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	xorl	%edi, %edi
                	callq	<addr>
                	cmpl	$0x10, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x1, %edi
                	callq	<addr>
                	cmpl	$0x12, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x28, %edi
                	callq	<addr>
@@ -82,7 +80,7 @@ Disassembly of section .text:
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x1, %edi
                	callq	<addr>
@@ -93,8 +91,8 @@ Disassembly of section .text:
                	cmpl	$0x1e, %eax
                	je	<addr>
                	movl	$0x5, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

@@ -95,9 +95,9 @@ fn an_unbound_static_slot_in_a_single_image_is_reported() {
     assert!(err.contains("import address table"), "{err}");
 }
 
-/// A weak reference no input defines is 0 in an ELF single-file image, as
-/// GNU ld resolves it, and an undefined reference in a Mach-O one, as ld64
-/// reports it. Darwin's `weak_import` is `weak` there and ignored on ELF.
+/// A weak reference no input defines is 0 in an ELF single-file image (an
+/// unresolved weak symbol's gABI value) and an undefined reference in a
+/// Mach-O one. Darwin's `weak_import` is `weak` there and ignored on ELF.
 #[test]
 fn a_weak_reference_no_input_defines_is_undefined_in_a_mach_o_image() {
     use crate::{Compiler, NativeOptions, Target};
@@ -3026,7 +3026,9 @@ fn windows_bindings_name_exports_of_their_dlls() {
 /// On a macOS or Linux host, every binding the bundled headers state for the
 /// host's target names an export of its library, so an image importing it
 /// loads. A Mach-O symbol carries the leading underscore `dlsym` does not
-/// take.
+/// take. A binding whose glibc version node (`libc/versions`) is newer than
+/// the host's glibc is not looked for: an image importing it needs that
+/// glibc.
 #[cfg(all(
     unix,
     any(target_os = "macos", target_os = "linux"),
@@ -3044,8 +3046,20 @@ fn posix_bindings_name_exports_of_their_libraries() {
         crate::Target::LinuxX64
     };
     let mut host = crate::StdHost::default();
+    let glibc = host_glibc_release(&mut host);
+    let machine = if cfg!(target_arch = "aarch64") {
+        crate::c5::codegen::Machine::Aarch64
+    } else {
+        crate::c5::codegen::Machine::X86_64
+    };
     let mut missing = alloc::vec::Vec::new();
     for (library, symbol) in crate::c5::linker::library_bindings(target) {
+        let node = crate::c5::object::so_versions::manifest_version(machine, &library, &symbol);
+        if let (Some(host), Some(need)) = (glibc, node.and_then(|v| v.strip_prefix("GLIBC_")))
+            && release(need).is_some_and(|need| need > host)
+        {
+            continue;
+        }
         let name = if cfg!(target_os = "macos") {
             symbol.strip_prefix('_').unwrap_or(&symbol)
         } else {
@@ -3061,6 +3075,37 @@ fn posix_bindings_name_exports_of_their_libraries() {
         "{target:?}: not exported:\n  {}",
         missing.join("\n  ")
     );
+}
+
+/// `major.minor` of a glibc release or version node.
+#[cfg(all(unix, any(target_os = "macos", target_os = "linux")))]
+fn release(v: &str) -> Option<(u32, u32)> {
+    let (major, rest) = v.split_once('.')?;
+    let minor = rest.split('.').next()?;
+    Some((major.parse().ok()?, minor.parse().ok()?))
+}
+
+/// The host glibc's release, from `gnu_get_libc_version`; `None` on a host
+/// whose C library is not glibc.
+#[cfg(all(unix, any(target_os = "macos", target_os = "linux")))]
+fn host_glibc_release(host: &mut crate::StdHost) -> Option<(u32, u32)> {
+    use crate::c5::host::Host;
+    let libc = host.dlopen(Some("libc.so.6"), 1);
+    let f = if libc == 0 {
+        0
+    } else {
+        host.dlsym(libc, "gnu_get_libc_version")
+    };
+    if f == 0 {
+        return None;
+    }
+    // SAFETY: glibc declares `const char *gnu_get_libc_version(void)`, which
+    // returns a static NUL-terminated string.
+    let text = unsafe {
+        let get: extern "C" fn() -> *const core::ffi::c_char = core::mem::transmute(f as usize);
+        core::ffi::CStr::from_ptr(get())
+    };
+    release(text.to_str().ok()?)
 }
 
 /// A `#pragma binding(data lib::sym, ...)` import on the Windows
@@ -3104,15 +3149,18 @@ fn data_import_lowers_as_iat_load_not_thunk_on_windows_x64() {
 
     // Scan .text for every RIP-relative instruction whose computed
     // target equals the IAT slot RVA. `lea`/`mov reg, [rip+disp32]`
-    // share the 7-byte REX.W + modrm 0x05 + disp32 layout, differing
-    // only in the opcode (0x8D vs 0x8B); the `jmp [rip+disp32]` thunk
+    // share the 7-byte REX.W(+R) + modrm 00 reg 101 + disp32 layout,
+    // differing only in the opcode (0x8D vs 0x8B); the `jmp [rip+disp32]` thunk
     // is `FF 25` + disp32 over 6 bytes.
     let mut lea_to_slot = 0usize; // 48 8D 05 (address-of -- the bug)
     let mut mov_to_slot = 0usize; // 48 8B 05 (IAT-slot load -- the fix)
     let mut thunk_to_slot = 0usize; // FF 25     (call trampoline standing in for data)
     let mut i = 0usize;
     while i + 7 <= text.len() {
-        if text[i] == 0x48 && text[i + 2] == 0x05 && (text[i + 1] == 0x8D || text[i + 1] == 0x8B) {
+        if text[i] & 0xFB == 0x48
+            && text[i + 2] & 0xC7 == 0x05
+            && (text[i + 1] == 0x8D || text[i + 1] == 0x8B)
+        {
             let disp = i32::from_le_bytes(text[i + 3..i + 7].try_into().unwrap());
             let instr_rva = text_rva + i as u32;
             let target = (instr_rva as i64 + 7 + disp as i64) as u32;
@@ -3590,7 +3638,7 @@ fn pe_iat_slot_rva(image: &[u8], want: &str) -> Option<u32> {
 }
 
 /// `(sh_addr, contents)` of the named section of a linked ELF image.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn elf_section_addr_bytes(b: &[u8], want: &[u8]) -> Option<(u64, alloc::vec::Vec<u8>)> {
     let u16a = |o: usize| u16::from_le_bytes(b[o..o + 2].try_into().unwrap()) as usize;
     let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap()) as usize;
@@ -3612,7 +3660,7 @@ fn elf_section_addr_bytes(b: &[u8], want: &[u8]) -> Option<(u64, alloc::vec::Vec
 }
 
 /// `(addr, contents)` of the named section of a linked Mach-O image.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn macho_section_addr_bytes(b: &[u8], want: &[u8]) -> Option<(u64, alloc::vec::Vec<u8>)> {
     let u32a = |o: usize| u32::from_le_bytes(b[o..o + 4].try_into().unwrap()) as usize;
     let u64a = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
@@ -3640,7 +3688,7 @@ fn macho_section_addr_bytes(b: &[u8], want: &[u8]) -> Option<(u64, alloc::vec::V
 /// `(code address, code bytes, address range of the import slots)` of a
 /// linked image: the IAT entry named by `pe_import` for a PE, the `.got`
 /// / `__got` region for the other two formats.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn import_slot_layout(
     image: &[u8],
     target: crate::Target,
@@ -3670,7 +3718,7 @@ fn import_slot_layout(
 /// ones that materialize a slot's own address. Scans `code` for the
 /// two page-relative forms each machine uses; the resolved target has
 /// to land in `slots`, so an unaligned scan start cannot contribute.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn count_slot_references(
     target: crate::Target,
     code_va: u64,
@@ -3729,7 +3777,7 @@ fn count_slot_references(
 /// to code expecting its value, and every later dereference is off by
 /// one indirection. Each of the three image writers patches the site
 /// with its own helper, so the property is checked on every target.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn an_import_slot_reference_reads_the_slot_on_every_target() {
     use crate::{Compiler, NativeOptions, Target};
@@ -3777,7 +3825,7 @@ fn an_import_slot_reference_reads_the_slot_on_every_target() {
 /// returns instruction bytes -- with no diagnostic at link or load. The
 /// source materializes no other in-code address, so a page-relative
 /// address landing inside the code section is that misrouting.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn a_shared_library_data_import_reads_its_slot_on_every_target() {
     use crate::{Compiler, NativeOptions, Target};
@@ -4968,7 +5016,7 @@ fn atomic128_emits_ldp_stp_ldxp_stxp_aarch64() {
     };
     let any_ldxp = words().any(|w| (w & 0xFFFF_8000) == 0xC87F_0000);
     let any_stxp = words().any(|w| (w & 0xFFE0_8000) == 0xC820_0000);
-    // enc_ldp_off(x10,x11,x9,0) and enc_stp_off(x12,x13,x9,0).
+    // enc_ldp_off(x10,x11,x9,0).word and enc_stp_off(x12,x13,x9,0).word.
     let any_ldp = words().any(|w| w == 0xA940_2D2A);
     let any_stp = words().any(|w| w == 0xA900_352C);
     assert!(
@@ -5006,7 +5054,7 @@ fn atomic128_positional_ldp_load_pair_aarch64() {
     );
     let bytes = emit_native_with_options(&program, Target::MacOSAarch64, NativeOptions::default())
         .expect("emit MacOSAarch64");
-    // enc_ldp_off(x10, x11, x9, 0).
+    // enc_ldp_off(x10, x11, x9, 0).word.
     let any_ldp = bytes
         .windows(4)
         .map(|w| u32::from_le_bytes([w[0], w[1], w[2], w[3]]))
@@ -5777,9 +5825,9 @@ fn a_by_reference_argument_is_the_address_of_a_copy() {
 }
 
 /// An `_Atomic` aggregate, or one with an `_Atomic` member, is no
-/// homogeneous aggregate on macOS, as clang classifies it, and passes in
-/// the general registers; gcc takes `_Atomic` as a qualifier, so on Linux
-/// the floating-point members still form one.
+/// homogeneous aggregate to macOS's clang-compiled code and passes in the
+/// general registers; gcc-compiled Linux code takes `_Atomic` as a
+/// qualifier, so there the floating-point members still form one.
 #[test]
 fn an_atomic_member_ends_a_homogeneous_aggregate_on_macos() {
     use crate::Target;
@@ -5938,12 +5986,12 @@ fn a_variadic_hidden_pointer_callee_takes_named_arguments_by_class() {
     );
 }
 
-/// A floating-point vector of one element is System V MEMORY class, as gcc
-/// places it: on linux-x64 a function returning one, bare or as a struct's
-/// member, takes the result pointer in rdi, and one taking one finds it on
-/// the stack with the integers around it in rdi and rsi. A vector of two
-/// floats stays in xmm0, and linux-aarch64 passes the struct in x1 and the
-/// `double` vector in d0.
+/// A floating-point vector of one element is System V MEMORY class, where
+/// gcc-compiled code places it: on linux-x64 a function returning one,
+/// bare or as a struct's member, takes the result pointer in rdi, and one
+/// taking one finds it on the stack with the integers around it in rdi and
+/// rsi. A vector of two floats stays in xmm0, and linux-aarch64 passes the
+/// struct in x1 and the `double` vector in d0.
 #[test]
 fn a_single_fp_vector_is_memory_class_on_system_v() {
     use crate::Target;
@@ -6359,31 +6407,34 @@ fn windows_arm64_variadic_imports_pass_named_arguments_in_the_integer_bank() {
     expect_words(
         &function_words(&obj, "call_f"),
         &[
-            enc_fmov_d_to_x(x(0), 0),
-            enc_movz(x(1), 1, 0),
-            enc_fmov_d_to_x(x(2), 1),
+            enc_fmov_d_to_x(x(0), 0).word,
+            enc_movz(x(1), 1, 0).word,
+            enc_fmov_d_to_x(x(2), 1).word,
         ],
         "call_f",
     );
     // 1.5f and 2.5 as their bit patterns.
     expect_words(
         &function_words(&obj, "call_k"),
-        &[enc_movz(x(0), 0x3fc0, 1), enc_movz(x(1), 0x4004, 3)],
+        &[
+            enc_movz(x(0), 0x3fc0, 1).word,
+            enc_movz(x(1), 0x4004, 3).word,
+        ],
         "call_k",
     );
     expect_words(
         &function_words(&obj, "call_h"),
-        &[enc_fmov_d_to_x(x(1), 2)],
+        &[enc_fmov_d_to_x(x(1), 2).word],
         "call_h",
     );
     // `x` in the first stack slot, 9 in the second.
     let ws = function_words(&obj, "call_s");
     assert!(
-        ws.contains(&enc_str_d_imm(0, x(31), 0)),
+        ws.contains(&enc_str_d_imm(0, x(31), 0).word),
         "call_s: x is not at [sp]"
     );
     assert!(
-        (0..31).any(|r| ws.contains(&enc_str_imm(x(r), x(31), 8))),
+        (0..31).any(|r| ws.contains(&enc_str_imm(x(r), x(31), 8).word)),
         "call_s: 9 is not at [sp, #8]"
     );
 }
@@ -7709,8 +7760,8 @@ fn local_label_jump_inline_asm_x64() {
     use crate::{NativeOptions, Target, emit_native_with_options};
     // Numeric local labels resolve within the block: `Nb` branches backward to
     // the nearest prior `N:`, `Nf` forward to the next. An in-reach target
-    // settles the branch on the rel8 form, as GNU as 2.46.1 settles the same
-    // stream. The windows below are self-relative, so they hold regardless of
+    // settles the branch on the rel8 form (checked against GNU as 2.46.1).
+    // The windows below are self-relative, so they hold regardless of
     // the block's position.
     let program = super::compile_str_bare(
         "void f(void){ __asm__ volatile(\n\
@@ -8530,11 +8581,11 @@ fn homogeneous_aggregate_elements_follow_the_members() {
 
 /// System V AMD64 3.2.3: an eightbyte no field overlaps takes no register,
 /// and a union's 16-byte vector beside a double or another vector takes one
-/// whole xmm register. An unnamed bit-field's bytes are INTEGER, as gcc
-/// classifies them, inside an anonymous member too; a zero-width one covers
-/// none in a structure and a union's first byte. The argument after each
-/// aggregate lands in the register past the ones the aggregate takes, and
-/// the result takes as many.
+/// whole xmm register. An unnamed bit-field's bytes are INTEGER, the class
+/// gcc-compiled code gives them, inside an anonymous member too; a
+/// zero-width one covers none in a structure and a union's first byte.
+/// The argument after each aggregate lands in the register past the ones
+/// the aggregate takes, and the result takes as many.
 #[test]
 fn sysv_eightbyte_classes_place_the_following_argument() {
     use crate::Target;
@@ -8674,9 +8725,10 @@ fn sysv_eightbyte_classes_place_the_following_argument() {
 /// System V AMD64 3.2.3: a packed aggregate with a member off its natural
 /// alignment is MEMORY class, on the stack ahead of the argument after it,
 /// which takes the first integer register; a bit-field is exempt, and so is
-/// a packed aggregate whose members all lie aligned. As gcc classifies them,
-/// a union's bit-field binds the union's offset to its integer mode, a zero
-/// width to one byte, and past an array's first element nothing is bound.
+/// a packed aggregate whose members all lie aligned. In the classification
+/// gcc-compiled code uses, a union's bit-field binds the union's offset to
+/// its integer mode, a zero width to one byte, and past an array's first
+/// element nothing is bound.
 #[test]
 fn sysv_misaligned_members_send_the_aggregate_to_memory() {
     use crate::Target;
@@ -9188,8 +9240,8 @@ fn elf64_symbol_records(b: &[u8]) -> alloc::vec::Vec<(alloc::string::String, u8,
 }
 
 /// For a RELA relocation the addend lives in `r_addend`; the target
-/// field in the section image carries no information and gas leaves it
-/// zero, and a loader may require it zero before applying the
+/// field in the section image carries no information and stays zero, and
+/// a loader may require it zero before applying the
 /// relocation. Pointer slots in static data used to leak the VM's baked
 /// values (the target's data offset for data pointers, the function's
 /// `ent_pc` for function pointers).
@@ -9378,9 +9430,9 @@ fn alias_defined_object_referenced_from_asm_binds_to_its_definition() {
 }
 
 /// An assembly-time assignment to a name defines an `SHN_ABS` symbol, and
-/// a `.size` naming a `.set` alias states the alias's own extent -- both as
-/// GNU as 2.46.1 records them. A name carrying the local-label prefix stays
-/// out of the table, as it does there.
+/// a `.size` naming a `.set` alias states the alias's own extent (checked
+/// against GNU as 2.46.1). A name carrying the local-label prefix stays out
+/// of the table.
 #[test]
 fn an_assembly_time_assignment_defines_an_absolute_symbol() {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
@@ -9439,8 +9491,7 @@ fn an_assembly_time_assignment_defines_an_absolute_symbol() {
 /// A post-link reader pairs each relocation with the nearest label at or
 /// below its offset and requires the relocation's target to be the GLOBAL
 /// symbol named by the label suffix, so the byte layout, the label
-/// placement, and the relocation targets must all match what GNU as
-/// produces.
+/// placement, and the relocation targets must be what that reader expects.
 #[test]
 fn file_scope_export_records_take_the_gas_shape() {
     use crate::{CompileOptions, Compiler, NativeOptions, OutputKind, Target};
@@ -10461,7 +10512,7 @@ fn library_builtins_need_no_auto_include_retry() {
 /// compiles with no note; the absolute values and the functions a header
 /// binds to an instruction leave no reference, and the rest call the
 /// library function. `cli_fixture_smoke` links and runs it.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn builtin_library_functions_need_no_declaration() {
     use crate::{CompileOptions, Compiler, NativeOptions, NativeSymSection, OutputKind, Target};
@@ -10532,7 +10583,7 @@ fn builtin_library_functions_need_no_declaration() {
 
 /// A freestanding unit that defines a library function after calling its
 /// builtin calls its own definition: the object holds the one symbol, defined.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn a_builtin_calls_the_units_later_definition() {
     use crate::{CompileOptions, Compiler, NativeOptions, NativeSymSection, OutputKind, Target};
@@ -10569,7 +10620,7 @@ fn a_builtin_calls_the_units_later_definition() {
 /// emits for it, in the caller at every optimization level, since the
 /// intrinsics are always inlined; the load and the store at -O. The masks
 /// clear the register fields.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn arm_neon_float_intrinsics_are_their_instructions() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -10620,7 +10671,7 @@ fn arm_neon_float_intrinsics_are_their_instructions() {
 /// C99 7.12.14's comparison builtins lower to the quiet compares:
 /// `ucomisd` / `ucomiss` on x86-64 and `fcmp` on AArch64, never the
 /// signaling `comis*` or `fcmpe`, at -O0 and -O.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn c99_comparison_builtins_compare_quietly() {
     use crate::{Compiler, NativeOptions, Target};
@@ -10708,7 +10759,7 @@ fn absolute_value_builtins_fold_alongside_the_library_builtins() {
 /// declarations; the builtins are visible to it as to the main source,
 /// since they are visible before any input is read.
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn builtins_are_visible_to_a_forced_include_body() {
     use crate::{CompileOptions, Compiler, Target};
     let dir = std::env::temp_dir().join(format!("badc-force-include-{}", std::process::id()));
@@ -10739,7 +10790,7 @@ fn builtins_are_visible_to_a_forced_include_body() {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn auto_include_retry_emits_what_the_force_include_would() {
     // A call to a library function with no declaration in scope is
     // invalid (C17 6.5.1p2). The driver recovers by re-running the compile
@@ -10798,7 +10849,7 @@ fn auto_include_retry_emits_what_the_force_include_would() {
 /// Full source-pass count of `f`'s compile, from the preprocessor's
 /// per-thread hook. A reused pass re-runs only the preamble and does
 /// not count.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn counting_source_passes<T>(f: impl FnOnce() -> T) -> (T, usize) {
     use crate::c5::preprocessor::FULL_SOURCE_PASSES;
     let before = FULL_SOURCE_PASSES.with(|c| c.get());
@@ -10807,7 +10858,7 @@ fn counting_source_passes<T>(f: impl FnOnce() -> T) -> (T, usize) {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn auto_include_retry_reuses_the_first_preprocessor_pass() {
     // Nothing this unit observed overlaps what <string.h> installs, so
     // the retry must reuse the recorded first pass (one full source
@@ -10865,7 +10916,7 @@ fn auto_include_retry_reuses_the_first_preprocessor_pass() {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn auto_include_retry_falls_back_when_the_header_touches_observed_names() {
     // The unit tested `NULL` before the retry adds <string.h>, which
     // defines it: the recorded pass is not reusable, so the retry must
@@ -10915,7 +10966,7 @@ fn auto_include_retry_falls_back_when_the_header_touches_observed_names() {
 
 /// `.text`'s `sh_addralign` and every `STT_FUNC` symbol's
 /// `(name, st_value, st_size)` from a relocatable ELF64 object.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn elf_text_align_and_funcs(bytes: &[u8]) -> (u64, alloc::vec::Vec<(String, u64, u64)>) {
     let u16le = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
     let u32le = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
@@ -10955,7 +11006,7 @@ fn elf_text_align_and_funcs(bytes: &[u8]) -> (u64, alloc::vec::Vec<(String, u64,
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn min_function_alignment_places_entries_without_growing_symbol_sizes() {
     // `-fmin-function-alignment=N` starts every function at a multiple of
     // N and raises `.text`'s own alignment to match, so the placement
@@ -11012,7 +11063,7 @@ fn min_function_alignment_places_entries_without_growing_symbol_sizes() {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn no_builtin_stops_the_library_name_folds_but_not_the_builtin_spellings() {
     // gcc's `-fno-builtin` bars the library spelling from folding and
     // leaves the `__builtin_` one alone. `-fno-builtin-<name>` does the
@@ -11095,7 +11146,7 @@ fn no_builtin_stops_the_library_name_folds_but_not_the_builtin_spellings() {
 /// A hosted POSIX unit calling `alloca` without its header gets the header
 /// from the auto-include recovery.
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn no_builtin_keeps_the_header_operations_no_library_defines() {
     use crate::{CompileOptions, Compiler, NativeOptions, NativeSymSection, OutputKind, Target};
     const SRC: &str = "#include <stdatomic.h>\n#include <setjmp.h>\n#include <malloc.h>\n\
@@ -11145,7 +11196,7 @@ fn no_builtin_keeps_the_header_operations_no_library_defines() {
 }
 
 /// Names of the `SHT_SYMTAB` entries with `st_shndx == SHN_UNDEF`.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn elf_undefined_names(bytes: &[u8]) -> alloc::vec::Vec<String> {
     let u16le = |o: usize| u16::from_le_bytes(bytes[o..o + 2].try_into().unwrap()) as usize;
     let u32le = |o: usize| u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) as usize;
@@ -11263,7 +11314,7 @@ fn no_builtin_name_declines_the_auto_include_retry_for_that_name() {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn freestanding_builtin_mem_transfer_binds_its_own_fallback() {
     // The `__builtin_` spelling stays callable in every mode: a
     // transfer whose count is no small constant falls back to a call of
@@ -11887,7 +11938,7 @@ fn aarch64_switch_table_lands_in_rodata_section_of_object() {
     // No named symbol covers the table: consumers that discover
     // compiler jump tables require the region symbol-free. The
     // section symbol and the `$d` mapping symbol are not names in
-    // that sense; gas emits the same `$d` over a jump table.
+    // that sense.
     for s in 0..elf.sym_count() {
         assert!(
             elf.sym_shndx(s) != tbl || elf.sym_type(s) == 3 || elf.sym_name(s).starts_with('$'),
@@ -12618,6 +12669,42 @@ fn long_double_conditional_merges_in_the_fp_class() {
     }
 }
 
+/// `-fno-unroll-loops` keeps -O from fully unrolling a constant-trip loop:
+/// the loop keeps its header phi, which the default unroll removes.
+#[test]
+fn no_unroll_loops_keeps_a_constant_trip_loop() {
+    use crate::{Compiler, NativeOptions, OutputKind};
+    const SRC: &str =
+        "int sum4(const int *a) { int s = 0; for (int i = 0; i < 4; i++) s += a[i]; return s; }\n";
+    let target = crate::Target::LinuxX64;
+    let phis = |unroll_loops: bool| {
+        let opts = crate::CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_optimize(true);
+        let program = Compiler::with_options(String::from(SRC), target, opts)
+            .compile()
+            .unwrap();
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            unroll_loops,
+            ..NativeOptions::new().with_optimize().with_dump_ssa()
+        };
+        let dump = crate::c5::codegen::lower_for(&program, target, opts)
+            .unwrap()
+            .ssa_dump;
+        let start = dump
+            .find("; name=sum4\n")
+            .unwrap_or_else(|| panic!("{dump}"));
+        let body = &dump[start + "; name=sum4\n".len()..];
+        let body = body.split("\n; ").next().unwrap_or(body);
+        (body.matches("Phi {").count(), body.to_string())
+    };
+    let (unrolled, body) = phis(true);
+    assert_eq!(unrolled, 0, "{body}");
+    let (kept, body) = phis(false);
+    assert!(kept > 0, "{body}");
+}
+
 /// Scalar promotion runs in every function holding an aggregate: a struct
 /// copied in from a pointer and read by field is split and lifted where
 /// neither the inliner nor the unroller changed the function.
@@ -12751,9 +12838,9 @@ fn size_bound_keeps_the_object_in_memory() {
 /// A frame object whose addresses only write it and that no load reads
 /// holds nothing anyone observes: the zero fill and the stores of the
 /// `vzipq_s8` pair's temporary go once the copy out reads the stored
-/// values, as with gcc. One whose address reaches a call keeps them, the
+/// values. One whose address reaches a call keeps them, the
 /// callee reading it.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn writes_to_an_object_nothing_reads_go() {
     const SRC: &str = "#include <arm_neon.h>\n\
@@ -13042,6 +13129,32 @@ pub(super) fn optimized_function_full_pool(
     })
 }
 
+/// An address a load folds into its displacement is left unread and
+/// unemitted; it holds no register and no slot, also under two registers
+/// per bank, where a placed one takes a slot no emitted value shares.
+#[test]
+fn an_unemitted_value_takes_no_place() {
+    const SRC: &str = "struct node { long pad[7]; int *count; };\n\
+        long f(struct node **v, long a, long b, long c) {\n\
+            struct node *n = v[9];\n\
+            return a * b + c + *n->count + a + b + c;\n\
+        }\n";
+    for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
+        let (body, _) = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(2, 2, || {
+            optimized_function(SRC, "f", target)
+        });
+        let folded: Vec<&str> = body
+            .lines()
+            .filter(|l| l.contains("BinopI { op=add,") && l.contains("rhs_imm=56 }"))
+            .collect();
+        assert!(!folded.is_empty(), "{target:?}: no folded address: {body}");
+        assert!(
+            body.contains("disp=56, kind=I64") && folded.iter().all(|l| l.ends_with("-> -")),
+            "{target:?}: {body}"
+        );
+    }
+}
+
 /// The id of the first instruction whose text starts with `head`.
 fn inst_id(insts: &[(u32, String)], head: &str, body: &str) -> u32 {
     insts
@@ -13289,6 +13402,53 @@ fn packed_bitfield_accesses_stay_inside_the_object() {
     }
 }
 
+/// A named address space after the `*` of a pointer to an array qualifies
+/// that pointer object, so reading or writing the pointer rides the
+/// segment and the array's elements do not: through a typedef, spelled
+/// out, two-dimensional, variable-length, and as a global.
+#[test]
+fn a_segment_on_a_pointer_to_an_array_rides_that_pointer() {
+    use crate::c5::ir::{AsmSeg, Inst};
+    const SRC: &str = "typedef int A[4];\n\
+        int a1(A *__seg_gs *pp) { return (**pp)[1]; }\n\
+        int a2(A *__seg_fs *pp) { return (**pp)[1]; }\n\
+        int a3(int (*__seg_gs *pp)[2][3]) { return (**pp)[1][2]; }\n\
+        int a4(int n, int (*__seg_gs *pp)[n]) { return (**pp)[1]; }\n\
+        extern A *__seg_gs g;\n\
+        int a5(void) { return (*g)[1]; }\n\
+        void a6(A *__seg_fs *pp, A *q) { *pp = q; }\n";
+    let program = crate::Compiler::with_options(
+        SRC.into(),
+        crate::Target::LinuxX64,
+        crate::CompileOptions::default().with_no_entry_point(true),
+    )
+    .compile()
+    .expect("compile");
+    let funcs = crate::c5::codegen::ssa::shadow::produce_ssa_funcs(
+        &program,
+        crate::Target::LinuxX64,
+        true,
+        true,
+    )
+    .expect("ssa");
+    for (name, want) in [
+        ("a1", AsmSeg::Gs),
+        ("a2", AsmSeg::Fs),
+        ("a3", AsmSeg::Gs),
+        ("a4", AsmSeg::Gs),
+        ("a5", AsmSeg::Gs),
+        ("a6", AsmSeg::Fs),
+    ] {
+        let func = funcs.iter().find(|g| g.name == name).expect("function");
+        let seg = (func.insts.iter())
+            .filter(|i| {
+                matches!(i, Inst::SegLoad { seg, .. } | Inst::SegStore { seg, .. } if *seg == want)
+            })
+            .count();
+        assert_eq!(seg, 1, "{name}: {:?}", func.insts);
+    }
+}
+
 /// A bit-field in a unit wider than 8 bytes is read, written and updated
 /// through its named address space, every piece of the unit riding the
 /// segment. A 128-bit value read there is rejected, as any 128-bit access
@@ -13414,7 +13574,8 @@ fn copy_out_of_an_object_a_call_reaches_stays_a_block_copy() {
 
 /// An object passed by value reaches the call through a copy into the
 /// call's argument temporary, so it splits: the copy out and the temporary
-/// take its fields, and no block copy is left.
+/// take its fields, and no block copy is left. The temporary goes as well:
+/// the call takes the fields as the parts of its registers.
 #[test]
 fn an_object_passed_by_value_splits_into_the_argument_copy() {
     for target in [crate::Target::LinuxX64, crate::Target::LinuxAarch64] {
@@ -13430,7 +13591,8 @@ fn an_object_passed_by_value_splits_into_the_argument_copy() {
             .iter()
             .filter(|(_, i)| i.starts_with("StoreLocal"))
             .count();
-        assert_eq!(temp_stores, 2, "{target:?}: {body}");
+        assert_eq!(temp_stores, 0, "{target:?}: {body}");
+        assert!(has_inst(&insts, &["AggParts {"]), "{target:?}: {body}");
     }
 }
 
@@ -15043,6 +15205,90 @@ fn x64_indirect_branch_thunk_covers_call_switch_and_computed_goto() {
     );
 }
 
+/// `(offset, type, symbol name, addend)` for every `.rela.text` entry.
+fn elf_text_relocs(obj: &[u8]) -> alloc::vec::Vec<(usize, u32, alloc::string::String, i64)> {
+    let sections = elf_section_bodies(obj);
+    let body = |n: &str| {
+        (sections.iter().find(|(name, _)| name == n))
+            .map(|(_, b)| b.clone())
+            .unwrap_or_default()
+    };
+    let (rela, symtab, strtab) = (body(".rela.text"), body(".symtab"), body(".strtab"));
+    let name = |sym: usize| {
+        let at = u32::from_le_bytes(symtab[sym * 24..sym * 24 + 4].try_into().unwrap()) as usize;
+        let end = strtab[at..].iter().position(|&b| b == 0).unwrap() + at;
+        alloc::string::String::from_utf8_lossy(&strtab[at..end]).into_owned()
+    };
+    (rela.as_chunks::<24>().0.iter())
+        .map(|e| {
+            let info = u64::from_le_bytes(e[8..16].try_into().unwrap());
+            (
+                u64::from_le_bytes(e[0..8].try_into().unwrap()) as usize,
+                info as u32,
+                name((info >> 32) as usize),
+                i64::from_le_bytes(e[16..24].try_into().unwrap()),
+            )
+        })
+        .collect()
+}
+
+#[test]
+fn guard_cf_checks_an_indirect_call_through_the_guard_pointer() {
+    // `-mguard=cf`: x86-64 moves the call's target to rax and calls
+    // `[rip + __guard_dispatch_icall_fptr]`; AArch64 moves it to x15, calls
+    // `__guard_check_icall_fptr` through x16, then `blr x15`. The switch
+    // dispatch and the computed goto are jumps, which the guard leaves.
+    let guard = crate::Hardening {
+        guard_cf: true,
+        ..crate::Hardening::NONE
+    };
+    let obj = emit_hardened(HARDENING_SRC, crate::Target::WindowsX64, guard);
+    let text = elf_text(&obj);
+    let calls = |t: &[u8]| {
+        t.windows(2)
+            .filter(|w| w[0] == 0xFF && w[1] & 0xF8 == 0xD0)
+            .count()
+    };
+    let relocs = elf_text_relocs(&obj);
+    let dispatch: alloc::vec::Vec<_> = (relocs.iter())
+        .filter(|r| r.2 == "__guard_dispatch_icall_fptr")
+        .collect();
+    assert_eq!(dispatch.len(), 1, "{relocs:?}");
+    let &(at, rtype, _, addend) = dispatch[0];
+    // R_X86_64_PC32 on the disp32 of `rex.w call [rip + disp32]`.
+    assert_eq!((rtype, addend), (2, -4));
+    assert_eq!(&text[at - 3..at + 4], [0x48, 0xFF, 0x15, 0, 0, 0, 0]);
+    assert_eq!(calls(&text), 0, "no register-indirect call survives");
+    let plain = emit_hardened(
+        HARDENING_SRC,
+        crate::Target::WindowsX64,
+        crate::Hardening::NONE,
+    );
+    assert_eq!(calls(&elf_text(&plain)), 1);
+    assert_eq!(
+        x64_register_indirect_forms(&text),
+        x64_register_indirect_forms(&elf_text(&plain)) - 1,
+        "the jumps keep their form"
+    );
+
+    let obj = emit_hardened(HARDENING_SRC, crate::Target::WindowsAarch64, guard);
+    let text = elf_text(&obj);
+    let word = |at: usize| u32::from_le_bytes(text[at..at + 4].try_into().unwrap());
+    let relocs = elf_text_relocs(&obj);
+    let check: alloc::vec::Vec<_> = (relocs.iter())
+        .filter(|r| r.2 == "__guard_check_icall_fptr")
+        .collect();
+    // R_AARCH64_ADR_PREL_PG_HI21 and R_AARCH64_ADD_ABS_LO12_NC.
+    let types: alloc::vec::Vec<_> = check.iter().map(|r| r.1).collect();
+    assert_eq!(types, [275, 277], "{relocs:?}");
+    let at = check[0].0;
+    // mov x15, xN; adrp x16; add x16; ldr x16, [x16]; blr x16; blr x15.
+    assert_eq!(word(at - 4) & 0xFFE0_FFFF, 0xAA00_03EF, "mov x15, xN");
+    assert_eq!(word(at + 8), 0xF940_0210, "ldr x16, [x16]");
+    assert_eq!(word(at + 12), 0xD63F_0200, "blr x16");
+    assert_eq!(word(at + 16), 0xD63F_01E0, "blr x15");
+}
+
 #[test]
 fn x64_indirect_branch_thunk_inline_embeds_the_retpoline() {
     // `-mindirect-branch=thunk-inline` (the vDSO's form: no external
@@ -15425,9 +15671,9 @@ fn a64_branch_protection_skips_a_naked_body() {
 
 #[test]
 fn a64_asm_template_ending_in_data_pads_only_ahead_of_an_instruction() {
-    // GNU as brings an executable section's counter to the instruction
-    // boundary when it assembles an instruction out of the data mapping
-    // state, not at the end of a data run. A naked function's body is its
+    // An executable section's counter reaches the instruction boundary
+    // when an instruction is assembled out of the data mapping state, not
+    // at the end of a data run. A naked function's body is its
     // inline asm, so a template ending in a data directive is the last
     // content of the section and takes no padding; an ordinary function's
     // epilogue follows, and the padding is the gap ahead of it. Every
@@ -16162,7 +16408,7 @@ pub(super) fn text_relocs(obj: &[u8]) -> alloc::vec::Vec<(u64, alloc::string::St
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn stack_protector_modes_select_the_shapes_gcc_selects() {
     use crate::{StackProtect, StackProtector, Target};
     let expect = |mode, want: &[&str]| {
@@ -16205,7 +16451,7 @@ fn stack_protector_modes_select_the_shapes_gcc_selects() {
 /// return after `fib`'s body touches no memory, and the frame path still
 /// checks the canary.
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn an_early_return_leaves_without_the_canary() {
     use crate::{CompileOptions, NativeOptions, OutputKind, StackProtect, StackProtector, Target};
     const SRC: &str = "long fib(int n) { if (n < 2) return n; return fib(n - 1) + fib(n - 2); }\n";
@@ -16259,7 +16505,7 @@ fn an_early_return_leaves_without_the_canary() {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn ssp_buffer_size_moves_the_character_array_threshold() {
     use crate::{StackProtect, StackProtector, Target};
     let at = |n: u32| {
@@ -16286,7 +16532,7 @@ fn ssp_buffer_size_moves_the_character_array_threshold() {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn stack_protector_off_leaves_the_object_unchanged() {
     use crate::{StackProtect, Target};
     for target in [Target::LinuxX64, Target::LinuxAarch64] {
@@ -16299,7 +16545,7 @@ fn stack_protector_off_leaves_the_object_unchanged() {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn stack_protector_checks_every_return_path() {
     use crate::{StackProtect, StackProtector, Target};
     // Three source-level returns over one frame that holds an array.
@@ -16325,7 +16571,7 @@ fn stack_protector_checks_every_return_path() {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn stack_protector_canary_sits_between_the_locals_and_the_return_address() {
     use crate::{StackProtect, StackProtector, Target};
     // A single character array, so every frame byte below the canary
@@ -16365,7 +16611,7 @@ fn stack_protector_canary_sits_between_the_locals_and_the_return_address() {
 
 /// x86-64 `lea disp8(%rbp), r64` displacements: REX.W 8D with mod=01 and
 /// rm=rbp. Every frame address the body materializes is one of these.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn rbp_lea_disps(code: &[u8]) -> alloc::vec::Vec<i32> {
     code.windows(4)
         .filter(|w| w[0] & 0xF8 == 0x48 && w[1] == 0x8D && w[2] & 0xC7 == 0x45)
@@ -16375,7 +16621,7 @@ fn rbp_lea_disps(code: &[u8]) -> alloc::vec::Vec<i32> {
 
 /// aarch64 `sub xD, x29, #imm` immediates: SUB (immediate), 64-bit, no
 /// shift, base x29. The counterpart of [`rbp_lea_disps`].
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn fp_sub_imms(code: &[u8]) -> alloc::vec::Vec<i32> {
     code.as_chunks::<4>()
         .0
@@ -16387,7 +16633,7 @@ fn fp_sub_imms(code: &[u8]) -> alloc::vec::Vec<i32> {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn stack_protector_orders_arrays_above_the_other_locals() {
     use crate::{StackProtect, StackProtector, Target};
     // The pointer is declared first, so the parser's slot order puts it
@@ -16437,7 +16683,7 @@ fn stack_protector_orders_arrays_above_the_other_locals() {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn stack_guard_forms_reach_the_object() {
     use crate::{GuardSeg, GuardSymbol, StackGuard, StackProtect, StackProtector, Target};
     let src = "void snk(void *); void f(void) { char b[32]; snk(b); }\n";
@@ -16538,7 +16784,7 @@ fn stack_guard_forms_reach_the_object() {
 /// that names no guard register reads its canary at `%gs:0x28`. A named
 /// segment is kept under either model.
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn the_kernel_code_model_reads_the_default_guard_through_gs() {
     use crate::{CodeModel, GuardSeg, SYSV_TLS_GUARD_OFFSET, StackGuard, StackProtect};
     let src = "void snk(void *); void f(void) { char b[32]; snk(b); }\n";
@@ -16581,7 +16827,7 @@ fn the_kernel_code_model_reads_the_default_guard_through_gs() {
 }
 
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn stack_protector_moves_the_debug_info_frame_offsets_with_the_locals() {
     use crate::{
         CompileOptions, NativeOptions, OutputKind, StackProtect, StackProtector, Target,
@@ -17292,7 +17538,13 @@ fn invariant_addresses_past_the_register_file_take_no_frame_slots() {
             ..NativeOptions::new().with_optimize()
         };
         opts.frame_larger_than = Some(64);
-        let build = crate::c5::codegen::lower_for(&program, target, opts).expect("lower");
+        // The premise is the full register file, not the pressure knobs'.
+        let build = crate::c5::codegen::ssa::reg_alloc::with_pool_size_override(
+            usize::MAX,
+            usize::MAX,
+            || crate::c5::codegen::lower_for(&program, target, opts),
+        )
+        .expect("lower");
         assert!(
             build
                 .diagnostics
@@ -17868,7 +18120,7 @@ fn a64_logical_imm_of(
 ) -> bool {
     use crate::c5::codegen::aarch64::encode::{Reg, enc_logical_imm};
     let (rd, rn) = (Reg((w & 0x1F) as u8), Reg(((w >> 5) & 0x1F) as u8));
-    enc_logical_imm(op, is64, rd, rn, value) == Some(w)
+    enc_logical_imm(op, is64, rd, rn, value).map(|i| i.word) == Some(w)
 }
 
 #[test]
@@ -18437,8 +18689,8 @@ fn stores_pair(ws: &[u32], rt: u8) -> bool {
 /// Whether `ws` adds registers `a` and `b` into x0, in either order.
 fn adds_regs(ws: &[u32], a: u8, b: u8) -> bool {
     use crate::c5::codegen::aarch64::encode::{Reg, enc_add_reg};
-    ws.contains(&enc_add_reg(Reg(0), Reg(a), Reg(b)))
-        || ws.contains(&enc_add_reg(Reg(0), Reg(b), Reg(a)))
+    ws.contains(&enc_add_reg(Reg(0), Reg(a), Reg(b)).word)
+        || ws.contains(&enc_add_reg(Reg(0), Reg(b), Reg(a)).word)
 }
 
 fn expect_words(ws: &[u32], want: &[u32], what: &str) {
@@ -18516,10 +18768,10 @@ fn apple_arm64_packs_narrow_stack_arguments() {
 }
 
 /// A `float` vector of 4 bytes, narrower than AAPCS64's Short Vectors
-/// (6.4.2), crosses a call as clang places it on every AArch64 target: as a
-/// 32-bit integer argument, in the next general register or an `int`'s stack
-/// slot (4 bytes on Apple arm64), and returned in s0. A struct holding it
-/// stays in the general registers.
+/// (6.4.2), crosses a call where clang-compiled code places it on every
+/// AArch64 target: as a 32-bit integer argument, in the next general
+/// register or an `int`'s stack slot (4 bytes on Apple arm64), and returned
+/// in s0. A struct holding it stays in the general registers.
 #[test]
 fn aarch64_narrow_float_vector_crosses_as_clang_places_it() {
     use crate::Target;
@@ -18577,38 +18829,38 @@ fn aarch64_narrow_float_vector_crosses_as_clang_places_it() {
         let obj = relocatable_object(SRC, target);
         let ws = |name: &str| function_words(&obj, name);
         assert!(
-            ws("give").contains(&enc_ldr_s_imm(0, x(0), 0)),
+            ws("give").contains(&enc_ldr_s_imm(0, x(0), 0).word),
             "{target:?} give: the vector is not returned in s0"
         );
         assert!(
-            any_base(&ws("give_s"), &|b| enc_ldr32_imm(x(0), b, 0)),
+            any_base(&ws("give_s"), &|b| enc_ldr32_imm(x(0), b, 0).word),
             "{target:?} give_s: the struct is not returned in w0"
         );
         assert!(
-            any_base(&ws("keep"), &|b| enc_str_s_imm(0, b, 0)),
+            any_base(&ws("keep"), &|b| enc_str_s_imm(0, b, 0).word),
             "{target:?} keep: the result is not read from s0"
         );
         assert!(
-            any_base(&ws("pass"), &|b| enc_ldr32_imm(x(1), b, 0)),
+            any_base(&ws("pass"), &|b| enc_ldr32_imm(x(1), b, 0).word),
             "{target:?} pass: the vector is not passed in w1"
         );
         // `j` stored at [sp, #slot] as a word, or as a doubleword in an 8-byte slot.
         let pass_s = ws("pass_s");
         assert!(
             (0..31).any(|r| {
-                pass_s.contains(&enc_str32_imm(x(r), x(31), slot))
-                    || (slot == 8 && pass_s.contains(&enc_str_imm(x(r), x(31), slot)))
+                pass_s.contains(&enc_str32_imm(x(r), x(31), slot).word)
+                    || (slot == 8 && pass_s.contains(&enc_str_imm(x(r), x(31), slot).word))
             }),
             "{target:?} pass_s: j is not at [sp, #{slot}]"
         );
     }
 }
 
-/// An integer vector narrower than 8 bytes returns as clang returns it on
-/// every AArch64 target: a single element as its bytes in the low bytes of
-/// v0 (`ldr s0`, `ldr h0`, `ldr b0`), several widened to equal lanes of d0
-/// (`ushll` from the bytes), which the caller narrows back (`xtn`) before it
-/// stores them.
+/// An integer vector narrower than 8 bytes returns where clang-compiled
+/// code reads it on every AArch64 target: a single element as its bytes in
+/// the low bytes of v0 (`ldr s0`, `ldr h0`, `ldr b0`), several widened to
+/// equal lanes of d0 (`ushll` from the bytes), which the caller narrows
+/// back (`xtn`) before it stores them.
 #[test]
 fn aarch64_narrow_integer_vectors_return_as_clang_places_them() {
     use crate::Target;
@@ -18646,9 +18898,9 @@ fn aarch64_narrow_integer_vectors_return_as_clang_places_them() {
             let give = function_words(&obj, &alloc::format!("give{i}"));
             let load_v0 = |b: Reg| {
                 if size == 4 {
-                    enc_ldr_s_imm(0, b, 0)
+                    enc_ldr_s_imm(0, b, 0).word
                 } else {
-                    enc_ldr_bh_imm(size, 0, b, 0)
+                    enc_ldr_bh_imm(size, 0, b, 0).word
                 }
             };
             assert!(
@@ -18660,7 +18912,7 @@ fn aarch64_narrow_integer_vectors_return_as_clang_places_them() {
             let mut w = elem;
             while w < lane {
                 assert!(
-                    give.contains(&enc_uxtl(0, 0, w)),
+                    give.contains(&enc_uxtl(0, 0, w).word),
                     "{target:?} give{i}: no widening from {w}-byte lanes"
                 );
                 w *= 2;
@@ -18670,7 +18922,7 @@ fn aarch64_narrow_integer_vectors_return_as_clang_places_them() {
             while w > elem {
                 w /= 2;
                 assert!(
-                    first.contains(&enc_xtn(0, 0, w)),
+                    first.contains(&enc_xtn(0, 0, w).word),
                     "{target:?} first{i}: no narrowing to {w}-byte lanes"
                 );
             }
@@ -18719,13 +18971,14 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
     let sp = Reg(31);
     let stores_at = |ws: &[u32], off: u32| {
         ws.iter()
-            .any(|&w| w & !0x1f == enc_str_imm(x(0), sp, off) & !0x1f)
+            .any(|&w| w & !0x1f == enc_str_imm(x(0), sp, off).word & !0x1f)
     };
     let rounds = |ws: &[u32]| {
         ws.windows(2)
             .filter(|p| {
                 (0..31).any(|r| {
-                    p[0] == enc_add_imm(x(r), x(r), 15) && p[1] == enc_and_align_down(x(r), x(r), 4)
+                    p[0] == enc_add_imm(x(r), x(r), 15).word
+                        && p[1] == enc_and_align_down(x(r), x(r), 4).word
                 })
             })
             .count()
@@ -18745,16 +18998,20 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
             adds_regs(&take_c, pair, next),
             "{target:?} take_c: the pair is not x{pair}: {take_c:08x?}"
         );
-        let caller = [
-            enc_ldr_imm(x(pair + 1), x(pair), 8),
-            enc_ldr_imm(x(pair), x(pair), 0),
-            enc_movz(x(next), 3, 0),
-        ];
-        expect_words(
-            &function_words(&obj, "call_take"),
-            &caller,
-            &alloc::format!("{target:?} call_take"),
-        );
+        // The pair arrives where the call passes it, as its parts outside
+        // Windows; Windows loads it from the parameter's object.
+        let call_take = function_words(&obj, "call_take");
+        let what_take = alloc::format!("{target:?} call_take");
+        expect_words(&call_take, &[enc_movz(x(next), 3, 0).word], &what_take);
+        if matches!(target, Target::WindowsAarch64) {
+            let loads = [
+                enc_ldr_imm(x(pair + 1), x(pair), 8).word,
+                enc_ldr_imm(x(pair), x(pair), 0).word,
+            ];
+            expect_words(&call_take, &loads, &what_take);
+        } else {
+            assert_eq!(call_take.len(), 6, "{what_take}: {call_take:08x?}");
+        }
         let want = if matches!(target, Target::LinuxAarch64) {
             2
         } else {
@@ -18771,15 +19028,18 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
             if matches!(target, Target::MacOSAarch64) {
                 expect_words(
                     &call,
-                    &[enc_str_imm(x(17), sp, 0), enc_str_imm(x(17), sp, 8)],
+                    &[
+                        enc_str_imm(x(17), sp, 0).word,
+                        enc_str_imm(x(17), sp, 8).word,
+                    ],
                     &what,
                 );
                 assert!(stores_at(&call, 16), "{what}: c not at [sp, #16]");
             } else {
                 let caller = [
-                    enc_ldr_imm(x(3), x(2), 8),
-                    enc_ldr_imm(x(2), x(2), 0),
-                    enc_movz(x(4), 3, 0),
+                    enc_ldr_imm(x(3), x(2), 8).word,
+                    enc_ldr_imm(x(2), x(2), 0).word,
+                    enc_movz(x(4), 3, 0).word,
                 ];
                 expect_words(&call, &caller, &what);
             }
@@ -18792,28 +19052,33 @@ fn align16_arguments_pair_registers_and_align_stack_slots() {
     let after_five = function_words(&obj, "after_five");
     let reads_c = after_five
         .iter()
-        .any(|&w| w & !0x1f == enc_ldr_imm(x(0), x(29), 16) & !0x1f);
+        .any(|&w| w & !0x1f == enc_ldr_imm(x(0), x(29), 16).word & !0x1f);
     assert!(
         reads_c && (0..31).any(|r| adds_regs(&after_five, 6, r)),
         "after_five: the pair is not x6: {after_five:08x?}"
     );
     let seven = [
-        enc_ldr_imm(x(17), x(29), 16),
-        enc_ldr_imm(x(17), x(29), 24),
-        enc_ldr_imm(x(0), x(29), 32),
+        enc_ldr_imm(x(17), x(29), 16).word,
+        enc_ldr_imm(x(17), x(29), 24).word,
+        enc_ldr_imm(x(0), x(29), 32).word,
     ];
     expect_words(&function_words(&obj, "after_seven"), &seven, "after_seven");
+    // The pair moves from its parameter registers into x6:x7 as its parts:
+    // nothing is loaded into them.
     let call_five = function_words(&obj, "call_five");
-    expect_words(
-        &call_five,
-        &[enc_ldr_imm(x(7), x(6), 8), enc_ldr_imm(x(6), x(6), 0)],
-        "call_five",
+    let loads_pair = |&w: &u32| w & 0xffc0_0000 == 0xf940_0000 && matches!(w & 0x1f, 6 | 7);
+    assert!(
+        !call_five.iter().any(loads_pair),
+        "call_five: {call_five:08x?}"
     );
     assert!(stores_at(&call_five, 0), "call_five: c not at [sp]");
     let call_seven = function_words(&obj, "call_seven");
     expect_words(
         &call_seven,
-        &[enc_str_imm(x(17), sp, 0), enc_str_imm(x(17), sp, 8)],
+        &[
+            enc_str_imm(x(17), sp, 0).word,
+            enc_str_imm(x(17), sp, 8).word,
+        ],
         "call_seven",
     );
     assert!(stores_at(&call_seven, 16), "call_seven: c not at [sp, #16]");
@@ -18857,25 +19122,29 @@ fn attribute_aligned_aggregate_is_placed_per_arm64_platform() {
             "{}: the pair is not x{pair}: {take_reg:08x?}",
             what("take_reg")
         );
+        // The eightbytes load from `*p` into the pair, as the parts outside
+        // Windows, through the base routed into the pair on Windows.
+        let call_reg = function_words(&obj, "call_reg");
+        let base = if matches!(target, Target::WindowsAarch64) {
+            pair
+        } else {
+            0
+        };
         let caller = [
-            enc_ldr_imm(x(pair + 1), x(pair), 8),
-            enc_ldr_imm(x(pair), x(pair), 0),
-            enc_movz(x(pair + 2), 3, 0),
+            enc_ldr_imm(x(pair + 1), x(base), 8).word,
+            enc_ldr_imm(x(pair), x(base), 0).word,
+            enc_movz(x(pair + 2), 3, 0).word,
         ];
-        expect_words(
-            &function_words(&obj, "call_reg"),
-            &caller,
-            &what("call_reg"),
-        );
+        expect_words(&call_reg, &caller, &what("call_reg"));
         let stack = function_words(&obj, "call_stack");
         let copy = [
-            enc_str_imm(x(17), sp, slot),
-            enc_str_imm(x(17), sp, slot + 8),
+            enc_str_imm(x(17), sp, slot).word,
+            enc_str_imm(x(17), sp, slot + 8).word,
         ];
         expect_words(&stack, &copy, &what("call_stack"));
         let other = if slot == 8 { 24 } else { 8 };
         assert!(
-            !stack.contains(&enc_str_imm(x(17), sp, other)),
+            !stack.contains(&enc_str_imm(x(17), sp, other).word),
             "{}: a struct half at [sp, #{other}]",
             what("call_stack")
         );
@@ -19047,9 +19316,9 @@ fn variadic_aggregate_over_16_bytes_is_read_where_the_caller_passed_it() {
         ws.windows(3).any(|w| {
             (0..31).any(|r| {
                 (0..31).any(|a| {
-                    w[0] == enc_add_imm(x(a), x(r), stride)
-                        && (0..31).any(|p| w[1] == enc_str_imm(x(a), x(p), 0))
-                        && (w[2] == enc_ldr_imm(x(r), x(r), 0)) == by_ref
+                    w[0] == enc_add_imm(x(a), x(r), stride).word
+                        && (0..31).any(|p| w[1] == enc_str_imm(x(a), x(p), 0).word)
+                        && (w[2] == enc_ldr_imm(x(r), x(r), 0).word) == by_ref
                 })
             })
         })
@@ -19067,9 +19336,9 @@ fn variadic_aggregate_over_16_bytes_is_read_where_the_caller_passed_it() {
     expect_words(
         &ws,
         &[
-            enc_add_imm(x(16), x(16), 8),
-            enc_add_imm(x(9), x(16), 8),
-            enc_ldr_imm(x(16), x(16), 0),
+            enc_add_imm(x(16), x(16), 8).word,
+            enc_add_imm(x(9), x(16), 8).word,
+            enc_ldr_imm(x(16), x(16), 0).word,
         ],
         "LinuxAarch64 va_big",
     );
@@ -19121,13 +19390,13 @@ fn variadic_hfa_elements_come_from_the_vector_save_area() {
         expect_words(
             &ws,
             &[
-                enc_ldrsw_imm(x(16), x(17), 28),
-                enc_add_imm(x(16), x(16), 16 * n),
+                enc_ldrsw_imm(x(16), x(17), 28).word,
+                enc_add_imm(x(16), x(16), 16 * n).word,
             ],
             name,
         );
         assert!(
-            !ws.contains(&enc_ldrsw_imm(x(16), x(17), 24)),
+            !ws.contains(&enc_ldrsw_imm(x(16), x(17), 24).word),
             "{name}: reads __gr_offs"
         );
         // `ldr x17, [src, #16k + p] ; str x17, [dst, #wk + p]` for each part.
@@ -19141,13 +19410,13 @@ fn variadic_hfa_elements_come_from_the_vector_save_area() {
         let copy = |src: u8, dst: u8, (from, to): (u32, u32)| {
             if width == 4 {
                 [
-                    enc_ldr32_imm(x(17), x(src), from),
-                    enc_str32_imm(x(17), x(dst), to),
+                    enc_ldr32_imm(x(17), x(src), from).word,
+                    enc_str32_imm(x(17), x(dst), to).word,
                 ]
             } else {
                 [
-                    enc_ldr_imm(x(17), x(src), from),
-                    enc_str_imm(x(17), x(dst), to),
+                    enc_ldr_imm(x(17), x(src), from).word,
+                    enc_str_imm(x(17), x(dst), to).word,
                 ]
             }
         };
@@ -19189,10 +19458,10 @@ fn sysv_va_arg_takes_each_eightbyte_from_its_area() {
         long double va_x87(int n, ...) { va_list ap; va_start(ap, n);\n\
             struct x87 s = va_arg(ap, struct x87); va_end(ap); return s.v + n; }\n";
     let (r10, r11) = (Reg(10), Reg(11));
-    let bytes = |f: &dyn Fn(&mut alloc::vec::Vec<u8>)| {
-        let mut v = alloc::vec::Vec::new();
+    let bytes = |f: &dyn Fn(&mut crate::c5::codegen::ssa::code_buf::CodeBuf)| {
+        let mut v = crate::c5::codegen::ssa::code_buf::CodeBuf::default();
         f(&mut v);
-        v
+        v.into_bytes()
     };
     // Load an offset field, check it, advance it.
     let load_gp = bytes(&|v| emit_mov_r32_mem(v, r10, r11, 0));
@@ -19294,27 +19563,42 @@ fn windows_arm64_variadic_composite_at_x7_is_split_with_the_stack() {
     expect_words(
         &ws,
         &[
-            enc_ldr_imm(x(7), x(7), 0),
-            enc_ldr_imm(x(17), x(16), 8),
-            enc_str_imm(x(17), sp, 0),
+            enc_ldr_imm(x(7), x(7), 0).word,
+            enc_ldr_imm(x(17), x(16), 8).word,
+            enc_str_imm(x(17), sp, 0).word,
         ],
         "WindowsAarch64 call7",
     );
     assert!(
-        !ws.contains(&enc_str_imm(x(17), sp, 8)),
+        !ws.contains(&enc_str_imm(x(17), sp, 8).word),
         "WindowsAarch64 call7"
     );
     assert!(
         ws.iter()
-            .any(|&w| w & !0x1f == enc_str_imm(x(0), sp, 8) & !0x1f),
+            .any(|&w| w & !0x1f == enc_str_imm(x(0), sp, 8).word & !0x1f),
         "WindowsAarch64 call7: the argument after the composite is not at [sp, #8]"
     );
     let ws = function_words(&relocatable_object(SRC, Target::LinuxAarch64), "call7");
     expect_words(
         &ws,
-        &[enc_str_imm(x(17), sp, 0), enc_str_imm(x(17), sp, 8)],
+        &[
+            enc_str_imm(x(17), sp, 0).word,
+            enc_str_imm(x(17), sp, 8).word,
+        ],
         "LinuxAarch64 call7",
     );
+}
+
+/// Whether `code` holds a 64-bit load `mov r64, [base + disp]` from the
+/// general register `base` below r8, `disp` 0 or an 8-bit displacement.
+fn loads_from(code: &[u8], base: u8, disp: u8) -> bool {
+    code.windows(4).any(|w| {
+        let (md, rm) = (w[2] >> 6, w[2] & 7);
+        matches!(w[0], 0x48 | 0x4c)
+            && w[1] == 0x8b
+            && rm == base
+            && ((md == 0 && disp == 0) || (md == 1 && w[3] == disp))
+    })
 }
 
 /// A variadic callee's named by-value aggregate travels in registers as a
@@ -19335,7 +19619,10 @@ fn named_aggregate_of_a_variadic_callee_is_passed_by_value() {
         ll ext_w8(struct s8 s, ...);\n\
         ll call_w8(struct s8 *p) { return ext_w8(*p, 3LL); }\n";
     let x = Reg;
-    let pair = [enc_ldr_imm(x(1), x(0), 8), enc_ldr_imm(x(0), x(0), 0)];
+    let pair = [
+        enc_ldr_imm(x(1), x(0), 8).word,
+        enc_ldr_imm(x(0), x(0), 0).word,
+    ];
     for (target, nva_start, w8_start) in [
         (Target::LinuxAarch64, 0, 0),
         (Target::MacOSAarch64, 16, 16),
@@ -19345,14 +19632,14 @@ fn named_aggregate_of_a_variadic_callee_is_passed_by_value() {
         let what = |f: &str| alloc::format!("{target:?} {f}");
         let mut nva = alloc::vec::Vec::new();
         if nva_start > 0 {
-            nva.push(enc_add_imm(x(17), x(29), nva_start));
+            nva.push(enc_add_imm(x(17), x(29), nva_start).word);
             expect_words(
                 &function_words(&obj, "w8"),
-                &[enc_add_imm(x(17), x(29), w8_start)],
+                &[enc_add_imm(x(17), x(29), w8_start).word],
                 &what("w8"),
             );
         } else {
-            nva.push(enc_movn(x(17), 0x2f, 0));
+            nva.push(enc_movn(x(17), 0x2f, 0).word);
         }
         let nva_words = function_words(&obj, "nva");
         assert!(
@@ -19364,7 +19651,7 @@ fn named_aggregate_of_a_variadic_callee_is_passed_by_value() {
         expect_words(&function_words(&obj, "call_nva"), &pair, &what("call_nva"));
         let ws = function_words(&obj, "call_w8");
         assert!(
-            ws.contains(&enc_ldr_imm(x(0), x(0), 0)),
+            ws.contains(&enc_ldr_imm(x(0), x(0), 0).word),
             "{}",
             what("call_w8")
         );
@@ -19376,8 +19663,12 @@ fn named_aggregate_of_a_variadic_callee_is_passed_by_value() {
         &function_bytes(&sysv, "nva"),
         &[0xc7, 0x00, 0x10, 0, 0, 0]
     ));
+    // The named `__int128` goes as its two eightbytes, each loaded from `*p`.
     let call = function_bytes(&sysv, "call_nva");
-    assert!(has(&call, &[0x48, 0x8b, 0x77, 0x08]) && has(&call, &[0x48, 0x8b, 0x3f]));
+    assert!(
+        loads_from(&call, 7, 8) && loads_from(&call, 7, 0),
+        "call_nva: {call:x?}"
+    );
     let win = relocatable_object(SRC, Target::WindowsX64);
     // lea r10, [rbp + 24] ; mov rcx, [rcx]
     assert!(has(&function_bytes(&win, "w8"), &[0x4c, 0x8d, 0x55, 0x18]));
@@ -19404,17 +19695,16 @@ fn out_pointer_callee_aggregates_follow_the_callee_convention() {
             .windows(seq.len())
             .any(|w| w == seq)
     };
-    // mov rcx, [rdx + 8] and mov rdx, [rdx]: the pair's eightbytes.
+    // A named pair goes as its eightbytes, each loaded from `*p` in rdi.
+    for name in ["call_ptr", "vcall_ptr"] {
+        let code = function_bytes(&obj, name);
+        assert!(
+            loads_from(&code, 7, 0) && loads_from(&code, 7, 8),
+            "{name}: {code:x?}"
+        );
+    }
+    // mov rcx, [rdx + 8] and mov rdx, [rdx]: the variadic tail's pair, by address.
     let (hi, lo) = ([0x48, 0x8b, 0x4a, 0x08], [0x48, 0x8b, 0x12]);
-    assert!(
-        has("call_ptr", &hi) && has("call_ptr", &lo),
-        "call_ptr: the pair not in rdx:rcx"
-    );
-    // mov rdx, [rsi + 8] and mov rsi, [rsi]: the pair's eightbytes after the pointer in rdi.
-    assert!(
-        has("vcall_ptr", &[0x48, 0x8b, 0x56, 0x08]) && has("vcall_ptr", &[0x48, 0x8b, 0x36]),
-        "vcall_ptr: the pair not in rsi:rdx"
-    );
     assert!(
         has("call_vtail", &hi) && has("call_vtail", &lo),
         "call_vtail: the pair by address"
@@ -19741,7 +20031,7 @@ fn win_arm64_unwind_codes_name_every_callee_save() {
 
 /// Each `.pdata` entry of a windows-arm64 image: its begin RVA, its length
 /// in bytes and, for an `.xdata` record, its unwind codes.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn a64_pe_unwind_entries(pe: &[u8]) -> alloc::vec::Vec<(u32, u32, Option<alloc::vec::Vec<u8>>)> {
     let word = |at: usize| u32::from_le_bytes(pe[at..at + 4].try_into().unwrap());
     let hdr = word(0x3C) as usize;
@@ -19779,7 +20069,7 @@ fn a64_pe_unwind_entries(pe: &[u8]) -> alloc::vec::Vec<(u32, u32, Option<alloc::
 
 /// Whether the unwind code opening `code` describes the instruction `w`
 /// (Microsoft, "ARM64 exception handling").
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn a64_code_describes(code: &[u8], w: u32) -> bool {
     let z = |b: u8| u32::from(b);
     match code[0] {
@@ -19802,7 +20092,7 @@ fn a64_code_describes(code: &[u8], w: u32) -> bool {
 /// frame where the test of an early return precedes it. `bti c` takes `nop`
 /// and `paciasp` `pac_sign_lr`, as the `.seh_nop` and `.seh_pac_sign_lr`
 /// directives record them.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 #[test]
 fn win_arm64_hardened_entries_take_their_own_unwind_records() {
     use crate::{Hardening, NativeOptions, OutputKind, Target};

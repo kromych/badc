@@ -3,7 +3,7 @@ inline_memory_class_struct_param.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -34,21 +34,21 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #-0x10]!
                	mov	x29, sp
                	sub	sp, sp, #0x50
-               	mov	x1, #0x7                // =7
-               	sub	x2, x29, #0x50
+               	sub	x1, x29, #0x50
                	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x2]
+               	stp	x16, x17, [x1]
                	ldp	x16, x17, [x0, #0x10]
-               	stp	x16, x17, [x2, #0x10]
+               	stp	x16, x17, [x1, #0x10]
                	ldr	x16, [x0, #0x20]
-               	str	x16, [x2, #0x20]
+               	str	x16, [x1, #0x20]
                	sub	x0, x29, #0x28
-               	ldp	x16, x17, [x2]
+               	ldp	x16, x17, [x1]
                	stp	x16, x17, [x0]
-               	ldp	x16, x17, [x2, #0x10]
+               	ldp	x16, x17, [x1, #0x10]
                	stp	x16, x17, [x0, #0x10]
-               	ldr	x16, [x2, #0x20]
+               	ldr	x16, [x1, #0x20]
                	str	x16, [x0, #0x20]
+               	mov	x1, #0x7                // =7
                	bl	<addr>
                	ldur	x1, [x29, #-0x50]
                	add	x0, x0, x1
@@ -92,7 +92,7 @@ Disassembly of section .text:
 <use_find>:
                	ldr	x2, [x0]
                	ldr	x3, [x0, #0x10]
-               	ldr	x0, [x0, #0x20]
+               	ldr	x4, [x0, #0x20]
                	cmp	x2, x1
                	b.ne	<addr>
                	mov	x0, #0x1                // =1
@@ -101,7 +101,7 @@ Disassembly of section .text:
                	b.ne	<addr>
                	mov	x0, #0x3                // =3
                	b	<addr>
-               	cmp	x0, x1
+               	cmp	x4, x1
                	b.ne	<addr>
                	mov	x0, #0x5                // =5
                	b	<addr>
@@ -128,25 +128,25 @@ Disassembly of section .text:
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sub	x0, x29, #0x50
-               	ldur	x1, [x29, #-0x50]
-               	cmp	x1, #0x1
+               	sub	x1, x29, #0x50
+               	ldur	x0, [x29, #-0x50]
+               	cmp	x0, #0x1
                	b.ne	<addr>
-               	ldur	x1, [x29, #-0x30]
-               	cmp	x1, #0x5
+               	ldur	x0, [x29, #-0x30]
+               	cmp	x0, #0x5
                	b.eq	<addr>
                	mov	x0, #0x2                // =2
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	adrp	x1, <page>
-               	add	x1, x1, <lo12>
-               	ldp	x16, x17, [x0]
-               	stp	x16, x17, [x1]
-               	ldp	x16, x17, [x0, #0x10]
-               	stp	x16, x17, [x1, #0x10]
-               	ldr	x16, [x0, #0x20]
-               	str	x16, [x1, #0x20]
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	ldp	x16, x17, [x1]
+               	stp	x16, x17, [x0]
+               	ldp	x16, x17, [x1, #0x10]
+               	stp	x16, x17, [x0, #0x10]
+               	ldr	x16, [x1, #0x20]
+               	str	x16, [x0, #0x20]
                	bl	<addr>
                	mov	x17, #0x3039            // =12345
                	cmp	x0, x17

@@ -3,7 +3,7 @@ float_is_four_bytes.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,9 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	xorl	%eax, %eax
                	leaq	<rip>, %rcx # <addr>
                	leaq	0x4(%rcx), %rsi
@@ -40,52 +38,48 @@ Disassembly of section .text:
                	callq	<addr>
                	movl	$0x6, %eax
                	movss	<rip>, %xmm0 # <addr>
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
-               	leaq	<rip>, %rdi
                	cvtss2sd	%xmm0, %xmm0
+               	leaq	<rip>, %rdi
                	movb	$0x1, %al
                	callq	<addr>
                	movl	$0x7, %eax
                	movss	<rip>, %xmm0 # <addr>
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
-               	leaq	<rip>, %rdi
                	cvtss2sd	%xmm0, %xmm0
+               	leaq	<rip>, %rdi
                	movb	$0x1, %al
                	callq	<addr>
                	movl	$0x8, %eax
                	movss	<rip>, %xmm0 # <addr>
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
-               	leaq	<rip>, %rdi
                	cvtss2sd	%xmm0, %xmm0
+               	leaq	<rip>, %rdi
                	movb	$0x1, %al
                	callq	<addr>
                	movl	$0x9, %eax
                	movss	<rip>, %xmm0 # <addr>
-               	movss	<rip>, %xmm1
-               	ucomiss	%xmm1, %xmm0
+               	ucomiss	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
-               	leaq	<rip>, %rdi
                	cvtss2sd	%xmm0, %xmm0
+               	leaq	<rip>, %rdi
                	movb	$0x1, %al
                	callq	<addr>
                	movl	$0xa, %eax
-               	movl	$0x3f800000, -0x8(%rbp) # imm = 0x3F800000
-               	movl	-0x8(%rbp), %esi
+               	movl	$0x3f800000, 0x8(%rsp)  # imm = 0x3F800000
+               	movl	0x8(%rsp), %esi
                	cmpl	$0x3f800000, %esi       # imm = 0x3F800000
                	je	<addr>
                	leaq	<rip>, %rdi
                	movb	$0x0, %al
                	callq	<addr>
                	movl	$0x10, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

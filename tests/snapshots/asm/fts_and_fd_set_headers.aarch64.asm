@@ -3,7 +3,7 @@ fts_and_fd_set_headers.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -18,14 +18,14 @@ Disassembly of section .text:
                	stp	x29, x30, [sp, #0x40]
                	add	x29, sp, #0x40
                	mov	x2, #0x0                // =0
-               	sub	x1, x29, #0x18
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrh	w16, [x0]
-               	strh	w16, [x1]
-               	sub	x0, x29, #0x10
-               	stur	x1, [x29, #-0x10]
+               	sub	x0, x29, #0x18
+               	adrp	x1, <page>
+               	add	x1, x1, <lo12>
+               	ldrh	w16, [x1]
+               	strh	w16, [x0]
+               	stur	x0, [x29, #-0x10]
                	stur	x2, [x29, #-0x8]
+               	sub	x0, x29, #0x10
                	mov	x1, #0x14               // =20
                	bl	<addr>
                	mov	x20, x0

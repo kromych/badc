@@ -12,8 +12,8 @@
 //! Layout runs the statement walk repeatedly until section addresses
 //! and symbol values stop changing, which is how forward references
 //! (`kimage_limit` used before its assignment) and self-referential
-//! sizing (RELR content depends on final addresses) resolve; GNU ld's
-//! relaxation passes serve the same purpose. Diagnostics (ASSERT,
+//! sizing (RELR content depends on final addresses) resolve.
+//! Diagnostics (ASSERT,
 //! undefined symbols, backwards dot moves) fire only on the final
 //! pass, when values are settled.
 //!
@@ -73,6 +73,7 @@ use hashbrown::{HashMap, HashSet};
 
 use inputs::RawSection;
 pub use inputs::{LdsObject, parse_lds_object};
+pub(crate) use preempt::{Reach, reach};
 use sections::is_debug_section;
 
 // ELF constants.
@@ -349,7 +350,7 @@ pub struct LdsOptions {
     /// `-soname`: recorded as `DT_SONAME`.
     pub soname: Option<String>,
     /// Output file base name. Names the base version definition where
-    /// no soname was given, as bfd's does.
+    /// no soname was given.
     pub output_name: String,
     /// `--hash-style`.
     pub hash_style: HashStyle,
@@ -388,8 +389,8 @@ pub struct LdsOptions {
     pub fini_function: String,
 }
 
-/// An entry no symbol names read as an address, as GNU ld reads one: in
-/// C's bases, `0x` hexadecimal and a leading `0` octal, the whole name.
+/// An entry no symbol names, read as an address: in C's bases, `0x`
+/// hexadecimal and a leading `0` octal, the whole name.
 fn numeric_entry(name: &str) -> Option<u64> {
     let (digits, radix) = match name.strip_prefix("0x").or_else(|| name.strip_prefix("0X")) {
         Some(hex) => (hex, 16),
@@ -597,7 +598,7 @@ impl Val {
     /// Value an expression naming the symbol that holds it sees. Only
     /// the definition taken from the location counter picks up a
     /// section for its own symtab entry, so what it hands on is a
-    /// number (bfd's rel_from_abs).
+    /// number.
     fn as_reference(self) -> Val {
         match self.att {
             Att::DotAbs => Val::abs(self.v),
@@ -786,9 +787,6 @@ pub struct LdsLinker<'a> {
     /// `objects`): index of the pseudo object.
     synth_obj: usize,
     dyn_relas: Vec<DynReloc>,
-    /// Reserved-but-never-written `.rela.dyn` slots (see
-    /// `count_reserved_none_slots`), computed once per link.
-    dyn_nones: Option<u64>,
     relr_addrs: Vec<u64>,
     /// GOT slots, keyed by the symbol each holds (a GOT reference to an
     /// undefined symbol still needs a slot).
@@ -983,7 +981,7 @@ impl<'a> LdsLinker<'a> {
         )
         .unwrap_or_default();
         // `.note.GNU-stack` conveys stack executability and nothing
-        // else; bfd consumes it and never places it. Keeping it would
+        // else; the link consumes it and never places it. Keeping it would
         // put a PROGBITS input in whatever `*(.note*)` rule claims it,
         // which then stops being a note section.
         let asked_by = objects.iter().find(|o| {
@@ -1095,7 +1093,6 @@ impl<'a> LdsLinker<'a> {
             referenced: HashSet::new(),
             synth_obj,
             dyn_relas: Vec::new(),
-            dyn_nones: None,
             relr_addrs: Vec::new(),
             got_slots: Vec::new(),
             got_map: HashMap::new(),
@@ -1373,9 +1370,9 @@ impl<'a> LdsLinker<'a> {
                     at
                 }
             },
-            // Nothing named an entry. A shared object has none, as bfd
-            // leaves `e_entry` zero for one; an executable takes bfd's
-            // default entry symbol and, failing that, its first text
+            // Nothing named an entry. A shared object has none, `e_entry`
+            // zero; an executable takes the default entry symbol and,
+            // failing that, its first text
             // address. A PIE is an executable.
             None if self.opts.shared => 0,
             None => self

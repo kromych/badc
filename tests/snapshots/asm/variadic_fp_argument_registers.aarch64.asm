@@ -3,7 +3,7 @@ variadic_fp_argument_registers.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -49,10 +49,10 @@ Disassembly of section .text:
                	str	w17, [x16, #0x1c]
                	ldr	d0, [x29, #0x50]
                	mov	x0, #0x0                // =0
+               	fmov	d1, #10.00000000
                	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2
                	b.ge	<addr>
-               	fmov	d1, #10.00000000
                	mov	x17, x1
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x1c]
@@ -120,10 +120,10 @@ Disassembly of section .text:
                	str	w17, [x16, #0x1c]
                	fcvt	d0, s0
                	mov	x0, #0x0                // =0
+               	fmov	d1, #10.00000000
                	ldrsw	x2, [x29, #0x10]
                	cmp	w0, w2
                	b.ge	<addr>
-               	fmov	d1, #10.00000000
                	mov	x17, x1
                	str	x9, [sp, #-0x10]!
                	ldrsw	x16, [x17, #0x1c]
@@ -451,9 +451,9 @@ Disassembly of section .text:
                	mov	x29, sp
                	sub	sp, sp, #0x10
                	fmov	d0, #1.50000000
-               	mov	x0, #0x2                // =2
                	fmov	d1, #2.50000000
                	fmov	d2, #3.50000000
+               	mov	x0, #0x2                // =2
                	bl	<addr>
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x8]
@@ -464,8 +464,8 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	fmov	s0, #1.50000000
-               	mov	x0, #0x1                // =1
                	fmov	d1, #2.50000000
+               	mov	x0, #0x1                // =1
                	bl	<addr>
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x10]
@@ -476,9 +476,9 @@ Disassembly of section .text:
                	ldp	x29, x30, [sp], #0x10
                	ret
                	fmov	s0, #1.50000000
-               	mov	x0, #0x2                // =2
                	fmov	d1, #2.50000000
                	fmov	d2, #3.50000000
+               	mov	x0, #0x2                // =2
                	bl	<addr>
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x8]
@@ -488,12 +488,12 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
                	fmov	s0, #2.00000000
                	fmov	d1, #3.00000000
                	fmov	d2, #4.00000000
-               	mov	x1, #0x5                // =5
                	fmov	d3, #6.00000000
+               	mov	x0, #0x1                // =1
+               	mov	x1, #0x5                // =5
                	bl	<addr>
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x18]
@@ -503,13 +503,13 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	fmov	s0, #5.50000000
+               	fmov	d1, #0.25000000
                	mov	x0, #0x1                // =1
                	mov	x1, #0x2                // =2
                	mov	x2, #0x3                // =3
                	mov	x3, #0x4                // =4
-               	fmov	s0, #5.50000000
                	mov	x4, #0x7                // =7
-               	fmov	d1, #0.25000000
                	bl	<addr>
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x20]
@@ -519,6 +519,10 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	fmov	d1, #0.25000000
+               	fmov	s0, #2.50000000
+               	mov	x16, #0x9               // =9
+               	str	x16, [sp]
                	mov	x0, #0x1                // =1
                	mov	x1, #0x2                // =2
                	mov	x2, #0x3                // =3
@@ -527,10 +531,6 @@ Disassembly of section .text:
                	mov	x5, #0x6                // =6
                	mov	x6, #0x7                // =7
                	mov	x7, #0x8                // =8
-               	fmov	d1, #0.25000000
-               	fmov	s0, #2.50000000
-               	mov	x16, #0x9               // =9
-               	str	x16, [sp]
                	bl	<addr>
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x28]

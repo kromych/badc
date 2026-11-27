@@ -3,7 +3,7 @@ init_subdesignator_multi_dim.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -27,25 +27,25 @@ Disassembly of section .text:
 
 <main>:
                	movzwq	<rip>, %rax # <addr>
-               	movzwq	<rip>, %rcx # <addr>
                	movzwq	<rip>, %rdx # <addr>
-               	movl	<rip>, %esi # <addr>
+               	movzwq	<rip>, %rsi # <addr>
                	movl	<rip>, %edi # <addr>
                	movl	<rip>, %r8d # <addr>
+               	movl	<rip>, %r9d # <addr>
                	cmpl	$0x1, %eax
                	jne	<addr>
-               	cmpl	$0x2, %ecx
+               	cmpl	$0x2, %edx
                	jne	<addr>
-               	cmpl	$0x7, %edx
+               	cmpl	$0x7, %esi
                	jne	<addr>
-               	movq	%rsi, %r9
-               	cmpl	$0x5, %r9d
+               	movq	%rdi, %rcx
+               	cmpl	$0x5, %ecx
                	jne	<addr>
-               	movq	%rdi, %r9
-               	cmpl	$0x6, %r9d
+               	movq	%r8, %rcx
+               	cmpl	$0x6, %ecx
                	jne	<addr>
-               	movq	%r8, %r9
-               	cmpl	$0x9, %r9d
+               	movq	%r9, %rcx
+               	cmpl	$0x9, %ecx
                	jne	<addr>
                	cmpw	$0x0, <rip> # <addr>
                	jne	<addr>
@@ -57,15 +57,15 @@ Disassembly of section .text:
                	retq
                	cmpl	$0x1, %eax
                	jne	<addr>
-               	cmpl	$0x2, %ecx
+               	cmpl	$0x2, %edx
                	jne	<addr>
-               	cmpl	$0x7, %edx
+               	cmpl	$0x7, %esi
                	jne	<addr>
-               	cmpl	$0x5, %esi
+               	cmpl	$0x5, %edi
                	jne	<addr>
-               	cmpl	$0x6, %edi
+               	cmpl	$0x6, %r8d
                	jne	<addr>
-               	cmpl	$0x9, %r8d
+               	cmpl	$0x9, %r9d
                	jne	<addr>
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x4, %eax

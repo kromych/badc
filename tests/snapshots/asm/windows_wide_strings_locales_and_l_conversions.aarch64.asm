@@ -3,7 +3,7 @@ windows_wide_strings_locales_and_l_conversions.aarch64:	file format elf64-little
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>

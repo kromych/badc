@@ -3,7 +3,7 @@ unary_plus_init_and_param_shadow.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -31,38 +31,35 @@ Disassembly of section .text:
 
 <main>:
                	movsd	<rip>, %xmm0 # <addr>
-               	vsubsd	<rip>, %xmm0, %xmm2
+               	vsubsd	<rip>, %xmm0, %xmm1
                	movsd	<rip>, %xmm0
-               	comisd	%xmm2, %xmm0
+               	comisd	%xmm1, %xmm0
                	jbe	<addr>
-               	movsd	<rip>, %xmm1
-               	comisd	%xmm1, %xmm2
+               	comisd	<rip>, %xmm1
                	ja	<addr>
                	movl	$0x1, %eax
                	retq
-               	movsd	<rip>, %xmm2 # <addr>
-               	vsubsd	<rip>, %xmm2, %xmm2
-               	comisd	%xmm2, %xmm0
+               	movsd	<rip>, %xmm1 # <addr>
+               	vsubsd	<rip>, %xmm1, %xmm1
+               	comisd	%xmm1, %xmm0
                	jbe	<addr>
-               	comisd	%xmm1, %xmm2
+               	comisd	<rip>, %xmm1
                	ja	<addr>
                	movl	$0x2, %eax
                	retq
-               	movsd	<rip>, %xmm2 # <addr>
-               	vsubsd	<rip>, %xmm2, %xmm2
-               	comisd	%xmm2, %xmm0
+               	movsd	<rip>, %xmm1 # <addr>
+               	vsubsd	<rip>, %xmm1, %xmm1
+               	comisd	%xmm1, %xmm0
                	jbe	<addr>
-               	comisd	%xmm1, %xmm2
+               	comisd	<rip>, %xmm1
                	ja	<addr>
                	movl	$0x3, %eax
                	retq
-               	movsd	<rip>, %xmm0 # <addr>
-               	vsubsd	<rip>, %xmm0, %xmm0
-               	movsd	<rip>, %xmm1
-               	comisd	%xmm0, %xmm1
-               	jbe	<addr>
-               	movsd	<rip>, %xmm1
+               	movsd	<rip>, %xmm1 # <addr>
+               	vsubsd	<rip>, %xmm1, %xmm1
                	comisd	%xmm1, %xmm0
+               	jbe	<addr>
+               	comisd	<rip>, %xmm1
                	ja	<addr>
                	movl	$0x4, %eax
                	retq

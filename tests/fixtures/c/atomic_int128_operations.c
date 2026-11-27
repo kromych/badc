@@ -38,5 +38,15 @@ int main(void) {
     __atomic_load(p, &r, __ATOMIC_SEQ_CST);
     if (r != x || __sync_fetch_and_add(p, 1) != x || v != 0)
         return 10;
+    // The generic compare-exchange and exchange take the values by pointer.
+    u128 want = 0, put = w, got;
+    if (!__atomic_compare_exchange(p, &want, &put, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST) || v != w)
+        return 11;
+    if (__atomic_compare_exchange(p, &want, &put, 1, __ATOMIC_ACQUIRE, __ATOMIC_RELAXED) || want != w)
+        return 12;
+    put = hi + 1;
+    __atomic_exchange(p, &put, &got, __ATOMIC_SEQ_CST);
+    if (got != w || v != hi + 1)
+        return 13;
     return 0;
 }

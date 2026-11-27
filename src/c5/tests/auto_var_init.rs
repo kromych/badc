@@ -135,7 +135,7 @@ mod jit_lane {
 }
 
 /// The emitted text of `src` for `target` under `mode`.
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn text_for(src: &str, target: Target, mode: AutoVarInit, optimize: bool) -> alloc::vec::Vec<u8> {
     use crate::NativeOptions;
     let program = Compiler::with_options(
@@ -161,7 +161,7 @@ fn text_for(src: &str, target: Target, mode: AutoVarInit, optimize: bool) -> all
 /// register. The control is the same source without the opt-outs, which
 /// the flag does change.
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn the_attribute_and_a_register_binding_opt_out() {
     for (target, sp) in [(Target::LinuxX64, "rsp"), (Target::LinuxAarch64, "sp")] {
         let opted_out = alloc::format!(
@@ -190,7 +190,7 @@ fn the_attribute_and_a_register_binding_opt_out() {
 /// writes before it reads costs nothing: the supplied value is a dead
 /// immediate the emitters skip, so the text is the unflagged one.
 #[test]
-#[cfg(feature = "full")]
+#[cfg(feature = "linker")]
 fn a_promoted_scalar_written_before_any_read_costs_nothing_at_o() {
     let src = "int f(int v) { int x; x = v * 3; return x + 1; }\n\
                long g(long *p) { long n; n = *p; return n; }\n";

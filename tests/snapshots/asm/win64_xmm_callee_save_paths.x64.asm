@@ -3,7 +3,7 @@ win64_xmm_callee_save_paths.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,18 +26,14 @@ Disassembly of section .text:
                	int3
 
 <rt>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
-               	movsd	%xmm0, -0x8(%rbp)
-               	movsd	-0x8(%rbp), %xmm0
-               	leave
+               	subq	$0x18, %rsp
+               	movsd	%xmm0, 0x8(%rsp)
+               	movsd	0x8(%rsp), %xmm0
+               	addq	$0x18, %rsp
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x30, %rsp
+               	subq	$0x38, %rsp
                	movsd	<rip>, %xmm0
                	callq	<addr>
                	movsd	%xmm0, 0x28(%rsp)
@@ -59,20 +55,20 @@ Disassembly of section .text:
                	vmulsd	0x10(%rsp), %xmm14, %xmm1
                	movsd	0x28(%rsp), %xmm14
                	vfmadd231sd	0x20(%rsp), %xmm14, %xmm1 # xmm1 = (xmm14 * mem) + xmm1
-               	vfmadd132sd	0x8(%rsp), %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
-               	cvttsd2si	%xmm0, %rax
+               	vfmadd231sd	0x8(%rsp), %xmm0, %xmm1 # xmm1 = (xmm0 * mem) + xmm1
+               	cvttsd2si	%xmm1, %rax
                	movsd	0x28(%rsp), %xmm14
-               	vfmadd132sd	<rip>, %xmm14, %xmm0 # xmm0 = (xmm0 * mem) + xmm14
-               	cvttsd2si	%xmm0, %rcx
+               	vfmadd132sd	<rip>, %xmm14, %xmm1 # xmm1 = (xmm1 * mem) + xmm14
+               	cvttsd2si	%xmm1, %rcx
                	cmpl	$0x2c, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	cmpl	$0x59, %ecx
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	movsd	<rip>, %xmm0
                	callq	<addr>
@@ -95,21 +91,21 @@ Disassembly of section .text:
                	vmulsd	0x10(%rsp), %xmm14, %xmm1
                	movsd	0x28(%rsp), %xmm14
                	vfmadd231sd	0x20(%rsp), %xmm14, %xmm1 # xmm1 = (xmm14 * mem) + xmm1
-               	vfmadd132sd	0x8(%rsp), %xmm1, %xmm0 # xmm0 = (xmm0 * mem) + xmm1
-               	cvttsd2si	%xmm0, %rax
+               	vfmadd231sd	0x8(%rsp), %xmm0, %xmm1 # xmm1 = (xmm0 * mem) + xmm1
+               	cvttsd2si	%xmm1, %rax
                	movsd	0x28(%rsp), %xmm14
-               	vfmadd132sd	<rip>, %xmm14, %xmm0 # xmm0 = (xmm0 * mem) + xmm14
-               	cvttsd2si	%xmm0, %rcx
+               	vfmadd132sd	<rip>, %xmm14, %xmm1 # xmm1 = (xmm1 * mem) + xmm14
+               	cvttsd2si	%xmm1, %rcx
                	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	cmpl	$0x1e, %ecx
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x38, %rsp
                	retq

@@ -3,7 +3,7 @@ write_stdout.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -19,11 +19,11 @@ Disassembly of section .text:
                	mov	x0, #0x4                // =4
                	bl	<addr>
                	mov	x1, x0
+               	mov	x0, #0x6968             // =26984
+               	movk	x0, #0xa, lsl #16
+               	str	w0, [x1]
                	mov	x0, #0x1                // =1
-               	mov	x3, #0x6968             // =26984
-               	movk	x3, #0xa, lsl #16
                	mov	x2, #0x3                // =3
-               	str	w3, [x1]
                	bl	<addr>
                	mov	x0, #0x0                // =0
                	ldp	x29, x30, [sp], #0x10

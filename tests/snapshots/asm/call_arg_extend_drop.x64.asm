@@ -3,7 +3,7 @@ call_arg_extend_drop.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -28,8 +28,7 @@ Disassembly of section .text:
 <fib>:
                	cmpl	$0x2, %edi
                	jl	<addr>
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	pushq	%r14
                	pushq	%r13
                	pushq	%r12
@@ -38,6 +37,7 @@ Disassembly of section .text:
                	xorl	%r14d, %r14d
                	leaq	-0x1(%r13), %rbx
                	xorl	%r12d, %r12d
+               	nop
                	cmpl	$0x2, %ebx
                	jl	<addr>
                	leaq	-0x1(%rbx), %rdi
@@ -56,21 +56,20 @@ Disassembly of section .text:
                	popq	%r12
                	popq	%r13
                	popq	%r14
-               	popq	%rbp
+               	popq	%r11
                	retq
-               	movslq	%edi, %rax
+               	movq	%rdi, %rax
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x14, %edi
                	callq	<addr>
                	cmpl	$0x1a6d, %eax           # imm = 0x1A6D
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

@@ -230,28 +230,27 @@ pub struct Program {
     /// `.weak` symbol names from file-scope asm. The object writer
     /// binds the name STB_WEAK wherever it surfaces -- a definition
     /// (function, data, asm-section label, alias) or an undefined
-    /// reference. A name that surfaces nowhere else gets no entry, as
-    /// GNU as emits none for an unreferenced undefined weak.
+    /// reference. A name that surfaces nowhere else gets no entry.
     pub asm_weak_names: Vec<String>,
     /// `.globl` symbol names from file-scope asm. A name the unit neither
-    /// defines nor references still gets an undefined global entry, as
-    /// GNU as emits one; `ld -r` carries it into the next link stage.
+    /// defines nor references still gets an undefined global entry, which
+    /// `ld -r` carries into the next link stage.
     pub asm_global_names: Vec<String>,
     /// Symbol visibility named by `.hidden` / `.internal` / `.protected` in
     /// file-scope asm. The object writer sets `st_other` wherever the name
-    /// surfaces. A later directive on the same name wins, as in GNU as.
+    /// surfaces. A later directive on the same name wins.
     pub asm_visibility: Vec<(String, SymVisibility)>,
     /// Names whose `st_other` the object writer sets
     /// `STO_AARCH64_VARIANT_PCS` in: those `.variant_pcs` marks in
     /// file-scope asm, and the functions that follow the SVE PCS.
     pub variant_pcs: Vec<String>,
     /// The unit is assembler source (`.s` / `.S`). The object writer then
-    /// takes the GNU as shape: an STT_FILE symbol only per `.file` directive
-    /// and a `.comment` section only from `.ident` strings, where a compiled
-    /// unit names its source file and carries the producer fingerprint.
+    /// writes an STT_FILE symbol only per `.file` directive and a `.comment`
+    /// section only from `.ident` strings, where a compiled unit names its
+    /// source file and carries the producer fingerprint.
     pub asm_unit: bool,
     /// `.file "name"` operands from file-scope asm, in directive order; one
-    /// STT_FILE symbol each, as GNU as emits them.
+    /// STT_FILE symbol each.
     pub asm_file_names: Vec<String>,
     /// `.ident` strings from file-scope asm, in directive order; pooled
     /// NUL-terminated into `.comment`.
@@ -335,6 +334,10 @@ pub struct Program {
     /// (`tls_data.len() - tls_init_size` bytes) is zero-init and
     /// goes into `.tbss`. Invariant: `tls_init_size <= tls_data.len()`.
     pub tls_init_size: usize,
+    /// Bytes of zero-filled thread-local storage past `tls_data`, which the
+    /// template does not hold: template offsets `[tls_data.len(),
+    /// tls_len())` name them.
+    pub tls_zero_fill_len: usize,
     /// Alignment of `tls_data`: the largest alignment among its objects,
     /// at least 8. The image writers place each thread's copy on it.
     pub tls_align: usize,
@@ -382,6 +385,9 @@ pub struct Program {
     /// decides its preemption (position-independent ELF relocatable output);
     /// see [`crate::c5::symbol::Symbol::is_interposable_definition`].
     pub(crate) interposable_refs: bool,
+    /// `-fno-plt` in effect: a call to a function the link resolves goes
+    /// through the address its GOT entry holds.
+    pub(crate) no_plt_calls: bool,
     /// `-ffp-contract=fast`: `-O` contracts any product the add or subtract
     /// using it is the only use of, not only a contractible one.
     pub(crate) fp_contract_fast: bool,
@@ -598,6 +604,71 @@ pub struct Program {
 }
 
 impl Program {
+    /// The extent of the data image: the file-backed bytes and the
+    /// zero-filled storage past them.
+    pub fn image_len(&self) -> usize {
+        self.data.len() + self.zero_fill_len
+    }
+
+    /// The size of the thread-local block: the template and the
+    /// zero-filled storage past it.
+    pub fn tls_len(&self) -> usize {
+        self.tls_data.len() + self.tls_zero_fill_len
+    }
+
+    /// Move the objects the parser placed in the zero region past `data`, on
+    /// the region's alignment, as the image's zero-filled storage.
+    pub(crate) fn place_zero_region(&mut self, region: crate::c5::layout::ZeroRegion) {
+        let crate::c5::layout::ZeroRegion {
+            len,
+            align,
+            starts,
+            pads,
+            marks,
+        } = region;
+        if len == 0 {
+            return;
+        }
+        self.data_object_starts.extend(starts);
+        self.data_pad_ranges.extend(pads);
+        self.data_align_marks.extend(marks);
+        let data_len = self.data.len();
+        let base = data_len.next_multiple_of(align.max(1));
+        let placement = crate::c5::layout::ZeroRegionPlacement {
+            data_len: data_len as i64,
+            len: len as i64,
+            base: base as i64,
+        };
+        // A pointer slot's bytes hold its target's offset, which the remap
+        // below moves in the relocation record alone.
+        let moved = |r: &DataReloc| crate::c5::layout::in_zero_region(r.target_offset as i64);
+        let slots = |relocs: &[DataReloc]| -> BTreeSet<u64> {
+            relocs
+                .iter()
+                .filter(|r| moved(r))
+                .map(|r| r.data_offset)
+                .collect()
+        };
+        let (data_slots, tls_slots) = (slots(&self.data_relocs), slots(&self.tls_data_relocs));
+        DataOffsets::remap_data_offsets(self, &placement);
+        let rewrite = |image: &mut [u8], relocs: &[DataReloc], slots: &BTreeSet<u64>| {
+            for r in relocs.iter().filter(|r| slots.contains(&r.data_offset)) {
+                let at = r.data_offset as usize;
+                image[at..at + 8].copy_from_slice(&r.target_offset.to_le_bytes());
+            }
+        };
+        rewrite(&mut self.data, &self.data_relocs, &data_slots);
+        rewrite(&mut self.tls_data, &self.tls_data_relocs, &tls_slots);
+        if base > data_len {
+            self.data_pad_ranges.push((data_len as i64, base as i64));
+        }
+        self.data_pad_ranges.sort_unstable();
+        self.data_align_marks.sort_unstable();
+        self.data_object_starts.sort_unstable();
+        self.data_align = self.data_align.max(align);
+        self.zero_fill_len = base + len - data_len;
+    }
+
     /// Each file-scope enumeration constant and its value.
     pub fn enumerators(&self) -> impl Iterator<Item = (&str, i64)> {
         (self.symbols.iter())
@@ -847,7 +918,8 @@ impl DataOffsets for Program {
             notes: _,
             tls_data: _,      // separate image
             tls_init_size: _, // extent of `tls_data`
-            tls_align: _,     // an alignment, not an offset
+            tls_zero_fill_len: _,
+            tls_align: _, // an alignment, not an offset
             data_relocs,
             extern_data_relocs,
             code_relocs,
@@ -855,6 +927,7 @@ impl DataOffsets for Program {
             bind_trampoline_slots: _, // a mode
             weak_refs_by_name: _,     // a mode
             interposable_refs: _,     // a mode
+            no_plt_calls: _,          // a mode
             fp_contract_fast: _,      // a mode
             tls_data_relocs,
             tls_extern_data_relocs: _, // slot in `tls_data`, target by name
@@ -1001,6 +1074,7 @@ mod data_offset_tests {
             notes: Vec::new(),
             tls_data: Vec::new(),
             tls_init_size: 0,
+            tls_zero_fill_len: 0,
             tls_align: 8,
             data_relocs: Vec::new(),
             extern_data_relocs: Vec::new(),
@@ -1009,6 +1083,7 @@ mod data_offset_tests {
             bind_trampoline_slots: false,
             weak_refs_by_name: false,
             interposable_refs: false,
+            no_plt_calls: false,
             fp_contract_fast: false,
             tls_data_relocs: Vec::new(),
             tls_extern_data_relocs: Vec::new(),

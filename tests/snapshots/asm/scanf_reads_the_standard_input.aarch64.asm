@@ -3,7 +3,7 @@ scanf_reads_the_standard_input.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -37,13 +37,13 @@ Disassembly of section .text:
                	sub	x3, x29, #0x10
                	bl	<addr>
                	mov	x4, x0
-               	adrp	x0, <page>
-               	add	x0, x0, <lo12>
                	ldursw	x2, [x29, #-0x28]
                	ldursw	x3, [x29, #-0x20]
                	ldur	d0, [x29, #-0x18]
-               	sub	x5, x29, #0x10
                	mov	x1, x20
+               	adrp	x0, <page>
+               	add	x0, x0, <lo12>
+               	sub	x5, x29, #0x10
                	bl	<addr>
                	adrp	x0, <page>
                	add	x0, x0, <lo12>

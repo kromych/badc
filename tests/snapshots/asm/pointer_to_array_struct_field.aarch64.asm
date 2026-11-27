@@ -3,7 +3,7 @@ pointer_to_array_struct_field.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -52,43 +52,36 @@ Disassembly of section .text:
                	add	x2, x0, x1, lsl #4
                	ldrsh	x6, [x2]
                	mul	x3, x1, x4
-               	sxth	x7, w3
-               	cmp	w6, w7
+               	cmp	w6, w3
                	b.ne	<addr>
                	mov	x8, #0x1                // =1
                	ldrsh	x6, [x2, #0x2]
                	add	x7, x3, #0x1
-               	sxth	x7, w7
                	cmp	w6, w7
                	b.ne	<addr>
                	mov	x8, #0x2                // =2
                	ldrsh	x6, [x2, #0x4]
                	add	x7, x3, #0x2
-               	sxth	x7, w7
                	cmp	w6, w7
                	b.ne	<addr>
                	mov	x8, #0x3                // =3
                	ldrsh	x6, [x2, #0x6]
                	add	x7, x3, #0x3
-               	sxth	x7, w7
                	cmp	w6, w7
                	b.ne	<addr>
                	mov	x8, #0x4                // =4
                	ldrsh	x6, [x2, #0x8]
                	add	x7, x3, #0x4
-               	sxth	x7, w7
                	cmp	w6, w7
                	b.ne	<addr>
                	mov	x8, #0x5                // =5
                	ldrsh	x6, [x2, #0xa]
                	add	x7, x3, #0x5
-               	sxth	x7, w7
                	cmp	w6, w7
                	b.ne	<addr>
                	mov	x6, #0x6                // =6
                	ldrsh	x2, [x2, #0xc]
                	add	x3, x3, #0x6
-               	sxth	x3, w3
                	cmp	w2, w3
                	b.ne	<addr>
                	mov	x6, #0x7                // =7
@@ -96,7 +89,6 @@ Disassembly of section .text:
                	ldrsh	x2, [x2, #0xe]
                	mul	x3, x1, x4
                	add	x3, x3, #0x7
-               	sxth	x3, w3
                	cmp	w2, w3
                	b.ne	<addr>
                	add	x1, x1, #0x1

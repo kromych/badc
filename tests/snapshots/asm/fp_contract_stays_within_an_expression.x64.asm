@@ -3,7 +3,7 @@ fp_contract_stays_within_an_expression.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -27,55 +27,51 @@ Disassembly of section .text:
 
 <main>:
                	movsd	<rip>, %xmm0 # <addr>
-               	movsd	<rip>, %xmm1 # <addr>
-               	movss	<rip>, %xmm2 # <addr>
-               	vmulss	<rip>, %xmm2, %xmm2
-               	vsubss	<rip>, %xmm2, %xmm2
+               	movsd	<rip>, %xmm2 # <addr>
+               	movss	<rip>, %xmm1 # <addr>
+               	vmulss	<rip>, %xmm1, %xmm1
+               	vsubss	<rip>, %xmm1, %xmm1
                	xorps	%xmm3, %xmm3
-               	ucomiss	%xmm3, %xmm2
+               	ucomiss	%xmm3, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
                	retq
-               	vmulsd	%xmm0, %xmm0, %xmm2
-               	subsd	%xmm1, %xmm2
+               	vmulsd	%xmm0, %xmm0, %xmm1
+               	subsd	%xmm2, %xmm1
                	xorl	%eax, %eax
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm2
+               	ucomisd	%xmm15, %xmm1
                	jp	<addr>
                	jne	<addr>
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm2
+               	ucomisd	%xmm15, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0x2, %eax
                	retq
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm2
+               	ucomisd	%xmm15, %xmm1
                	jp	<addr>
                	je	<addr>
                	movl	$0x3, %eax
                	retq
-               	movapd	%xmm1, %xmm2
-               	vfmsub231sd	%xmm0, %xmm0, %xmm2 # xmm2 = (xmm0 * xmm0) - xmm2
-               	movabsq	$-0x8000000000000000, %r10 # imm = 0x8000000000000000
-               	movq	%r10, %xmm15
-               	xorpd	%xmm15, %xmm1
-               	vfmadd213sd	%xmm1, %xmm0, %xmm0 # xmm0 = (xmm0 * xmm0) + xmm1
+               	movapd	%xmm2, %xmm1
+               	vfmsub231sd	%xmm0, %xmm0, %xmm1 # xmm1 = (xmm0 * xmm0) - xmm1
+               	vxorpd	<rip>, %xmm2, %xmm2
+               	vfmadd213sd	%xmm2, %xmm0, %xmm0 # xmm0 = (xmm0 * xmm0) + xmm2
                	movq	%rax, %xmm15
-               	ucomisd	%xmm15, %xmm2
+               	ucomisd	%xmm15, %xmm1
                	jp	<addr>
                	je	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm2
+               	ucomisd	<rip>, %xmm1
                	jp	<addr>
                	jne	<addr>
                	movq	%rax, %xmm15
                	ucomisd	%xmm15, %xmm0
                	jp	<addr>
                	je	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	jp	<addr>
                	je	<addr>
                	movl	$0x4, %eax

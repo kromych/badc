@@ -3,7 +3,7 @@ zero_sign_extension_32bit.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,25 +26,23 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	leaq	<rip>, %rdi
                	callq	<addr>
-               	movq	%rax, %r8
-               	cmpl	$0x80000001, %r8d       # imm = 0x80000001
+               	movq	%rax, %rdx
+               	cmpl	$0x80000001, %edx       # imm = 0x80000001
                	je	<addr>
                	movl	$0x28, %ecx
                	movl	%ecx, <rip> # <addr>
                	movq	<rip>, %rax # <addr>
                	movq	(%rax), %rdi
+               	movq	%rdx, 0x8(%rsp)
                	leaq	<rip>, %rsi
                	movl	$0x5d, %edx
-               	movq	%r8, 0x8(%rsp)
                	movb	$0x0, %al
                	callq	<addr>
-               	movq	0x8(%rsp), %r8
-               	cmpl	$0x80000001, %r8d       # imm = 0x80000001
+               	movq	0x8(%rsp), %rdx
+               	cmpl	$0x80000001, %edx       # imm = 0x80000001
                	je	<addr>
                	movl	$0x29, %ecx
                	movl	%ecx, <rip> # <addr>
@@ -61,7 +59,7 @@ Disassembly of section .text:
                	movb	$0x0, %al
                	callq	<addr>
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	leave
+               	addq	$0x18, %rsp
                	retq

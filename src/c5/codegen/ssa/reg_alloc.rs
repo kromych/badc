@@ -23,10 +23,10 @@
 //!    a fresh spill slot -- or, for a value surviving calls whose
 //!    loop-weighted saves cost less than its spill, a caller-saved
 //!    register each of those calls stores and reloads around itself
-//!    ([`Allocation::call_saves`]), or, for a value lying in a loop, a
-//!    register only values living through the loop hold, saved around it
-//!    ([`super::loop_saves`]). Pre-coloring of call arguments into the
-//!    host argument registers is left to the per-arch emit pass.
+//!    ([`Allocation::call_saves`]), or, for a value lying in a loop or a
+//!    branch arm, a register only values living through it hold, saved
+//!    around it ([`super::loop_saves`]). Pre-coloring of call arguments
+//!    into the host argument registers is left to the per-arch emit pass.
 //!
 //! The output is intentionally minimal: each `Place` is either
 //! one of the host's GPRs / FP regs or a stack slot's byte offset
@@ -99,6 +99,9 @@ impl Place {
 pub(crate) struct Allocation {
     /// Where each SSA value lives.
     pub places: Vec<Place>,
+    /// The function's `FunctionSsa::fenv_access`, for the emit's
+    /// dead-value skip ([`super::emit_common::is_dead_pure`]).
+    pub fenv_access: bool,
     /// Total spill slots reserved (in 8-byte units). The emit
     /// pass adds `vstack_slots * 8 + 8 * spill_count` bytes to
     /// the function's `locals_bytes` reservation.
@@ -166,13 +169,16 @@ pub(crate) struct Allocation {
     /// is zero and it is never materialized; the instruction's own value
     /// is unread.
     pub imm_store: Vec<bool>,
-    /// The `Imm` values every reader of which is an integer argument a
-    /// call places on the stack ([`stack_arg_immediates`]), with their
-    /// constants. Such a value takes no place: the call's marshaling sets
-    /// it from its encoding, so it holds no register ahead of the call.
-    pub stack_imm: alloc::collections::BTreeMap<ValueId, i64>,
+    /// The constants and local addresses the calls reading them set
+    /// ([`call_set_arguments`]). Such a value takes no place: the call's
+    /// marshaling sets it from its encoding, so it holds no register ahead
+    /// of the call.
+    pub call_set: alloc::collections::BTreeMap<ValueId, ArgSet>,
+    /// AArch64: the constants the integer selects reading them set as an
+    /// arm ([`select_set_arms`]), taking no place as `call_set` does.
+    pub select_set: alloc::collections::BTreeSet<ValueId>,
     /// The frame loads ([`stack_arg_loads`]) the call's marshaling performs
-    /// itself, as `(slot, disp, kind)`, taking no place as `stack_imm` does.
+    /// itself, as `(slot, disp, kind)`, taking no place as `call_set` does.
     pub stack_load: alloc::collections::BTreeMap<ValueId, (i64, i32, LoadKind)>,
     /// Per value: an `Imm` placed in the FP file ([`fp_constants`]).
     pub fp_const: Vec<bool>,
@@ -234,18 +240,39 @@ pub(crate) struct Allocation {
     /// live across it, each stored to its slot ahead of the call and
     /// loaded back after it.
     pub call_saves: Vec<(ValueId, Vec<CallSave>)>,
-    /// The registers saved around loops.
+    /// The registers saved around loops and branch arms.
     pub loop_saves: LoopSaveCode,
     /// The SVE predicates' places and the VL-scaled slots.
     pub sve: super::sve_alloc::SveAlloc,
+    /// x86-64, when a value holds a register of [`X86_SCRATCH_PAIR`]: the
+    /// registers of the values at each point, from which the emitter plans
+    /// each site's scratch, and the first of the two spill slots a
+    /// borrowed scratch register keeps its value in.
+    pub scratch_sites: Option<ScratchSites>,
 }
 
-/// The code the saves around loops add at block boundaries
-/// ([`super::loop_saves`]).
+/// What a call's marshaling sets an argument from ([`Allocation::call_set`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ArgSet {
+    /// A constant.
+    Imm(i64),
+    /// The address of the local at this slot offset.
+    Local(i64),
+    /// The address of the unit's data at this offset (`Inst::ImmData`).
+    Data(i64),
+    /// The address of the function at this entry (`Inst::ImmCode`).
+    Code(usize),
+}
+
+/// The code the saves around loops and branch arms add at block boundaries
+/// ([`super::loop_saves`]), with the stores of the values saved around
+/// calls that store once where they are defined ([`save_store_blocks`]).
 #[derive(Clone, Debug, Default)]
 pub(crate) struct LoopSaveCode {
     /// Per block: saves stored at its end, ahead of its phi moves.
     pub stores: Vec<(crate::c5::ir::BlockId, Vec<CallSave>)>,
+    /// Per block: saves stored at its start, past its loads there.
+    pub stores_at_start: Vec<(crate::c5::ir::BlockId, Vec<CallSave>)>,
     /// Per block: saves loaded at its start.
     pub loads_at_start: Vec<(crate::c5::ir::BlockId, Vec<CallSave>)>,
     /// Per block: saves loaded at its end, past its phi moves.
@@ -266,6 +293,10 @@ impl LoopSaveCode {
         Self::of(&self.stores, b)
     }
 
+    pub(crate) fn stores_at_start_of(&self, b: crate::c5::ir::BlockId) -> &[CallSave] {
+        Self::of(&self.stores_at_start, b)
+    }
+
     pub(crate) fn loads_at_start_of(&self, b: crate::c5::ir::BlockId) -> &[CallSave] {
         Self::of(&self.loads_at_start, b)
     }
@@ -277,12 +308,14 @@ impl LoopSaveCode {
     /// Whether block `b` holds any of this code.
     pub(crate) fn touches(&self, b: crate::c5::ir::BlockId) -> bool {
         !(self.stores_at(b).is_empty()
+            && self.stores_at_start_of(b).is_empty()
             && self.loads_at_start_of(b).is_empty()
             && self.loads_at_end_of(b).is_empty())
     }
 
     fn all(&self) -> impl Iterator<Item = &CallSave> {
         (self.stores.iter())
+            .chain(&self.stores_at_start)
             .chain(&self.loads_at_start)
             .chain(&self.loads_at_end)
             .flat_map(|(_, s)| s)
@@ -296,6 +329,8 @@ pub(crate) struct CallSave {
     pub is_fp: bool,
     pub wide: VecWidth,
     pub slot: u32,
+    /// The slot holds the value already: the call only reloads it.
+    pub stored: bool,
 }
 
 /// Each value output of the asm statement at `site` with its place;
@@ -1184,6 +1219,10 @@ pub(crate) struct RegBanks {
     /// prologue's save and the epilogue's restore, once per call of the
     /// function. AArch64 saves the registers in pairs, so each costs half.
     pub open_cost: u64,
+    /// The coloring is repeated with each callee-saved register whose
+    /// holders' spills cost less than its opening withheld (x86-64), so a
+    /// node may open one at no cost of its own.
+    pub withholds: bool,
 }
 
 impl RegBanks {
@@ -1201,6 +1240,15 @@ impl RegBanks {
     /// [`NO_FP_SCRATCH`].
     pub fn new(target: Target, fixed: FixedRegs) -> Self {
         Self::with_fp_saved(target, fixed, |r| fp_callee_saved(target, r))
+    }
+
+    /// With rbp as a callee-saved register where `func` keeps no frame
+    /// pointer (`FunctionSsa::frees_rbp`) and `-ffixed-` leaves it.
+    pub(crate) fn with_free_rbp(mut self, func: &FunctionSsa, fixed: FixedRegs) -> Self {
+        if func.frees_rbp && !fixed.has_gpr(5) {
+            self.callee_gprs.push(5);
+        }
+        self
     }
 
     /// The banks of an SVE-PCS function that reaches no code of another
@@ -1244,14 +1292,19 @@ impl RegBanks {
             fp_scratch[n] = r;
             n += 1;
         }
+        let mut caller_gprs = keep(rows.caller_gprs, FixedRegs::has_gpr);
+        if target.is_x86_64() && scratch_pair_first() {
+            caller_gprs.sort_by_key(|r| !X86_SCRATCH_PAIR.contains(r));
+        }
         Self {
             callee_gprs: keep(rows.callee_gprs, FixedRegs::has_gpr),
-            caller_gprs: keep(rows.caller_gprs, FixedRegs::has_gpr),
+            caller_gprs,
             callee_fprs,
             caller_fprs,
             fp_scratch,
             callee_fpr_low64_only: !target.is_x86_64(),
             open_cost: if target.is_aarch64() { 1 } else { 2 } * (FREQ_ONE + STATIC_COST),
+            withholds: target.is_x86_64(),
         }
     }
 }
@@ -1377,6 +1430,237 @@ fn call_forbid_masks(
     out
 }
 
+/// The values in [`X86_SCRATCH_PAIR`] at the x86-64 sites whose lowering
+/// would find fewer than two scratch registers ([`scratch_room`]): an
+/// instruction's operands and result, the phi moves of an edge that stage
+/// through scratch, the parameters an entry places. Kept off the pair,
+/// they leave it to the site, which then borrows it at worst. With `broad`,
+/// every integer value a starved instruction reads or writes, whatever its
+/// place, and so for the loops ([`x86_scratch_borrowed_in_loops`]).
+fn x86_scratch_starved(
+    func: &FunctionSsa,
+    target: Target,
+    alloc: &Allocation,
+    sites: &ScratchSites,
+    broad: bool,
+) -> Vec<ValueId> {
+    let in_pair = |v: ValueId| matches!(alloc.places.get(v as usize), Some(Place::IntReg(r)) if X86_SCRATCH_PAIR.contains(r));
+    let starved = |order: &[u8], touched: u16| scratch_room(order, sites.writable, touched) < 2;
+    let int = |u: ValueId| {
+        (u as usize) < func.insts.len() && !alloc.is_fp_value(&func.insts[u as usize], u)
+    };
+    let kept = |u: ValueId| if broad { int(u) } else { in_pair(u) };
+    let tls = tls_addr_is_call(target, func);
+    let mut out = Vec::new();
+    for (v, inst) in func.insts.iter().enumerate() {
+        let v = v as ValueId;
+        if matches!(inst, Inst::Phi { .. })
+            || is_call_site(inst, tls)
+            || super::emit_common::is_dead_pure(inst, v, alloc)
+            || !starved(&X86_SCRATCH_ORDER, sites.masks.touched[v as usize])
+        {
+            continue;
+        }
+        if produces_value(inst) && kept(v) {
+            out.push(v);
+        }
+        for_each_operand(inst, |op| {
+            if kept(op) {
+                out.push(op);
+            }
+        });
+    }
+    out.extend(x86_scratch_borrowed_in_loops(
+        func, alloc, sites, tls, broad,
+    ));
+    let reg = |v: ValueId| match alloc.places.get(v as usize) {
+        Some(&Place::IntReg(r)) => 1u16 << r,
+        _ => 0,
+    };
+    for (b, blk) in func.blocks.iter().enumerate() {
+        let succs = super::mem2reg::successors(
+            &blk.terminator,
+            &func.computed_goto_targets,
+            &func.jump_tables,
+        );
+        let mut moved = Vec::new();
+        let mut staged = false;
+        for s in succs {
+            let m = super::emit_common::edge_moves(func, alloc, b as crate::c5::ir::BlockId, s);
+            staged |= super::super::x86_64::emit::moves_stage(&m.int)
+                || !m.fp_const.is_empty()
+                || !m.pred.is_empty();
+            for id in func.blocks[s as usize].inst_range.clone() {
+                let Inst::Phi { incoming, .. } = &func.insts[id as usize] else {
+                    break;
+                };
+                for &(p, src) in incoming {
+                    if p as usize == b {
+                        moved.extend([id, src]);
+                    }
+                }
+            }
+        }
+        let touched = moved.iter().fold(0, |m, &v| m | reg(v));
+        if staged && starved(&X86_MOVE_ORDER, touched) {
+            out.extend(moved.into_iter().filter(|&v| in_pair(v)));
+        }
+    }
+    let args = target.abi_for(func.conv).int_arg_regs;
+    let params: Vec<ValueId> = (0..func.insts.len() as ValueId)
+        .filter(|&v| {
+            matches!(
+                func.insts[v as usize],
+                Inst::ParamRef { .. } | Inst::ParamPart { .. }
+            )
+        })
+        .collect();
+    let touched = params
+        .iter()
+        .fold(args.iter().fold(0u16, |m, &r| m | 1 << r), |m, &v| {
+            m | reg(v)
+        });
+    if starved(&X86_MOVE_ORDER, touched) {
+        out.extend(params.into_iter().filter(|&v| in_pair(v)));
+    }
+    out
+}
+
+/// The values in [`X86_SCRATCH_PAIR`] that an instruction inside a loop
+/// would borrow the register of: one reading or writing a spill slot, which
+/// stages through scratch, where no two scratch registers are free. A
+/// borrow there stores and reloads on every iteration; kept off the pair,
+/// the value leaves the pair to the staging, as with 13 registers. With
+/// `broad`, every integer value living through such a site.
+fn x86_scratch_borrowed_in_loops(
+    func: &FunctionSsa,
+    alloc: &Allocation,
+    sites: &ScratchSites,
+    tls: bool,
+    broad: bool,
+) -> Vec<ValueId> {
+    let depth = crate::c5::codegen::passes::layout::loop_depths(func);
+    let block_of = crate::c5::codegen::passes::constfold_branch::block_index(func);
+    let spilled = |v: ValueId| matches!(alloc.places.get(v as usize), Some(Place::Spill(_)));
+    let mut sites_in: Vec<(ValueId, u16)> = Vec::new();
+    for (v, inst) in func.insts.iter().enumerate() {
+        let looped = (block_of.get(v))
+            .and_then(|&b| depth.get(b as usize))
+            .is_some_and(|&d| d > 0);
+        let through = sites.masks.through[v];
+        if !looped
+            || matches!(inst, Inst::Phi { .. })
+            || is_call_site(inst, tls)
+            || super::emit_common::is_dead_pure(inst, v as ValueId, alloc)
+            || scratch_room(
+                &X86_SCRATCH_ORDER,
+                sites.writable,
+                sites.masks.touched[v] | through,
+            ) >= 2
+        {
+            continue;
+        }
+        let mut stages = spilled(v as ValueId);
+        for_each_operand(inst, |op| stages |= spilled(op));
+        let pair = X86_SCRATCH_PAIR.iter().fold(0u16, |m, &r| m | 1 << r) & through;
+        if stages && pair != 0 {
+            sites_in.push((v as ValueId, pair));
+        }
+    }
+    // A value lives over `[v, last_use[v]]` (`Allocation::last_use`).
+    let mut out = Vec::new();
+    for (u, inst) in func
+        .insts
+        .iter()
+        .enumerate()
+        .filter(|_| !sites_in.is_empty())
+    {
+        if !produces_value(inst) || alloc.is_fp_value(inst, u as ValueId) {
+            continue;
+        }
+        let held = match alloc.places[u] {
+            Place::IntReg(r) if X86_SCRATCH_PAIR.contains(&r) => 1u16 << r,
+            _ if broad => u16::MAX,
+            _ => continue,
+        };
+        let end = alloc.last_use.get(u).copied().unwrap_or(0);
+        let next = sites_in.partition_point(|&(v, _)| v <= u as ValueId);
+        if (sites_in[next..].iter())
+            .take_while(|&&(v, _)| v <= end)
+            .any(|&(_, pair)| pair & held != 0)
+        {
+            out.push(u as ValueId);
+        }
+    }
+    out
+}
+
+/// How many registers of `order` an x86-64 site may take as scratch:
+/// writable, and neither read nor written by the site.
+pub(crate) fn scratch_room(order: &[u8], writable: u16, touched: u16) -> usize {
+    order
+        .iter()
+        .filter(|&&r| writable >> r & 1 != 0 && touched >> r & 1 == 0)
+        .count()
+}
+
+/// x86-64 values kept off [`X86_SCRATCH_PAIR`] where a lowering takes
+/// that pair as scratch and cannot borrow it from a value: the operands of
+/// a call, whose marshal moves rsp before it stages; the operands and
+/// outputs of an inline-asm statement and the values live across it, whose
+/// lowering stages through the pair; and the values live out of a block
+/// whose terminator jumps through a register, and its operands, as no code
+/// runs past the jump to give a borrowed register back.
+fn x86_scratch_pair_forbid(
+    func: &FunctionSsa,
+    liveness: &super::liveness::Liveness,
+    target: Target,
+) -> Vec<bool> {
+    if !target.is_x86_64() {
+        return Vec::new();
+    }
+    let n = func.insts.len();
+    let tls = tls_addr_is_call(target, func);
+    let mut out = vec![false; n];
+    let mark = |v: ValueId, out: &mut Vec<bool>| {
+        if (v as usize) < n {
+            out[v as usize] = true;
+        }
+    };
+    for (v, inst) in func.insts.iter().enumerate() {
+        if is_call_site(inst, tls) || matches!(inst, Inst::InlineAsm { .. }) {
+            for_each_operand(inst, |op| {
+                mark(op, &mut out);
+                // A call reads an aggregate argument's parts in place.
+                if let Some(parts @ Inst::AggParts { .. }) = func.insts.get(op as usize) {
+                    for_each_operand(parts, |p| mark(p, &mut out));
+                }
+            });
+        }
+        if matches!(inst, Inst::AsmOut { .. }) {
+            mark(v as ValueId, &mut out);
+        }
+    }
+    let asm = |inst: &Inst| matches!(inst, Inst::InlineAsm { .. });
+    for (_, live) in liveness.values_live_after(func, &asm) {
+        for u in live {
+            mark(u, &mut out);
+        }
+    }
+    for (b, blk) in func.blocks.iter().enumerate() {
+        if matches!(
+            blk.terminator,
+            Terminator::JumpTable { .. } | Terminator::GotoIndirect { .. }
+        ) {
+            liveness
+                .block_liveness()
+                .for_each_live_out(b as crate::c5::ir::BlockId, |v| mark(v, &mut out));
+            blk.terminator.for_each_operand(|v| mark(v, &mut out));
+        }
+    }
+    out
+}
+
 /// Each call with the values live across it, for the saves around calls;
 /// empty where the function may not save around one: it calls a
 /// returns-twice function, has a `__try` region, or has no frame.
@@ -1444,20 +1728,17 @@ fn ret_part_reads(func: &FunctionSsa, target: Target) -> BTreeMap<ValueId, (u64,
 
 /// Per phi-class root, what keeping it in a caller-saved register across
 /// the calls it lives across ([`call_crossings`]) costs: a store and a
-/// load at each, by the call's loop weight, and by its frequency and size
-/// ([`cost_weights`]).
+/// load at each, by the call block's `weights` ([`cost_weights`]).
 fn call_save_costs(
     func: &FunctionSsa,
     crossings: &[(ValueId, Vec<ValueId>)],
     node_of: &[ValueId],
-) -> (Vec<u64>, Vec<u64>) {
+    weights: &[u64],
+) -> Vec<u64> {
     let mut cost = alloc::vec![0u64; func.insts.len()];
-    let mut by_freq = alloc::vec![0u64; func.insts.len()];
     if crossings.is_empty() {
-        return (cost, by_freq);
+        return cost;
     }
-    let weights = block_weights(func);
-    let freqs = cost_weights(func);
     let mut block_of = alloc::vec![0usize; func.insts.len()];
     for (b, block) in func.blocks.iter().enumerate() {
         for v in block.inst_range.clone() {
@@ -1466,16 +1747,15 @@ fn call_save_costs(
     }
     for (site, live) in crossings {
         let b = block_of[*site as usize];
-        let (w, f) = (weights[b].saturating_mul(2), freqs[b].saturating_mul(2));
+        let w = weights[b].saturating_mul(2);
         let mut roots: Vec<ValueId> = live.iter().map(|&v| node_of[v as usize]).collect();
         roots.sort_unstable();
         roots.dedup();
         for r in roots {
             cost[r as usize] = cost[r as usize].saturating_add(w);
-            by_freq[r as usize] = by_freq[r as usize].saturating_add(f);
         }
     }
-    (cost, by_freq)
+    cost
 }
 
 /// The target's full register banks.
@@ -1524,20 +1804,12 @@ impl Rows {
             },
             Target::LinuxX64 => Self {
                 // System V x86_64. Callee-saved: rbx, r12, r13, r14,
-                // r15. r10 and r11 stay reserved as the writer's fixed
-                // scratch (`SCRATCH_R10` / `SCRATCH_R11` in
-                // ssa_emit_x86_64) -- many handlers (int_or_spill_dst,
-                // materialize_int for spilled sources, the Va* /
-                // call-arg marshallers) write them unconditionally to
-                // land a value in a known register, so the allocator
-                // must not park another SSA value there. Both are
-                // caller-saved, so reserving them forces no prologue
-                // save and a scratch-only body stays leaf-elidable. r13
-                // is an ordinary callee-saved allocation target, saved
-                // only when colored. Caller-saved opens up to the SysV
-                // arg regs (rdi, rsi, rdx, rcx, r8, r9) plus rax.
+                // r15. Caller-saved: rax, the argument registers rdi,
+                // rsi, rdx, rcx, r8, r9, and r10 and r11 last, which a
+                // lowering takes first as scratch when no value holds
+                // them (`ScratchPlan`).
                 callee_gprs: &[3, 12, 13, 14, 15],
-                caller_gprs: &[0, 1, 2, 6, 7, 8, 9],
+                caller_gprs: &[0, 1, 2, 6, 7, 8, 9, 10, 11],
                 callee_fprs: &[],
                 caller_fprs: &[0, 1, 2, 3, 4, 5, 6, 7],
                 // xmm14 / xmm15 are the emit pass's scratch; xmm8..xmm13
@@ -1546,14 +1818,10 @@ impl Rows {
             },
             Target::WindowsX64 => Self {
                 // Win64 callee-saved GPRs: rbx, rsi, rdi, r12, r13, r14,
-                // r15. r10 / r11 stay reserved as the writer's fixed
-                // scratch (see the LinuxX64 comment for the SCRATCH_R10
-                // / SCRATCH_R11 contract); both are caller-saved. r13 is
-                // an ordinary callee-saved allocation target. Caller-
-                // saved opens up to the Win64 arg regs (rcx, rdx, r8,
-                // r9) plus rax.
+                // r15. Caller-saved: rax, the argument registers rcx,
+                // rdx, r8, r9, and r10 and r11 last, as on System V.
                 callee_gprs: &[3, 6, 7, 12, 13, 14, 15],
-                caller_gprs: &[0, 1, 2, 8, 9],
+                caller_gprs: &[0, 1, 2, 8, 9, 10, 11],
                 // Win64 marks xmm6..xmm15 non-volatile (callee-saved);
                 // the prologue and every epilogue path save and restore
                 // the full 128 bits of each one the body uses, so the
@@ -1565,6 +1833,35 @@ impl Rows {
         }
     }
 }
+
+/// The registers an x86-64 lowering takes as scratch, in order: the pair,
+/// then r9 and r8, then r15 and r14. Each is one of r8-r15 other than r12
+/// and r13, which an encoding names through REX bits with no SIB byte or
+/// displacement.
+pub(crate) const X86_SCRATCH_ORDER: [u8; 6] = [10, 11, 9, 8, 15, 14];
+
+/// The registers an x86-64 parallel copy of places takes as scratch, in
+/// order: its moves encode any general register, so every one other than
+/// rsp and rbp serves.
+pub(crate) const X86_MOVE_ORDER: [u8; 14] = [10, 11, 9, 8, 0, 1, 2, 6, 7, 3, 12, 13, 14, 15];
+
+/// What the x86-64 emitter plans each site's scratch from
+/// ([`Allocation::scratch_sites`]).
+#[derive(Debug, Clone)]
+pub(crate) struct ScratchSites {
+    pub masks: super::liveness::RegisterMasks,
+    /// The first of the two spill slots past the allocation's own that a
+    /// borrowed scratch register keeps its value in, which the frame adds
+    /// once a site borrows one.
+    pub borrow_slot: u32,
+    /// The general registers a lowering may write: the convention's
+    /// caller-saved ones and the callee-saved ones the prologue saves.
+    pub writable: u16,
+}
+
+/// The x86-64 registers a lowering takes first as scratch
+/// (`ScratchPlan`), which the caller-saved banks list last.
+pub(crate) const X86_SCRATCH_PAIR: [u8; 2] = [10, 11];
 
 /// General-purpose registers the allocator may use for `target`, after
 /// the codegen-test bank caps (`BADC_MAX_GPR` / the per-thread override).
@@ -1689,6 +1986,51 @@ pub(crate) fn free_fp_register(
 /// Allocate physical placements for every value in `func`. See
 /// the module docs for the algorithm.
 pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Allocation {
+    let mut pair_off: Vec<bool> = Vec::new();
+    let mut round = 1;
+    loop {
+        let alloc = allocate_keeping(func, target, fixed, &pair_off);
+        if round == SCRATCH_ROUNDS {
+            return alloc;
+        }
+        let broad = round > PRECISE_SCRATCH_ROUNDS;
+        let starved = alloc.scratch_sites.as_ref().map_or_else(Vec::new, |sites| {
+            x86_scratch_starved(func, target, &alloc, sites, broad)
+        });
+        pair_off.resize(func.insts.len(), false);
+        let mut fresh = false;
+        for v in starved {
+            fresh |= !core::mem::replace(&mut pair_off[v as usize], true);
+        }
+        if !fresh {
+            return alloc;
+        }
+        round += 1;
+    }
+}
+
+/// x86-64 allocations that keep off [`X86_SCRATCH_PAIR`] only the values
+/// holding it at a starved site ([`x86_scratch_starved`]). Each lets other
+/// values into the pair there, so a block whose values all live through
+/// such sites moved a few per allocation, up to 93 times; past these, an
+/// allocation keeps off the pair every integer value a starved site reads
+/// or writes or a looped one stages through. At eight the C fixtures', the
+/// perf corpus's and sqlite's Linux objects keep their bytes; at five,
+/// blake2b's compression grows by 10 instructions and 15 stack accesses.
+const PRECISE_SCRATCH_ROUNDS: usize = 8;
+
+/// Allocations in all, past which the last stands and its starved sites
+/// borrow their scratch: the broad rounds settle within two.
+const SCRATCH_ROUNDS: usize = PRECISE_SCRATCH_ROUNDS + 3;
+
+/// [`allocate`], keeping the values `pair_off` marks off
+/// [`X86_SCRATCH_PAIR`].
+fn allocate_keeping(
+    func: &FunctionSsa,
+    target: Target,
+    fixed: FixedRegs,
+    pair_off: &[bool],
+) -> Allocation {
     let region_base = super::emit_common::region_base(func, target, fixed);
     let fixed = super::emit_common::fixed_for_function(func, target, fixed);
     let n_insts = func.insts.len();
@@ -1702,9 +2044,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // operand live and weighs on no spill decision.
     let mut use_counts = compute_use_counts(func);
     drop_unread_incomes(func, &mut use_counts);
-    // Unread, a stack argument's constant is unemitted, and the liveness
+    // Unread, an argument its call sets is unemitted, and the liveness
     // reading only emitted values keeps it out of the coloring.
-    let stack_imm = stack_arg_immediates(func, target, &use_counts);
+    let call_set = call_set_arguments(func, target, &use_counts);
     let stack_load = stack_arg_loads(func, target, &use_counts);
     // Read off its literal by every reader, a floating constant is unemitted.
     let fp_literals = if target.is_x86_64() {
@@ -1712,12 +2054,37 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     } else {
         alloc::collections::BTreeSet::new()
     };
-    for &v in stack_imm
-        .keys()
-        .chain(stack_load.keys())
+    let select_set = select_set_arms(func, target, &use_counts);
+    for &v in (call_set.keys().chain(stack_load.keys()))
         .chain(&fp_literals)
+        .chain(&select_set)
     {
         use_counts[v as usize] = 0;
+    }
+    // A store whose own value is unread can take a constant from its
+    // encoding. When every reader of an `Imm` is such a store, the stores
+    // are marked and the `Imm` loses its readers, so it is never
+    // materialized and takes no place; ahead of the branch fusion, a dead
+    // `Imm(0)` no longer counts as a flag-writing `xor`.
+    let candidates: Vec<(usize, ValueId)> = func
+        .insts
+        .iter()
+        .enumerate()
+        .filter(|&(v, _)| use_counts[v] == 0)
+        .filter_map(|(v, inst)| Some((v, store_immediate(func, inst, target)?)))
+        .collect();
+    let mut imm_readers: Vec<u32> = vec![0; func.insts.len()];
+    for &(_, c) in &candidates {
+        imm_readers[c as usize] += 1;
+    }
+    let mut imm_store: Vec<bool> = vec![false; func.insts.len()];
+    for &(v, c) in &candidates {
+        imm_store[v] = imm_readers[c as usize] == use_counts[c as usize];
+    }
+    for &(v, c) in &candidates {
+        if imm_store[v] {
+            use_counts[c as usize] = 0;
+        }
     }
     // Likewise a constant the SVE rows reading it take from their encoding.
     if target.is_aarch64() {
@@ -1738,11 +2105,12 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let banks = if func.sve_pcs.is_some() && !super::sve_alloc::reaches_other_pcs(func, target) {
         RegBanks::sve_pcs(target, fixed)
     } else {
-        RegBanks::new(target, fixed)
+        RegBanks::new(target, fixed).with_free_rbp(func, fixed)
     };
     if n_insts == 0 {
         return Allocation {
             places,
+            fenv_access: func.fenv_access,
             spill_count: 0,
             gpr_used: Vec::new(),
             fp_used: Vec::new(),
@@ -1756,7 +2124,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             select_inc: Vec::new(),
             imm_held: Vec::new(),
             imm_store: Vec::new(),
-            stack_imm: alloc::collections::BTreeMap::new(),
+            call_set: alloc::collections::BTreeMap::new(),
+            select_set: alloc::collections::BTreeSet::new(),
             stack_load: alloc::collections::BTreeMap::new(),
             fp_mem_operand: alloc::collections::BTreeSet::new(),
             fp_const,
@@ -1773,6 +2142,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             call_saves: Vec::new(),
             loop_saves: LoopSaveCode::default(),
             sve: Default::default(),
+            scratch_sites: None,
         };
     }
 
@@ -1784,6 +2154,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // collapses to today's per-value behavior. Class-level
     // last-use is the max over all members so a value stays live
     // until every member of its class is dead.
+    let emitted = reads.clone();
     let liveness = super::emit_common::time_pass("ssa::liveness::Liveness::compute", || {
         super::liveness::Liveness::compute_reading(func, reads)
     });
@@ -1793,13 +2164,52 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // tests classes against. `node_of` is the identity here because no
     // class exists yet; the colourer's graph below is the same sweep over
     // the class roots this produces.
-    let value_of: Vec<ValueId> = (0..func.insts.len() as ValueId).collect();
+    let crowded = crowded_values(func, &liveness, &emitted);
+    let value_of: Vec<ValueId> = (0..func.insts.len() as ValueId)
+        .map(|v| if crowded[v as usize] { NO_VALUE } else { v })
+        .collect();
     let value_interference = liveness.interference(func, &value_of);
-    let mut classes = super::phi_class::PhiClasses::build(func, &value_interference);
+    // x86-64: a two-address result joins the class of an operand dying at
+    // it, the one the lowering writes the result over, when no member of
+    // one class interferes with the other: the chain shares one register
+    // and the copy ahead of each step goes.
+    let joined: Vec<(ValueId, ValueId)> = if target.is_x86_64() {
+        let dies = |o: ValueId, v: usize| {
+            last_use.get(o as usize) == Some(&(v as u32)) && use_counts[o as usize] > 0
+        };
+        // A fused multiply-add writes whichever operand its form names, so
+        // it joins only an accumulation: an addend that a fused
+        // multiply-add produced.
+        (func.insts.iter().enumerate())
+            .filter_map(|(v, inst)| {
+                let o = match *inst {
+                    Inst::Binop { .. } | Inst::BinopI { .. } => x86_two_address(inst)
+                        .into_iter()
+                        .flatten()
+                        .find(|&o| dies(o, v))?,
+                    Inst::Fma { c, .. }
+                        if dies(c, v) && matches!(func.insts[c as usize], Inst::Fma { .. }) =>
+                    {
+                        c
+                    }
+                    _ => return None,
+                };
+                Some((v as ValueId, o))
+            })
+            .filter(|&(v, o)| !crowded[v as usize] && !crowded[o as usize])
+            .collect()
+    } else {
+        Vec::new()
+    };
     let mut calls_after_def =
         super::emit_common::time_pass("ssa::liveness::values_live_across_calls", || {
             compute_calls_after_def(func, &liveness, target)
         });
+    let mut classes = super::phi_class::PhiClasses::build_with(
+        func,
+        &value_interference,
+        (&joined, &calls_after_def),
+    );
     // Promote per-value `calls_after_def` to the class: members share
     // one register, so a member whose own range does not cross a call
     // still needs a callee-saved home when another member's does.
@@ -1855,12 +2265,15 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let mut asm_live = asm_live_values(func, &liveness, target, fixed);
     let asm_forbid = asm_forbid_masks(func, &asm_live, &node_of);
     let call_forbid = call_forbid_masks(func, &liveness, target, fixed, &node_of);
+    let pair_forbid = x86_scratch_pair_forbid(func, &liveness, target);
     let crossings = call_crossings(func, &liveness, target);
     let ret_part_forbid = ret_part_crossing_forbid(func, target, &crossings, &node_of);
-    let wide = wide_values(func);
+    let mut wide = wide_values(func);
+    widen_vector_zeros(func, &mut wide);
     let mut node_cons: Vec<Option<NodeConstraints>> = vec![None; func.insts.len()];
     for (v, inst) in func.insts.iter().enumerate() {
-        if !produces_value(inst) || produces_pred_result(inst) {
+        // An instruction the emitters skip writes no register and no slot.
+        if !produces_value(inst) || produces_pred_result(inst) || !emitted[v] || crowded[v] {
             continue;
         }
         let root = node_of[v] as usize;
@@ -1869,9 +2282,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             must_callee: false,
             call_forbid: 0,
             save_cost: 0,
-            save_freq: 0,
-            spill_freq: 0,
-            def_cost: 0,
+            spill_cost: 0,
+            level_cost: 0,
             hint: None,
             forbid: 0,
             avoid: 0,
@@ -1886,6 +2298,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             entry.hint = hints[v];
         }
         entry.forbid |= param_incoming_forbid[v] | call_target_forbid[v];
+        if pair_forbid.get(v) == Some(&true) || pair_off.get(v) == Some(&true) {
+            entry.forbid |= X86_SCRATCH_PAIR.iter().fold(0, |m, &r| m | 1 << r);
+        }
         entry.avoid |= avoid.get(v).copied().unwrap_or(0);
         entry.loop_avoid |= loop_avoid.get(v).copied().unwrap_or(0);
         if let Some(&(gpr, fpr)) = asm_forbid.get(root) {
@@ -1898,27 +2313,18 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             entry.call_forbid |= u64::from(if entry.is_fp { fpr } else { gpr });
         }
     }
-    let (save_costs, save_freqs) = call_save_costs(func, &crossings, &node_of);
-    if save_costs.iter().any(|&c| c > 0) {
-        let defs = compute_def_weights(func, &node_of, &use_counts);
-        for (root, c) in node_cons.iter_mut().enumerate() {
-            if let Some(c) = c {
-                c.save_cost = save_costs[root];
-                c.save_freq = save_freqs[root];
-                c.def_cost = defs[root];
-            }
-        }
-    }
-    // What spilling each node costs by block frequency and size, against
-    // opening a callee-saved register for it.
-    {
-        let freqs = cost_weights(func);
-        let uses_by_freq = use_weights(func, &node_of, &liveness, &freqs);
-        let defs_by_freq = def_weights(func, &node_of, &use_counts, &freqs);
-        for (root, c) in node_cons.iter_mut().enumerate() {
-            if let Some(c) = c {
-                c.spill_freq = uses_by_freq[root].saturating_add(defs_by_freq[root]);
-            }
+    // Every cost the coloring weighs is in these units: an instruction's
+    // executions and its size.
+    let freqs = cost_weights(func);
+    let save_costs = call_save_costs(func, &crossings, &node_of, &freqs);
+    let spill_weights = use_weights(func, &node_of, &liveness, &freqs);
+    let level_weights = level_use_weights(func, &node_of, &liveness, &freqs);
+    let defs = def_weights(func, &node_of, &use_counts, &freqs);
+    for (root, c) in node_cons.iter_mut().enumerate() {
+        if let Some(c) = c {
+            c.save_cost = save_costs[root];
+            c.spill_cost = spill_weights[root].saturating_add(defs[root]);
+            c.level_cost = level_weights[root].saturating_add(defs[root]);
         }
     }
     // A two-address result and an operand dying at it follow each other;
@@ -1944,10 +2350,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         }
     }
     let (max_gpr, max_fpr) = pool_size_limits();
-    let spill_weights = compute_spill_weights(func, &node_of, &liveness);
     let loops = (!func.has_returns_twice_call)
-        .then(|| super::loop_saves::analyze(func, &liveness, &node_of, &block_weights(func)))
-        .flatten();
+        .then(|| super::loop_saves::analyze(func, &liveness, &node_of, &freqs));
     let color = |node_cons: &[Option<NodeConstraints>]| {
         color_graph(
             &value_interference,
@@ -1969,19 +2373,21 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // at each definition, a load at each use, by loop weight -- is
     // withheld and the graph colored again. x86-64 only: AArch64 saves
     // registers in pairs folded into the frame's own setup and teardown.
-    if target.is_x86_64() {
+    if banks.withholds {
         let exits = (func.blocks.iter())
             .filter(|b| matches!(b.terminator, Terminator::Return(_) | Terminator::TailExt(_)))
             .count() as u64;
         let early = super::early_exit::early_exit(func, &param_incoming_plan(func, target));
         let exits = exits - u64::from(early.is_some());
-        let defs = compute_def_weights(func, &node_of, &use_counts);
         let conv_banks = RegBanks::new(conv_target, fixed);
         let (call_gpr, call_fpr) = call_saves(func, target, conv_target, fixed);
         let (asm_gpr, asm_fpr) =
             asm_callee_saved(func, &asm_live, &conv_banks, target, conv_target);
         let base = region_base.map_or(0, |r| 1u32 << r);
         let saved = [call_gpr | asm_gpr | base, call_fpr | asm_fpr].map(u64::from);
+        // A call runs the save and one restore, whichever exit it leaves
+        // by; each exit's restore lengthens the function.
+        let open = 2 * FREQ_ONE + (exits + 1) * STATIC_COST;
         let mut withheld = [0u64; 2];
         loop {
             let mut held = [[0u64; 64]; 2];
@@ -1992,7 +2398,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                     Place::FpReg(r) if c.is_fp && banks.callee_fprs.contains(&r) => r,
                     _ => continue,
                 };
-                let cost = spill_weights[node].saturating_add(defs[node]);
+                let cost = c.spill_cost;
                 let h = &mut held[usize::from(c.is_fp)][r as usize];
                 *h = h.saturating_add(cost);
             }
@@ -2000,7 +2406,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             for (bank, regs) in held.iter().enumerate() {
                 for (r, &cost) in regs.iter().enumerate() {
                     let free = (saved[bank] >> r) & 1 != 0 || (withheld[bank] >> r) & 1 != 0;
-                    if cost > 0 && cost < exits + 1 && !free {
+                    if cost > 0 && cost < open && !free {
                         withheld[bank] |= 1 << r;
                         more = true;
                     }
@@ -2048,21 +2454,37 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         coloring = color(&node_cons);
     }
     places = coloring.places;
-    for &v in stack_imm.keys().chain(stack_load.keys()) {
+    for &v in call_set.keys().chain(stack_load.keys()).chain(&select_set) {
         places[v as usize] = Place::None;
     }
     let mut spill_count = coloring.spill_count;
-    let saves_at = call_save_lists(
-        (&crossings, &node_of),
-        (&coloring.saved, &node_cons, &places),
+    place_crowded(
+        func,
+        &liveness,
+        &crowded,
+        &wide,
+        &mut places,
         &mut spill_count,
     );
-    let loop_code = loop_save_code(
+    let store_in = save_store_blocks(func, (&crossings, &node_of), &coloring.saved, &freqs);
+    let (saves_at, def_stores) = call_save_lists(
+        (&crossings, &node_of),
+        (&coloring.saved, &node_cons, &places),
+        (&store_in, &|b, v| liveness.block_liveness().live_out(b, v)),
+        &mut spill_count,
+    );
+    let mut loop_code = loop_save_code(
         loops.as_ref(),
         &coloring.loop_saved,
         (&node_cons, &places),
         &mut spill_count,
     );
+    for (b, save) in def_stores {
+        match loop_code.stores.iter_mut().find(|(x, _)| *x == b) {
+            Some((_, saves)) => saves.push(save),
+            None => loop_code.stores.push((b, alloc::vec![save])),
+        }
+    }
     // A copy or an atomic read-modify-write may take any register as a
     // temporary, so its record covers them all; the x86-64 shift and
     // division records cover the registers they write.
@@ -2287,31 +2709,6 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             *slot = slot.saturating_sub(1);
         }
     }
-    // A store whose own value is unread can take a constant from its
-    // encoding. When every reader of an `Imm` is such a store, the stores
-    // are marked and the `Imm` loses its readers, so it is never
-    // materialized; ahead of the branch fusion below, a dead `Imm(0)` no
-    // longer counts as a flag-writing `xor`.
-    let candidates: Vec<(usize, ValueId)> = func
-        .insts
-        .iter()
-        .enumerate()
-        .filter(|&(v, _)| use_counts[v] == 0)
-        .filter_map(|(v, inst)| Some((v, store_immediate(func, inst, target)?)))
-        .collect();
-    let mut imm_readers: Vec<u32> = vec![0; func.insts.len()];
-    for &(_, c) in &candidates {
-        imm_readers[c as usize] += 1;
-    }
-    let mut imm_store: Vec<bool> = vec![false; func.insts.len()];
-    for &(v, c) in &candidates {
-        imm_store[v] = imm_readers[c as usize] == use_counts[c as usize];
-    }
-    for &(v, c) in &candidates {
-        if imm_store[v] {
-            use_counts[c as usize] = 0;
-        }
-    }
     // Likewise the increment an aarch64 select alone reads, of its other arm.
     let mut select_inc: Vec<bool> = vec![false; func.insts.len()];
     for (s, inst) in func.insts.iter().enumerate() {
@@ -2447,7 +2844,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
             let inst = &func.insts[p as usize];
             // A dead pure inst and a lifetime marker emit no code.
             inst.is_lifetime_marker()
-                || (inst.is_pure() && use_counts[p as usize] == 0)
+                || (func.is_pure(inst) && use_counts[p as usize] == 0)
                 || (sets_flags && flags_survive(inst))
         });
         if !window_ok {
@@ -2465,6 +2862,18 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // holds, or an x86-64 load compared with zero in memory, that only later
     // selects in its block read.
     let mut mask_tests: Vec<bool> = vec![false; func.insts.len()];
+    // Per value, the selects later in its block reading it as the condition.
+    let mut selects_of: alloc::collections::BTreeMap<ValueId, Vec<ValueId>> = Default::default();
+    for block in &func.blocks {
+        for p in block.inst_range.clone() {
+            if let Inst::Select { cond, .. } = func.insts[p as usize]
+                && block.inst_range.contains(&cond)
+                && cond < p
+            {
+                selects_of.entry(cond).or_default().push(p);
+            }
+        }
+    }
     for block in &func.blocks {
         for c in block.inst_range.clone() {
             let (fuses, tests) = match func.insts[c as usize] {
@@ -2510,17 +2919,14 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                     ..
                 }
             );
-            let low_word_reader = (c..block.inst_range.end).any(|p| {
-                matches!(func.insts[p as usize], Inst::Select { cond, .. } if cond == c)
-                    && super::super::passes::narrow::is_cmp32(&func.cmp32, p)
-            });
+            let selects = selects_of.get(&c).map_or(&[][..], |s| &s[..]);
+            let low_word_reader =
+                (selects.iter()).any(|&p| super::super::passes::narrow::is_cmp32(&func.cmp32, p));
             if quad && low_word_reader {
                 continue;
             }
             let reads = |p: ValueId| matches!(func.insts[p as usize], Inst::Select { cond, .. } if cond == c);
-            let (n, last) = ((c + 1)..block.inst_range.end)
-                .filter(|&p| reads(p))
-                .fold((0, c), |(n, _), p| (n + 1, p));
+            let (n, last) = (selects.len() as u32, selects.last().copied().unwrap_or(c));
             if n == 0 || use_counts.get(c as usize).copied().unwrap_or(0) != n {
                 continue;
             }
@@ -2528,7 +2934,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                 let inst = &func.insts[p as usize];
                 reads(p)
                     || inst.is_lifetime_marker()
-                    || (inst.is_pure() && use_counts[p as usize] == 0)
+                    || (func.is_pure(inst) && use_counts[p as usize] == 0)
                     || flags_survive(inst)
             });
             if window_ok {
@@ -2581,7 +2987,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     let mut gpr_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
     let mut fp_used: alloc::collections::BTreeSet<u8> = alloc::collections::BTreeSet::new();
     for (v, inst) in func.insts.iter().enumerate() {
-        if super::emit_common::is_dead_pure_counts(inst, v as ValueId, &use_counts) {
+        if super::emit_common::is_dead_pure_counts(func, inst, v as ValueId, &use_counts) {
             continue;
         }
         match places[v] {
@@ -2592,8 +2998,12 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                 fp_used.insert(r);
             }
             Place::Spill(s) => {
-                let units = node_cons[node_of[v] as usize].map_or(1, |c| c.wide.units());
-                slots_end = slots_end.max(s + units);
+                // A crowded value makes no node: its own width sizes its slot.
+                let width = match crowded[v] {
+                    true => wide[v],
+                    false => node_cons[node_of[v] as usize].map_or(VecWidth::Scalar, |c| c.wide),
+                };
+                slots_end = slots_end.max(s + width.units());
             }
             Place::None => {}
         }
@@ -2613,13 +3023,13 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     // registers AAPCS64 / SysV / Win64 require the callee to
     // preserve.
     // The set is the definition's own convention's (`conv_target`).
-    let conv_banks = RegBanks::new(conv_target, fixed);
+    let conv_banks = RegBanks::new(conv_target, fixed).with_free_rbp(func, fixed);
     let mut gpr_used_callee: Vec<u8> = gpr_used
         .into_iter()
         .filter(|r| conv_banks.callee_gprs.contains(r))
         .collect();
-    // The x86_64 writer's fixed scratch (r10 / r11) is caller-saved, so
-    // it needs no save. The aarch64 writer's callee-saved x19 is saved
+    // The x86_64 writer's scratch is caller-saved or a register the
+    // prologue saves anyway. The aarch64 writer's callee-saved x19 is saved
     // through `Frame::uses_x19`, not this list.
     let mut fp_used_callee: Vec<u8> = fp_used
         .into_iter()
@@ -2677,7 +3087,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                 };
                 let (na, nb) = (node_of[a as usize], node_of[b as usize]);
                 let lies = |x: ValueId, saved: ValueId| {
-                    info.inside[x as usize].is_some_and(|inner| {
+                    info.inside(x).is_some_and(|inner| {
                         (coloring.loop_saved.iter())
                             .any(|&(l, n)| n == saved && info.encloses(l, inner))
                     })
@@ -2705,11 +3115,32 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
                 node_cons[node_of[v as usize] as usize].map_or(VecWidth::Scalar, |c| c.wide)
             },
             emitted: &|v| {
-                !super::emit_common::is_dead_pure_counts(&func.insts[v as usize], v, &use_counts)
+                !super::emit_common::is_dead_pure_counts(
+                    func,
+                    &func.insts[v as usize],
+                    v,
+                    &use_counts,
+                )
             },
         },
     );
     let asm_preserve = asm_preserve_masks(func, target, region_base);
+    let pair_held = target.is_x86_64()
+        && places
+            .iter()
+            .any(|p| matches!(p, Place::IntReg(r) if X86_SCRATCH_PAIR.contains(r)));
+    let scratch_sites = pair_held.then(|| {
+        let reg = |v: ValueId| match places[v as usize] {
+            Place::IntReg(r) => Some(r),
+            _ => None,
+        };
+        let bits = |regs: &[u8]| regs.iter().fold(0u16, |m, &r| m | 1 << r);
+        ScratchSites {
+            masks: liveness.register_masks(func, &reg),
+            borrow_slot: spill_count,
+            writable: bits(&conv_banks.caller_gprs) | bits(&gpr_used_callee),
+        }
+    });
     let imm_held = imm_already_held(func, &places, &use_counts, target);
     let fp_mem_operand = if target.is_x86_64() {
         fp_memory_operands(func, &use_counts, fp_literals)
@@ -2718,6 +3149,7 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
     };
     Allocation {
         places,
+        fenv_access: func.fenv_access,
         spill_count,
         fp_scratch: banks.fp_scratch,
         gpr_used: gpr_used_callee,
@@ -2731,7 +3163,8 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         select_inc,
         imm_held,
         imm_store,
-        stack_imm,
+        call_set,
+        select_set,
         stack_load,
         fp_mem_operand,
         fp_const,
@@ -2754,21 +3187,82 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         call_saves: saves_at,
         loop_saves: loop_code,
         sve,
+        scratch_sites,
     }
+}
+
+/// The block whose end stores each node the coloring saved around calls,
+/// in place of a store ahead of each call: a node of one value whose
+/// defining block holds none of the calls it crosses and, by the per-block
+/// `weights`, runs less often than one of them alone, as outside a loop
+/// holding the call. A sum over the calls would count calls that exclude
+/// one another, as on the paths past an early return; a tie is no
+/// evidence, as the estimate stops dividing past a nesting depth.
+fn save_store_blocks(
+    func: &FunctionSsa,
+    (crossings, node_of): (&[(ValueId, Vec<ValueId>)], &[ValueId]),
+    saved: &[bool],
+    weights: &[u64],
+) -> Vec<Option<crate::c5::ir::BlockId>> {
+    let mut out = alloc::vec![None; saved.len()];
+    if !saved.iter().any(|&s| s) {
+        return out;
+    }
+    let mut block_of = alloc::vec![0usize; func.insts.len()];
+    for (b, block) in func.blocks.iter().enumerate() {
+        for v in block.inst_range.clone() {
+            block_of[v as usize] = b;
+        }
+    }
+    let mut members = alloc::vec![0u32; saved.len()];
+    for &root in node_of {
+        members[root as usize] += 1;
+    }
+    let mut hottest_call = alloc::vec![0u64; saved.len()];
+    let mut in_def_block = alloc::vec![false; saved.len()];
+    for (site, live) in crossings {
+        let b = block_of[*site as usize];
+        for &v in live {
+            let root = node_of[v as usize] as usize;
+            if saved[root] && members[root] == 1 {
+                hottest_call[root] = hottest_call[root].max(weights[b]);
+                in_def_block[root] |= block_of[root] == b;
+            }
+        }
+    }
+    for (root, out) in out.iter_mut().enumerate() {
+        let b = block_of[root];
+        if hottest_call[root] > weights[b] && !in_def_block[root] {
+            *out = Some(b as crate::c5::ir::BlockId);
+        }
+    }
+    out
 }
 
 /// Each call a node the coloring saved crosses, with the caller-saved
 /// registers of those nodes and their slots, which the reservation grows
-/// by. A slot holds its value only around one call, so nodes saved at no
-/// common call share it.
+/// by, and the block-end stores of the nodes [`save_store_blocks`] places.
+/// Nodes saved at no common call share a slot: one stored ahead of a call
+/// holds its value only around it, and one stored where it is defined
+/// is live across each call between. Two of the latter share it when
+/// neither is live where the other is stored (`live_out`).
+#[allow(clippy::type_complexity)]
 fn call_save_lists(
     (crossings, node_of): (&[(ValueId, Vec<ValueId>)], &[ValueId]),
     (saved, node_cons, places): (&[bool], &[Option<NodeConstraints>], &[Place]),
+    (store_in, live_out): (
+        &[Option<crate::c5::ir::BlockId>],
+        &dyn Fn(crate::c5::ir::BlockId, ValueId) -> bool,
+    ),
     spill_count: &mut u32,
-) -> Vec<(ValueId, Vec<CallSave>)> {
+) -> (
+    Vec<(ValueId, Vec<CallSave>)>,
+    Vec<(crate::c5::ir::BlockId, CallSave)>,
+) {
     if !saved.iter().any(|&s| s) {
-        return Vec::new();
+        return (Vec::new(), Vec::new());
     }
+    let store_in = |node: usize| store_in.get(node).copied().flatten();
     let in_reg = |v: ValueId| matches!(places[v as usize], Place::IntReg(_) | Place::FpReg(_));
     let mut sites_of: Vec<Vec<usize>> = alloc::vec![Vec::new(); saved.len()];
     for (k, (_, live)) in crossings.iter().enumerate() {
@@ -2783,12 +3277,29 @@ fn call_save_lists(
     let mut taken: Vec<Vec<u32>> = alloc::vec![Vec::new(); crossings.len()];
     let mut slot = alloc::vec![u32::MAX; saved.len()];
     let mut end = 0u32;
+    // The nodes stored where they are defined: slot, units, block, node.
+    let mut at_def: Vec<(u32, u32, crate::c5::ir::BlockId, usize)> = Vec::new();
     for (node, sites) in sites_of.iter().enumerate().filter(|(_, s)| !s.is_empty()) {
         let units = node_cons[node].map_or(1, |c| c.wide.units());
-        let free = |s: u32| (sites.iter()).all(|&k| (s..s + units).all(|u| !taken[k].contains(&u)));
+        let def = store_in(node);
+        let clash = |s: u32| {
+            def.is_some_and(|b| {
+                (at_def.iter()).any(|&(s2, u2, b2, n2)| {
+                    s < s2 + u2
+                        && s2 < s + units
+                        && (live_out(b2, node as ValueId) || live_out(b, n2 as ValueId))
+                })
+            })
+        };
+        let free = |s: u32| {
+            (sites.iter()).all(|&k| (s..s + units).all(|u| !taken[k].contains(&u))) && !clash(s)
+        };
         let s = (0..).find(|&s| free(s)).unwrap_or(0);
         for &k in sites {
             taken[k].extend(s..s + units);
+        }
+        if let Some(b) = def {
+            at_def.push((s, units, b, node));
         }
         slot[node] = *spill_count + s;
         end = end.max(s + units);
@@ -2813,6 +3324,7 @@ fn call_save_lists(
                 is_fp,
                 wide,
                 slot: slot[root],
+                stored: store_in(root).is_some(),
             });
         }
         if !saves.is_empty() {
@@ -2820,13 +3332,36 @@ fn call_save_lists(
         }
     }
     out.sort_unstable_by_key(|&(site, _)| site);
-    out
+    let mut stores = Vec::new();
+    for (node, b) in (0..saved.len()).filter_map(|n| Some((n, store_in(n)?))) {
+        let (reg, is_fp) = match places[node] {
+            Place::IntReg(r) => (r, false),
+            Place::FpReg(r) => (r, true),
+            _ => continue,
+        };
+        if sites_of[node].is_empty() {
+            continue;
+        }
+        let wide = node_cons[node].map_or(VecWidth::Scalar, |c| c.wide);
+        let slot = slot[node];
+        stores.push((
+            b,
+            CallSave {
+                reg,
+                is_fp,
+                wide,
+                slot,
+                stored: false,
+            },
+        ));
+    }
+    (out, stores)
 }
 
-/// The stores and loads of the saves around loops the coloring chose, with a
+/// The stores and loads of the saves around regions the coloring chose, with a
 /// slot per node, which the reservation grows by.
 fn loop_save_code(
-    loops: Option<&super::loop_saves::LoopSaves>,
+    loops: Option<&super::loop_saves::LoopSaves<'_>>,
     saved: &[(u32, ValueId)],
     (node_cons, places): (&[Option<NodeConstraints>], &[Place]),
     spill_count: &mut u32,
@@ -2851,7 +3386,7 @@ fn loop_save_code(
             Place::FpReg(r) => (r, true),
             _ => continue,
         };
-        let Some(t) = info.through(l, node) else {
+        let (Some(t), Some(store)) = (info.through(l, node), info.store(l)) else {
             continue;
         };
         let wide = node_cons[node as usize].map_or(VecWidth::Scalar, |c| c.wide);
@@ -2865,8 +3400,12 @@ fn loop_save_code(
             is_fp,
             wide,
             slot,
+            stored: false,
         };
-        at(&mut code.stores, info.loops[l as usize].preheader, save);
+        match store {
+            super::loop_saves::Store::End(b) => at(&mut code.stores, b, save),
+            super::loop_saves::Store::Start(b) => at(&mut code.stores_at_start, b, save),
+        }
         for &r in &t.reloads {
             match r {
                 super::loop_saves::Reload::Start(b) => at(&mut code.loads_at_start, b, save),
@@ -3535,17 +4074,16 @@ pub(crate) struct NodeConstraints {
     /// The registers the calls the node crosses clobber.
     pub call_forbid: u64,
     /// What saving a caller-saved register around those calls costs
-    /// ([`call_save_costs`]), and what spilling costs beyond the uses the
-    /// coloring weighs: the loop-weighted definitions. A zero save cost
-    /// takes no caller-saved register.
+    /// ([`call_save_costs`]), against a spill and against opening a
+    /// callee-saved register, which saves it once per call of the function.
+    /// Zero takes no caller-saved register.
     pub save_cost: u64,
-    /// The save cost by block frequency and size ([`cost_weights`]),
-    /// against opening a callee-saved register, which saves it once per
-    /// call of the function.
-    pub save_freq: u64,
-    /// The spill's uses and definitions by block frequency and size.
-    pub spill_freq: u64,
-    pub def_cost: u64,
+    /// What spilling costs: a load at each use and a store at each
+    /// definition, by block frequency and size ([`cost_weights`]).
+    pub spill_cost: u64,
+    /// The part of `spill_cost` at the definitions and at the uses no loop
+    /// holds that does not hold the definition ([`level_use_weights`]).
+    pub level_cost: u64,
     /// Preferred register, honored when free and bank-legal.
     pub hint: Option<u8>,
     /// Physical registers (in this node's bank) the colorer must not
@@ -3641,6 +4179,23 @@ pub(crate) fn with_pool_size_override<R>(
 /// takes precedence. Under the `codegen_test` feature the
 /// `BADC_MAX_GPR` / `BADC_MAX_FPR` environment variables truncate the
 /// integer / FP banks; without the feature they are ignored.
+/// Whether the codegen-test environment asks for the x86-64 scratch pair
+/// at the front of the caller-saved bank (`BADC_X86_SCRATCH_FIRST`), so
+/// every lowering that takes scratch meets a register a value holds. A
+/// test that sets the bank sizes ([`with_pool_size_override`]) keeps the
+/// order.
+fn scratch_pair_first() -> bool {
+    #[cfg(feature = "codegen_test")]
+    {
+        POOL_SIZE_OVERRIDE.with(|cell| cell.get()).is_none()
+            && std::env::var_os("BADC_X86_SCRATCH_FIRST").is_some()
+    }
+    #[cfg(not(feature = "codegen_test"))]
+    {
+        false
+    }
+}
+
 fn pool_size_limits() -> (usize, usize) {
     #[cfg(feature = "std")]
     if let Some(caps) = POOL_SIZE_OVERRIDE.with(|cell| cell.get()) {
@@ -3714,7 +4269,7 @@ pub(crate) fn color_graph(
     no_slot_share: bool,
     weights: &[u64],
     apart: &[Vec<ValueId>],
-    loops: Option<&super::loop_saves::LoopSaves>,
+    loops: Option<&super::loop_saves::LoopSaves<'_>>,
 ) -> Coloring {
     let n = node_of.len();
     let mut color: Vec<Place> = vec![Place::None; n];
@@ -3814,12 +4369,14 @@ pub(crate) fn color_graph(
         // one spills; Win64 saves the whole xmm register and takes it, but
         // no convention keeps a ymm register's upper half.
         let low64 = banks.callee_fpr_low64_only;
-        let callee =
-            if c.must_callee && (c.wide >= VecWidth::V256 || (c.wide == VecWidth::V128 && low64)) {
-                &callee_full[..0]
-            } else {
-                &callee_full[..callee_full.len().min(cap)]
-            };
+        let callee = if c.is_fp
+            && c.must_callee
+            && (c.wide >= VecWidth::V256 || (c.wide == VecWidth::V128 && low64))
+        {
+            &callee_full[..0]
+        } else {
+            &callee_full[..callee_full.len().min(cap)]
+        };
         let caller = &caller_full[..caller_full.len().min(cap)];
         let free = |r: u8| !forbidden[r as usize];
         // A callee-saved register another node holds: the prologue saves it
@@ -3876,19 +4433,19 @@ pub(crate) fn color_graph(
                     // saving a caller-saved register around the calls costs
                     // less than the save and restore it takes per call of
                     // the function, which the spill fallback weighs.
-                    let saves = c.save_freq > 0
-                        && c.save_freq < banks.open_cost
-                        && c.save_freq < c.spill_freq
+                    let saves = c.save_cost > 0
+                        && c.save_cost < banks.open_cost
+                        && c.save_cost < c.spill_cost
                         && caller.iter().any(|&r| !unsaved[r as usize]);
                     callee.iter().copied().find(open).or_else(|| {
-                        (!saves && (c.spill_freq == 0 || c.spill_freq >= banks.open_cost))
+                        (!saves && (c.spill_cost == 0 || c.spill_cost >= banks.open_cost))
                             .then(|| callee.iter().copied().find(|&r| free(r)))
                             .flatten()
                     })
                 } else {
                     caller.iter().copied().find(|&r| free(r)).or_else(|| {
                         callee.iter().copied().find(open).or_else(|| {
-                            (c.spill_freq == 0 || c.spill_freq >= banks.open_cost)
+                            (c.spill_cost == 0 || c.spill_cost >= banks.open_cost)
                                 .then(|| callee.iter().copied().find(|&r| free(r)))
                                 .flatten()
                         })
@@ -3898,16 +4455,7 @@ pub(crate) fn color_graph(
         // Left to spill, a node crossing calls whose saves cost less than
         // its spill takes a caller-saved register saved around them.
         let pick = pick.or_else(|| {
-            let spill_cost = weights
-                .get(node)
-                .copied()
-                .unwrap_or(0)
-                .saturating_add(c.def_cost);
-            let (save, spill) = match c.save_freq {
-                0 => (c.save_cost, spill_cost),
-                f => (f, c.spill_freq),
-            };
-            if save == 0 || save >= spill {
+            if c.save_cost == 0 || c.save_cost >= c.spill_cost {
                 return None;
             }
             // Its own hint first -- a parameter stays in its argument
@@ -3925,25 +4473,15 @@ pub(crate) fn color_graph(
             saved[node] = true;
             Some(r)
         });
-        // Left to spill, a node lying in a loop takes a register only values
-        // living through the loop hold, saved around it, when the saves
-        // cost less than its spill.
+        // Left to spill, a node lying in a loop or a branch arm takes a
+        // register only values living through the region hold, saved around
+        // it or a region around it, when the saves cost less than its spill.
         let pick = pick.or_else(|| {
             let info = loops?;
-            let l = (*info.inside.get(node)?)?;
-            let spill_cost = weights
-                .get(node)
-                .copied()
-                .unwrap_or(0)
-                .saturating_add(c.def_cost);
-            let around = |saves: &[(u32, ValueId)], root: ValueId| {
+            let inner = info.inside(node as ValueId)?;
+            let around = |saves: &[(u32, ValueId)], root: ValueId, l: u32| {
                 saves.iter().any(|&(o, n)| n == root && info.encloses(o, l))
             };
-            let mut cost = [0u64; 64];
-            let mut blocked = [false; 64];
-            for (r, b) in blocked.iter_mut().enumerate() {
-                *b = ((c.forbid | c.call_forbid) >> r) & 1 != 0;
-            }
             let mut holders: Vec<(u8, ValueId)> = Vec::new();
             for &m in &memb_val[memb_off[node] as usize..memb_off[node + 1] as usize] {
                 for &nb in interference.neighbors(m) {
@@ -3953,17 +4491,40 @@ pub(crate) fn color_graph(
                         Place::FpReg(r) if c.is_fp => r,
                         _ => continue,
                     };
-                    if root as usize == node || holders.contains(&(r, root)) {
-                        continue;
+                    if root as usize != node && !holders.contains(&(r, root)) {
+                        holders.push((r, root));
                     }
-                    holders.push((r, root));
+                }
+            }
+            // A callee-saved register no value holds yet costs its opening,
+            // unless the coloring is repeated without it when its holders
+            // cost less.
+            let mut base = [0u64; 64];
+            for &r in callee.iter().filter(|_| !banks.withholds) {
+                if (opened[usize::from(c.is_fp)] >> r) & 1 == 0 {
+                    base[r as usize] = banks.open_cost;
+                }
+            }
+            let mut best: Option<(u64, u32, u8)> = None;
+            for l in info.chain(inner) {
+                let limit = if info.is_loop(l) {
+                    c.spill_cost
+                } else {
+                    c.level_cost
+                };
+                let mut cost = base;
+                let mut blocked = [false; 64];
+                for (r, b) in blocked.iter_mut().enumerate() {
+                    *b = ((c.forbid | c.call_forbid) >> r) & 1 != 0;
+                }
+                for &(r, root) in &holders {
                     // A value saved around calls stores and reloads its
-                    // register at each, also inside the loop.
+                    // register at each, also inside the region.
                     if saved[root as usize] {
                         blocked[r as usize] = true;
                         continue;
                     }
-                    if around(&loop_saved, root) {
+                    if around(&loop_saved, root, l) {
                         continue;
                     }
                     match info.through(l, root) {
@@ -3971,15 +4532,21 @@ pub(crate) fn color_graph(
                         None => blocked[r as usize] = true,
                     }
                 }
+                let found = (caller.iter().filter(|_| !c.must_callee))
+                    .chain(callee)
+                    .copied()
+                    .filter(|&r| !blocked[r as usize])
+                    .min_by_key(|&r| cost[r as usize])
+                    .filter(|&r| cost[r as usize] < limit);
+                if let Some(r) = found
+                    && best.is_none_or(|(b, _, _)| cost[r as usize] < b)
+                {
+                    best = Some((cost[r as usize], l, r));
+                }
             }
-            let r = (caller.iter().filter(|_| !c.must_callee))
-                .chain(callee)
-                .copied()
-                .filter(|&r| !blocked[r as usize])
-                .min_by_key(|&r| cost[r as usize])
-                .filter(|&r| cost[r as usize] < spill_cost)?;
+            let (_, l, r) = best?;
             for &(_, root) in holders.iter().filter(|&&(hr, _)| hr == r) {
-                if !around(&loop_saved, root) {
+                if !around(&loop_saved, root, l) {
                     loop_saved.retain(|&(o, n)| !(n == root && info.encloses(l, o)));
                     loop_saved.push((l, root));
                 }
@@ -4091,7 +4658,7 @@ pub(crate) fn cost_weights(func: &FunctionSsa) -> Vec<u64> {
 /// that reaches no exit is not halved, nor one in the loop of a dominator
 /// that leaves it: the loop's iterations take that arm.
 pub(crate) fn block_frequencies(func: &FunctionSsa) -> Vec<u64> {
-    use super::mem2reg::{EXIT, dominators, post_dominators, successors};
+    use super::mem2reg::{dominators, post_dominators, successors};
     use crate::c5::ir::BlockId;
     let weights = block_weights(func);
     let depths = crate::c5::codegen::passes::layout::loop_depths(func);
@@ -4108,49 +4675,96 @@ pub(crate) fn block_frequencies(func: &FunctionSsa) -> Vec<u64> {
         .collect();
     let idom = dominators(func);
     let ipdom = post_dominators(func);
-    let post_dominates = |a: BlockId, mut b: BlockId| loop {
-        match ipdom.get(b as usize).copied() {
-            Some(p) if p == a => return true,
-            Some(EXIT) | None => return false,
-            Some(p) if p == BlockId::MAX => return true,
-            Some(p) => b = p,
+    let n = func.blocks.len();
+    // The post-dominator forest by DFS intervals: `a` post-dominates `b`
+    // when it is a proper ancestor of `b`, or when `b`'s root reaches no
+    // exit (no block post-dominates it, every one is taken to).
+    let parent = |b: usize| ipdom.get(b).copied().filter(|&p| (p as usize) < n);
+    let mut children: Vec<Vec<BlockId>> = alloc::vec![Vec::new(); n];
+    for b in 0..n {
+        if let Some(p) = parent(b) {
+            children[p as usize].push(b as BlockId);
         }
-    };
-    (0..func.blocks.len())
-        .map(|b| {
-            let mut halvings = 0u32;
-            let mut x = b as BlockId;
-            while let Some(&d) = idom.get(x as usize) {
-                if d == x || d == BlockId::MAX {
-                    break;
-                }
-                let continues = leaves_loop[d as usize] && depths[x as usize] >= depths[d as usize];
-                if !post_dominates(x, d) && !continues {
-                    halvings += 1;
-                }
-                x = d;
+    }
+    let (mut enter, mut leave) = (alloc::vec![0u32; n], alloc::vec![0u32; n]);
+    let mut endless = alloc::vec![false; n];
+    let mut clock = 0u32;
+    for root in (0..n).filter(|&b| parent(b).is_none()) {
+        let open = ipdom.get(root) == Some(&BlockId::MAX);
+        let mut stack: Vec<(usize, usize)> = alloc::vec![(root, 0)];
+        enter[root] = clock;
+        clock += 1;
+        while let Some(&mut (b, ref mut next)) = stack.last_mut() {
+            endless[b] = open;
+            if let Some(&c) = children[b].get(*next) {
+                *next += 1;
+                enter[c as usize] = clock;
+                clock += 1;
+                stack.push((c as usize, 0));
+            } else {
+                leave[b] = clock;
+                stack.pop();
             }
-            weights[b].saturating_mul(FREQ_ONE) >> halvings.min(8)
-        })
+        }
+    }
+    let post_dominates = |a: BlockId, b: BlockId| {
+        let (a, b) = (a as usize, b as usize);
+        endless[b] || a != b && enter[a] < enter[b] && leave[b] <= leave[a]
+    };
+    // A block's halvings are its dominator's plus one for its own step to
+    // it, unless that dominator is post-dominated by the block or leaves a
+    // loop the block continues; filled down each dominator chain once.
+    let step = |x: usize, d: usize| {
+        let continues = leaves_loop[d] && depths[x] >= depths[d];
+        u32::from(!post_dominates(x as BlockId, d as BlockId) && !continues)
+    };
+    let mut halvings: Vec<Option<u32>> = alloc::vec![None; n];
+    let mut path: Vec<usize> = Vec::new();
+    for b in 0..n {
+        let mut x = b;
+        let base = loop {
+            if let Some(h) = halvings[x] {
+                break h;
+            }
+            match idom.get(x).copied() {
+                Some(d) if d as usize != x && d != BlockId::MAX && (d as usize) < n => {
+                    path.push(x);
+                    x = d as usize;
+                }
+                _ => {
+                    halvings[x] = Some(0);
+                    break 0;
+                }
+            }
+        };
+        let mut h = base;
+        while let Some(x) = path.pop() {
+            h = h.saturating_add(step(x, idom[x] as usize));
+            halvings[x] = Some(h);
+        }
+    }
+    (0..n)
+        .map(|b| weights[b].saturating_mul(FREQ_ONE) >> halvings[b].unwrap_or(0).min(8))
         .collect()
 }
 
-/// Loop-depth-weighted use count per interference node, keyed by node
-/// id (the phi-congruence-class root). Each use site of any class
-/// member contributes `LOOP_WEIGHT^min(depth, cap)` for the depth of
-/// the block holding the use. `color_graph` colors highest-weight
-/// nodes first, so the coldest values are the ones that spill when a
-/// bank fills. Straight-line functions weight every use at depth 0, so
-/// the order degrades to raw use count.
+/// What spilling each interference node costs its uses, keyed by node id
+/// (the phi-congruence-class root): each use site of any class member
+/// contributes its block's [`cost_weights`], the reload's executions and
+/// its size. `color_graph` colors highest-weight nodes first, so the
+/// coldest values are the ones that spill when a bank fills. The
+/// allocator reads [`use_weights`] with the weights it shares out.
+#[cfg(test)]
 fn compute_spill_weights(
     func: &FunctionSsa,
     node_of: &[ValueId],
     liveness: &super::liveness::Liveness,
 ) -> Vec<u64> {
-    use_weights(func, node_of, liveness, &block_weights(func))
+    use_weights(func, node_of, liveness, &cost_weights(func))
 }
 
-/// [`compute_spill_weights`] by the per-block weights `block_weight`.
+/// What spilling each interference node costs its uses, by the per-block
+/// weights `block_weight`.
 fn use_weights(
     func: &FunctionSsa,
     node_of: &[ValueId],
@@ -4191,13 +4805,52 @@ fn use_weights(
     w
 }
 
-/// Loop-depth-weighted count of the emitted definitions per interference
-/// node: what storing its members to a spill slot costs.
-fn compute_def_weights(func: &FunctionSsa, node_of: &[ValueId], use_counts: &[u32]) -> Vec<u64> {
-    def_weights(func, node_of, use_counts, &block_weights(func))
+/// [`use_weights`] over the uses in no loop the used value's definition
+/// lies outside of. A save around a branch arm runs once per entry of the
+/// arm, and a loop inside the arm runs per entry a number of times the
+/// static estimate does not know, so the arm weighs its own uses alone.
+fn level_use_weights(
+    func: &FunctionSsa,
+    node_of: &[ValueId],
+    liveness: &super::liveness::Liveness,
+    block_weight: &[u64],
+) -> Vec<u64> {
+    let n = func.insts.len();
+    let depths = crate::c5::codegen::passes::layout::loop_depths(func);
+    let mut depth_of = vec![u32::MAX; n];
+    for (b, block) in func.blocks.iter().enumerate() {
+        for v in block.inst_range.clone() {
+            depth_of[v as usize] = depths[b];
+        }
+    }
+    let mut w: Vec<u64> = vec![0u64; n];
+    for (b, block) in func.blocks.iter().enumerate() {
+        let (wb, db) = (block_weight[b], depths[b]);
+        let mut bump = |v: ValueId| {
+            if v != NO_VALUE && (v as usize) < n && db <= depth_of[v as usize] {
+                let root = node_of[v as usize] as usize;
+                w[root] = w[root].saturating_add(wb);
+            }
+        };
+        for i in block.inst_range.clone() {
+            if liveness.reads(i) {
+                for_each_operand(&func.insts[i as usize], &mut bump);
+            }
+        }
+        match block.terminator {
+            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => bump(cond),
+            Terminator::Return(v) => bump(v),
+            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
+                bump(target)
+            }
+            _ => {}
+        }
+    }
+    w
 }
 
-/// [`compute_def_weights`] by the per-block weights `block_weight`.
+/// What storing each interference node's emitted definitions to a spill
+/// slot costs, by the per-block weights `block_weight`.
 fn def_weights(
     func: &FunctionSsa,
     node_of: &[ValueId],
@@ -4208,7 +4861,7 @@ fn def_weights(
     for (b, block) in func.blocks.iter().enumerate() {
         for v in block.inst_range.clone() {
             let inst = &func.insts[v as usize];
-            if super::emit_common::is_dead_pure_counts(inst, v, use_counts) {
+            if super::emit_common::is_dead_pure_counts(func, inst, v, use_counts) {
                 continue;
             }
             if let Some(&root) = node_of.get(v as usize) {
@@ -4230,48 +4883,38 @@ fn def_weights(
 /// agree on which materializations lower.
 pub(crate) fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
     let n = func.insts.len();
-    let mut counts: Vec<u32> = vec![0; n];
-    let bump_into = |counts: &mut Vec<u32>, v: ValueId| {
-        if v != NO_VALUE && (v as usize) < n {
-            counts[v as usize] += 1;
-        }
-    };
+    let mut counts = operand_reads(func);
     let decrement = |counts: &mut Vec<u32>, v: ValueId| {
         if v != NO_VALUE && (v as usize) < n && counts[v as usize] > 0 {
             counts[v as usize] -= 1;
         }
     };
-    for inst in &func.insts {
-        for_each_operand(inst, |op| bump_into(&mut counts, op));
-    }
-    for block in &func.blocks {
-        block
-            .terminator
-            .for_each_operand(|v| bump_into(&mut counts, v));
-    }
-    // Iterate to fixed point: a pure inst with zero uses is dead, and
-    // so is a phi nothing reads. Worst case O(n^2) but n is typically
-    // small (per-function inst count) and the fixed point converges in
-    // few passes (chain length).
+    // A pure inst with zero uses is dead, and so is a phi nothing reads.
+    // The pure ones die through a worklist: a death decrements its
+    // operands once, and an operand reaching zero joins the list. Phi
+    // deaths feed the list too, so a round follows only a round in which
+    // a phi died, and a function with no phis takes none.
     let mut killed: Vec<bool> = vec![false; n];
+    let phis: Vec<usize> = (0..n)
+        .filter(|&i| matches!(func.insts[i], Inst::Phi { .. }))
+        .collect();
+    let mut dying: Vec<usize> = (0..n).filter(|&i| counts[i] == 0).collect();
     loop {
-        let mut changed = false;
-        loop {
-            let mut pure_changed = false;
-            for (i, inst) in func.insts.iter().enumerate() {
-                if killed[i] || !inst.is_pure() {
-                    continue;
-                }
-                if counts[i] == 0 {
-                    killed[i] = true;
-                    changed = true;
-                    pure_changed = true;
-                    for_each_operand(inst, |op| decrement(&mut counts, op));
-                }
+        while let Some(i) = dying.pop() {
+            let inst = &func.insts[i];
+            if killed[i] || counts[i] != 0 || !func.is_pure(inst) {
+                continue;
             }
-            if !pure_changed {
-                break;
-            }
+            killed[i] = true;
+            for_each_operand(inst, |op| {
+                decrement(&mut counts, op);
+                if op != NO_VALUE && (op as usize) < n && counts[op as usize] == 0 {
+                    dying.push(op as usize);
+                }
+            });
+        }
+        if phis.is_empty() {
+            break;
         }
         // Phi liveness: a phi read by a non-phi instruction or a
         // terminator that still emits is live, and liveness flows
@@ -4310,24 +4953,28 @@ pub(crate) fn compute_use_counts(func: &FunctionSsa) -> Vec<u32> {
                 seed(&mut live, &mut work, s);
             }
         }
-        for (i, inst) in func.insts.iter().enumerate() {
-            let Inst::Phi { incoming, kind } = inst else {
+        let mut phi_died = false;
+        for &i in &phis {
+            let Inst::Phi { incoming, kind } = &func.insts[i] else {
                 continue;
             };
             if killed[i] || live[i] {
                 continue;
             }
             killed[i] = true;
-            changed = true;
+            phi_died = true;
             // Decrement the incomes whose edge move read a place;
             // `drop_unread_incomes` removes the no-place ones.
             for &(_, s) in incoming {
                 if !super::emit_common::phi_income_reads_no_place(func, *kind, s) {
                     decrement(&mut counts, s);
+                    if s != NO_VALUE && (s as usize) < n && counts[s as usize] == 0 {
+                        dying.push(s as usize);
+                    }
                 }
             }
         }
-        if !changed {
+        if !phi_died {
             break;
         }
     }
@@ -4366,7 +5013,8 @@ pub(crate) fn operands_read(func: &FunctionSsa, use_counts: &[u32]) -> Vec<bool>
         .map(|(v, inst)| {
             let dead_phi =
                 matches!(inst, Inst::Phi { .. }) && use_counts.get(v).copied().unwrap_or(0) == 0;
-            !dead_phi && !super::emit_common::is_dead_pure_counts(inst, v as ValueId, use_counts)
+            !dead_phi
+                && !super::emit_common::is_dead_pure_counts(func, inst, v as ValueId, use_counts)
         })
         .collect()
 }
@@ -4394,6 +5042,36 @@ pub(crate) fn is_call_site(inst: &Inst, tls_addr_is_call: bool) -> bool {
         Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. }
     ) || (tls_addr_is_call && matches!(inst, Inst::TlsAddr(_)))
         || is_setjmp_barrier(inst)
+}
+
+/// How many times each value is read by an instruction's operands and
+/// the blocks' terminators, over the walk [`for_each_operand`] defines.
+pub(crate) fn operand_reads(func: &FunctionSsa) -> Vec<u32> {
+    let mut counts: Vec<u32> = vec![0; func.insts.len()];
+    let mut bump = |v: ValueId| {
+        if let Some(c) = counts.get_mut(v as usize) {
+            *c += 1;
+        }
+    };
+    for inst in &func.insts {
+        for_each_operand(inst, &mut bump);
+    }
+    for block in &func.blocks {
+        block.terminator.for_each_operand(&mut bump);
+    }
+    counts
+}
+
+/// [`operand_reads`] with each block's exit accumulator read too: the
+/// counts a pass asks whether a value has a reader besides one.
+pub(crate) fn value_reads(func: &FunctionSsa) -> Vec<u32> {
+    let mut counts = operand_reads(func);
+    for block in &func.blocks {
+        if let Some(c) = counts.get_mut(block.exit_acc as usize) {
+            *c += 1;
+        }
+    }
+    counts
 }
 
 /// Invoke `f` for each operand `ValueId` referenced by `inst`, for the
@@ -4511,6 +5189,69 @@ impl VecWidth {
             VecWidth::V128 => 2,
             VecWidth::V256 => 4,
             VecWidth::V512 => 8,
+        }
+    }
+}
+
+/// `Inst::Imm(0)` stands for the zero of every width, a vector's included.
+/// A zero read as a vector operand -- a SIMD row's, a vector operation's, a
+/// vector store's or phi's -- takes the widest such width, so a spill keeps
+/// the whole vector: its slot is that wide, and the lowering zeroes every
+/// cell of it. Readers of the scalar find zero in the slot's first cell as
+/// before; in a register the vector forms extend it (`vmovq`, `fmov`).
+fn widen_vector_zeros(func: &FunctionSsa, wide: &mut [VecWidth]) {
+    let zero = |v: ValueId| matches!(func.insts.get(v as usize), Some(Inst::Imm(0)));
+    let demand = |v: ValueId, w: VecWidth, wide: &mut [VecWidth]| {
+        if w > VecWidth::Scalar && zero(v) && w > wide[v as usize] {
+            wide[v as usize] = w;
+        }
+    };
+    let store_width = |kind: StoreKind| match kind {
+        StoreKind::V128 => VecWidth::V128,
+        StoreKind::V256 => VecWidth::V256,
+        StoreKind::V512 => VecWidth::V512,
+        _ => VecWidth::Scalar,
+    };
+    for inst in &func.insts {
+        match inst {
+            Inst::SimdVal { op, args, .. } => {
+                let w = VecWidth::of_bytes(crate::c5::simd::get(*op).bytes);
+                for &a in args {
+                    demand(a, w, wide);
+                }
+            }
+            Inst::VecBinop {
+                bytes, lhs, rhs, ..
+            } => {
+                demand(*lhs, VecWidth::of_bytes(*bytes), wide);
+                demand(*rhs, VecWidth::of_bytes(*bytes), wide);
+            }
+            Inst::VecInsert { vec, bytes, .. } | Inst::VecExtract { vec, bytes, .. } => {
+                demand(*vec, VecWidth::of_bytes(*bytes), wide);
+            }
+            Inst::Store { value, kind, .. } | Inst::StoreLocal { value, kind, .. } => {
+                demand(*value, store_width(*kind), wide);
+            }
+            Inst::Phi { incoming, kind } => {
+                for &(_, v) in incoming {
+                    demand(v, VecWidth::of_load(*kind), wide);
+                }
+            }
+            _ => {}
+        }
+    }
+    // A copy of a widened zero is as wide.
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for (v, inst) in func.insts.iter().enumerate() {
+            if let Inst::Copy { value, .. } = inst
+                && let Some(&w) = wide.get(*value as usize)
+                && w > wide[v]
+            {
+                wide[v] = w;
+                changed = true;
+            }
         }
     }
 }
@@ -4836,49 +5577,276 @@ fn call_plan<'f>(
     Some((args, fp_arg_mask, plan))
 }
 
-/// The `Imm` values every reader of which is an integer argument a call
-/// places on the stack, with their constants (`Allocation::stack_imm`).
-fn stack_arg_immediates(
+/// More values live at once than an interference graph is built over: a
+/// graph has an edge per pair of them, so its size grows with the square of
+/// the widest point. At 128 values live at once, building and coloring the
+/// graph costs as much per instruction as the rest of the allocation, and
+/// the point is four times the width of the largest register file.
+const CROWD_BOUND: usize = 128;
+
+/// The values spilled ahead of the coloring: where more than
+/// [`CROWD_BOUND`] values are live, the first-defined of them
+/// ([`super::liveness::Liveness::crowded`]). Taken out of the graph, they
+/// bound its width; phis and their incomes, which share a place with one
+/// another, scalable vectors and predicates stay in it.
+fn crowded_values(
+    func: &FunctionSsa,
+    liveness: &super::liveness::Liveness,
+    emitted: &[bool],
+) -> Vec<bool> {
+    let n = func.insts.len();
+    let mut phi_side = alloc::vec![false; n];
+    for (v, inst) in func.insts.iter().enumerate() {
+        if let Inst::Phi { incoming, .. } = inst {
+            phi_side[v] = true;
+            for &(_, u) in incoming {
+                if let Some(p) = phi_side.get_mut(u as usize) {
+                    *p = true;
+                }
+            }
+        }
+    }
+    let eligible = |v: ValueId| {
+        let (i, inst) = (v as usize, &func.insts[v as usize]);
+        emitted[i]
+            && !phi_side[i]
+            && produces_value(inst)
+            && !produces_pred_result(inst)
+            && func.value_sve_kind(v).is_none()
+            && !matches!(inst, Inst::AsmOut { .. } | Inst::InlineAsm { .. })
+    };
+    liveness.crowded(func, CROWD_BOUND, &eligible)
+}
+
+/// Slots past `spill_count` for the [`crowded_values`]. A value's span is
+/// the stretch of the tape from its first to its last point: its
+/// definition, its reads, and the ends of the blocks it is live across. A
+/// value takes the slot of one whose span ended before its own begins, so
+/// the frame grows with the crowded values live at once rather than with
+/// their count; a caller of a returns-twice function shares no slot, as
+/// in [`color_graph`].
+fn place_crowded(
+    func: &FunctionSsa,
+    liveness: &super::liveness::Liveness,
+    crowded: &[bool],
+    wide: &[VecWidth],
+    places: &mut [Place],
+    spill_count: &mut u32,
+) {
+    let n = func.insts.len();
+    let mut span = vec![(u32::MAX, 0u32); n];
+    let block_of = crate::c5::codegen::passes::constfold_branch::block_index(func);
+    for (b, blk) in func.blocks.iter().enumerate() {
+        let (start, end) = (blk.inst_range.start, blk.inst_range.end);
+        // A value defined elsewhere is live from the block's start.
+        let mut cover = |v: ValueId, at: u32| {
+            if (v as usize) < n && crowded[v as usize] {
+                let s = &mut span[v as usize];
+                let from = if block_of[v as usize] as usize == b {
+                    at
+                } else {
+                    start
+                };
+                *s = (s.0.min(from), s.1.max(at));
+            }
+        };
+        for idx in blk.inst_range.clone() {
+            cover(idx, idx);
+            for_each_operand(&func.insts[idx as usize], |op| cover(op, idx));
+        }
+        blk.terminator.for_each_operand(|op| cover(op, end));
+        cover(blk.exit_acc, end);
+        liveness
+            .block_liveness()
+            .for_each_live_out(b as crate::c5::ir::BlockId, |v| cover(v, end));
+    }
+    let mut order: Vec<usize> = (0..n).filter(|&v| crowded[v]).collect();
+    order.sort_by_key(|&v| (span[v].0, v));
+    let mut active: BinaryHeap<Reverse<(u32, u32, u32)>> = BinaryHeap::new();
+    let mut free: BTreeMap<u32, Vec<u32>> = BTreeMap::new();
+    for v in order {
+        while let Some(&Reverse((last, slot, units))) = active.peek()
+            && last < span[v].0
+        {
+            active.pop();
+            free.entry(units).or_default().push(slot);
+        }
+        let units = wide[v].units();
+        let reused = (!func.has_returns_twice_call)
+            .then(|| free.get_mut(&units).and_then(Vec::pop))
+            .flatten();
+        let slot = reused.unwrap_or_else(|| {
+            *spill_count += units;
+            *spill_count - units
+        });
+        places[v] = Place::Spill(slot);
+        active.push(Reverse((span[v].1, slot, units)));
+    }
+}
+
+/// The constants and the local, data and code addresses every reader of
+/// which is an integer argument of a call that sets it
+/// ([`Allocation::call_set`]): a constant the call places on the stack; a
+/// value the call sets in one instruction, the move a register holding it
+/// would take; a value whose reading calls lie in its own block, which
+/// sets it as often; or a value one call reads once, in a block of no
+/// deeper loop, set there instead of at its definition.
+fn call_set_arguments(
     func: &FunctionSsa,
     target: Target,
     use_counts: &[u32],
-) -> alloc::collections::BTreeMap<ValueId, i64> {
-    let mut readers: alloc::collections::BTreeMap<ValueId, u32> =
+) -> alloc::collections::BTreeMap<ValueId, ArgSet> {
+    use crate::c5::codegen::ArgPlacement;
+    // Another unit's object or function may be reached through its GOT
+    // entry, a load where a register would take a move.
+    let bound: alloc::collections::BTreeSet<ValueId> = (func.extern_imm_data_refs.iter())
+        .chain(&func.extern_imm_code_refs)
+        .map(|&(v, _)| v)
+        .collect();
+    // An AArch64 local's address is one `sub` from fp when its distance
+    // fits 12 bits whatever saves (every callee-saved register and the
+    // x19 pair) and canary the frame puts between them; an over-aligned
+    // object lies in a region placed after the coloring.
+    let banks = RegBanks::for_target(target);
+    let slots16 = |n: usize| u64::from(super::emit_common::slots16(n as u32));
+    let a64_saves = slots16(banks.callee_gprs.len())
+        + slots16(banks.callee_fprs.len())
+        + 16
+        + u64::from(crate::c5::codegen::CANARY_REGION_BYTES);
+    let one = |v: ValueId, inst: &Inst| match *inst {
+        Inst::Imm(k) => {
+            target.is_x86_64() || crate::c5::codegen::aarch64::encode::imm64_insts(k as u64) == 1
+        }
+        Inst::LocalAddr(off) if target.is_aarch64() => {
+            off < 0
+                && off.unsigned_abs() * 8 + a64_saves < 1 << 12
+                && !func.over_aligned.iter().any(|m| m.slot == off)
+        }
+        // An AArch64 data or code address is two instructions.
+        _ => target.is_x86_64() && !bound.contains(&v),
+    };
+    // Per value: the reading calls' arguments, whether each is set at no
+    // cost over a register holding it, and the last one's block.
+    let mut readers: alloc::collections::BTreeMap<ValueId, (u32, bool, usize)> =
         alloc::collections::BTreeMap::new();
-    for blk in &func.blocks {
+    for (b, blk) in func.blocks.iter().enumerate() {
         for pc in blk.inst_range.clone() {
             let inst = &func.insts[pc as usize];
             let Some((args, fp, plan)) = call_plan(func, inst, target) else {
                 continue;
             };
             for (i, (&v, p)) in args.iter().zip(&plan.placements).enumerate() {
-                if matches!(p, crate::c5::codegen::ArgPlacement::Stack(_))
-                    && !fp.has(i)
-                    && matches!(func.insts.get(v as usize), Some(Inst::Imm(_)))
-                    && !func.f32_values.get(v as usize).copied().unwrap_or(false)
-                {
-                    *readers.entry(v).or_default() += 1;
+                let here = blk.inst_range.contains(&v);
+                let cheap = match (func.insts.get(v as usize), p) {
+                    (Some(Inst::Imm(_)), ArgPlacement::Stack(_)) => true,
+                    (
+                        Some(
+                            def @ (Inst::Imm(_)
+                            | Inst::LocalAddr(_)
+                            | Inst::ImmData(_)
+                            | Inst::ImmCode(_)),
+                        ),
+                        ArgPlacement::IntReg(_) | ArgPlacement::Stack(_),
+                    ) => here || one(v, def),
+                    (Some(_), ArgPlacement::IntReg(_) | ArgPlacement::Stack(_)) => false,
+                    _ => continue,
+                };
+                if !fp.has(i) && !func.f32_values.get(v as usize).copied().unwrap_or(false) {
+                    let r = readers.entry(v).or_insert((0, true, b));
+                    *r = (r.0 + 1, r.1 && cheap, b);
                 }
             }
         }
     }
+    let mut depths = None;
+    let mut as_often = |v: ValueId, reader: usize| {
+        let depths =
+            depths.get_or_insert_with(|| crate::c5::codegen::passes::layout::loop_depths(func));
+        let def = func
+            .blocks
+            .iter()
+            .position(|blk| blk.inst_range.contains(&v));
+        def.is_some_and(|d| depths[reader] <= depths[d])
+    };
     readers
         .into_iter()
-        .filter(|&(v, n)| use_counts.get(v as usize) == Some(&n))
+        .filter(|&(v, (n, cheap, b))| {
+            use_counts.get(v as usize) == Some(&n) && (cheap || n == 1 && as_often(v, b))
+        })
         .filter_map(|(v, _)| match func.insts[v as usize] {
-            Inst::Imm(k) => Some((v, k)),
+            Inst::Imm(k) => Some((v, ArgSet::Imm(k))),
+            Inst::LocalAddr(off) if off < 0 => Some((v, ArgSet::Local(off))),
+            Inst::ImmData(off) => Some((v, ArgSet::Data(off))),
+            Inst::ImmCode(pc) => Some((v, ArgSet::Code(pc))),
             _ => None,
         })
         .collect()
 }
 
-/// x86-64: the floating loads, through a pointer or a scaled index, whose
-/// one reader is the next instruction that emits code, a floating add,
-/// subtract, multiply or divide of the load's precision that takes it as
-/// its second operand, or a fused multiply-add. The reader takes the load
-/// as its memory operand and the load emits nothing. The address holds at
-/// the reader: only floating values are defined at the load and at the
-/// reader, and a spilled result is stored after the read.
+/// AArch64: the constants every reader of which is an integer select's
+/// arm, which the select sets ([`Allocation::select_set`]): zero, which it
+/// reads as `xzr`, and a constant one instruction sets that one select
+/// reads in a block of no deeper loop, set there instead of at its
+/// definition.
+fn select_set_arms(
+    func: &FunctionSsa,
+    target: Target,
+    use_counts: &[u32],
+) -> alloc::collections::BTreeSet<ValueId> {
+    let mut readers: alloc::collections::BTreeMap<ValueId, (u32, usize)> =
+        alloc::collections::BTreeMap::new();
+    if !target.is_aarch64() {
+        return alloc::collections::BTreeSet::new();
+    }
+    for (b, blk) in func.blocks.iter().enumerate() {
+        for pc in blk.inst_range.clone() {
+            let Inst::Select {
+                a, b: other, kind, ..
+            } = func.insts[pc as usize]
+            else {
+                continue;
+            };
+            if matches!(kind, LoadKind::F32 | LoadKind::F64) {
+                continue;
+            }
+            for arm in [a, other] {
+                if matches!(func.insts.get(arm as usize), Some(Inst::Imm(_))) {
+                    let r = readers.entry(arm).or_insert((0, b));
+                    *r = (r.0 + 1, b);
+                }
+            }
+        }
+    }
+    let mut depths = None;
+    let mut as_often = |v: ValueId, reader: usize| {
+        let depths =
+            depths.get_or_insert_with(|| crate::c5::codegen::passes::layout::loop_depths(func));
+        let def = (func.blocks.iter()).position(|blk| blk.inst_range.contains(&v));
+        def.is_some_and(|d| depths[reader] <= depths[d])
+    };
+    (readers.into_iter())
+        .filter(|&(v, (n, b))| {
+            let Inst::Imm(k) = func.insts[v as usize] else {
+                return false;
+            };
+            use_counts.get(v as usize) == Some(&n)
+                && (k == 0
+                    || crate::c5::codegen::aarch64::encode::imm64_insts(k as u64) == 1
+                        && n == 1
+                        && as_often(v, b))
+        })
+        .map(|(v, _)| v)
+        .collect()
+}
+
+/// x86-64: the floating loads, through a pointer, a scaled index or the
+/// unit's data addressed off rip (`pc_rel`), whose one reader is the next
+/// instruction that emits code, a floating add, subtract, multiply or
+/// divide of the load's precision that takes it as its second operand, or a
+/// fused multiply-add. The reader takes the load as its memory operand and
+/// the load emits nothing. The address holds at the reader: only floating
+/// values are defined at the load and at the reader, and a spilled result
+/// is stored after the read.
 fn fp_memory_operands(
     func: &FunctionSsa,
     use_counts: &[u32],
@@ -4894,7 +5862,6 @@ fn fp_memory_operands(
                     kind,
                     volatile: false,
                     align: 0,
-                    pc_rel: false,
                     ..
                 } => kind,
                 Inst::LoadIndexed {
@@ -4915,7 +5882,12 @@ fn fp_memory_operands(
                 continue;
             }
             let Some(r) = (v + 1..block.inst_range.end as usize).find(|&i| {
-                !super::emit_common::is_dead_pure_counts(&func.insts[i], i as ValueId, use_counts)
+                !super::emit_common::is_dead_pure_counts(
+                    func,
+                    &func.insts[i],
+                    i as ValueId,
+                    use_counts,
+                )
             }) else {
                 continue;
             };
@@ -4950,8 +5922,9 @@ fn fp_commutes(op: BinOp) -> bool {
 /// x86-64: the floating constants other than +0.0 that every reader takes
 /// as its memory operand, the read-only literal addressed off rip: a
 /// floating add, subtract, multiply or divide of the constant's precision
-/// reading it second, or first where the operation commutes, or a fused
-/// multiply-add reading it once, with no other constant operand. Such a
+/// reading it second, or first where the operation commutes, a fused
+/// multiply-add reading it once, or a comparison reading it on the side
+/// `[u]comis` takes from memory, with no other constant operand. Such a
 /// constant takes no register.
 fn fp_literal_operands(
     func: &FunctionSsa,
@@ -4985,9 +5958,19 @@ fn fp_literal_operands(
                 [false, false, true] => Some(c),
                 _ => None,
             },
+            // A compare's memory side is its second operand, the first of
+            // `<` and `<=`, which the lowering swaps.
+            Inst::Binop { op, lhs, rhs } if crate::c5::ir::is_fp_comparison_op(op) => {
+                let swapped = matches!(crate::c5::ir::fp_relation(op), BinOp::Flt | BinOp::Fle);
+                let (held, mem) = if swapped { (rhs, lhs) } else { (lhs, rhs) };
+                (literal(mem) && !literal(held) && f32(mem) == f32(held)).then_some(mem)
+            }
             _ => None,
         }
-        .filter(|&c| f32(c) == f32(r as ValueId));
+        .filter(|&c| {
+            f32(c) == f32(r as ValueId)
+                || matches!(*inst, Inst::Binop { op, .. } if crate::c5::ir::is_fp_comparison_op(op))
+        });
         for_each_operand(inst, |o| {
             if Some(o) != folded
                 && let Some(h) = held.get_mut(o as usize)
@@ -5053,7 +6036,7 @@ fn stack_arg_loads(
                     && use_counts.get(v as usize) == Some(&1)
                     && blk.inst_range.contains(&v)
                     && v < pc
-                    && ((v + 1)..pc).all(|w| func.insts[w as usize].is_pure())
+                    && ((v + 1)..pc).all(|w| func.is_pure(&func.insts[w as usize]))
                 {
                     out.insert(v, (off, disp, kind));
                 }
@@ -5125,6 +6108,21 @@ fn populate_call_arg_hints(
         let pc = pc as u32;
         for (&v, placement) in args.iter().zip(&plan.placements) {
             let vu = v as usize;
+            // An aggregate given as its parts takes each in its register.
+            if let (Some(Inst::AggParts { parts, .. }), ArgPlacement::StructRegs { regs, n, .. }) =
+                (func.insts.get(vu), placement.register_part())
+                && parts.len() == usize::from(n)
+            {
+                for (&p, c) in parts.iter().zip(&regs) {
+                    let pu = p as usize;
+                    let fp = fp_const.get(pu).copied().unwrap_or(false)
+                        || result_kind(&func.insts[pu]) == ResultKind::Fp;
+                    if fp == c.is_fp && last_use[pu] == pc && !calls_after_def[pu] {
+                        hints[pu].get_or_insert(c.reg);
+                    }
+                }
+                continue;
+            }
             let (r, fp) = match placement.register_part() {
                 ArgPlacement::IntReg(r) => (Some(r), false),
                 ArgPlacement::FpReg(r) => (Some(r), true),
@@ -5984,6 +6982,7 @@ mod tests {
             fp_scratch: [NO_FP_SCRATCH; FP_SCRATCH_COUNT],
             callee_fpr_low64_only: true,
             open_cost: 2 * FREQ_ONE,
+            withholds: false,
         }
     }
 
@@ -5997,9 +6996,8 @@ mod tests {
             must_callee,
             call_forbid: 0,
             save_cost: 0,
-            save_freq: 0,
-            spill_freq: 0,
-            def_cost: 0,
+            spill_cost: 0,
+            level_cost: 0,
             hint,
             forbid: 0,
             avoid: 0,
@@ -6020,9 +7018,8 @@ mod tests {
             must_callee,
             call_forbid: 0,
             save_cost: 0,
-            save_freq: 0,
-            spill_freq: 0,
-            def_cost: 0,
+            spill_cost: 0,
+            level_cost: 0,
             hint: None,
             forbid: 0,
             avoid: 0,
@@ -6656,7 +7653,7 @@ int main(void) { return 0; }
             let mut cons = [int_node(true, None); 3];
             if let Some(c) = cons[2].as_mut() {
                 c.save_cost = save_cost;
-                c.def_cost = 10;
+                c.spill_cost = 20;
             }
             let r = color_graph(
                 &g,
@@ -6866,8 +7863,8 @@ int main(void) { return 0; }
     fn loop_depths_and_weights_reflect_nesting() {
         use crate::c5::codegen::passes::layout::loop_depths;
         // Straight-line function: no loop, every block at depth 0, and
-        // no use weight reaches the loop multiplier (weights are the
-        // raw use counts).
+        // no use weight reaches the loop multiplier (a use costs its
+        // reload's one execution and its size).
         let sl = lift("tests/fixtures/c/quicksort.c");
         let swap = sl.iter().find(|f| f.name == "swap").expect("swap");
         assert!(
@@ -6882,8 +7879,8 @@ int main(void) { return 0; }
                 &super::super::liveness::Liveness::compute(swap)
             )
             .iter()
-            .all(|&w| w < LOOP_WEIGHT),
-            "a loop-free function weights every use at depth 0 (raw use count)"
+            .all(|&w| w < LOOP_WEIGHT * FREQ_ONE),
+            "a loop-free function weights every use at depth 0"
         );
         // Loop function: the loop body sits at depth >= 1 and a
         // loop-carried value's weight reaches the loop multiplier.
@@ -6901,7 +7898,7 @@ int main(void) { return 0; }
                 &super::super::liveness::Liveness::compute(hot)
             )
             .iter()
-            .any(|&w| w >= LOOP_WEIGHT),
+            .any(|&w| w >= LOOP_WEIGHT * FREQ_ONE),
             "a loop-carried value must outweigh a function-scope value"
         );
     }
@@ -7137,16 +8134,13 @@ int main(void) { return 0; }
         assert!(!alloc_of("looped").gpr_used.is_empty());
     }
 
+    /// An unread value is no node of the coloring: under two registers it
+    /// takes no slot, and the spill region ends after the live values'.
     #[test]
-    fn a_slot_only_a_dead_value_holds_is_outside_the_spill_region() {
+    fn a_dead_value_takes_no_slot() {
         let (f, dead) = dead_shift_chain();
         let alloc = with_pool_size_override(2, 2, || allocate(&f, Target::LinuxX64));
-        let Place::Spill(s) = alloc.places[dead as usize] else {
-            panic!(
-                "the unread shift must spill, got {:?}",
-                alloc.places[dead as usize]
-            );
-        };
+        assert_eq!(alloc.places[dead as usize], Place::None);
         let live_end = (f.insts.iter().enumerate())
             .filter(|&(v, inst)| {
                 !super::super::emit_common::is_dead_pure(inst, v as ValueId, &alloc)
@@ -7157,37 +8151,21 @@ int main(void) { return 0; }
             })
             .max()
             .unwrap_or(0);
-        assert!(s >= live_end, "the dead value must take the top slot");
         assert_eq!(alloc.spill_count, live_end);
     }
 
+    /// An unread value takes no register, so none is saved for it; every
+    /// saved register has an emitted writer.
     #[test]
-    fn dead_pure_color_stays_out_of_used_sets() {
+    fn a_dead_value_takes_no_register() {
         let (f, dead) = dead_shift_chain();
-        // Pin uncapped banks so the pressure-matrix env cannot spill
-        // the dead value instead of coloring it.
         let alloc =
             with_pool_size_override(usize::MAX, usize::MAX, || allocate(&f, Target::LinuxX64));
         assert!(
             super::super::emit_common::is_dead_pure(&f.insts[dead as usize], dead, &alloc),
             "the unread shift must be dead-pure"
         );
-        let Place::IntReg(r) = alloc.places[dead as usize] else {
-            panic!(
-                "the dead value must be colored, got {:?}",
-                alloc.places[dead as usize]
-            );
-        };
-        assert!(
-            RegBanks::for_target(Target::LinuxX64)
-                .callee_gprs
-                .contains(&r),
-            "with the caller bank exhausted the dead value takes a callee-saved register, got {r}"
-        );
-        assert!(
-            !alloc.gpr_used.contains(&r),
-            "gpr {r} is written by nothing, so it must not be saved"
-        );
+        assert_eq!(alloc.places[dead as usize], Place::None);
         for &r in &alloc.gpr_used {
             assert!(
                 f.insts.iter().enumerate().any(|(v, inst)| {
@@ -7285,6 +8263,265 @@ int main(void) { return 0; }
         }
     }
 
+    /// The per-block walk up the dominator tree the frequencies were once
+    /// computed by, each step testing post-dominance by walking the
+    /// post-dominator chain: the reference the linear form must match.
+    fn frequencies_by_walking(func: &FunctionSsa) -> Vec<u64> {
+        use super::super::mem2reg::{EXIT, dominators, post_dominators, successors};
+        use crate::c5::ir::BlockId;
+        let weights = block_weights(func);
+        let depths = crate::c5::codegen::passes::layout::loop_depths(func);
+        let leaves_loop: Vec<bool> = (func.blocks.iter().enumerate())
+            .map(|(b, block)| {
+                successors(
+                    &block.terminator,
+                    &func.computed_goto_targets,
+                    &func.jump_tables,
+                )
+                .iter()
+                .any(|&s| depths[s as usize] < depths[b])
+            })
+            .collect();
+        let idom = dominators(func);
+        let ipdom = post_dominators(func);
+        let post_dominates = |a: BlockId, mut b: BlockId| loop {
+            match ipdom.get(b as usize).copied() {
+                Some(p) if p == a => return true,
+                Some(EXIT) | None => return false,
+                Some(p) if p == BlockId::MAX => return true,
+                Some(p) => b = p,
+            }
+        };
+        (0..func.blocks.len())
+            .map(|b| {
+                let mut halvings = 0u32;
+                let mut x = b as BlockId;
+                while let Some(&d) = idom.get(x as usize) {
+                    if d == x || d == BlockId::MAX {
+                        break;
+                    }
+                    let continues =
+                        leaves_loop[d as usize] && depths[x as usize] >= depths[d as usize];
+                    if !post_dominates(x, d) && !continues {
+                        halvings += 1;
+                    }
+                    x = d;
+                }
+                weights[b].saturating_mul(FREQ_ONE) >> halvings.min(8)
+            })
+            .collect()
+    }
+
+    /// The frequencies filled down the dominator tree equal the per-block
+    /// walk on every function of the self-host and quicksort fixtures.
+    #[test]
+    fn block_frequencies_match_the_dominator_walk() {
+        for path in ["tests/fixtures/c/c4.c", "tests/fixtures/c/quicksort.c"] {
+            for f in lift(path) {
+                assert_eq!(
+                    block_frequencies(&f),
+                    frequencies_by_walking(&f),
+                    "{path}: {}",
+                    f.name
+                );
+            }
+        }
+    }
+
+    /// Function `f` of `src` lifted for `target`, its vector and scalar
+    /// locals promoted.
+    #[cfg(not(debug_assertions))]
+    fn promoted(src: &str, target: Target) -> FunctionSsa {
+        let program =
+            Compiler::with_target(format!("{src}int main(void) {{ return 0; }}\n"), target)
+                .compile()
+                .expect("compile");
+        let mut funcs =
+            crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, target, false, true)
+                .expect("produce_ssa_funcs");
+        crate::c5::codegen::passes::simd_values::run(&mut funcs);
+        let mut f = funcs.into_iter().find(|f| f.name == "f").expect("f");
+        super::super::vector_slots::run(&mut f);
+        super::super::mem2reg::run(&mut f);
+        f
+    }
+
+    /// The thread's CPU time for `run` on `reps` copies of `f`, in one
+    /// interval: a thread clock that advances in scheduler ticks (15.6 ms
+    /// on Windows) reads a short run as zero or a whole tick.
+    #[cfg(not(debug_assertions))]
+    fn cpu_cost(
+        f: &FunctionSsa,
+        reps: u32,
+        run: &impl Fn(&mut FunctionSsa),
+    ) -> core::time::Duration {
+        let mut copies: Vec<FunctionSsa> = (0..reps).map(|_| f.clone()).collect();
+        let start = crate::c5::tests::thread_cpu_time();
+        for g in &mut copies {
+            with_pool_size_override(usize::MAX, usize::MAX, || run(g));
+        }
+        crate::c5::tests::thread_cpu_time() - start
+    }
+
+    /// A function of `n` conditional updates: a chain of `n` diamonds.
+    #[cfg(not(debug_assertions))]
+    fn conditional_updates(n: usize) -> String {
+        let body: String = (0..n)
+            .map(|i| format!("    if (p[{}] > x + {i}) s += {i};\n", i % 64))
+            .collect();
+        format!("long f(const long *p, long x) {{\n    long s = 0;\n{body}    return s;\n}}\n")
+    }
+
+    /// One block of `n` values live at once: loads, then products each
+    /// reading two of them, then stores, as scalars or as vectors.
+    #[cfg(not(debug_assertions))]
+    fn values_live_at_once(n: usize, vector: bool) -> String {
+        let ty = if vector { "v4u" } else { "long" };
+        let mut s = String::from("typedef unsigned v4u __attribute__((vector_size(16)));\n");
+        s += &format!("void f(const {ty} *p, {ty} *q) {{\n");
+        for k in 0..n {
+            s += &format!("    {ty} a{k} = p[{k}];\n");
+        }
+        for k in 0..n {
+            s += &format!("    {ty} b{k} = a{k} * a{};\n", (k * 7 + 1) % n);
+        }
+        for k in 0..n {
+            s += &format!("    q[{k}] = b{k};\n");
+        }
+        s + "}\n"
+    }
+
+    /// `large`, `times` the input of `small`, allocates in under `bound`
+    /// times its time: the thread's CPU time, which waiting for a core does
+    /// not advance, the least of eight rounds that alternate `times` runs of
+    /// `small` with one of `large`. The tests running beside it only add to
+    /// a side's CPU time, through the caches and memory they share, so the
+    /// least round of each side is the one they disturbed least.
+    #[cfg(not(debug_assertions))]
+    fn assert_scales(
+        what: &str,
+        (small, large, times): (&FunctionSsa, &FunctionSsa, u32),
+        bound: f64,
+        run: impl Fn(&mut FunctionSsa),
+    ) {
+        let (mut t1, mut tn) = (core::time::Duration::MAX, core::time::Duration::MAX);
+        for _ in 0..8 {
+            t1 = t1.min(cpu_cost(small, times, &run));
+            tn = tn.min(cpu_cost(large, 1, &run));
+        }
+        let growth = tn.as_secs_f64() * f64::from(times) / t1.as_secs_f64();
+        assert!(
+            growth < bound,
+            "{what}: {t1:?}, {times} times the input {tn:?} ({growth:.1}x)"
+        );
+    }
+
+    /// Allocation time grows with the blocks, not their square: sixteen
+    /// times the conditional updates take under sixty-four times as long
+    /// (26-33 alone, 33-39 beside the rest of the suite), where a walk per
+    /// block up the dominator chain took a hundred alone.
+    /// Release-only: the debug assertions' cost is not the allocator's.
+    #[test]
+    #[cfg(not(debug_assertions))]
+    fn allocation_time_grows_with_the_blocks_not_their_square() {
+        for target in [Target::LinuxX64, Target::LinuxAarch64] {
+            let (small, large) = (
+                promoted(&conditional_updates(1000), target),
+                promoted(&conditional_updates(16000), target),
+            );
+            let what = format!("{target:?} updates");
+            assert_scales(&what, (&small, &large, 16), 64.0, |f| {
+                core::hint::black_box(super::allocate(f, target, FixedRegs::NONE));
+            });
+        }
+    }
+
+    /// Allocation time grows with the values live at once, not their
+    /// square, through the -O0 allocation and the -O one with its hoisting
+    /// and range-splitting retries, on both targets, for scalars and
+    /// vectors: eight times the values take under twenty-four times as
+    /// long (7-10 alone, 4-12 beside the rest of the suite), where an edge
+    /// per pair of them took fifty-eight. Past [`CROWD_BOUND`] values the
+    /// graph has no edge per pair. Release-only: the debug assertions' cost
+    /// is not the allocator's.
+    #[test]
+    #[cfg(not(debug_assertions))]
+    fn allocation_time_grows_with_the_values_live_at_once_not_their_square() {
+        for target in [Target::LinuxX64, Target::LinuxAarch64] {
+            for vector in [false, true] {
+                let (small, large) = (
+                    promoted(&values_live_at_once(250, vector), target),
+                    promoted(&values_live_at_once(2000, vector), target),
+                );
+                let what = format!("{target:?} vector={vector}");
+                let pair = (&small, &large, 8);
+                assert_scales(&format!("{what} -O0"), pair, 24.0, |f| {
+                    core::hint::black_box(super::allocate(f, target, FixedRegs::NONE));
+                });
+                assert_scales(&format!("{what} -O"), pair, 24.0, |f| {
+                    core::hint::black_box(super::super::licm::allocate_hoisted(
+                        f,
+                        target,
+                        FixedRegs::NONE,
+                        0,
+                        &[],
+                    ));
+                });
+            }
+        }
+    }
+
+    /// `n` values live across a loop whose body defines `n` more from them
+    /// and folds both into a sum, in an order that keeps them live together,
+    /// so the loop stages its spills through scratch on every iteration.
+    #[cfg(not(debug_assertions))]
+    fn values_live_across_a_loop(n: usize) -> String {
+        let mut s = String::from("unsigned long f(const unsigned long *p, int n) {\n");
+        for k in 0..n {
+            s += &format!("    unsigned long a{k} = p[{k}] * {} + {k};\n", 2 * k + 1);
+        }
+        s += "    unsigned long s = 0;\n    for (int i = 0; i < n; i++) {\n";
+        for k in 0..n {
+            s += &format!(
+                "        unsigned long b{k} = p[(i + {k}) % 256] ^ a{};\n",
+                (k * 7 + 1) % n
+            );
+        }
+        for k in 0..n {
+            s += &format!("        s = s * 31 + b{k};\n");
+        }
+        for k in (0..n).rev() {
+            s += &format!("        s = s * 37 + b{k} + a{k};\n");
+        }
+        s + "    }\n    return s;\n}\n"
+    }
+
+    /// Allocating values that live across a loop through sites starved of
+    /// scratch takes x86-64 under 24 times as long as AArch64 (11.3
+    /// measured, in at most [`SCRATCH_ROUNDS`] allocations), where each
+    /// allocation keeping only the scratch pair's holders off it let others
+    /// in, and the rounds took 69 times as long.
+    #[test]
+    #[cfg(not(debug_assertions))]
+    fn x86_scratch_rounds_are_bounded() {
+        let src = values_live_across_a_loop(200);
+        let (x86, a64) = (
+            promoted(&src, Target::LinuxX64),
+            promoted(&src, Target::LinuxAarch64),
+        );
+        let (mut tx, mut ta) = (core::time::Duration::ZERO, core::time::Duration::ZERO);
+        for _ in 0..4 {
+            tx += cpu_cost(&x86, 1, &|f: &mut FunctionSsa| {
+                core::hint::black_box(super::allocate(f, Target::LinuxX64, FixedRegs::NONE));
+            });
+            ta += cpu_cost(&a64, 1, &|f: &mut FunctionSsa| {
+                core::hint::black_box(super::allocate(f, Target::LinuxAarch64, FixedRegs::NONE));
+            });
+        }
+        let ratio = tx.as_secs_f64() / ta.as_secs_f64();
+        assert!(ratio < 24.0, "x86-64 {tx:?}, AArch64 {ta:?} ({ratio:.1}x)");
+    }
+
     /// Allocate every function in c4.c. Exercises the cross-block
     /// vstack threading + spill paths. We don't assert the
     /// spill_count -- only that the allocator terminates and
@@ -7302,13 +8539,17 @@ int main(void) { return 0; }
                 // is unread -- the allocator nulls those out so
                 // the emit pass skips the dst-propagate step --
                 // and a phi nothing reads, whose edge moves are
-                // dropped. A constant or a local a stack argument reads in
-                // place takes none either: the call's marshaling reads it.
+                // dropped. A value its call sets, or a local a stack argument
+                // reads in place, takes none either: the call's marshaling does.
+                // Nor does a value the emitters skip.
                 let kind = result_kind(&f.insts[i]);
-                let read_by_call = alloc.stack_imm.contains_key(&(i as u32))
+                let read_by_call = alloc.call_set.contains_key(&(i as u32))
                     || alloc.stack_load.contains_key(&(i as u32));
                 if read_by_call {
                     assert_eq!(*p, Place::None, "inst {i} is read by its call");
+                    continue;
+                }
+                if super::super::emit_common::is_dead_pure(&f.insts[i], i as ValueId, &alloc) {
                     continue;
                 }
                 let dead_dst = alloc.use_counts.get(i).copied().unwrap_or(0) == 0
@@ -7677,6 +8918,7 @@ int main(void) { return 0; }
             tls_dynamic: false,
             section: None,
             patchable_entry: None,
+            type_hash: None,
             no_instrument: false,
             no_stack_protector: false,
             is_weak: false,
@@ -7711,6 +8953,9 @@ int main(void) { return 0; }
             has_returns_twice_call: false,
             did_unroll: false,
             did_inline: false,
+            frees_rbp: false,
+            fenv_access: false,
+            ret_low_word: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),
@@ -7929,6 +9174,7 @@ int main(void) { return 0; }
             tls_dynamic: false,
             section: None,
             patchable_entry: None,
+            type_hash: None,
             no_instrument: false,
             no_stack_protector: false,
             is_weak: false,
@@ -7963,6 +9209,9 @@ int main(void) { return 0; }
             has_returns_twice_call: false,
             did_unroll: false,
             did_inline: false,
+            frees_rbp: false,
+            fenv_access: false,
+            ret_low_word: false,
             insts,
             blocks,
             extern_call_refs: Vec::new(),
@@ -8032,6 +9281,7 @@ int main(void) { return 0; }
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
+            parts: Vec::new(),
         };
         let f = branch_func(vec![load_i64(), load_i64(), call], 2);
         assert_eq!(compute_use_counts(&f)[..2], [1, 1]);
@@ -8240,6 +9490,11 @@ int main(void) { return 0; }
         for (store, imm) in [(2, 1), (4, 3), (6, 5), (8, 7), (10, 9), (12, 11), (14, 13)] {
             assert!(x64.imm_store[store], "store v{store}");
             assert!(x64.is_unread(imm), "v{imm}");
+            assert_eq!(
+                x64.places[imm as usize],
+                Place::None,
+                "v{imm} holds a place"
+            );
         }
         assert!(x64.imm_store[15]);
         // AArch64 has no store immediate, but reads zero out of xzr / wzr,
@@ -8254,6 +9509,7 @@ int main(void) { return 0; }
             .collect();
         assert_eq!(marked, [12]);
         assert!(a64.is_unread(11));
+        assert_eq!(a64.places[11], Place::None);
         assert_eq!(a64.use_counts[13], 2);
     }
 
@@ -8516,8 +9772,8 @@ int main(void) { return 0; }
     }
 
     /// A value read after a call only by an instruction no emitter lowers
-    /// (a sum nothing reads) does not cross the call: it takes a
-    /// caller-saved register and the function saves nothing.
+    /// (a sum nothing reads) does not cross the call: unread itself, it
+    /// takes no place, and the function saves nothing.
     #[test]
     fn a_read_by_a_skipped_instruction_crosses_no_call() {
         let func = store_func(
@@ -8535,6 +9791,7 @@ int main(void) { return 0; }
                     arg_aggs: Vec::new(),
                     ret_agg: None,
                     ret_slot_local: 0,
+                    parts: Vec::new(),
                 },
                 Inst::Binop {
                     op: BinOp::Add,
@@ -8546,11 +9803,7 @@ int main(void) { return 0; }
         );
         for target in [Target::LinuxX64, Target::LinuxAarch64] {
             let a = with_pool_size_override(usize::MAX, usize::MAX, || allocate(&func, target));
-            let banks = RegBanks::for_target(target);
-            let Place::IntReg(r) = a.places[0] else {
-                panic!("{target:?}: {:?}", a.places[0])
-            };
-            assert!(banks.caller_gprs.contains(&r), "{target:?}: x{r}");
+            assert_eq!(a.places[0], Place::None, "{target:?}");
             assert!(a.gpr_used.is_empty(), "{target:?}: {:?}", a.gpr_used);
             assert_eq!(a.last_use[0], 0, "{target:?}: no emitted read");
         }
@@ -8699,6 +9952,7 @@ int main(void) { return 0; }
                 arg_aggs: Vec::new(),
                 ret_agg: None,
                 ret_slot_local: 0,
+                parts: Vec::new(),
             };
             let func = store_func(
                 vec![
@@ -8770,6 +10024,7 @@ int main(void) { return 0; }
             arg_aggs: Vec::new(),
             ret_agg: None,
             ret_slot_local: 0,
+            parts: Vec::new(),
         };
         let part = |slot| Inst::RetPart {
             slot,
@@ -8845,9 +10100,8 @@ int main(void) { return 0; }
                 must_callee: true,
                 call_forbid: 0,
                 save_cost: 0,
-                save_freq: 0,
-                spill_freq: 0,
-                def_cost: 0,
+                spill_cost: 0,
+                level_cost: 0,
                 hint: None,
                 forbid: 0,
                 avoid: 0,
@@ -8875,11 +10129,13 @@ int main(void) { return 0; }
                 None,
             ];
             let mut count = 7;
-            let lists = call_save_lists(
+            let (lists, stores) = call_save_lists(
                 (&crossings, &node_of),
                 (&saved, &node_cons, &places),
+                (&[], &|_, _| false),
                 &mut count,
             );
+            assert!(stores.is_empty());
             let slot = |site: ValueId, reg: u8| {
                 let (_, saves) = lists.iter().find(|(s, _)| *s == site).expect("site");
                 saves.iter().find(|c| c.reg == reg).expect("save").slot

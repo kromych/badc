@@ -3,7 +3,7 @@ va_opt_initializer.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -32,6 +32,7 @@ Disassembly of section .text:
                	cmpq	$0x0, (%rcx,%rax,8)
                	je	<addr>
                	incq	%rax
+               	nopw	(%rax,%rax)
                	cmpq	$0x0, (%rcx,%rax,8)
                	jne	<addr>
                	testl	%eax, %eax

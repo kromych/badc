@@ -3,7 +3,7 @@ optimizer_fp_arg_mask_remap.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,9 +26,7 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x20, %rsp
+               	subq	$0x28, %rsp
                	movsd	<rip>, %xmm0
                	callq	<addr>
                	movsd	%xmm0, 0x18(%rsp)
@@ -44,39 +42,35 @@ Disassembly of section .text:
                	movsd	0x18(%rsp), %xmm1
                	comisd	%xmm1, %xmm2
                	ja	<addr>
-               	movsd	<rip>, %xmm2
-               	comisd	%xmm2, %xmm1
+               	comisd	<rip>, %xmm1
                	jbe	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movsd	<rip>, %xmm2
                	movsd	0x10(%rsp), %xmm1
                	comisd	%xmm1, %xmm2
                	ja	<addr>
-               	movsd	<rip>, %xmm2
-               	comisd	%xmm2, %xmm1
+               	comisd	<rip>, %xmm1
                	jbe	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
-               	movsd	<rip>, %xmm1
                	movsd	0x8(%rsp), %xmm14
-               	ucomisd	%xmm1, %xmm14
+               	ucomisd	<rip>, %xmm14
                	jp	<addr>
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movsd	<rip>, %xmm1
                	comisd	%xmm0, %xmm1
                	ja	<addr>
-               	movsd	<rip>, %xmm1
-               	comisd	%xmm1, %xmm0
+               	comisd	<rip>, %xmm0
                	jbe	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq
                	movl	$0x13, %eax
-               	leave
+               	addq	$0x28, %rsp
                	retq

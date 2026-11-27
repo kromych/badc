@@ -276,7 +276,14 @@ impl Builder {
             self.text_reloc(at + X64_DESCRIPTOR_AT, table, R_X86_64_PC32, addend - 4);
             self.text_reloc(at + X64_HELPER_AT, helper, R_X86_64_PLT32, -4);
             let steps = vec![(X64_PROLOGUE, PrologueStep::Alloc(X64_FRAME))];
-            (self.o.unwind).push((at as u64, UnwindSteps::X64 { leaf: false, steps }));
+            let (saves, exits) = (Vec::new(), Vec::new());
+            let record = UnwindSteps::X64 {
+                leaf: false,
+                steps,
+                saves,
+                exits,
+            };
+            (self.o.unwind).push((at as u64, record));
         } else {
             self.code(A64_TAIL_MERGE);
             let page = at + A64_DESCRIPTOR_AT;
@@ -288,7 +295,15 @@ impl Builder {
                 at: A64_EPILOGUE_AT,
                 steps: vec![A64Step::SaveFpLrX(A64_FRAME)],
             }];
-            (self.o.unwind).push((at as u64, UnwindSteps::A64 { steps, exits }));
+            let saves = Vec::new();
+            (self.o.unwind).push((
+                at as u64,
+                UnwindSteps::A64 {
+                    steps,
+                    exits,
+                    saves,
+                },
+            ));
         }
     }
 

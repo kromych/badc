@@ -3,7 +3,7 @@ fd_set_macros.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -33,29 +33,16 @@ Disassembly of section .text:
                	sub	x2, x29, #0x80
                	ldurb	w0, [x29, #-0x80]
                	orr	x0, x0, #0x1
-               	sturb	w0, [x29, #-0x80]
                	orr	x0, x0, #0x80
                	sturb	w0, [x29, #-0x80]
                	ldurb	w1, [x29, #-0x7f]
                	orr	x1, x1, #0x1
                	sturb	w1, [x29, #-0x7f]
-               	ldurb	w3, [x29, #-0x74]
-               	orr	x3, x3, #0x10
-               	sturb	w3, [x29, #-0x74]
+               	ldurb	w1, [x29, #-0x74]
+               	orr	x1, x1, #0x10
+               	sturb	w1, [x29, #-0x74]
                	tbnz	w0, #0x0, <addr>
                	mov	x0, #0x2                // =2
-               	add	sp, sp, #0x80
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	and	x1, x1, #0xff
-               	tbnz	w1, #0x0, <addr>
-               	mov	x0, #0x4                // =4
-               	add	sp, sp, #0x80
-               	ldp	x29, x30, [sp], #0x10
-               	ret
-               	and	x3, x3, #0xff
-               	tbnz	w3, #0x4, <addr>
-               	mov	x0, #0x5                // =5
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
@@ -65,8 +52,8 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w4, [x29, #-0x7a]
-               	tbz	w4, #0x2, <addr>
+               	ldurb	w1, [x29, #-0x7a]
+               	tbz	w1, #0x2, <addr>
                	mov	x0, #0x7                // =7
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
@@ -77,12 +64,14 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	ldurb	w1, [x29, #-0x7f]
                	cmp	w1, #0x1
                	b.eq	<addr>
                	mov	x0, #0xc                // =12
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	ldurb	w3, [x29, #-0x74]
                	cmp	w3, #0x10
                	b.eq	<addr>
                	mov	x0, #0xd                // =13
@@ -101,7 +90,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x80
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	ldurb	w1, [x29, #-0x7f]
                	tbnz	w1, #0x0, <addr>
                	mov	x0, #0x17               // =23
                	add	sp, sp, #0x80

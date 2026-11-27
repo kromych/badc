@@ -3,7 +3,7 @@ ptr_to_incomplete_array.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -43,6 +43,7 @@ Disassembly of section .text:
                	incq	%rax
                	incq	%rcx
                	movsbq	(%rax), %rdx
+               	nopl	(%rax)
                	testq	%rdx, %rdx
                	jne	<addr>
                	movsbq	(%rax), %rax
@@ -82,6 +83,7 @@ Disassembly of section .text:
                	cmpl	%ecx, %eax
                	je	<addr>
                	incq	%r8
+               	nopl	(%rax)
                	cmpl	$0x2, %r8d
                	jl	<addr>
                	movl	$0x2, %eax

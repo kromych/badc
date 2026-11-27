@@ -3,7 +3,7 @@ block_static_shadows_extern.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -34,90 +34,89 @@ Disassembly of section .text:
                	movzbq	(%rdi,%rax), %rdx
                	addq	%rdx, %rcx
                	incq	%rax
+               	nopl	(%rax,%rax)
                	cmpl	%esi, %eax
                	jl	<addr>
                	movq	%rcx, %rax
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
+               	movq	<rip>, %rax # <addr>
                	leaq	<rip>, %rdi # <addr>
                	movl	$0x2, %esi
-               	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	cmpl	$0x12, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
+               	movq	<rip>, %rax # <addr>
                	leaq	<rip>, %rdi # <addr>
                	movl	$0x3, %esi
-               	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	cmpl	$0x345, %eax            # imm = 0x345
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
+               	movq	<rip>, %rax # <addr>
                	leaq	<rip>, %rdi # <addr>
                	movl	$0x2, %esi
-               	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	cmpl	$0x67, %eax
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
+               	movq	<rip>, %rax # <addr>
                	leaq	<rip>, %rdi # <addr>
                	movl	$0x1, %esi
-               	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	cmpl	$0x8, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
+               	movq	<rip>, %rax # <addr>
                	leaq	<rip>, %rdi # <addr>
                	movl	$0x1, %esi
-               	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	cmpl	$0x9, %eax
                	je	<addr>
                	movl	$0x5, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movq	<rip>, %rdi # <addr>
-               	movl	$0x3, %esi
                	movq	<rip>, %rax # <addr>
+               	movl	$0x3, %esi
                	callq	*%rax
                	movq	%rax, 0x8(%rsp)
                	leaq	<rip>, %rax # <addr>
                	leaq	0x1(%rax), %rdi
-               	movl	$0x2, %esi
                	movq	<rip>, %rax # <addr>
+               	movl	$0x2, %esi
                	callq	*%rax
                	movq	0x8(%rsp), %r10
                	addq	%rax, %r10
                	movq	%r10, 0x8(%rsp)
                	movq	<rip>, %rdi # <addr>
-               	movl	$0x1, %esi
                	movq	<rip>, %rax # <addr>
+               	movl	$0x1, %esi
                	callq	*%rax
                	movq	0x8(%rsp), %r10
                	addq	%rax, %r10
                	movq	%r10, 0x8(%rsp)
+               	movq	<rip>, %rax # <addr>
                	leaq	<rip>, %rdi # <addr>
                	movl	$0x1, %esi
-               	movq	<rip>, %rax # <addr>
                	callq	*%rax
                	movq	0x8(%rsp), %r10
                	addq	%rax, %r10
                	movq	%r10, 0x8(%rsp)
                	movq	<rip>, %rdi # <addr>
-               	movl	$0x1, %esi
                	movq	<rip>, %rax # <addr>
+               	movl	$0x1, %esi
                	callq	*%rax
                	movq	%rax, %r10
                	movq	0x8(%rsp), %rax
@@ -125,8 +124,8 @@ Disassembly of section .text:
                	cmpl	$0xb9b, %eax            # imm = 0xB9B
                	je	<addr>
                	movl	$0x6, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

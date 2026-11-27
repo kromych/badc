@@ -3,7 +3,7 @@ builtin_va_list_typedef.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -73,6 +73,7 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	incq	%rax
                	movl	-0xd0(%rbp), %edx
+               	nopl	(%rax,%rax)
                	cmpl	%edx, %eax
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
@@ -138,6 +139,7 @@ Disassembly of section .text:
                	addq	%rdx, %rax
                	incq	%rcx
                	movl	-0xe0(%rbp), %edx
+               	nopl	(%rax,%rax)
                	cmpl	%edx, %ecx
                	jl	<addr>
                	xorl	%ecx, %ecx
@@ -205,7 +207,7 @@ Disassembly of section .text:
                	movq	0x8(%r11), %r10
                	addq	$0x8, 0x8(%r11)
                	movq	%r10, %rax
-               	movq	(%rax), %rcx
+               	movq	(%rax), %rsi
                	leaq	-0x18(%rbp), %rax
                	movq	%rax, %r11
                	movl	0x4(%r11), %r10d
@@ -231,19 +233,18 @@ Disassembly of section .text:
                	movq	%r10, %rax
                	movl	(%rax), %edx
                	leaq	-0x18(%rbp), %rax
-               	movq	-0xd0(%rbp), %rsi
+               	movq	-0xd0(%rbp), %rcx
                	xorl	%eax, %eax
-               	movsbq	(%rsi), %rsi
-               	cmpl	$0x74, %esi
-               	jne	<addr>
                	movsbq	(%rcx), %rcx
+               	cmpl	$0x74, %ecx
+               	jne	<addr>
+               	movsbq	(%rsi), %rcx
                	cmpl	$0x78, %ecx
                	sete	%cl
                	movzbq	%cl, %rcx
                	testq	%rcx, %rcx
                	je	<addr>
-               	movsd	<rip>, %xmm1
-               	ucomisd	%xmm1, %xmm0
+               	ucomisd	<rip>, %xmm0
                	sete	%cl
                	movzbq	%cl, %rcx
                	setnp	%r10b
@@ -363,6 +364,7 @@ Disassembly of section .text:
                	addq	%rdx, %rcx
                	incq	%rax
                	movl	-0xd0(%rbp), %edx
+               	nopl	(%rax,%rax)
                	cmpl	%edx, %eax
                	jl	<addr>
                	leaq	-0x18(%rbp), %rax
@@ -371,8 +373,7 @@ Disassembly of section .text:
                	retq
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x3, %edi
                	movl	$0xa, %esi
                	movl	$0xe, %edx
@@ -382,7 +383,7 @@ Disassembly of section .text:
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x1, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x3, %edi
                	movl	$0x1, %esi
@@ -393,30 +394,30 @@ Disassembly of section .text:
                	cmpl	$0xe, %eax
                	je	<addr>
                	movl	$0x2, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
+               	movsd	<rip>, %xmm0
                	leaq	<rip>, %rdi
                	leaq	<rip>, %rsi
-               	movsd	<rip>, %xmm0
                	movl	$0x7, %edx
                	movb	$0x1, %al
                	callq	<addr>
                	testl	%eax, %eax
                	jne	<addr>
                	movl	$0x3, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x4, %edi
                	movl	$0x1, %esi
                	movl	$0x2, %edx
                	movl	$0x3, %ecx
-               	movq	%rdi, %r8
+               	movl	$0x4, %r8d
                	movb	$0x0, %al
                	callq	<addr>
                	cmpl	$0xa, %eax
                	je	<addr>
                	movl	$0x4, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	movl	$0x2, %edi
                	movl	$0x14, %esi
@@ -426,8 +427,8 @@ Disassembly of section .text:
                	cmpl	$0x2a, %eax
                	je	<addr>
                	movl	$0x5, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq
                	xorl	%eax, %eax
-               	popq	%rbp
+               	popq	%r11
                	retq

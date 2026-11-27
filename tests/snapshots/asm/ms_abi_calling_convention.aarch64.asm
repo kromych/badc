@@ -3,7 +3,7 @@ ms_abi_calling_convention.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -247,18 +247,13 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x2                // =2
                	bl	<addr>
-               	mov	x20, x0
-               	lsl	x16, x20, #1
-               	str	x16, [sp, #0x38]
-               	add	x16, x20, x20, lsl #1
-               	str	x16, [sp, #0x30]
-               	cmp	w20, #0x2
+               	lsl	x1, x0, #1
+               	add	x2, x0, x0, lsl #1
+               	cmp	w0, #0x2
                	b.ne	<addr>
-               	ldr	x16, [sp, #0x38]
-               	cmp	w16, #0x4
+               	cmp	w1, #0x4
                	b.ne	<addr>
-               	ldr	x16, [sp, #0x30]
-               	cmp	w16, #0x6
+               	cmp	w2, #0x6
                	b.eq	<addr>
                	mov	x0, #0x9                // =9
                	ldp	x29, x30, [sp, #0x40]
@@ -268,26 +263,19 @@ Disassembly of section .text:
                	ret
                	mov	x0, #0x3                // =3
                	bl	<addr>
-               	mov	x21, x0
+               	mov	x20, x0
                	mov	x0, #0x4                // =4
                	bl	<addr>
-               	mov	x22, x0
+               	mov	x21, x0
                	mov	x0, #0x5                // =5
                	bl	<addr>
                	mov	x17, #0xa               // =10
-               	mul	x1, x22, x17
-               	add	x1, x21, x1
-               	mov	x17, #0x64              // =100
-               	mul	x2, x20, x17
-               	add	x1, x1, x2
-               	ldr	x16, [sp, #0x38]
-               	mov	x17, #0x3e8             // =1000
-               	mul	x2, x16, x17
-               	add	x1, x1, x2
-               	ldr	x16, [sp, #0x30]
-               	mov	x17, #0x2710            // =10000
-               	mul	x2, x16, x17
-               	add	x1, x1, x2
+               	mul	x1, x21, x17
+               	add	x1, x20, x1
+               	add	x1, x1, #0xc8
+               	add	x1, x1, #0xfa0
+               	mov	x17, #0xea60            // =60000
+               	add	x1, x1, x17
                	sxtw	x1, w1
                	mov	x17, #0x86a0            // =34464
                	movk	x17, #0x1, lsl #16

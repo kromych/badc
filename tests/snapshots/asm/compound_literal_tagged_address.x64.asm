@@ -3,7 +3,7 @@ compound_literal_tagged_address.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,40 +26,38 @@ Disassembly of section .text:
                	int3
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
+               	subq	$0x18, %rsp
                	leaq	<rip>, %rax # <addr>
                	movq	%rax, %rcx
                	orq	$0x1, %rcx
-               	movq	%rcx, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rcx
+               	movq	%rcx, 0x8(%rsp)
+               	movq	0x8(%rsp), %rcx
                	testb	$0x1, %cl
                	jne	<addr>
                	movl	$0x1, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
-               	movq	-0x8(%rbp), %rcx
+               	movq	0x8(%rsp), %rcx
                	andq	$-0x2, %rcx
                	cmpq	%rax, %rcx
                	je	<addr>
                	movl	$0x2, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	shrq	$0x2, %rax
-               	movq	%rax, -0x8(%rbp)
-               	movq	-0x8(%rbp), %rcx
+               	movq	%rax, 0x8(%rsp)
+               	movq	0x8(%rsp), %rcx
                	cmpq	%rax, %rcx
                	je	<addr>
                	movl	$0x3, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	movl	<rip>, %eax # <addr>
                	cmpl	$0x1e, %eax
                	je	<addr>
                	movl	$0x5, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq
                	xorl	%eax, %eax
-               	leave
+               	addq	$0x18, %rsp
                	retq

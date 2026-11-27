@@ -3,7 +3,7 @@ fp_const_return.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -12,22 +12,6 @@ Disassembly of section .text:
                	brk	#0x1
                	brk	#0x1
                	brk	#0x1
-
-<sum_zero>:
-               	mov	x1, #0x8                // =8
-               	sub	x2, x1, #0x1
-               	ldr	x2, [x0, x2, lsl #3]
-               	cbnz	x2, <addr>
-               	sub	x1, x1, #0x1
-               	cmp	w1, #0x0
-               	b.gt	<addr>
-               	cbnz	w1, <addr>
-               	movi	d0, #0000000000000000
-               	ret
-               	sub	x1, x1, #0x1
-               	ldr	x0, [x0, x1, lsl #3]
-               	scvtf	d0, x0
-               	ret
 
 <main>:
                	stp	x29, x30, [sp, #-0x10]!
@@ -63,17 +47,28 @@ Disassembly of section .text:
                	add	x0, x0, #0x1
                	cmp	w0, #0x2
                	b.lt	<addr>
-               	sub	x0, x29, #0x40
-               	mov	x1, #0x8                // =8
-               	bl	<addr>
-               	mov	x0, #0x0                // =0
-               	fmov	d17, x0
-               	fcmp	d0, d17
+               	sub	x1, x29, #0x40
+               	mov	x0, #0x8                // =8
+               	sub	x2, x0, #0x1
+               	ldr	x2, [x1, x2, lsl #3]
+               	cbnz	x2, <addr>
+               	sub	x0, x0, #0x1
+               	cmp	w0, #0x0
+               	b.gt	<addr>
+               	cbnz	w0, <addr>
+               	movi	d0, #0000000000000000
+               	movi	d1, #0000000000000000
+               	fcmp	d0, d1
                	b.eq	<addr>
                	mov	x0, #0x5                // =5
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	mov	x0, #0x0                // =0
                	add	sp, sp, #0x50
                	ldp	x29, x30, [sp], #0x10
                	ret
+               	sub	x0, x0, #0x1
+               	ldr	x0, [x1, x0, lsl #3]
+               	scvtf	d0, x0
+               	b	<addr>

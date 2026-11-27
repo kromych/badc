@@ -3,7 +3,7 @@ long_double_parameter_shapes.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -1128,7 +1128,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
                	fmov	d0, #2.00000000
                	fmov	d1, #3.00000000
                	fmov	d2, #4.00000000
@@ -1136,12 +1135,13 @@ Disassembly of section .text:
                	add	x16, sp, #0x70
                	fmov	x17, d0
                	bl	<addr>
-               	sub	x1, x29, #0xa0
+               	sub	x0, x29, #0xa0
                	add	x16, sp, #0x60
                	fmov	x17, d2
                	bl	<addr>
                	ldr	q0, [x7]
-               	ldr	q2, [x1]
+               	ldr	q2, [x0]
+               	mov	x0, #0x1                // =1
                	bl	<addr>
                	fmov	d1, #10.00000000
                	fcmp	d0, d1
@@ -1186,24 +1186,24 @@ Disassembly of section .text:
                	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x3                // =3
                	fmov	d1, #1.00000000
                	fmov	d2, #4.00000000
                	sub	x7, x29, #0x80
                	add	x16, sp, #0x80
                	fmov	x17, d1
                	bl	<addr>
-               	sub	x1, x29, #0x90
+               	sub	x0, x29, #0x90
                	add	x16, sp, #0x70
                	fmov	x17, d0
                	bl	<addr>
-               	sub	x2, x29, #0xa0
+               	sub	x1, x29, #0xa0
                	add	x16, sp, #0x60
                	fmov	x17, d2
                	bl	<addr>
                	ldr	q0, [x7]
-               	ldr	q1, [x1]
-               	ldr	q2, [x2]
+               	ldr	q1, [x0]
+               	ldr	q2, [x1]
+               	mov	x0, #0x3                // =3
                	bl	<addr>
                	fmov	d1, #7.50000000
                	fcmp	d0, d1
@@ -1212,21 +1212,21 @@ Disassembly of section .text:
                	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0x1                // =1
                	fmov	d0, #0.50000000
                	fmov	d1, #2.00000000
-               	mov	x1, #0x3                // =3
                	fmov	d2, #4.00000000
                	sub	x7, x29, #0x90
                	add	x16, sp, #0x70
                	fmov	x17, d1
                	bl	<addr>
-               	sub	x2, x29, #0xa0
+               	sub	x0, x29, #0xa0
                	add	x16, sp, #0x60
                	fmov	x17, d2
                	bl	<addr>
                	ldr	q1, [x7]
-               	ldr	q2, [x2]
+               	ldr	q2, [x0]
+               	mov	x0, #0x1                // =1
+               	mov	x1, #0x3                // =3
                	bl	<addr>
                	fmov	d1, #10.50000000
                	fcmp	d0, d1
@@ -1235,7 +1235,6 @@ Disassembly of section .text:
                	add	sp, sp, #0x100
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	mov	x0, #0xa                // =10
                	fmov	d0, #1.00000000
                	fmov	d1, #2.00000000
                	fmov	d2, #3.00000000
@@ -1250,60 +1249,61 @@ Disassembly of section .text:
                	add	x16, sp, #0x90
                	fmov	x17, d0
                	bl	<addr>
-               	sub	x1, x29, #0x60
+               	sub	x0, x29, #0x60
                	add	x16, sp, #0xa0
                	fmov	x17, d1
                	bl	<addr>
-               	sub	x2, x29, #0x50
+               	sub	x1, x29, #0x50
                	add	x16, sp, #0xb0
                	fmov	x17, d2
                	bl	<addr>
-               	sub	x3, x29, #0x40
+               	sub	x2, x29, #0x40
                	add	x16, sp, #0xc0
                	fmov	x17, d3
                	bl	<addr>
-               	sub	x4, x29, #0x30
+               	sub	x3, x29, #0x30
                	add	x16, sp, #0xd0
                	fmov	x17, d4
                	bl	<addr>
-               	sub	x5, x29, #0x20
+               	sub	x4, x29, #0x20
                	add	x16, sp, #0xe0
                	fmov	x17, d5
                	bl	<addr>
-               	sub	x6, x29, #0x10
+               	sub	x5, x29, #0x10
                	add	x16, sp, #0xf0
                	fmov	x17, d6
                	bl	<addr>
-               	sub	x8, x29, #0x80
+               	sub	x6, x29, #0x80
                	add	x16, sp, #0x80
                	fmov	x17, d7
                	bl	<addr>
-               	sub	x9, x29, #0x90
+               	sub	x8, x29, #0x90
                	add	x16, sp, #0x70
                	fmov	x17, d19
                	bl	<addr>
-               	sub	x10, x29, #0xa0
+               	sub	x9, x29, #0xa0
                	add	x16, sp, #0x60
                	fmov	x17, d20
                	bl	<addr>
-               	mov	x16, x9
+               	mov	x16, x8
                	ldr	x17, [x16]
                	str	x17, [sp]
                	ldr	x17, [x16, #0x8]
                	str	x17, [sp, #0x8]
-               	mov	x16, x10
+               	mov	x16, x9
                	ldr	x17, [x16]
                	str	x17, [sp, #0x10]
                	ldr	x17, [x16, #0x8]
                	str	x17, [sp, #0x18]
                	ldr	q0, [x7]
-               	ldr	q1, [x1]
-               	ldr	q2, [x2]
-               	ldr	q3, [x3]
-               	ldr	q4, [x4]
-               	ldr	q5, [x5]
-               	ldr	q6, [x6]
-               	ldr	q7, [x8]
+               	ldr	q1, [x0]
+               	ldr	q2, [x1]
+               	ldr	q3, [x2]
+               	ldr	q4, [x3]
+               	ldr	q5, [x4]
+               	ldr	q6, [x5]
+               	ldr	q7, [x6]
+               	mov	x0, #0xa                // =10
                	bl	<addr>
                	adrp	x16, <page>
                	ldr	d1, [x16, #0x8]

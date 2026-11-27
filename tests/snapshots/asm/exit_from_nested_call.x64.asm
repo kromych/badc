@@ -3,7 +3,7 @@ exit_from_nested_call.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -26,40 +26,43 @@ Disassembly of section .text:
                	int3
 
 <handler>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	movl	$0x3, %edi
                	callq	<addr>
                	ud2
 
 <descend>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x100, %rsp            # imm = 0x100
-               	movb	%dil, -0x100(%rbp)
+               	subq	$0x108, %rsp            # imm = 0x108
+               	movb	%dil, (%rsp)
                	testl	%edi, %edi
                	je	<addr>
+               	nopw	%cs:(%rax,%rax)
+               	nop
                	movq	%rdi, %rax
                	subl	$0x1, %eax
-               	movb	%al, -0xc0(%rbp)
+               	movb	%al, 0x40(%rsp)
                	je	<addr>
+               	nopw	%cs:(%rax,%rax)
+               	nopl	(%rax)
                	subl	$0x1, %eax
-               	movb	%al, -0x80(%rbp)
+               	movb	%al, 0x80(%rsp)
                	je	<addr>
+               	nopw	%cs:(%rax,%rax)
+               	nopl	(%rax)
                	subl	$0x1, %eax
-               	movb	%al, -0x40(%rbp)
+               	movb	%al, 0xc0(%rsp)
                	je	<addr>
                	leaq	-0x1(%rax), %rdi
                	callq	<addr>
-               	movsbq	-0x40(%rbp), %rcx
+               	movsbq	0xc0(%rsp), %rcx
                	addq	%rcx, %rax
-               	movsbq	-0x80(%rbp), %rcx
+               	movsbq	0x80(%rsp), %rcx
                	addq	%rcx, %rax
-               	movsbq	-0xc0(%rbp), %rcx
+               	movsbq	0x40(%rsp), %rcx
                	addq	%rcx, %rax
-               	movsbq	-0x100(%rbp), %rcx
+               	movsbq	(%rsp), %rcx
                	addq	%rcx, %rax
-               	leave
+               	addq	$0x108, %rsp            # imm = 0x108
                	retq
                	movl	$0x2, %edi
                	callq	<addr>
@@ -75,11 +78,10 @@ Disassembly of section .text:
                	ud2
 
 <main>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
+               	pushq	%rax
                	leaq	-<rip>, %rdi # <addr>
                	xorl	%esi, %esi
-               	movq	%rsi, %rdx
+               	xorl	%edx, %edx
                	callq	<addr>
                	movl	$0x8, %edi
                	callq	<addr>
@@ -88,5 +90,5 @@ Disassembly of section .text:
                	testl	%eax, %eax
                	cmovneq	%rdx, %rcx
                	movq	%rcx, %rax
-               	popq	%rbp
+               	popq	%r11
                	retq

@@ -3,7 +3,7 @@ inline_struct_return_multi_block.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -27,32 +27,32 @@ Disassembly of section .text:
                	sub	sp, sp, #0x10
                	mov	x0, #0x20               // =32
                	stur	w0, [x29, #-0x8]
-               	adrp	x2, <addr>
-               	add	x2, x2, <lo12>
+               	adrp	x3, <addr>
+               	add	x3, x3, <lo12>
                	ldur	w0, [x29, #-0x8]
                	adrp	x1, <addr>
                	add	x1, x1, <lo12>
                	lsr	x0, x0, #5
                	cmp	w0, #0x9
                	b.ne	<addr>
-               	adrp	x3, <page>
+               	adrp	x2, <page>
                	mov	x4, #0x1                // =1
-               	str	w4, [x3, #0x20]
+               	str	w4, [x2, #0x20]
                	cmp	w0, #0x4
                	b.lo	<addr>
-               	adrp	x3, <page>
+               	adrp	x2, <page>
                	mov	x4, #0x1                // =1
-               	str	w4, [x3, #0x20]
+               	str	w4, [x2, #0x20]
                	mov	x17, #0x18              // =24
                	mul	x0, x0, x17
                	add	x0, x1, x0
                	ldr	w1, [x0]
                	cbnz	w1, <addr>
                	adrp	x1, <page>
-               	mov	x3, #0x1                // =1
-               	str	w3, [x1, #0x20]
+               	mov	x2, #0x1                // =1
+               	str	w2, [x1, #0x20]
                	ldr	w1, [x0]
-               	ldr	w3, [x0, #0x4]
+               	ldr	w2, [x0, #0x4]
                	ldrh	w4, [x0, #0x8]
                	ldrb	w5, [x0, #0xa]
                	ldrb	w6, [x0, #0xb]
@@ -65,7 +65,7 @@ Disassembly of section .text:
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
-               	sxtw	x1, w3
+               	sxtw	x1, w2
                	add	x0, x0, x1
                	add	x0, x0, x4
                	sxtb	x1, w5
@@ -79,13 +79,12 @@ Disassembly of section .text:
                	b.ne	<addr>
                	adrp	x0, <page>
                	ldrsw	x0, [x0, #0x20]
-               	mov	x1, #0x7                // =7
-               	mov	x2, #0x0                // =0
                	cmp	x0, #0x0
-               	csel	x0, x1, x2, ne
+               	mov	x16, #0x7               // =7
+               	csel	x0, x16, xzr, ne
                	add	sp, sp, #0x10
                	ldp	x29, x30, [sp], #0x10
                	ret
                	and	x0, x1, #0x3
-               	ldrsw	x0, [x2, x0, lsl #2]
+               	ldrsw	x0, [x3, x0, lsl #2]
                	b	<addr>

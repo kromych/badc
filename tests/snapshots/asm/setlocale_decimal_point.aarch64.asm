@@ -3,7 +3,7 @@ setlocale_decimal_point.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -28,9 +28,9 @@ Disassembly of section .text:
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	ldr	x0, [x0]
+               	ldr	x2, [x20]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldr	x2, [x20]
                	bl	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x20]
@@ -56,22 +56,22 @@ Disassembly of section .text:
                	ldr	x20, [sp], #0x30
                	ret
                	bl	<addr>
-               	mov	x2, x0
-               	ldr	x0, [x2]
+               	mov	x1, x0
+               	ldr	x0, [x1]
+               	str	x1, [sp, #0x18]
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	str	x2, [sp, #0x18]
                	bl	<addr>
                	sxtw	x0, w0
-               	ldr	x2, [sp, #0x18]
+               	ldr	x1, [sp, #0x18]
                	cbz	x0, <addr>
                	adrp	x0, <page>
                	ldr	x0, [x0, <lo12>]
                	ldr	x0, [x0]
+               	ldr	x3, [x1]
+               	mov	x2, x20
                	adrp	x1, <page>
                	add	x1, x1, <lo12>
-               	ldr	x3, [x2]
-               	mov	x2, x20
                	bl	<addr>
                	mov	x0, #0x1                // =1
                	ldp	x29, x30, [sp, #0x20]

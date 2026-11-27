@@ -3,7 +3,7 @@ inline_asm_x64_mem_disp.x64:	file format elf64-x86-64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	xorl	%ebp, %ebp
                	movq	%rsp, %rdi
                	movl	$<entry_off>, %esi
@@ -103,24 +103,24 @@ Disassembly of section .text:
                	popq	%r13
                	popq	%rbp
                	retq
-               	leaq	<rip>, %rax # <addr>
-               	movq	<rip>, %rcx # <addr>
-               	cmpq	$0xcafe, %rcx           # imm = 0xCAFE
+               	leaq	<rip>, %rcx # <addr>
+               	movq	<rip>, %rax # <addr>
+               	cmpq	$0xcafe, %rax           # imm = 0xCAFE
                	je	<addr>
                	movl	$0x7, %eax
                	popq	%r12
                	popq	%r13
                	popq	%rbp
                	retq
-               	movq	<rip>, %rcx # <addr>
-               	cmpq	$0xfe, %rcx
+               	movq	<rip>, %rax # <addr>
+               	cmpq	$0xfe, %rax
                	je	<addr>
                	movl	$0x8, %eax
                	popq	%r12
                	popq	%r13
                	popq	%rbp
                	retq
-               	addq	$0x100, %rax            # imm = 0x100
+               	leaq	0x100(%rcx), %rax
                	leaq	<rip>, %r10 # <addr>
                	leaq	0x100(%r10), %r10
                	movabsq	$-0xff20ff20ff20ff3, %r11 # imm = 0xF00DF00DF00DF00D

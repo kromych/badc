@@ -3,7 +3,7 @@ computed_goto_const_static_table.aarch64:	file format elf64-littleaarch64
 
 Disassembly of section .text:
 
-<.text>:
+<_start>:
                	mov	x29, #0x0               // =0
                	mov	x0, sp
                	mov	x1, <entry_off>
@@ -16,13 +16,11 @@ Disassembly of section .text:
 <interp_ptr_const>:
                	mov	x2, x0
                	mov	x0, #0x0                // =0
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	mov	x1, #0x1                // =1
-               	ldrb	w5, [x2]
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
-               	ldr	x3, [x3, x5, lsl #3]
+               	mov	x1, #0x1                // =1
+               	ldrb	w3, [x2]
+               	ldr	x3, [x4, x3, lsl #3]
                	br	x3
                	add	x3, x1, #0x1
                	ldrb	w1, [x2, x1]
@@ -49,13 +47,11 @@ Disassembly of section .text:
 <interp_decl_const>:
                	mov	x2, x0
                	mov	x0, #0x0                // =0
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	mov	x1, #0x1                // =1
-               	ldrb	w5, [x2]
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
-               	ldr	x3, [x3, x5, lsl #3]
+               	mov	x1, #0x1                // =1
+               	ldrb	w3, [x2]
+               	ldr	x3, [x4, x3, lsl #3]
                	br	x3
                	add	x3, x1, #0x1
                	ldrb	w1, [x2, x1]
@@ -82,13 +78,11 @@ Disassembly of section .text:
 <interp_long>:
                	mov	x2, x0
                	mov	x0, #0x0                // =0
-               	adrp	x3, <page>
-               	add	x3, x3, <lo12>
-               	mov	x1, #0x1                // =1
-               	ldrb	w5, [x2]
                	adrp	x4, <page>
                	add	x4, x4, <lo12>
-               	ldr	x3, [x3, x5, lsl #3]
+               	mov	x1, #0x1                // =1
+               	ldrb	w3, [x2]
+               	ldr	x3, [x4, x3, lsl #3]
                	br	x3
                	add	x3, x1, #0x1
                	ldrb	w1, [x2, x1]

@@ -5839,31 +5839,6 @@ fn select_set_arms(
         .collect()
 }
 
-/// x86-64: the loads a reader takes as its memory operand, which emit no
-/// instruction of their own: [`fp_memory_operands`], and an integer load
-/// only a block's branch tests for zero (`cmp $0, mem`). None elsewhere.
-pub(crate) fn folded_loads(
-    func: &FunctionSsa,
-    target: Target,
-    use_counts: &[u32],
-) -> alloc::collections::BTreeSet<ValueId> {
-    if !target.is_x86_64() {
-        return alloc::collections::BTreeSet::new();
-    }
-    let mut out = fp_memory_operands(func, use_counts, fp_literal_operands(func, use_counts));
-    for block in &func.blocks {
-        if let super::super::ir::Terminator::Bz { cond, .. }
-        | super::super::ir::Terminator::Bnz { cond, .. } = block.terminator
-            && block.inst_range.contains(&cond)
-            && use_counts.get(cond as usize) == Some(&1)
-            && zero_testable_load(&func.insts[cond as usize])
-        {
-            out.insert(cond);
-        }
-    }
-    out
-}
-
 /// x86-64: the floating loads, through a pointer, a scaled index or the
 /// unit's data addressed off rip (`pc_rel`), whose one reader is the next
 /// instruction that emits code, a floating add, subtract, multiply or

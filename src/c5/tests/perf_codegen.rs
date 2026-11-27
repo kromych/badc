@@ -8782,6 +8782,72 @@ float sq(float x) { return x * g[0] / g[1]; }\n";
     m.finish();
 }
 
+/// `tests/perf/horner.c`, its clock read in place of `bench_clock.h`.
+fn horner_perf_source() -> String {
+    include_str!("../../../tests/perf/horner.c").replace(
+        "#include \"bench_clock.h\"",
+        "#include <time.h>\n\
+static double bench_ms(void) {\n\
+    struct timespec now;\n\
+    clock_gettime(CLOCK_MONOTONIC, &now);\n\
+    return (double)now.tv_sec * 1000.0 + (double)now.tv_nsec / 1000000.0;\n\
+}",
+    )
+}
+
+/// The loads LICM moves out of a loop stay as many as the bank holds: the
+/// rest are read from the table where the loop uses them, with no frame
+/// slot. The polynomial loops of `tests/perf/horner.c` hold sixteen
+/// coefficients; on x86-64 the Horner loop keeps most in registers and
+/// reads the others in its multiply-adds, and the Estrin loop, whose copies
+/// would crowd out its own values, keeps its loads. Over a 24-register
+/// floating bank on AArch64 neither loop stores or reloads a value. Each
+/// loop reread the slots its spilled copies took, every iteration.
+#[test]
+fn moved_loads_past_the_bank_are_read_where_they_are_used() {
+    let src = horner_perf_source();
+    let mut m = Misses::default();
+    let insns = x64(&src, "main");
+    let frame = |i: &X64Insn| matches!(i.mem_base(), Some(4 | 5));
+    let fma = |i: &X64Insn| i.vex && matches!(i.op, 0x3899..=0x38BF);
+    let inner: Vec<&[X64Insn]> = (insns.iter().enumerate())
+        .filter(|(_, b)| b.is_jcc() && b.target() <= b.at)
+        .filter_map(|(k, b)| {
+            let top = insns.iter().position(|i| i.at == b.target())?;
+            let body = &insns[top..=k];
+            (body.iter().any(fma) && !body.iter().any(|i| i.op == 0xE8)).then_some(body)
+        })
+        .collect();
+    let held = |body: &[X64Insn]| body.iter().filter(|i| fma(i) && i.reg_form()).count();
+    m.expect(
+        inner.len() >= 2
+            && !inner.iter().any(|body| body.iter().any(frame))
+            && inner.iter().any(|body| held(body) >= 8),
+        || format!("x86-64 main: {insns:x?}"),
+    );
+    let ws = function_words(
+        &object_with_pool(&src, Target::LinuxAarch64, (usize::MAX, 12)),
+        "main",
+    );
+    // FMADD (scalar, double), BL, and a load or store (op0 bits 27 and 25
+    // are 1 and 0) off sp or x29.
+    let fmadd = |w: u32| w & 0xFFE0_8000 == 0x1F40_0000;
+    let bl = |w: u32| w >> 26 == 0b100101;
+    let frame = |w: u32| w & 0x0A00_0000 == 0x0800_0000 && matches!((w >> 5) & 31, 29 | 31);
+    let loops: Vec<&[u32]> = (ws.iter().enumerate())
+        .filter_map(|(i, &w)| match a64_branch(w, i) {
+            Some((t, _)) if t >= 0 && t as usize <= i => Some(&ws[t as usize..=i]),
+            _ => None,
+        })
+        .filter(|body| body.iter().any(|&w| fmadd(w)) && !body.iter().any(|&w| bl(w)))
+        .collect();
+    m.expect(
+        loops.len() >= 2 && !loops.iter().any(|body| body.iter().any(|&w| frame(w))),
+        || format!("AArch64 main: {ws:08x?}"),
+    );
+    m.finish();
+}
+
 /// A leaf whose constant indices and multiply-adds fold away is weighed at
 /// the size it emits: a degree-15 polynomial helper, 31 instructions once
 /// each `c[k]` is a displacement and each product fused, is spliced at its

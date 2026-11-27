@@ -419,13 +419,19 @@ fn apply_heads(func: &mut FunctionSsa, heads: &[Head]) -> Undo {
 /// value the second allocation would have given a register anyway from
 /// looking free.
 pub(super) fn spill_traffic(func: &FunctionSsa, alloc: &Allocation) -> u64 {
+    (spill_traffic_by_block(func, alloc).into_iter()).fold(0, u64::saturating_add)
+}
+
+/// [`spill_traffic`] per block.
+pub(super) fn spill_traffic_by_block(func: &FunctionSsa, alloc: &Allocation) -> Vec<u64> {
     let weights = super::reg_alloc::block_weights(func);
     let spilled = |v: ValueId| -> bool {
         v != NO_VALUE && matches!(alloc.places.get(v as usize), Some(Place::Spill(_)))
     };
-    let mut total: u64 = 0;
+    let mut out = vec![0u64; func.blocks.len()];
     for (b, block) in func.blocks.iter().enumerate() {
         let wb = weights[b];
+        let total = &mut out[b];
         for idx in block.inst_range.clone() {
             let inst = &func.insts[idx as usize];
             if super::emit_common::is_dead_pure_counts(func, inst, idx, &alloc.use_counts) {
@@ -436,11 +442,11 @@ pub(super) fn spill_traffic(func: &FunctionSsa, alloc: &Allocation) -> u64 {
             // slot; its operand is not charged again.
             if let Inst::Copy { value, .. } = *inst {
                 let both = spilled(idx) && spilled(value);
-                total = total.saturating_add(wb * (1 + u64::from(both)));
+                *total = total.saturating_add(wb * (1 + u64::from(both)));
                 continue;
             }
             if spilled(idx) {
-                total = total.saturating_add(wb);
+                *total = total.saturating_add(wb);
             }
             if let Ok(i) = alloc
                 .call_saves
@@ -448,17 +454,17 @@ pub(super) fn spill_traffic(func: &FunctionSsa, alloc: &Allocation) -> u64 {
             {
                 let saves = &alloc.call_saves[i].1;
                 let moved = saves.len() + saves.iter().filter(|s| !s.stored).count();
-                total = total.saturating_add(wb.saturating_mul(moved as u64));
+                *total = total.saturating_add(wb.saturating_mul(moved as u64));
             }
             super::reg_alloc::for_each_operand(inst, |op| {
                 if spilled(op) {
-                    total = total.saturating_add(wb);
+                    *total = total.saturating_add(wb);
                 }
             });
         }
         block.terminator.for_each_operand(|op| {
             if spilled(op) {
-                total = total.saturating_add(wb);
+                *total = total.saturating_add(wb);
             }
         });
         // The stores and loads of the registers saved around regions.
@@ -468,9 +474,9 @@ pub(super) fn spill_traffic(func: &FunctionSsa, alloc: &Allocation) -> u64 {
             + saves.stores_at_start_of(b).len()
             + saves.loads_at_start_of(b).len()
             + saves.loads_at_end_of(b).len();
-        total = total.saturating_add(wb.saturating_mul(moved as u64));
+        *total = total.saturating_add(wb.saturating_mul(moved as u64));
     }
-    total
+    out
 }
 
 /// Allocate `func`, then retry with the spilled values' call-free runs

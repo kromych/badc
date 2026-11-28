@@ -2398,23 +2398,24 @@ impl Terminator {
     /// passes that renumber values. Exhaustive, so a new terminator does
     /// not compile until it answers here; a variant missed by a
     /// hand-maintained copy keeps a pre-rewrite value id.
-    ///
-    /// `Return` may carry `NO_VALUE` for a void return, which is passed
-    /// through unchanged.
     pub(crate) fn for_each_operand(&self, mut f: impl FnMut(ValueId)) {
+        if let Some(v) = self.operand() {
+            f(v);
+        }
+    }
+
+    /// The value the terminator reads; a return of none, a jump, and an
+    /// end that is not reached read none.
+    pub(crate) fn operand(&self) -> Option<ValueId> {
         match self {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => f(*cond),
-            Terminator::GotoIndirect { target } => f(*target),
-            Terminator::JumpTable { idx, .. } => f(*idx),
-            Terminator::Return(v) => {
-                if let Some(v) = v {
-                    f(*v);
-                }
-            }
+            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => Some(*cond),
+            Terminator::GotoIndirect { target } => Some(*target),
+            Terminator::JumpTable { idx, .. } => Some(*idx),
+            Terminator::Return(v) => *v,
             Terminator::Jmp(_)
             | Terminator::TailExt(_)
             | Terminator::AsmGoto { .. }
-            | Terminator::Unreachable => {}
+            | Terminator::Unreachable => None,
         }
     }
 

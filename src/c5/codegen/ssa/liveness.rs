@@ -19,7 +19,7 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::super::ir::{BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId};
+use super::super::ir::{BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, ValueId};
 
 /// Sentinel for a value outside the live-set universe.
 const NO_RANK: u32 = u32::MAX;
@@ -664,18 +664,7 @@ impl Liveness {
                     last_use_pos[v as usize] = term_pos;
                 }
             };
-            match &blk.terminator {
-                Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => term_use(*cond),
-                Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
-                    term_use(*target)
-                }
-                Terminator::Return(Some(v)) => term_use(*v),
-                Terminator::Return(None)
-                | Terminator::Jmp(_)
-                | Terminator::TailExt(_)
-                | Terminator::AsmGoto { .. }
-                | Terminator::Unreachable => {}
-            }
+            blk.terminator.for_each_operand(&mut term_use);
         }
 
         let blocks = BlockLiveness::compute_reading(func, &reads);
@@ -795,14 +784,7 @@ impl Liveness {
                 return true;
             }
         }
-        match &blk.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => *cond == x,
-            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
-                *target == x
-            }
-            Terminator::Return(Some(v)) => *v == x,
-            _ => false,
-        }
+        blk.terminator.operand() == Some(x)
     }
 
     /// Whether `v` is live at the program point immediately after the

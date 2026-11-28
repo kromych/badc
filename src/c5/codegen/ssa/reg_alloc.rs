@@ -4797,14 +4797,7 @@ fn use_weights(
                 w[root] = w[root].saturating_add(wb);
             }
         };
-        match block.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => bump_term(cond),
-            Terminator::Return(Some(v)) => bump_term(v),
-            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
-                bump_term(target)
-            }
-            _ => {}
-        }
+        block.terminator.for_each_operand(&mut bump_term);
     }
     w
 }
@@ -4841,14 +4834,7 @@ fn level_use_weights(
                 for_each_operand(&func.insts[i as usize], &mut bump);
             }
         }
-        match block.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => bump(cond),
-            Terminator::Return(Some(v)) => bump(v),
-            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
-                bump(target)
-            }
-            _ => {}
-        }
+        block.terminator.for_each_operand(&mut bump);
     }
     w
 }

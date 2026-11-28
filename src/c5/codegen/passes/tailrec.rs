@@ -269,14 +269,7 @@ fn use_mask(func: &FunctionSsa) -> Vec<bool> {
         for_each_operand(inst, &mut mark);
     }
     for blk in &func.blocks {
-        match blk.terminator {
-            Terminator::Return(Some(v)) => mark(v),
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(cond),
-            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
-                mark(target)
-            }
-            _ => {}
-        }
+        blk.terminator.for_each_operand(&mut mark);
     }
     used
 }

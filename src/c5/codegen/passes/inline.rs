@@ -1977,11 +1977,7 @@ fn value_use_mask(func: &FunctionSsa) -> Vec<bool> {
         inst.for_each_operand(|v| mark(v, &mut used));
     }
     for blk in &func.blocks {
-        match blk.terminator {
-            Terminator::Return(Some(v)) => mark(v, &mut used),
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(cond, &mut used),
-            _ => {}
-        }
+        blk.terminator.for_each_operand(|v| mark(v, &mut used));
     }
     used
 }

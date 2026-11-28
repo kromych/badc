@@ -74,7 +74,7 @@ use alloc::vec::Vec;
 
 use crate::c5::codegen::ssa::reg_alloc::for_each_operand;
 use crate::c5::codegen::ssa::tape::{self, At, Insertion};
-use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId};
+use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, ValueId};
 
 /// Byte ranges, relative to the object a pointer parameter points at,
 /// that a body reads and writes through it. A parameter absent from
@@ -988,17 +988,9 @@ fn split_objects(
             }
         }
     }
-    // A base address reaching a terminator or block accumulator escapes.
+    // A base address reaching a terminator escapes.
     for block in &func.blocks {
-        let v = match &block.terminator {
-            Terminator::Return(Some(v))
-            | Terminator::Bz { cond: v, .. }
-            | Terminator::Bnz { cond: v, .. }
-            | Terminator::GotoIndirect { target: v }
-            | Terminator::JumpTable { idx: v, .. } => *v,
-            _ => NO_VALUE,
-        };
-        if let Some(base) = base_of(v) {
+        if let Some(base) = block.terminator.operand().and_then(&base_of) {
             declined.insert(base);
         }
     }

@@ -1436,7 +1436,7 @@ fn call_forbid_masks(
 /// through scratch, the parameters an entry places. Kept off the pair,
 /// they leave it to the site, which then borrows it at worst. With `broad`,
 /// every integer value a starved instruction reads or writes, whatever its
-/// place, and so for the loops ([`x86_scratch_borrowed_in_loops`]).
+/// place.
 fn x86_scratch_starved(
     func: &FunctionSsa,
     target: Target,
@@ -1470,9 +1470,6 @@ fn x86_scratch_starved(
             }
         });
     }
-    out.extend(x86_scratch_borrowed_in_loops(
-        func, alloc, sites, tls, broad,
-    ));
     let reg = |v: ValueId| match alloc.places.get(v as usize) {
         Some(&Place::IntReg(r)) => 1u16 << r,
         _ => 0,
@@ -1534,11 +1531,12 @@ fn x86_scratch_starved(
 /// `broad`, every integer value living through such a site.
 fn x86_scratch_borrowed_in_loops(
     func: &FunctionSsa,
+    target: Target,
     alloc: &Allocation,
     sites: &ScratchSites,
-    tls: bool,
     broad: bool,
 ) -> Vec<ValueId> {
+    let tls = tls_addr_is_call(target, func);
     let depth = crate::c5::codegen::passes::layout::loop_depths(func);
     let block_of = crate::c5::codegen::passes::constfold_branch::block_index(func);
     let spilled = |v: ValueId| matches!(alloc.places.get(v as usize), Some(Place::Spill(_)));
@@ -1987,16 +1985,22 @@ pub(crate) fn free_fp_register(
 /// the module docs for the algorithm.
 pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> Allocation {
     let mut pair_off: Vec<bool> = Vec::new();
-    let mut round = 1;
-    loop {
+    for round in 1..=SCRATCH_ROUNDS {
         let alloc = allocate_keeping(func, target, fixed, &pair_off);
-        if round == SCRATCH_ROUNDS {
+        let Some(sites) = alloc.scratch_sites.as_ref() else {
             return alloc;
+        };
+        if round == SCRATCH_ROUNDS {
+            if x86_scratch_starved(func, target, &alloc, sites, false).is_empty() {
+                return alloc;
+            }
+            break;
         }
         let broad = round > PRECISE_SCRATCH_ROUNDS;
-        let starved = alloc.scratch_sites.as_ref().map_or_else(Vec::new, |sites| {
-            x86_scratch_starved(func, target, &alloc, sites, broad)
-        });
+        let mut starved = x86_scratch_starved(func, target, &alloc, sites, broad);
+        starved.extend(x86_scratch_borrowed_in_loops(
+            func, target, &alloc, sites, broad,
+        ));
         pair_off.resize(func.insts.len(), false);
         let mut fresh = false;
         for v in starved {
@@ -2005,8 +2009,11 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
         if !fresh {
             return alloc;
         }
-        round += 1;
     }
+    // A site the rounds left starved has no register to borrow, as its own
+    // values hold the rest: with every value off the pair, each site takes
+    // it free.
+    allocate_keeping(func, target, fixed, &vec![true; func.insts.len()])
 }
 
 /// x86-64 allocations that keep off [`X86_SCRATCH_PAIR`] only the values
@@ -2019,8 +2026,9 @@ pub(crate) fn allocate(func: &FunctionSsa, target: Target, fixed: FixedRegs) -> 
 /// blake2b's compression grows by 10 instructions and 15 stack accesses.
 const PRECISE_SCRATCH_ROUNDS: usize = 8;
 
-/// Allocations in all, past which the last stands and its starved sites
-/// borrow their scratch: the broad rounds settle within two.
+/// Allocations that mark values, the broad ones settling within two. The
+/// last stands with its looped sites borrowing their scratch, unless a
+/// site is still starved: one more then keeps every value off the pair.
 const SCRATCH_ROUNDS: usize = PRECISE_SCRATCH_ROUNDS + 3;
 
 /// [`allocate`], keeping the values `pair_off` marks off

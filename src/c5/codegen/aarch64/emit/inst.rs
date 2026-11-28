@@ -332,9 +332,9 @@ pub(super) fn emit_inst(
         } => emit_bit_field(
             code, dst, *value, *lsb, *width, *signed, alloc, frame, scratch,
         ),
-        Inst::BinopI { op, lhs, rhs_imm } => {
-            emit_binop_imm(code, *op, v, dst, *lhs, *rhs_imm, alloc, frame, scratch)
-        }
+        Inst::BinopI { op, lhs, rhs_imm } => emit_binop_imm(
+            code, func, *op, v, dst, *lhs, *rhs_imm, alloc, frame, scratch,
+        ),
         Inst::Call {
             target_pc,
             args,

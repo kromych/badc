@@ -690,7 +690,7 @@ mod tests {
             hints: alloc::vec![None; n],
             f32_values: alloc::vec![false; n],
             high_observed: Vec::new(),
-            high_clear: Vec::new(),
+            high_clear: Vec::new().into(),
             wide: alloc::vec![crate::c5::codegen::ssa::reg_alloc::VecWidth::Scalar; n],
             asm_preserve: (u32::MAX, u32::MAX),
             call_saves: Vec::new(),

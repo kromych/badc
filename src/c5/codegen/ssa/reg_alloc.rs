@@ -209,7 +209,9 @@ pub(crate) struct Allocation {
     /// out-of-range entries default to observed, keeping the extension.
     pub high_observed: Vec<bool>,
     /// Per value: a clear high word by range; unknown values are not clear.
-    pub high_clear: Vec<bool>,
+    /// Filled when first asked for ([`Allocation::high_clear`]): one aarch64
+    /// lowering reads it, and only of the allocation that is emitted.
+    pub high_clear: core::cell::OnceCell<Vec<bool>>,
     /// Per-value comparison operand width (see
     /// `passes::narrow`). True marks an integer comparison the emit
     /// issues in the 32-bit register form. Empty or out-of-range
@@ -391,8 +393,12 @@ impl Allocation {
         !self.high_observed.get(v as usize).copied().unwrap_or(true)
     }
 
-    pub(crate) fn high_clear(&self, v: ValueId) -> bool {
-        self.high_clear.get(v as usize).copied().unwrap_or(false)
+    /// Whether `v`, a value of the `func` this allocates, has a clear high
+    /// word by range.
+    pub(crate) fn high_clear(&self, func: &FunctionSsa, v: ValueId) -> bool {
+        use crate::c5::codegen::passes::drop_redundant_extend::compute_high_clear;
+        let table = self.high_clear.get_or_init(|| compute_high_clear(func));
+        table.get(v as usize).copied().unwrap_or(false)
     }
 
     /// True when no instruction and no terminator reads `v`. Unknown
@@ -2135,7 +2141,7 @@ fn allocate_keeping(
             hints,
             f32_values: Vec::new(),
             high_observed: Vec::new(),
-            high_clear: Vec::new(),
+            high_clear: Vec::new().into(),
             cmp32: Vec::new(),
             div32: Vec::new(),
             count_nonzero: Vec::new(),
@@ -3176,7 +3182,7 @@ fn allocate_keeping(
         high_observed: crate::c5::codegen::passes::drop_redundant_extend::compute_high_observed(
             func,
         ),
-        high_clear: crate::c5::codegen::passes::drop_redundant_extend::compute_high_clear(func),
+        high_clear: core::cell::OnceCell::new(),
         cmp32: func.cmp32.clone(),
         div32: func.div32.clone(),
         count_nonzero: if target.is_x86_64() {

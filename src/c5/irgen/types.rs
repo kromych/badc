@@ -337,7 +337,6 @@ pub(super) fn lvalue_shape_label(expr: &Expr) -> &'static str {
         Expr::CompoundAssign { .. } => "CompoundAssign",
         Expr::PreInc { .. } => "PreInc",
         Expr::PostInc { .. } => "PostInc",
-        Expr::Sizeof(_) => "Sizeof",
         Expr::CompoundLiteral { .. } => "CompoundLiteral",
         Expr::Comma { .. } => "Comma",
         Expr::Intrinsic { .. } => "Intrinsic",

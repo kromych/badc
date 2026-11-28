@@ -18,12 +18,6 @@
 //! stored as a symbol-table index, so the walker never re-runs name
 //! lookup.
 
-// Several node variants are produced by the parser but consumed
-// only by the walker. The dead-code lint flags any unused-arm
-// reachability that depends on parser sites we haven't wired
-// yet; allow it module-wide rather than per-variant.
-#![allow(dead_code)]
-
 use alloc::vec::Vec;
 
 use super::ir::{BinOp, MemOrder};
@@ -90,8 +84,6 @@ pub(crate) enum UnOp {
     Neg,
     /// Bitwise complement (`~`), C99 6.5.3.3.
     BitNot,
-    /// Logical complement (`!`), C99 6.5.3.3p5: result is `int` 0/1.
-    LogNot,
     /// `&expr` -- take the address of an lvalue. C99 6.5.3.2.
     AddrOf,
     /// `*expr` -- dereference a pointer. C99 6.5.3.2.
@@ -307,16 +299,6 @@ pub(crate) fn bitfield_slice_mask(width: u32, offset: u32) -> u128 {
     m << offset
 }
 
-/// Operand of `sizeof`. C99 6.5.3.4p2 allows either a type-name or
-/// a unary-expression. The parser folds the result to a constant at
-/// parse time -- the AST stores the resolved byte count and the
-/// node's own integer-literal type tag; the walker emits an `imm`.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct SizeofResolved {
-    pub size_bytes: i64,
-    pub result_ty: i64,
-}
-
 /// Expression node. Every variant carries a `ty: i64` matching the
 /// `i64` encoding the single-pass parser computes into `self.ty`,
 /// so the walker never re-runs type resolution.
@@ -469,8 +451,6 @@ pub(crate) enum Expr {
         ty: i64,
         nsw: bool,
     },
-    /// `sizeof <operand>`. Resolved to a constant at parse time.
-    Sizeof(SizeofResolved),
     /// `lhs, rhs`. C99 6.5.17 -- evaluate `lhs` for side effects,
     /// the value of the comma expression is `rhs`.
     Comma { lhs: ExprId, rhs: ExprId, ty: i64 },
@@ -638,6 +618,8 @@ pub(crate) enum Expr {
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum BlockItem {
     Stmt(StmtId),
+    // TODO: nothing builds this variant; a block item is a statement.
+    #[allow(dead_code)]
     Decl(DeclId),
 }
 
@@ -693,12 +675,6 @@ pub(crate) enum Stmt {
     GotoIndirect(ExprId),
     /// `label: body` (C99 6.8.1) -- the goto target.
     Labeled { label: LabelId, body: StmtId },
-    /// Inline assembly. `text` is the assembler source; `clobbers`
-    /// is the comma-separated clobber list.
-    Asm {
-        text: alloc::string::String,
-        clobbers: alloc::string::String,
-    },
     /// GNU C `asm goto`: extended asm whose template may branch to the
     /// C labels listed in `asm_blocks[idx].labels`. A statement (not
     /// an expression) because it ends the current basic block;
@@ -1197,7 +1173,6 @@ macro_rules! visit_data_offsets {
                 | Expr::CompoundAssign { .. }
                 | Expr::PreInc { .. }
                 | Expr::PostInc { .. }
-                | Expr::Sizeof { .. }
                 | Expr::Comma { .. }
                 | Expr::ShortCircuit { .. }
                 | Expr::Intrinsic { .. }
@@ -1354,14 +1329,11 @@ impl Ast {
 }
 
 /// Read the type tag off an expression node. Returns `None` for
-/// shapes that don't carry one (`Sizeof` is constant-evaluated
-/// and the walker doesn't peek into the result; intrinsics carry
-/// their own `ty`).
+/// shapes that don't carry one (intrinsics carry their own `ty`).
 pub(crate) fn expr_ty(e: &Expr) -> Option<i64> {
     match e {
         plain_ty_expr!(ty) => Some(*ty),
         Expr::Cast { to_ty, .. } => Some(*to_ty),
-        Expr::Sizeof(s) => Some(s.result_ty),
         // `sizeof <vla>` is a runtime `size_t`; c5 types it as `int`.
         Expr::VlaSizeof { .. } => Some(crate::c5::token::Ty::Int as i64),
         Expr::CompoundLiteral { ty, .. } => Some(*ty),

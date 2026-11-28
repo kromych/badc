@@ -171,11 +171,7 @@ impl Compiler {
         // An inline-asm memory operand reaches a local without an `&`
         // node for the address scan to find.
         if !self.ast.asm_blocks.is_empty()
-            || self
-                .ast
-                .stmts
-                .iter()
-                .any(|s| matches!(s, Stmt::Asm { .. } | Stmt::AsmGoto(_)))
+            || self.ast.stmts.iter().any(|s| matches!(s, Stmt::AsmGoto(_)))
         {
             return;
         }
@@ -377,7 +373,6 @@ impl Compiler {
     fn const_operand(&self, e: ExprId) -> Option<i64> {
         match self.ast.expr(e) {
             Expr::IntLit { val, .. } => Some(*val),
-            Expr::Sizeof(s) => Some(s.size_bytes),
             // The parser leaves a subscript's and a pointer step's
             // element scaling as a product of two literals.
             Expr::Binary { op, lhs, rhs, ty } => {

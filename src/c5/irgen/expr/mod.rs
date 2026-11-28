@@ -160,7 +160,6 @@ impl<'a> Walker<'a> {
                 );
                 self.walk_inc(b, *lvalue, *by, *ty, (Yields::Old, *nsw), checks)
             }
-            Expr::Sizeof(s) => Ok(b.imm(s.size_bytes)),
             // C99 6.3.2.1p3: a VLA lvalue decays to a pointer to its
             // first element -- the runtime base pointer the matching
             // `Decl::Vla` stored into `ptr_slot`.
@@ -354,7 +353,6 @@ impl<'a> Walker<'a> {
                 match op {
                     UnOp::Neg => Some(v.wrapping_neg()),
                     UnOp::BitNot => Some(!v),
-                    UnOp::LogNot => Some((v == 0) as i64),
                     UnOp::Renormalize { .. } => Some(crate::c5::vm::eval::eval_extend(
                         v,
                         super::access::load_kind_for(*ty, self.target),

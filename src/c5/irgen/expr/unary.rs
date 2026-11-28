@@ -7,8 +7,8 @@ use crate::c5::ast::expr_ty;
 impl<'a> Walker<'a> {
     /// Walk an `Expr::Unary` rvalue. AddrOf hands off to the lvalue
     /// walk and Deref loads through the address; Neg lowers to the
-    /// negate node of its operand's bank, BitNot and LogNot to a binop
-    /// against an immediate.
+    /// negate node of its operand's bank, BitNot to a binop against an
+    /// immediate.
     pub(super) fn walk_unary(
         &mut self,
         b: &mut SsaBuilder,
@@ -47,10 +47,6 @@ impl<'a> Walker<'a> {
             UnOp::BitNot => {
                 let v = self.walk_expr_rvalue(b, child)?;
                 Ok(b.binop_imm(BinOp::Xor, v, -1))
-            }
-            UnOp::LogNot => {
-                let v = self.walk_expr_rvalue(b, child)?;
-                Ok(b.binop_imm(BinOp::Eq, v, 0))
             }
             UnOp::Renormalize { nsw } => {
                 let v = self.walk_expr_rvalue(b, child)?;

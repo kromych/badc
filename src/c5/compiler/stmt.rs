@@ -551,7 +551,7 @@ impl Compiler {
     /// or `||`, through a comma's right operand. A cast to another integer
     /// type marks a deliberate integer.
     fn has_boolean_value(&self, e: Option<super::super::ast::ExprId>, ty: i64) -> bool {
-        use super::super::ast::{Expr, UnOp};
+        use super::super::ast::Expr;
         if super::types::is_bool_ty(unqualified_version_ty(ty)) {
             return true;
         }
@@ -560,10 +560,7 @@ impl Compiler {
             match self.ast.expr(id) {
                 Expr::Comma { rhs, .. } => e = Some(*rhs),
                 Expr::Binary { op, .. } => return crate::c5::ir::is_comparison_op(*op),
-                Expr::ShortCircuit { .. }
-                | Expr::Unary {
-                    op: UnOp::LogNot, ..
-                } => return true,
+                Expr::ShortCircuit { .. } => return true,
                 _ => return false,
             }
         }

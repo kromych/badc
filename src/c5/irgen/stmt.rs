@@ -239,7 +239,6 @@ impl<'a> Walker<'a> {
                 let blk = self.switch_dispatch.last().and_then(|d| d.default);
                 self.walk_case_marker(b, blk, body_id)
             }
-            Stmt::Asm { .. } => Err(WalkError::InvalidStmt { id, kind: "Asm" }),
             Stmt::Decl(d) => {
                 let decl_id = *d;
                 self.walk_decl(b, decl_id)?;

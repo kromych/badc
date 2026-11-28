@@ -1489,6 +1489,52 @@ fn bounds_strict_traps_recovers_and_turns_off_as_bounds_does() {
     assert_eq!(off, (0, 0));
 }
 
+/// C17 6.8.5p4: a subscript by a loop's counter, which the loop's
+/// condition holds below the bound, cannot fail its check. With the check
+/// in its body the loop stayed rolled, the sum was no constant, and the
+/// call behind the comparison of it, to a function no unit defines, did
+/// not link.
+#[test]
+fn a_subscript_the_loop_condition_bounds_carries_no_check() {
+    let dir = TempDir::new("badc-sanitize-counted");
+    let src = dir.join("counted.c");
+    std::fs::write(
+        &src,
+        "void never_defined(void);
+         static const unsigned char len[] = {3, 5, 7, 9};
+         static inline unsigned total(void) {
+    unsigned l = 2;
+    int i;
+             for (i = 0; i < sizeof len / sizeof len[0]; i++)
+        l += len[i];
+             return l;
+}
+         int main(void) {
+    if (total() > 255)
+        never_defined();
+             return total() == 26 ? 0 : 1;
+}
+",
+    )
+    .unwrap();
+    for flag in ["-fsanitize=bounds", "-fsanitize=bounds-strict"] {
+        let exe = dir.join(format!("counted{}", flag.replace('=', "_")));
+        let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+            .args(["-q", "-O", flag, "-o"])
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{flag}: {}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let o = run(&exe, &[]);
+        assert!(o.status.success() && o.stderr.is_empty(), "{flag}: {o:?}");
+    }
+}
+
 const BOOLS: &str = "#include <stdio.h>
 #include <string.h>
 struct in { int v[2]; };

@@ -47,6 +47,13 @@
 //! own branch never ends a block: the trip count decided which way it
 //! goes in every copy.
 //!
+//! A body block that branches to two blocks of the loop keeps it rolled.
+//! Where such a loop counts to a trip that unrolls and no other loop is
+//! left to expand, the comparisons a dominating branch answers are folded
+//! once (`simplify_branches::run_implied`) and the loops looked at again:
+//! a test of the counter against the bound the header holds it to is
+//! such a branch (C17 6.8.5p4).
+//!
 //! A value the loop defines and a block past it reads has to be
 //! rebuilt where the copies rejoin. SSA dominance puts every such read
 //! in a block the loop is the only way into, so the rebuild runs over
@@ -59,6 +66,7 @@
 //! loop of a function with a returns-twice call (cloned call sites would
 //! multiply the setjmp return points).
 
+use alloc::boxed::Box;
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec;
 use alloc::vec::Vec;
@@ -117,12 +125,21 @@ fn run_one(func: &mut FunctionSsa) {
     {
         return;
     }
+    let mut implied = false;
     for _ in 0..MAX_LOOPS_PER_FUNC {
         if emitted_insts(func) > MAX_FUNC_INSTS {
             return;
         }
-        let Some(plan) = find_unrollable(func) else {
-            return;
+        let plan = match find_unrollable(func) {
+            Found::Loop(plan) => plan,
+            // A test the loop's own condition answers is a branch inside
+            // the body until the ranges fold it.
+            Found::Branching if !implied => {
+                implied = true;
+                super::simplify_branches::run_implied(func);
+                continue;
+            }
+            _ => return,
         };
         #[cfg(feature = "codegen_test")]
         if std::env::var("BADC_LOG_UNROLL").is_ok() {
@@ -186,15 +203,24 @@ impl LoopShape {
     }
 }
 
-fn find_unrollable(func: &FunctionSsa) -> Option<Expansion> {
+/// What [`find_unrollable`] found.
+enum Found {
+    Loop(Box<Expansion>),
+    /// No loop to expand, and one that counts to a trip that unrolls while
+    /// a block of its body branches to two blocks of it.
+    Branching,
+    None,
+}
+
+fn find_unrollable(func: &FunctionSsa) -> Found {
     if func.blocks.len() < 3 {
-        return None;
+        return Found::None;
     }
     let preds = predecessors(func);
     let idom = dominators(func);
     let rpo = rpo_numbers(func);
     let loops = natural_loops(func, &idom, &preds, &rpo);
-    loops.iter().find_map(|l| {
+    let plan = loops.iter().find_map(|l| {
         let shape = try_shape(func, l.header, &l.body, &preds).filter(|s| {
             let cap = if s.chain_exits.iter().any(Option::is_some) {
                 MAX_EXIT_REGION_INSTS
@@ -206,7 +232,31 @@ fn find_unrollable(func: &FunctionSsa) -> Option<Expansion> {
                 && s.region_blocks() <= MAX_REGION_BLOCKS
         })?;
         Expansion::build(func, shape, &preds)
-    })
+    });
+    if let Some(plan) = plan {
+        return Found::Loop(Box::new(plan));
+    }
+    let branching = loops.iter().any(|l| {
+        let inside = |b: BlockId| l.body.binary_search(&b).is_ok();
+        let forks = |b: &BlockId| {
+            *b != l.header
+                && matches!(
+                    func.blocks[*b as usize].terminator,
+                    Terminator::Bz { target, fall_through, .. }
+                    | Terminator::Bnz { target, fall_through, .. }
+                        if inside(target) && inside(fall_through)
+                )
+        };
+        l.body.iter().any(forks)
+            && Counter::of(func, l.header, &l.body, &preds)
+                .and_then(|c| c.trips(func))
+                .is_some_and(|trip| trip <= MAX_TRIP)
+    });
+    if branching {
+        Found::Branching
+    } else {
+        Found::None
+    }
 }
 
 fn shape_inst_count(func: &FunctionSsa, s: &LoopShape) -> usize {
@@ -230,6 +280,112 @@ fn emitted_insts(func: &FunctionSsa) -> usize {
         .count()
 }
 
+/// A loop's exit test and the values its header steps, read off the header
+/// and its two predecessors.
+struct Counter {
+    cond: ValueId,
+    /// The successor the header's branch names as its target.
+    target: BlockId,
+    is_bz: bool,
+    enter: BlockId,
+    exit: BlockId,
+    latch: BlockId,
+    /// One entry per header phi: `(phi id, preheader init operand,
+    /// latch back-edge operand)`.
+    phis: Vec<(ValueId, ValueId, ValueId)>,
+}
+
+impl Counter {
+    fn of(
+        func: &FunctionSsa,
+        h: BlockId,
+        body: &[BlockId],
+        preds: &[Vec<BlockId>],
+    ) -> Option<Counter> {
+        // Entry block 0 has the function's implicit entry edge; a loop
+        // block there has an extra predecessor the phi gate cannot see.
+        // A label's address names one block; the expansion replaces it.
+        if h == 0 || body.iter().any(|b| func.computed_goto_targets.contains(b)) {
+            return None;
+        }
+        // The header conditionally exits: one successor in the loop, one out.
+        let (cond, target, fall, is_bz) = match func.blocks[h as usize].terminator {
+            Terminator::Bz {
+                cond,
+                target,
+                fall_through,
+            } => (cond, target, fall_through, true),
+            Terminator::Bnz {
+                cond,
+                target,
+                fall_through,
+            } => (cond, target, fall_through, false),
+            _ => return None,
+        };
+        let in_body = |b: BlockId| body.binary_search(&b).is_ok();
+        let (enter, exit) = match (in_body(target), in_body(fall)) {
+            (true, false) => (target, fall),
+            (false, true) => (fall, target),
+            _ => return None,
+        };
+        // Exactly two header predecessors: the latch and one preheader
+        // outside the loop. More entries mean a side entry the phi
+        // rewrite cannot express.
+        let (latch, pre) = match preds[h as usize][..] {
+            [a, b] if in_body(a) && !in_body(b) => (a, b),
+            [a, b] if in_body(b) && !in_body(a) => (b, a),
+            _ => return None,
+        };
+        let mut phis: Vec<(ValueId, ValueId, ValueId)> = Vec::new();
+        for pc in func.blocks[h as usize].inst_range.clone() {
+            let Inst::Phi { incoming, .. } = &func.insts[pc as usize] else {
+                continue;
+            };
+            if incoming.len() != 2 {
+                return None;
+            }
+            let (mut init, mut back) = (None, None);
+            for &(pb, v) in incoming {
+                if pb == latch {
+                    back = Some(v);
+                } else if pb == pre {
+                    init = Some(v);
+                } else {
+                    return None;
+                }
+            }
+            let (init, back) = (init?, back?);
+            if init == NO_VALUE || back == NO_VALUE {
+                return None;
+            }
+            phis.push((pc, init, back));
+        }
+        if phis.is_empty() {
+            return None;
+        }
+        Some(Counter {
+            cond,
+            target,
+            is_bz,
+            enter,
+            exit,
+            latch,
+            phis,
+        })
+    }
+
+    fn trips(&self, func: &FunctionSsa) -> Option<usize> {
+        count_trips(
+            func,
+            self.cond,
+            self.target,
+            self.exit,
+            self.is_bz,
+            &self.phis,
+        )
+    }
+}
+
 fn try_shape(
     func: &FunctionSsa,
     header: BlockId,
@@ -237,35 +393,12 @@ fn try_shape(
     preds: &[Vec<BlockId>],
 ) -> Option<LoopShape> {
     let h = header;
-    // Entry block 0 has the function's implicit entry edge; a loop
-    // block there has an extra predecessor the phi gate cannot see.
-    if h == 0 || body.len() < 2 || body.len() > MAX_LOOP_BLOCKS {
+    if body.len() < 2 || body.len() > MAX_LOOP_BLOCKS {
         return None;
     }
-    // A label's address names one block; the expansion replaces it.
-    if body.iter().any(|b| func.computed_goto_targets.contains(b)) {
-        return None;
-    }
-    // The header conditionally exits: one successor in the loop, one out.
-    let (cond, s1, s2, is_bz) = match func.blocks[h as usize].terminator {
-        Terminator::Bz {
-            cond,
-            target,
-            fall_through,
-        } => (cond, target, fall_through, true),
-        Terminator::Bnz {
-            cond,
-            target,
-            fall_through,
-        } => (cond, target, fall_through, false),
-        _ => return None,
-    };
+    let counter = Counter::of(func, h, body, preds)?;
+    let (enter, exit) = (counter.enter, counter.exit);
     let in_body = |b: BlockId| body.binary_search(&b).is_ok();
-    let (enter, exit) = match (in_body(s1), in_body(s2)) {
-        (true, false) => (s1, s2),
-        (false, true) => (s2, s1),
-        _ => return None,
-    };
     // The non-header blocks form a chain back to the header, each with
     // exactly one successor inside the loop; a second in-loop successor
     // is a multi-block body and stays rolled.
@@ -306,46 +439,13 @@ fn try_shape(
     if chain.len() + 1 != body.len() || chain.iter().any(|b| !in_body(*b)) {
         return None;
     }
-    let latch = *chain.last()?;
-    // Exactly two header predecessors: the latch and one preheader
-    // outside the loop. More entries mean a side entry the phi
-    // rewrite cannot express.
-    let hp = &preds[h as usize];
-    if hp.len() != 2 {
+    if chain.last() != Some(&counter.latch) {
         return None;
     }
-    let pre = match (hp[0] == latch, hp[1] == latch) {
-        (true, false) => hp[1],
-        (false, true) => hp[0],
-        _ => return None,
-    };
-    if in_body(pre) {
-        return None;
-    }
-    let mut phis: Vec<(ValueId, ValueId, ValueId)> = Vec::new();
     for b in core::iter::once(h).chain(chain.iter().copied()) {
         for pc in func.blocks[b as usize].inst_range.clone() {
             match &func.insts[pc as usize] {
-                Inst::Phi { incoming, .. } => {
-                    if b != h || incoming.len() != 2 {
-                        return None;
-                    }
-                    let (mut init, mut back) = (None, None);
-                    for &(pb, v) in incoming {
-                        if pb == latch {
-                            back = Some(v);
-                        } else if pb == pre {
-                            init = Some(v);
-                        } else {
-                            return None;
-                        }
-                    }
-                    let (init, back) = (init?, back?);
-                    if init == NO_VALUE || back == NO_VALUE {
-                        return None;
-                    }
-                    phis.push((pc, init, back));
-                }
+                Inst::Phi { .. } if b != h => return None,
                 // A volatile access is performed strictly per the
                 // abstract machine (C99 5.1.2.3p2 / 6.7.3p6); cloning
                 // duplicates it.
@@ -367,9 +467,6 @@ fn try_shape(
             }
         }
     }
-    if phis.is_empty() {
-        return None;
-    }
     // Each init must be defined outside the loop so copy 0 can
     // reference it directly.
     let in_loop = |v: ValueId| {
@@ -377,16 +474,16 @@ fn try_shape(
             .chain(chain.iter().copied())
             .any(|b| func.blocks[b as usize].inst_range.contains(&v))
     };
-    if phis.iter().any(|&(_, init, _)| in_loop(init)) {
+    if counter.phis.iter().any(|&(_, init, _)| in_loop(init)) {
         return None;
     }
-    let trip = count_trips(func, cond, s1, exit, is_bz, &phis)?;
+    let trip = counter.trips(func)?;
     Some(LoopShape {
         header: h,
         chain,
         exit,
         chain_exits,
-        phis,
+        phis: counter.phis,
         trip,
     })
 }

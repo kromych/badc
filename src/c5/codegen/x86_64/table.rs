@@ -10,8 +10,6 @@
 //! Operand order is Intel (`dst, src`), matching the database signatures. The
 //! caller passes operands already resolved to architectural register numbers.
 
-#![allow(dead_code)] // Catalog breadth runs ahead of lowering coverage.
-
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -122,6 +120,8 @@ pub(crate) enum Map {
     Legacy,
     Op0F,
     Op0F38,
+    /// `tools/gen_isa.py` emits this map; no cataloged form is in it yet.
+    #[allow(dead_code)]
     Op0F3A,
 }
 
@@ -836,6 +836,7 @@ fn describe_operands(ops: &[Opnd]) -> String {
 /// that match, the shortest encoding is chosen (ties broken by catalog
 /// order), which deterministically reproduces the assembler's preference for
 /// the `83 /r` imm8 short form, the accumulator immediate forms, and the like.
+#[cfg(test)]
 pub(crate) fn encode(
     mnem: Mnem,
     width_override: Option<u8>,

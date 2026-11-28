@@ -28,7 +28,6 @@
 //! `Inst`.
 
 #![cfg(feature = "std")]
-#![allow(dead_code)]
 
 use alloc::format;
 use alloc::string::String;

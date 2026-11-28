@@ -26,7 +26,7 @@
 // outside the implemented subset; `x86_64::lower` turns that into a
 // compile error.
 
-#![allow(dead_code, clippy::too_many_arguments)]
+#![allow(clippy::too_many_arguments)]
 
 mod arith;
 mod call;
@@ -124,10 +124,6 @@ const NO_SCRATCH: u8 = 0xFF;
 /// The plan outside the planned sites of a function whose values hold the
 /// pair.
 const NO_PLAN: ScratchPlan = ScratchPlan::free([NO_SCRATCH; 2]);
-/// Further scratches inside the allocator's `caller_gprs` pool: a handler
-/// that uses one must check that no `rd` or operand place aliases it.
-const SCRATCH_RCX: Reg = Reg(1);
-const SCRATCH_RDX: Reg = Reg(2);
 
 /// One of the two scratch registers of the site being lowered
 /// ([`ScratchPlan`]): none holds an operand or the result of the site.
@@ -395,12 +391,6 @@ impl Stage {
             Stage::Scratch(s) => scratch(code, s),
         }
     }
-}
-
-/// Extract the FP reg from a `Place`, or `None` if it's not an
-/// xmm register.
-fn fp_reg(place: Place) -> Option<Reg> {
-    place.fp_reg_u8().map(Reg)
 }
 
 /// The working xmm of an FP-producing handler: the allocated register for

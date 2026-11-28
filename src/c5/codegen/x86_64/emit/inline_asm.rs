@@ -1659,14 +1659,6 @@ const RIPREL_PROBE_DISP: i32 = 0x5B3D_71A7u32 as i32;
 /// that already carries the first probe: every byte differs again.
 const RIPREL_PROBE_DISP2: i32 = 0xA4C2_8E58u32 as i32;
 
-/// Byte offset of the four-byte run that differs between two encodings that
-/// vary only in a RIP-relative displacement. Returns `None` unless exactly
-/// four contiguous bytes differ -- an encoder-invariant check that the disp32
-/// is the sole variable field.
-fn riprel_disp32_field(a: &[u8], b: &[u8]) -> Option<usize> {
-    differing_run(a, b).filter(|&(_, n)| n == 4).map(|(s, _)| s)
-}
-
 /// The single contiguous run of bytes two equal-length encodings differ in,
 /// as (offset, length). `None` when they differ nowhere or in more than one
 /// run -- the encoder-invariant check that the probed field is the only

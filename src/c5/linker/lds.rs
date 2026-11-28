@@ -14,7 +14,6 @@
 //! operators.
 
 #![cfg(feature = "std")]
-#![allow(dead_code)]
 
 use crate::c5::diag::Code;
 use alloc::boxed::Box;

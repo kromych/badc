@@ -20,7 +20,6 @@
 // codegen until then. The test in this module exercises the
 // public surface, so the lints would still surface; gating
 // module-wide keeps the build clean.
-#![allow(dead_code)]
 
 use crate::c5::diag::Code;
 use alloc::format;

@@ -13,8 +13,6 @@
 //! The VM does not interpret this path (its inline-asm evaluator is x86-only),
 //! so AArch64 mnemonic inline asm is native-only.
 
-#![allow(dead_code)]
-
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;

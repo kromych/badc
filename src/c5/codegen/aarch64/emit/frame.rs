@@ -9,10 +9,6 @@ pub(crate) struct Frame {
     pub frame_bytes: u32,
     /// Byte distance from the frame base down to the allocator spill region.
     pub alloc_spill_base: u32,
-    /// Bytes of the parameter cell region between the locals and the
-    /// allocator spills: one 16-byte cell per register-carried parameter
-    /// once some register parameter's home store survives, 0 otherwise.
-    pub param_cells_bytes: u32,
     /// fp-relative offset of the lowest parameter cell; 0 when the region
     /// is empty.
     pub param_cells_off: i64,
@@ -204,6 +200,7 @@ impl Frame {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn compute_frame(
     func: &FunctionSsa,
     alloc: &Allocation,
@@ -326,7 +323,6 @@ pub(crate) fn compute_frame_with_tail_calls(
             aligned: static_region_bytes,
             outgoing: outgoing_bytes,
         },
-        param_cells_bytes,
         param_cells_off: if param_cells_bytes > 0 {
             -(upper_bytes as i64)
         } else {

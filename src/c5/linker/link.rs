@@ -13,7 +13,6 @@
 //! pours into the dynamic linker's PLT pool.
 
 #![cfg(feature = "std")]
-#![allow(dead_code)]
 
 use crate::c5::diag::Code;
 use alloc::borrow::Cow;

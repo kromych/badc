@@ -11,8 +11,6 @@
 //! Register numbers are architectural (0..31, 31 = xzr/sp per context). The
 //! `sf` bit (W vs X) is baked into the two separate catalog rows.
 
-#![allow(dead_code)] // Catalog breadth runs ahead of lowering coverage.
-
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;

@@ -450,7 +450,6 @@ pub(crate) fn emit_function(
             start: entry_mark.code,
             out,
             fcx,
-            ret_tags,
             tail_calls: tail_calls.clone(),
             entry,
             early_exit,
@@ -573,7 +572,6 @@ fn frame_bases_only(func: &FunctionSsa, alloc: &Allocation) -> Vec<bool> {
 struct FnEmit<'a, 'b> {
     out: Out<'a, 'b>,
     fcx: FnCtx<'b>,
-    ret_tags: &'b alloc::collections::BTreeMap<usize, i64>,
     /// Per block, the call it ends in as a tail call.
     tail_calls: Vec<Option<TailCall<'b>>>,
     entry: super::FunctionEntry,

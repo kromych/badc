@@ -34,7 +34,6 @@
 // here for completeness and aren't called by the lowering pass.
 // Suppress the dead-code lint for the whole module so adding the
 // next encoder doesn't need a per-item attribute.
-#![allow(dead_code)]
 
 use alloc::format;
 use alloc::vec::Vec;
@@ -2765,14 +2764,6 @@ pub(crate) fn enc_strb_reg(rt: Reg, rn: Reg, rm: Reg, ext: IndexExt) -> Insn {
     )
 }
 
-/// `LDRSH <Xt>, [<Xn|SP>, #imm]` -- 16-bit load sign-extended into
-/// the full 64-bit `Xt`, immediate offset scaled by 2. Used by
-/// [`LoadKind::I16`] for `short` lvalue reads. Encoding: opc=10
-/// (sign-extend to 64-bit), size=01 (halfword).
-pub(crate) fn enc_ldrsh_imm(rt: Reg, rn: Reg, imm: u32) -> Insn {
-    enc_mem(LDRSH, rt.0, rn, LDRSH.scaled(imm))
-}
-
 /// `LDRH <Wt>, [<Xn|SP>, #imm]` -- 16-bit load zero-extended into
 /// `Wt` (which clears the high 32 bits of `Xt`), immediate offset
 /// scaled by 2. Used by [`LoadKind::U16`] for `unsigned short` lvalue
@@ -2793,14 +2784,6 @@ pub(crate) fn enc_strh_imm(rt: Reg, rn: Reg, imm: u32) -> Insn {
 /// 64-bit register are also cleared).
 pub(crate) fn enc_ldrb_imm(rt: Reg, rn: Reg, imm: u32) -> Insn {
     enc_mem(LDRB, rt.0, rn, LDRB.scaled(imm))
-}
-
-/// `LDRSB <Xt>, [<Xn|SP>, #imm]` -- byte load sign-extended into
-/// the full 64-bit `Xt`. Used by [`LoadKind::I8`] for `signed char`
-/// lvalue reads. Encoding: opc=10 (sign-extend to 64-bit),
-/// size=00 (byte). Imm is unscaled (byte stride).
-pub(crate) fn enc_ldrsb_imm(rt: Reg, rn: Reg, imm: u32) -> Insn {
-    enc_mem(LDRSB, rt.0, rn, LDRSB.scaled(imm))
 }
 
 /// `STRB <Wt>, [<Xn|SP>, #imm]` -- byte store. Stores the low 8 bits
@@ -3115,57 +3098,6 @@ pub(crate) fn enc_ldur(rt: Reg, rn: Reg, imm: i32) -> Insn {
 /// Mirror of [`enc_ldur`].
 pub(crate) fn enc_stur(rt: Reg, rn: Reg, imm: i32) -> Insn {
     enc_mem(STR_X, rt.0, rn, STR_X.unscaled(imm))
-}
-
-/// `LDURSW <Xt>, [<Xn|SP>, #imm]` -- load 4 bytes, sign-extend to
-/// 64. Unscaled 9-bit signed offset.
-pub(crate) fn enc_ldursw(rt: Reg, rn: Reg, imm: i32) -> Insn {
-    enc_mem(LDRSW, rt.0, rn, LDRSW.unscaled(imm))
-}
-
-/// `LDUR <Wt>, [<Xn|SP>, #imm]` -- load 4 bytes into a 32-bit
-/// register, zero-extending to the full 64-bit Xt.
-pub(crate) fn enc_ldur32(rt: Reg, rn: Reg, imm: i32) -> Insn {
-    enc_mem(LDR_W, rt.0, rn, LDR_W.unscaled(imm))
-}
-
-/// `LDURSH <Xt>, [<Xn|SP>, #imm]` -- load 2 bytes, sign-extend to
-/// 64. Unscaled 9-bit signed offset.
-pub(crate) fn enc_ldursh(rt: Reg, rn: Reg, imm: i32) -> Insn {
-    enc_mem(LDRSH, rt.0, rn, LDRSH.unscaled(imm))
-}
-
-/// `LDURH <Wt>, [<Xn|SP>, #imm]` -- load 2 bytes, zero-extend
-/// (to 32 bits, implicitly to 64). Unscaled 9-bit signed offset.
-pub(crate) fn enc_ldurh(rt: Reg, rn: Reg, imm: i32) -> Insn {
-    enc_mem(LDRH, rt.0, rn, LDRH.unscaled(imm))
-}
-
-/// `LDURSB <Xt>, [<Xn|SP>, #imm]` -- load 1 byte, sign-extend to
-/// 64. Unscaled 9-bit signed offset.
-pub(crate) fn enc_ldursb(rt: Reg, rn: Reg, imm: i32) -> Insn {
-    enc_mem(LDRSB, rt.0, rn, LDRSB.unscaled(imm))
-}
-
-/// `LDURB <Wt>, [<Xn|SP>, #imm]` -- load 1 byte, zero-extend
-/// (to 32 bits, implicitly to 64). Unscaled 9-bit signed offset.
-pub(crate) fn enc_ldurb(rt: Reg, rn: Reg, imm: i32) -> Insn {
-    enc_mem(LDRB, rt.0, rn, LDRB.unscaled(imm))
-}
-
-/// `STUR <Wt>, [<Xn|SP>, #imm]` -- store low 32 bits of Xt.
-pub(crate) fn enc_stur32(rt: Reg, rn: Reg, imm: i32) -> Insn {
-    enc_mem(STR_W, rt.0, rn, STR_W.unscaled(imm))
-}
-
-/// `STURH <Wt>, [<Xn|SP>, #imm]` -- store low 16 bits of Xt.
-pub(crate) fn enc_sturh(rt: Reg, rn: Reg, imm: i32) -> Insn {
-    enc_mem(STRH, rt.0, rn, STRH.unscaled(imm))
-}
-
-/// `STURB <Wt>, [<Xn|SP>, #imm]` -- store low 8 bits of Xt.
-pub(crate) fn enc_sturb(rt: Reg, rn: Reg, imm: i32) -> Insn {
-    enc_mem(STRB, rt.0, rn, STRB.unscaled(imm))
 }
 
 /// `LSL <Xd>, <Xn>, #shift` -- logical shift left by immediate.
@@ -3550,13 +3482,6 @@ pub(crate) fn emit_mov_reg(code: &mut CodeBuf, rd: Reg, rn: Reg) {
 pub(crate) enum BranchKind {
     /// Unconditional `B` (PC-relative, 26-bit signed offset).
     B,
-    /// Conditional `CBZ <Xt>` (compare-and-branch on zero).
-    Cbz(Reg),
-    /// Conditional `CBNZ <Xt>`.
-    Cbnz(Reg),
-    /// `B.<cond>` -- conditional branch reading the NZCV flags.
-    /// Emitted by the cmp+branch fusion peephole.
-    Bcc(Cond),
     /// `BL` for direct subroutine calls. Same encoding family as `B`,
     /// distinguished only by the link bit.
     Bl,
@@ -3904,9 +3829,6 @@ fn apply_fixups(
         // The placeholder is the same branch: its text reads the field.
         let insn = match f.kind {
             BranchKind::B => enc_b(delta_insns),
-            BranchKind::Cbz(rt) => enc_cbz(rt, delta_insns),
-            BranchKind::Cbnz(rt) => enc_cbnz(rt, delta_insns),
-            BranchKind::Bcc(cond) => enc_b_cond(cond, delta_insns),
             BranchKind::Bl => enc_bl(delta_insns),
         };
         code[f.native_offset..f.native_offset + 4].copy_from_slice(&insn.word.to_le_bytes());

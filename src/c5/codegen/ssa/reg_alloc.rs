@@ -3671,6 +3671,14 @@ fn asm_preserve_masks(func: &FunctionSsa, target: Target, region_base: Option<u8
     )
 }
 
+/// What [`check_allocation`] reads of the saves: whether two values share
+/// a register, and the saves around each call.
+#[cfg(feature = "codegen_test")]
+type SavesRead<'a> = (
+    &'a dyn Fn(ValueId, ValueId) -> bool,
+    &'a [(ValueId, Vec<CallSave>)],
+);
+
 /// [`check_allocation`], under the `codegen_test` feature and only when
 /// `BADC_VERIFY_ALLOC` is set, so it never runs in a production or
 /// normal test build.
@@ -3682,10 +3690,7 @@ fn verify_allocation(
     liveness: &super::liveness::Liveness,
     fp_const: &[bool],
     use_counts: &[u32],
-    saves: (
-        &dyn Fn(ValueId, ValueId) -> bool,
-        &[(ValueId, Vec<CallSave>)],
-    ),
+    saves: SavesRead<'_>,
 ) {
     if std::env::var("BADC_VERIFY_ALLOC").is_ok() || ALLOCATION_CHECK.with(|c| c.get()) {
         check_allocation(
@@ -3738,10 +3743,7 @@ fn check_allocation(
     liveness: &super::liveness::Liveness,
     fp_const: &[bool],
     use_counts: &[u32],
-    (shares, call_saves): (
-        &dyn Fn(ValueId, ValueId) -> bool,
-        &[(ValueId, Vec<CallSave>)],
-    ),
+    (shares, call_saves): SavesRead<'_>,
 ) {
     let first = core::cell::RefCell::new(None::<alloc::string::String>);
     let report = |msg: alloc::string::String| {
@@ -4131,7 +4133,7 @@ thread_local! {
 
 /// Run `f` with every allocation on this thread checked, as under
 /// `BADC_VERIFY_ALLOC`: a violation panics.
-#[cfg(feature = "codegen_test")]
+#[cfg(all(test, feature = "codegen_test"))]
 pub(crate) fn with_allocation_check<R>(f: impl FnOnce() -> R) -> R {
     let prior = ALLOCATION_CHECK.with(|c| c.replace(true));
     struct Restore(bool);

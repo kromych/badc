@@ -1216,6 +1216,43 @@ def render_test(
     return text
 
 
+def stopped_early(ran: Step) -> bool:
+    """Whether a reducer exited with an error inside its budget."""
+    return not ran.timed_out and ran.status != 0
+
+
+def run_reducer(
+    name: str,
+    argv: list[str],
+    work: Path,
+    test: Path,
+    per_test: float,
+    seconds: float,
+    jobs: int,
+) -> tuple[Step, Path]:
+    """Run the reducer over `work/candidate.c`; the run and where its output is."""
+    if name == "c_reduce":
+        command = [
+            *argv,
+            "candidate.c",
+            "-o",
+            "reduced.c",
+            "--expect-status",
+            "0",
+            "--expect",
+            "",
+            "--timeout",
+            str(per_test),
+            "--",
+            sys.executable,
+            str(test),
+            "{}",
+        ]
+        return run_command(command, work, seconds), work / "reduced.c"
+    command = [*argv, "--n", str(jobs), "--timeout", str(int(per_test)), "test.sh", "candidate.c"]
+    return run_command(command, work, seconds), work / "candidate.c"
+
+
 def reduce_finding(
     finding: Finding,
     reducer: tuple[str, list[str]],
@@ -1246,28 +1283,16 @@ def reduce_finding(
         finding.reduce_note = "the interestingness test does not hold on the case"
         return
     name, argv = reducer
-    if name == "c_reduce":
-        command = [
-            *argv,
-            "candidate.c",
-            "-o",
-            "reduced.c",
-            "--expect-status",
-            "0",
-            "--expect",
-            "",
-            "--timeout",
-            str(per_test),
-            "--",
-            sys.executable,
-            str(test),
-            "{}",
-        ]
-        result = work / "reduced.c"
-    else:
-        command = [*argv, "--n", str(jobs), "--timeout", str(int(per_test)), "test.sh", "candidate.c"]
-        result = candidate
-    ran = run_command(command, work, seconds)
+    ran, result = run_reducer(name, argv, work, test, per_test, seconds, jobs)
+    if name != "c_reduce" and stopped_early(ran):
+        # It did not run to its end, so what it left is not a reduction: the
+        # in-tree reducer takes the rest of the budget over the case as it was.
+        shutil.copyfile(finding.source, candidate)
+        failed = f"{name} exit {ran.status}"
+        name, argv = find_reducer("c_reduce")
+        left = max(seconds - ran.seconds, 0.0)
+        ran, result = run_reducer(name, argv, work, test, per_test, left, jobs)
+        name = f"{name} ({failed})"
     if not result.is_file():
         finding.reduce_note = f"{name} left no output ({'timed out' if ran.timed_out else 'exit ' + str(ran.status)})"
         return
@@ -1968,6 +1993,12 @@ def self_test() -> int:
             )
     check("the reducer can be turned off", find_reducer("none"), None)
     check("the in-tree reducer is the fallback", find_reducer("c_reduce")[0], "c_reduce")
+    ended = [Step([], status, 1.0, "", "", timed_out) for status, timed_out in ((0, False), (1, False), (None, True))]
+    check(
+        "a reducer that exits with an error inside its budget did not reduce",
+        [stopped_early(step) for step in ended],
+        [False, True, False],
+    )
     check(
         "diagnostic code",
         diagnostic_code("case.c:7: error: bad expression: got `;` [B2020] [syntax]"),

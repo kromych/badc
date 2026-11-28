@@ -602,7 +602,7 @@ def kernel_steps(nested: bool = False) -> list[str]:
         # released against; its warnings are not this step's subject, same as
         # in CI.
         "step env KCFLAGS=-Wno-error python3 demos/linux/verify.py "
-        '--kernel-dir "$ktree" --linker badc '
+        '--kernel-dir "$ktree" --linker badc --verify-ssa '
         f'--expect-units "$floor" --workdir {KERNEL_CACHE}/verify-out "$@"',
     ]
 

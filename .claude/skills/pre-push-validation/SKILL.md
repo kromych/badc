@@ -65,8 +65,10 @@ only SDK-libc target. `./scripts/validate_local_boxes.py` runs:
     absent rather than downgrading the check. The macOS host regenerates after
     every commit through the post-commit hook, so it carries no lane step.
     Skip with `--no-snapshots`.
-  * the kernel step: `demos/linux/verify.py --linker badc` over the pinned
-    `defconfig` release, on each Linux lane -- compile, link and boot. The
+  * the kernel step: `demos/linux/verify.py --linker badc --verify-ssa` over
+    the pinned `defconfig` release, on each Linux lane -- compile, link and
+    boot, every unit compiled under the SSA checks, so a pass that leaves
+    malformed SSA fails its unit by name. The
     boots are the ones CI runs, four plus a displacement probe per distinct
     displacement. x86_64 cannot pin one, and its unpinned probe draws
     displacement 0 on one boot in 479; such a probe is repeated, up to three

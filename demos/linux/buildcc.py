@@ -64,7 +64,8 @@ BADC_FALLBACK (file of kernel-relative source paths to leave to the real
 compiler), BADC_MANIFEST (append `badc|fallback|fail|missing|badc-asm|gas
 <TAB>source[<TAB>detail]` per kernel unit), BADC_WARN_LOG (append
 `cc<TAB>source<TAB>diagnostic` per line badc wrote on a successful compile),
-BADC_TIMEOUT (seconds per badc run, default 300).
+BADC_TIMEOUT (seconds per badc run, default 300), BADC_VERIFY_SSA (`1` to
+compile every unit under `--verify-ssa`, the SSA checks after each pass).
 """
 
 from __future__ import annotations
@@ -667,8 +668,8 @@ def main(argv: list[str]) -> int:
     if flags.dropped:
         report_unsupported(src, flags.dropped)
 
-    cmd = [badc, "--gnu", "-q", "-c", f"--target={target}", "-o", obj,
-           *flags.argv, src]
+    cmd = [badc, "--gnu", "-q", "-c", f"--target={target}",
+           *checks(os.environ), "-o", obj, *flags.argv, src]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True,
                            timeout=timeout)
@@ -700,7 +701,14 @@ def main(argv: list[str]) -> int:
     return rc or 1
 
 
+def checks(env) -> list[str]:
+    """The options $BADC_VERIFY_SSA adds to every badc compile."""
+    return ["--verify-ssa"] if env.get("BADC_VERIFY_SSA") == "1" else []
+
+
 def _self_test() -> int:
+    assert checks({}) == [] and checks({"BADC_VERIFY_SSA": "0"}) == []
+    assert checks({"BADC_VERIFY_SSA": "1"}) == ["--verify-ssa"]
     """Check the flag rewrite. Pure, and the gate reaches a kernel unit
     only after a tree is configured, so it is checked where a push can
     afford to say so."""

@@ -23,7 +23,8 @@ pub enum Check {
     /// minimum by -1, whose value its type cannot represent (C17 6.5p5).
     SignedIntegerOverflow,
     /// A left shift of a negative signed value, or of a value the result
-    /// type cannot represent shifted (C17 6.5.7p4).
+    /// type cannot represent shifted (C17 6.5.7p4). Under `-fwrapv` the
+    /// shift is defined, as gcc and clang take the option, and not checked.
     ShiftBase,
     /// A shift by a negative amount or by the promoted left operand's
     /// width or more (C17 6.5.7p3).
@@ -38,7 +39,9 @@ pub enum Check {
     /// for a trailing member taken to extend past its bound; clang's
     /// `array-bounds`. An address one past the last element is in bounds.
     Bounds,
-    /// [`Check::Bounds`] on those trailing members as well.
+    /// gcc's `bounds-strict`: [`Check::Bounds`] reaches those trailing
+    /// members as well. The option names both, and a subscript's check is
+    /// `bounds` wherever it is turned off, trapped, or recovered.
     BoundsStrict,
     /// A load of a `_Bool` whose byte is neither 0 nor 1 (C17 6.2.6.1p5,
     /// a trap representation).
@@ -191,6 +194,7 @@ impl Check {
             }
             "shift" => Some(Check::ShiftBase.bit() | Check::ShiftExponent.bit()),
             "array-bounds" => Some(Check::Bounds.bit()),
+            "bounds-strict" => Some(Check::Bounds.bit() | Check::BoundsStrict.bit()),
             _ => (Check::ALL.iter())
                 .find(|c| c.name() == name)
                 .map(|c| c.bit()),
@@ -297,7 +301,7 @@ impl Compiler {
     /// left shift, `-fsanitize=shift-base`; whether a check was attached.
     pub(super) fn sanitize_shift(&mut self, id: ExprId, ty: i64, amount_ty: i64) -> bool {
         let left = self.node_op(id) == Some(BinOp::Shl);
-        let base = if left && !is_unsigned_ty(ty) {
+        let base = if left && !is_unsigned_ty(ty) && !self.wrapv {
             Check::ShiftBase.bit()
         } else {
             0
@@ -581,13 +585,11 @@ impl Compiler {
         stride: i64,
         begin: (u32, u32),
     ) {
-        let check = if self.sanitize.runs(Check::BoundsStrict) {
-            Check::BoundsStrict
-        } else if self.sanitize.runs(Check::Bounds) && !base.flexible {
-            Check::Bounds
-        } else {
+        let check = Check::Bounds;
+        if !self.sanitize.runs(check) || (base.flexible && !self.sanitize.runs(Check::BoundsStrict))
+        {
             return;
-        };
+        }
         let Some(bytes) = base.bound.filter(|_| base.addr && stride > 0) else {
             return;
         };
@@ -1119,6 +1121,7 @@ impl Compiler {
         self.data.push(0);
         self.data_object_starts.push(at);
         self.ubsan_files.insert(name, at);
+        self.ubsan_interned_end = self.data.len() as i64;
         at
     }
 
@@ -1191,6 +1194,7 @@ impl Compiler {
         self.data.push(0);
         self.data_object_starts.push(at);
         self.ubsan_types.insert(key, at);
+        self.ubsan_interned_end = self.data.len() as i64;
         at
     }
 }

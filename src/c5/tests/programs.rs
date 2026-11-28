@@ -3892,6 +3892,22 @@ fn type_name_function_of_function_pointer_typedef() {
 }
 
 #[test]
+fn tentative_array_sized_later() {
+    // C17 6.9.2p2: `T x[];` and a later `T x[N];` with no initializer are
+    // one zero-filled object of N elements, wherever the target keeps
+    // storage no initializer names.
+    for target in [
+        crate::Target::LinuxX64,
+        crate::Target::LinuxAarch64,
+        crate::Target::WindowsX64,
+        crate::Target::MacOSAarch64,
+    ] {
+        let name = "tentative_array_sized_later.c";
+        assert_eq!(super::run_fixture_for(name, target), 0, "{target:?}");
+    }
+}
+
+#[test]
 fn tentative_definition_completed_later() {
     // C99 6.9.2p2: an object declared while its type was incomplete is sized
     // and aligned by the type the unit ends with. The Microsoft targets type

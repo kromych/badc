@@ -56,24 +56,35 @@ struct Opts<'a> {
     converge_arms: bool,
 }
 
+const CLEANUP: Opts<'static> = Opts {
+    const_data: None,
+    addr_facts: None,
+    resolve_constant_p: false,
+    fold_selects: false,
+    implied_ranges: false,
+    const_stores: false,
+    param_ranges: &[],
+    merge_blocks: false,
+    converge_arms: false,
+};
+
 /// The post-walk correctness cleanup, run at every optimization level.
 pub(crate) fn run(funcs: &mut [FunctionSsa]) {
     for func in funcs {
-        run_one(
-            func,
-            &Opts {
-                const_data: None,
-                addr_facts: None,
-                resolve_constant_p: false,
-                fold_selects: false,
-                implied_ranges: false,
-                const_stores: false,
-                param_ranges: &[],
-                merge_blocks: false,
-                converge_arms: false,
-            },
-        );
+        run_one(func, &CLEANUP);
     }
+}
+
+/// The cleanup with the comparisons a dominating branch answers folded
+/// as well ([`super::value_range`]).
+pub(crate) fn run_implied(func: &mut FunctionSsa) {
+    run_one(
+        func,
+        &Opts {
+            implied_ranges: true,
+            ..CLEANUP
+        },
+    );
 }
 
 /// The `-O` form: const-object loads, select consumers, and null

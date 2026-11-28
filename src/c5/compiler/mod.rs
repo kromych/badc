@@ -2832,6 +2832,8 @@ pub struct Compiler {
     ubsan_types: alloc::collections::BTreeMap<(String, u16, u16), i64>,
     /// Each source file's name for the handlers, by name.
     ubsan_files: alloc::collections::BTreeMap<String, i64>,
+    /// A data offset past every descriptor and name the two maps hold.
+    ubsan_interned_end: i64,
     /// The subscript node and index node of the last subscript a bounds
     /// check was attached to, which a `&` applied to that subscript lets
     /// reach one past the last element.
@@ -3662,6 +3664,7 @@ impl Compiler {
             sanitize: opts.sanitize,
             ubsan_types: alloc::collections::BTreeMap::new(),
             ubsan_files: alloc::collections::BTreeMap::new(),
+            ubsan_interned_end: 0,
             bounds_subscript: None,
             ubsan_handlers: alloc::collections::BTreeMap::new(),
             operator_at: (0, 0),

@@ -20317,3 +20317,56 @@ fn an_attribute_warning_reports_at_the_call() {
         .collect();
     assert_eq!(lines, [4], "{:?}", build.diagnostics);
 }
+
+/// C17 6.5.1.1p3: the controlling expression of a generic selection and
+/// the associations it does not select are not evaluated, and what a
+/// bounds check staged for them goes with them. Each pointer slot of the
+/// data is relocated once, and a selection alone leaves none: a slot of a
+/// discarded operand's site stayed in the list, a second relocation of the
+/// slot the evaluated operand's site then took, or one past the data.
+#[test]
+fn a_check_site_of_an_unevaluated_operand_leaves_no_relocation() {
+    use crate::c5::compiler::CompileOptions;
+    use crate::c5::{Compiler, NativeOptions, OutputKind, Target, emit_native_with_options};
+    use crate::c5::{Sanitize, SanitizerCheck};
+    let sanitize = Sanitize {
+        enabled: SanitizerCheck::Bounds.bit(),
+        ..Sanitize::default()
+    };
+    let slots = |value: &str| {
+        let src = format!(
+            "struct n {{ unsigned int count[6]; int last; }};\n\
+             unsigned f(struct n *p, int dir) {{ return {value}; }}\n"
+        );
+        let options = CompileOptions::default()
+            .with_no_entry_point(true)
+            .with_sanitize(sanitize);
+        let program = Compiler::with_options(src, Target::LinuxX64, options)
+            .compile()
+            .expect("compile");
+        let opts = NativeOptions {
+            output_kind: OutputKind::Relocatable,
+            ..NativeOptions::default()
+        };
+        let bytes = emit_native_with_options(&program, Target::LinuxX64, opts).expect("emit");
+        let obj = crate::c5::linker::parse_native_elf(&bytes).expect("parse ET_REL");
+        let mut slots: alloc::vec::Vec<u64> = obj.data_relocs.iter().map(|r| r.offset).collect();
+        slots.sort_unstable();
+        slots
+    };
+    // A site holds its file's name and a descriptor of each of two types.
+    let x = "p->count[dir]";
+    for (value, sites) in [
+        (x.to_string(), 1),
+        (
+            format!("_Generic(({x}), unsigned int: 1, default: 2) + {x}"),
+            1,
+        ),
+        (format!("_Generic(({x}), char: 1, default: ({x})) + {x}"), 2),
+        (format!("_Generic(({x}), char: 1, default: 2)"), 0),
+    ] {
+        let slots = slots(&value);
+        assert_eq!(slots.len(), 3 * sites, "{value}: {slots:?}");
+        assert!(slots.windows(2).all(|w| w[0] != w[1]), "{value}: {slots:?}");
+    }
+}

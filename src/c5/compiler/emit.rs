@@ -178,9 +178,11 @@ impl Compiler {
     /// and drop everything recorded past the new end: later growth
     /// reuses those offsets for unrelated bytes, so a stale literal
     /// boundary could split a live object, a stale padding range or
-    /// alignment mark would describe live bytes as padding, and a
+    /// alignment mark would describe live bytes as padding, a
     /// staged-literal symbol left anchored there would claim storage
-    /// an unrelated object owns.
+    /// an unrelated object owns, a stale pointer slot would relocate
+    /// those bytes, and a check's descriptor or file name interned there
+    /// would be read out of them.
     ///
     /// Every entry records an offset at or near the data length at its
     /// push, so entries at or past `len` form a suffix; dropping them
@@ -195,7 +197,8 @@ impl Compiler {
             + self.const_data_ranges.len()
             + self.data_align_marks.len()
             + self.staged_literal_syms.len()
-            + self.func_name_objects.len();
+            + self.func_name_objects.len()
+            + self.data_relocs.len();
         let mut examined = pop_tail_past(&mut self.data_object_starts, |&s| s >= end);
         examined += pop_tail_past(&mut self.data_pad_ranges, |r| r.0 >= end);
         if let Some(last) = self.data_pad_ranges.last_mut() {
@@ -228,6 +231,20 @@ impl Compiler {
         // The retired `__func__` storage is gone, so a later reference
         // must materialize it again rather than resolve to the offset.
         examined += pop_tail_past(&mut self.func_name_objects, |&(.., o)| o >= end);
+        let slot_past = |r: &crate::c5::program::DataReloc| r.data_offset >= end as u64;
+        while let Some(slot) =
+            (self.data_relocs.last().filter(|r| slot_past(r))).map(|r| r.data_offset)
+        {
+            self.data_relocs.pop();
+            self.init_reloc_slots.remove(&slot);
+            examined += 1;
+        }
+        examined += usize::from(!self.data_relocs.is_empty());
+        if self.ubsan_interned_end > end {
+            self.ubsan_types.retain(|_, at| *at < end);
+            self.ubsan_files.retain(|_, at| *at < end);
+            self.ubsan_interned_end = end;
+        }
         super::initializer::note_init_bookkeeping(examined, recorded, 0);
         debug_assert!(self.data_object_starts.iter().all(|&s| s < end));
         debug_assert!(self.data_pad_ranges.iter().all(|r| r.0 < r.1 && r.1 <= end));
@@ -239,6 +256,7 @@ impl Compiler {
         debug_assert!(self.data_align_marks.iter().all(|&(off, _)| off < end));
         debug_assert!(self.staged_literal_syms.iter().all(|&(off, _)| off < end));
         debug_assert!(self.func_name_objects.iter().all(|&(.., o)| o < end));
+        debug_assert!(!self.data_relocs.iter().any(slot_past));
     }
 
     /// Skip tokens until the matching close paren. Caller has

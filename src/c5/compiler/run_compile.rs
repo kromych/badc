@@ -3139,8 +3139,13 @@ impl Compiler {
             self.symbols[id_idx].val = off;
             self.symbols[id_idx].reserved_data_bytes = bytes;
             // A move off a misaligned slot keeps the bytes a
-            // prior defining declaration wrote there.
-            if reuse_eligible && prior.1 > 0 && !prior_zero {
+            // prior defining declaration wrote there. A zero-region slot
+            // takes none: the object has no initializer.
+            if reuse_eligible
+                && prior.1 > 0
+                && !prior_zero
+                && !crate::c5::layout::in_zero_region(off)
+            {
                 let n = prior.1.min(bytes) as usize;
                 for k in 0..n {
                     self.data[off as usize + k] = self.data[prior.0 as usize + k];

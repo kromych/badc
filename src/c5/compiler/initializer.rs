@@ -437,11 +437,13 @@ impl Compiler {
     }
 
     /// Whether the static object `idx` being declared, of type `ty`, takes
-    /// the zero region: no initializer follows, and neither `const` (read-only
-    /// pages hold its bytes) nor a named section (which carves its bytes from
-    /// `.data`) keeps it in the image.
+    /// the zero region: no initializer follows or came with an earlier
+    /// declaration (C17 6.9.2p1), and neither `const` (read-only pages hold
+    /// its bytes) nor a named section (which carves its bytes from `.data`)
+    /// keeps it in the image.
     pub(super) fn takes_zero_region(&self, idx: usize, ty: i64) -> bool {
         self.lex.tk != Token::Assign
+            && !self.symbols[idx].has_initializer
             && !self.declared_object_is_const(ty)
             && self.symbols[idx].section_name.is_none()
     }
@@ -3513,9 +3515,9 @@ impl Compiler {
         for slot in popped {
             self.init_reloc_slots.remove(&slot);
         }
+        self.data_relocs.truncate(cp.data_relocs);
         self.truncate_data(cp.data);
         self.data_object_starts.truncate(cp.data_object_starts);
-        self.data_relocs.truncate(cp.data_relocs);
         self.code_relocs.truncate(cp.code_relocs);
         self.code_reloc_sym_idx.truncate(cp.code_reloc_sym_idx);
         self.extern_data_relocs.truncate(cp.extern_data_relocs);

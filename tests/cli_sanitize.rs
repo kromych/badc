@@ -1249,6 +1249,45 @@ fn shifts_and_divisions_are_checked() {
     }
 }
 
+/// Where signed overflow wraps (`-fwrapv`, `-fno-strict-overflow`) a signed
+/// left shift is defined, and gcc and clang check its amount alone: the
+/// reports of a negative base and of bits shifted past the sign are gone,
+/// those of the amount stay.
+#[test]
+fn a_wrapping_signed_left_shift_has_no_base_to_check() {
+    let dir = TempDir::new("badc-sanitize-wrapv");
+    let src = dir.join("overflow.c");
+    std::fs::write(&src, SHIFTS).unwrap();
+    for wraps in ["-fwrapv", "-fno-strict-overflow"] {
+        for opt in ["-O0", "-O"] {
+            let exe = dir.join(format!("shifts{wraps}{opt}"));
+            let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+                .args(["-q", opt, "-fsanitize=shift", wraps, "-o"])
+                .arg(&exe)
+                .arg(&src)
+                .output()
+                .expect("run badc");
+            assert!(
+                built.status.success(),
+                "{}",
+                String::from_utf8_lossy(&built.stderr)
+            );
+            let o = run(&exe, &[]);
+            assert!(o.status.success(), "{wraps} {opt}: {o:?}");
+            assert_eq!(
+                reports(&o),
+                [
+                    "3:60: runtime error: shift exponent 32 is too large for 32-bit type 'int'",
+                    "4:60: runtime error: shift exponent -1 is negative",
+                    "7:73: runtime error: shift exponent 64 is too large for 64-bit type \
+                     'long long'",
+                ],
+                "{wraps} {opt}"
+            );
+        }
+    }
+}
+
 const COMPOUND: &str = "#include <limits.h>
 #include <stdio.h>
 int main(int argc, char **argv) {
@@ -1443,6 +1482,136 @@ fn subscripts_are_held_to_the_array_bound() {
                 "{o:?}"
             );
         }
+    }
+}
+
+/// gcc's `bounds-strict` is `bounds` reaching the trailing members too, so
+/// its checks trap, stop recovering, and turn off wherever `bounds` does:
+/// by either name and by the group `undefined`, which names `bounds`.
+#[test]
+fn bounds_strict_traps_recovers_and_turns_off_as_bounds_does() {
+    let dir = TempDir::new("badc-sanitize-strict");
+    let src = dir.join("overflow.c");
+    std::fs::write(&src, BOUNDS).unwrap();
+    let handlers = |flags: [&str; 2]| {
+        let listing = dir.join("overflow.s");
+        let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+            .args(["-q", "-O0", "-S"])
+            .args(flags)
+            .arg("-o")
+            .arg(&listing)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{flags:?}: {}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let text = std::fs::read_to_string(&listing).unwrap();
+        let all = text.matches("__ubsan_handle_out_of_bounds").count();
+        let aborting = text.matches("__ubsan_handle_out_of_bounds_abort").count();
+        (all - aborting, aborting)
+    };
+    let strict = "-fsanitize=bounds-strict";
+    let (returning, aborting) = handlers([strict, "-fsanitize-recover=all"]);
+    assert!(returning > 0 && aborting == 0, "{returning} {aborting}");
+    for name in ["undefined", "bounds", "bounds-strict"] {
+        let trap = format!("-fsanitize-trap={name}");
+        assert_eq!(handlers([&trap, strict]), (0, 0), "{trap}");
+        let abort = format!("-fno-sanitize-recover={name}");
+        assert_eq!(handlers([strict, &abort]), (0, returning), "{abort}");
+        let off = format!("-fno-sanitize={name}");
+        assert_eq!(handlers([strict, &off]), (0, 0), "{off}");
+    }
+    let off = handlers(["-fsanitize=bounds", "-fno-sanitize=bounds-strict"]);
+    assert_eq!(off, (0, 0));
+}
+
+/// C17 6.8.5p4: a subscript by a loop's counter, which the loop's
+/// condition holds below the bound, cannot fail its check. With the check
+/// in its body the loop stayed rolled, the sum was no constant, and the
+/// call behind the comparison of it, to a function no unit defines, did
+/// not link.
+#[test]
+fn a_subscript_the_loop_condition_bounds_carries_no_check() {
+    let dir = TempDir::new("badc-sanitize-counted");
+    let src = dir.join("counted.c");
+    std::fs::write(
+        &src,
+        "void never_defined(void);
+         static const unsigned char len[] = {3, 5, 7, 9};
+         static inline unsigned total(void) {
+    unsigned l = 2;
+    int i;
+             for (i = 0; i < sizeof len / sizeof len[0]; i++)
+        l += len[i];
+             return l;
+}
+         int main(void) {
+    if (total() > 255)
+        never_defined();
+             return total() == 26 ? 0 : 1;
+}
+",
+    )
+    .unwrap();
+    for flag in ["-fsanitize=bounds", "-fsanitize=bounds-strict"] {
+        let exe = dir.join(format!("counted{}", flag.replace('=', "_")));
+        let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+            .args(["-q", "-O", flag, "-o"])
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{flag}: {}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let o = run(&exe, &[]);
+        assert!(o.status.success() && o.stderr.is_empty(), "{flag}: {o:?}");
+    }
+}
+
+/// C17 6.5.1.1p3: a generic selection's controlling expression is not
+/// evaluated, and the data a check staged for it is dropped. A site that
+/// follows names its own file and type, not the bytes that took the place
+/// of the ones the dropped operand had named first.
+#[test]
+fn a_site_after_an_unevaluated_operand_names_its_file_and_type() {
+    let dir = TempDir::new("badc-sanitize-generic");
+    let src = dir.join("overflow.c");
+    std::fs::write(
+        &src,
+        "struct n { unsigned int count[6]; int last; };\n\
+         __attribute__((noinline)) unsigned f(struct n *p, int dir) {\n    \
+         return _Generic((p->count[dir]), unsigned int: 1, default: 2) + p->count[dir];\n}\n\
+         int main(int argc, char **argv) {\n    struct n v = {{1, 2, 3, 4, 5, 6}, 7};\n    \
+         (void)argv;\n    return f(&v, 5 + argc) == 0;\n}\n",
+    )
+    .unwrap();
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("generic{opt}"));
+        let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+            .args(["-q", opt, "-fsanitize=bounds", "-o"])
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{opt}: {}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let o = run(&exe, &[]);
+        assert_eq!(
+            reports(&o),
+            ["3:69: runtime error: index 6 out of bounds for type 'unsigned int[6]'"],
+            "{opt}: {o:?}"
+        );
+        let named = String::from_utf8_lossy(&o.stderr).contains("overflow.c:3:69");
+        assert!(named, "{opt}: {o:?}");
     }
 }
 
@@ -1687,4 +1856,85 @@ fn a_fault_is_reported_with_the_frames_that_led_to_it() {
             "{flags:?} {opt}: {text}"
         );
     }
+}
+
+/// Each `FIELD` and `FITS` shifts by a constant below the width, and `pack`
+/// holds a call no unit defines behind `__builtin_constant_p` tests, as
+/// `main` does behind a comparison of two equal calls: the program links
+/// only where every one of them folds, which takes `pack` inlined.
+const DECIDED: &str = "#define BITS(h, l) ((~0ULL << (l)) & (~0ULL >> (63 - (h))))
+#define FITS(v, h, l) (((unsigned long long)(v) & ~(BITS(h, l) >> (l))) == 0)
+#define FIELD(v, h, l) (((unsigned long long)(v) << (l)) & BITS(h, l))
+void never_defined(void);
+static inline unsigned long long pack(unsigned char a, unsigned char b) {
+    if (__builtin_constant_p(a) &&
+        !(FITS(a, 7, 0) && FITS(a, 23, 16) && FITS(a, 39, 32) && FITS(a, 55, 48))) {
+        never_defined();
+    }
+    if (__builtin_constant_p(b) &&
+        !(FITS(b, 15, 8) && FITS(b, 31, 24) && FITS(b, 47, 40) && FITS(b, 63, 56))) {
+        never_defined();
+    }
+    return FIELD(a, 7, 0) | FIELD(b, 15, 8) | FIELD(a, 23, 16) | FIELD(b, 31, 24) |
+           FIELD(a, 39, 32) | FIELD(b, 47, 40) | FIELD(a, 55, 48) | FIELD(b, 63, 56);
+}
+int main(void) {
+    if (pack(22, 2) != pack(22, 2)) {
+        never_defined();
+    }
+    return pack(1, 2) == 0x0201020102010201ULL ? 0 : 1;
+}
+";
+
+/// C17 6.6: a check whose operands are constants that pass it is decided
+/// at translation time and inserts nothing, so a function keeps the size
+/// it has without the checks and is inlined where it was. With a branch
+/// and a report at each of its 48 constant shifts `pack` stayed out of
+/// line, and the calls behind the comparisons it decides did not link.
+#[test]
+fn a_check_decided_at_translation_time_inserts_nothing() {
+    let dir = TempDir::new("badc-sanitize-decided");
+    let src = dir.join("decided.c");
+    std::fs::write(&src, DECIDED).unwrap();
+    for flag in ["-fsanitize=shift", "-fsanitize=undefined"] {
+        let exe = dir.join(format!("decided{}", flag.replace('=', "_")));
+        let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+            .args(["-q", "-O", flag, "-o"])
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{flag}: {}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let o = run(&exe, &[]);
+        assert!(o.status.success() && o.stderr.is_empty(), "{flag}: {o:?}");
+    }
+    // At -O0 the listing names a handler for the shift by a variable
+    // alone.
+    let shifts = dir.join("shifts.c");
+    std::fs::write(
+        &shifts,
+        "unsigned long by_three(unsigned long v) { return v << 3; }\n\
+         int high_bit(void) { return 1 << 30; }\n\
+         int by_n(int v, int n) { return v << n; }\n",
+    )
+    .unwrap();
+    let listing = dir.join("shifts.s");
+    let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+        .args(["-q", "-O0", "-fsanitize=shift", "-S", "-o"])
+        .arg(&listing)
+        .arg(&shifts)
+        .output()
+        .expect("run badc");
+    assert!(
+        built.status.success(),
+        "{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    let text = std::fs::read_to_string(&listing).unwrap();
+    let calls = text.matches("__ubsan_handle_shift_out_of_bounds").count();
+    assert_eq!(calls, 1, "{text}");
 }

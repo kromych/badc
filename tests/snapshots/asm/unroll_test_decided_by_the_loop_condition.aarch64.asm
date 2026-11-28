@@ -1,0 +1,22 @@
+
+unroll_test_decided_by_the_loop_condition.aarch64:	file format elf64-littleaarch64
+
+Disassembly of section .text:
+
+<_start>:
+               	mov	x29, #0x0               // =0
+               	mov	x0, sp
+               	mov	x1, <entry_off>
+               	movk	x1, #0x0, lsl #16
+               	b	<addr>
+               	brk	#0x1
+               	brk	#0x1
+               	brk	#0x1
+
+<main>:
+               	adrp	x0, <page>
+               	ldrsw	x0, [x0, #0x20]
+               	cmp	w0, #0x0
+               	mov	x16, #0x1               // =1
+               	csel	x0, x16, xzr, ne
+               	ret

@@ -479,6 +479,7 @@ const LINKED_IMAGE_RUN_FIXTURES: &[(&str, i32)] = &[
     ("weak_extern_data_address.c", 0),
     ("tentative_array_definition.c", 0),
     ("loop_edge_copy_over_every_register.c", 0),
+    ("tentative_array_sized_later.c", 0),
     ("tentative_deferred_array_grows.c", 0),
     ("tentative_definition_completed_later.c", 0),
     ("thread_local_basic.c", 0),

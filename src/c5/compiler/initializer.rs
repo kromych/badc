@@ -437,11 +437,13 @@ impl Compiler {
     }
 
     /// Whether the static object `idx` being declared, of type `ty`, takes
-    /// the zero region: no initializer follows, and neither `const` (read-only
-    /// pages hold its bytes) nor a named section (which carves its bytes from
-    /// `.data`) keeps it in the image.
+    /// the zero region: no initializer follows or came with an earlier
+    /// declaration (C17 6.9.2p1), and neither `const` (read-only pages hold
+    /// its bytes) nor a named section (which carves its bytes from `.data`)
+    /// keeps it in the image.
     pub(super) fn takes_zero_region(&self, idx: usize, ty: i64) -> bool {
         self.lex.tk != Token::Assign
+            && !self.symbols[idx].has_initializer
             && !self.declared_object_is_const(ty)
             && self.symbols[idx].section_name.is_none()
     }

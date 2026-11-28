@@ -10,6 +10,10 @@ use super::*;
 use crate::c5::ast::expr_ty;
 use crate::c5::ir::BitCountOp;
 
+/// How deep a check's failure flag is folded over constant operands
+/// ([`SsaBuilder::peek_const`]); a signed left shift's nests six operations.
+const FLAG_FOLD_DEPTH: u32 = 8;
+
 impl<'a> Walker<'a> {
     /// A string function `-finline-stringops` expands inline (an
     /// `Expr::MemLoop`): a loop over the bytes, one at a time, its index in
@@ -576,6 +580,8 @@ impl<'a> Walker<'a> {
         self.report_failed_check(b, check.check, flag, &[value]);
     }
 
+    /// Branch to `check`'s report with `values` where `flag` is non-zero,
+    /// and go on.
     pub(super) fn report_failed_check(
         &self,
         b: &mut SsaBuilder,
@@ -583,6 +589,11 @@ impl<'a> Walker<'a> {
         flag: ValueId,
         values: &[ValueId],
     ) {
+        // A check its constant operands pass at translation time (C17 6.6)
+        // has no failing path to emit.
+        if b.peek_const(flag, FLAG_FOLD_DEPTH) == Some(0) {
+            return;
+        }
         let (failed, join) = (b.new_block(), b.new_block());
         b.expect(Some(false));
         b.branch_zero(flag, join, failed);

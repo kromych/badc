@@ -1406,6 +1406,32 @@ impl SsaBuilder {
         }
     }
 
+    /// The value of `v` where it reads only integer constants: an `Imm`,
+    /// or a `Binop`, `BinopI` or `Extend` over such values, at most `depth`
+    /// operations deep. The fold is [`fold_int_binop_imm`]'s, so an
+    /// operation it leaves to run time has no value here.
+    pub(crate) fn peek_const(&self, v: ValueId, depth: u32) -> Option<i64> {
+        if self.func.f32_values.get(v as usize) == Some(&true) {
+            return None;
+        }
+        let next = depth.checked_sub(1);
+        match *self.func.insts.get(v as usize)? {
+            Inst::Imm(k) => Some(k),
+            Inst::Binop { op, lhs, rhs } => {
+                let (l, r) = (self.peek_const(lhs, next?)?, self.peek_const(rhs, next?)?);
+                fold_int_binop_imm(op, l, r)
+            }
+            Inst::BinopI { op, lhs, rhs_imm } => {
+                fold_int_binop_imm(op, self.peek_const(lhs, next?)?, rhs_imm)
+            }
+            Inst::Extend { value, kind, .. } => Some(crate::c5::vm::eval::eval_extend(
+                self.peek_const(value, next?)?,
+                kind,
+            )),
+            _ => None,
+        }
+    }
+
     /// `Inst::BinopI` with on-the-fly algebraic peepholes.
     ///
     /// * Identity rhs (no-op on `lhs`, returns the lhs unchanged):

@@ -1688,3 +1688,84 @@ fn a_fault_is_reported_with_the_frames_that_led_to_it() {
         );
     }
 }
+
+/// Each `FIELD` and `FITS` shifts by a constant below the width, and `pack`
+/// holds a call no unit defines behind `__builtin_constant_p` tests, as
+/// `main` does behind a comparison of two equal calls: the program links
+/// only where every one of them folds, which takes `pack` inlined.
+const DECIDED: &str = "#define BITS(h, l) ((~0ULL << (l)) & (~0ULL >> (63 - (h))))
+#define FITS(v, h, l) (((unsigned long long)(v) & ~(BITS(h, l) >> (l))) == 0)
+#define FIELD(v, h, l) (((unsigned long long)(v) << (l)) & BITS(h, l))
+void never_defined(void);
+static inline unsigned long long pack(unsigned char a, unsigned char b) {
+    if (__builtin_constant_p(a) &&
+        !(FITS(a, 7, 0) && FITS(a, 23, 16) && FITS(a, 39, 32) && FITS(a, 55, 48))) {
+        never_defined();
+    }
+    if (__builtin_constant_p(b) &&
+        !(FITS(b, 15, 8) && FITS(b, 31, 24) && FITS(b, 47, 40) && FITS(b, 63, 56))) {
+        never_defined();
+    }
+    return FIELD(a, 7, 0) | FIELD(b, 15, 8) | FIELD(a, 23, 16) | FIELD(b, 31, 24) |
+           FIELD(a, 39, 32) | FIELD(b, 47, 40) | FIELD(a, 55, 48) | FIELD(b, 63, 56);
+}
+int main(void) {
+    if (pack(22, 2) != pack(22, 2)) {
+        never_defined();
+    }
+    return pack(1, 2) == 0x0201020102010201ULL ? 0 : 1;
+}
+";
+
+/// C17 6.6: a check whose operands are constants that pass it is decided
+/// at translation time and inserts nothing, so a function keeps the size
+/// it has without the checks and is inlined where it was. With a branch
+/// and a report at each of its 48 constant shifts `pack` stayed out of
+/// line, and the calls behind the comparisons it decides did not link.
+#[test]
+fn a_check_decided_at_translation_time_inserts_nothing() {
+    let dir = TempDir::new("badc-sanitize-decided");
+    let src = dir.join("decided.c");
+    std::fs::write(&src, DECIDED).unwrap();
+    for flag in ["-fsanitize=shift", "-fsanitize=undefined"] {
+        let exe = dir.join(format!("decided{}", flag.replace('=', "_")));
+        let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+            .args(["-q", "-O", flag, "-o"])
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{flag}: {}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let o = run(&exe, &[]);
+        assert!(o.status.success() && o.stderr.is_empty(), "{flag}: {o:?}");
+    }
+    // At -O0 the listing names a handler for the shift by a variable
+    // alone.
+    let shifts = dir.join("shifts.c");
+    std::fs::write(
+        &shifts,
+        "unsigned long by_three(unsigned long v) { return v << 3; }\n\
+         int high_bit(void) { return 1 << 30; }\n\
+         int by_n(int v, int n) { return v << n; }\n",
+    )
+    .unwrap();
+    let listing = dir.join("shifts.s");
+    let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+        .args(["-q", "-O0", "-fsanitize=shift", "-S", "-o"])
+        .arg(&listing)
+        .arg(&shifts)
+        .output()
+        .expect("run badc");
+    assert!(
+        built.status.success(),
+        "{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    let text = std::fs::read_to_string(&listing).unwrap();
+    let calls = text.matches("__ubsan_handle_shift_out_of_bounds").count();
+    assert_eq!(calls, 1, "{text}");
+}

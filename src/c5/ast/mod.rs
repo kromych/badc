@@ -873,12 +873,10 @@ pub(crate) enum Decl {
     /// byte size. The walker evaluates `dim * elem_size`, allocates
     /// that many bytes from the stack via the alloca intrinsic, stores
     /// the base pointer into `ptr_slot`, and the byte count into
-    /// `size_slot` (read back by `sizeof`). `elem_ty` carries the
-    /// element type for struct-size remapping. `fill` is the byte
+    /// `size_slot` (read back by `sizeof`). `fill` is the byte
     /// `-ftrivial-auto-var-init` stores over the allocation.
     Vla {
         sym: u32,
-        elem_ty: i64,
         elem_size: i64,
         ptr_slot: i64,
         size_slot: i64,
@@ -895,7 +893,11 @@ pub(crate) enum Decl {
     /// The AST records the binding for completeness; the walker
     /// emits nothing because the storage + init live outside the
     /// function body.
-    StaticLocal { sym: u32 },
+    StaticLocal {
+        /// The object declared, which the `Debug` form shows.
+        #[allow(dead_code)]
+        sym: u32,
+    },
 }
 
 /// Per-function AST snapshot captured at function-end. Carries
@@ -1346,149 +1348,11 @@ impl Ast {
         }
     }
 
-    /// Add `data_base` to every data-segment offset stored on AST nodes.
-    /// Used by the linker after each unit's data segment is placed in the
-    /// merged image: parser-time `data_off` / `val` snapshots are
-    /// unit-local; the merged image places the unit at `data_base` bytes
-    /// from the segment's start (and beyond the leading NULL guard).
-    pub(crate) fn rebase_data_offsets(&mut self, data_base: i64) {
-        if data_base == 0 {
-            return;
-        }
-        self.for_each_data_offset(&mut |off| *off += data_base);
-    }
-
-    /// Linker-side fixup for multi-TU builds: shift every
-    /// `Token::Fun` ident's `val` (the callee's pre-link
-    /// `ent_pc`) by `text_base`, mirroring the rebase the linker
-    /// applies elsewhere through `apply_reloc`. The walker reads
-    /// `val` directly when the merged `Symbol` table is empty
-    /// (the multi-TU path), so without this fixup an in-unit
-    /// `Expr::Call` to a defined-in-the-same-unit function
-    /// lowers to `Inst::Call { target_pc = pre-link PC }` and
-    /// the SSA emit's `pc_to_native[target_pc]` lookup hits an
-    /// unmapped slot. Cross-unit references (forward `extern`
-    /// calls into another unit) carry `val == 0` and are
-    /// handled by the symbol-table fixup pass on the linker side.
-    pub(crate) fn rebase_function_pcs(&mut self, text_base: i64) {
-        use crate::c5::token::Token;
-        if text_base == 0 {
-            return;
-        }
-        for expr in &mut self.exprs {
-            if let Expr::Ident { class, val, .. } = expr
-                && *class == Token::Fun as i64
-                && *val > 0
-            {
-                *val += text_base;
-            }
-        }
-    }
-
-    /// Linker-side fixup for multi-TU builds: shift every `sym`
-    /// index stored on AST nodes by `sym_base`. The linker
-    /// concatenates per-unit `parser_symbols` so unit `i`'s
-    /// indices start at `sym_base[i]`; without this shift the
-    /// walker's `live_fun_val` reads the wrong symbol entry.
-    pub(crate) fn rebase_sym_indices(&mut self, sym_base: u32) {
-        if sym_base == 0 {
-            return;
-        }
-        for expr in &mut self.exprs {
-            if let Expr::Ident { sym, .. } = expr {
-                *sym += sym_base;
-            }
-        }
-        for decl in &mut self.decls {
-            match decl {
-                Decl::Local { sym, .. } => *sym += sym_base,
-                Decl::Vla { sym, .. } => *sym += sym_base,
-                Decl::StaticLocal { sym, .. } => *sym += sym_base,
-            }
-        }
-    }
-
-    /// Linker-side fixup: remap every `Token::Sys` ident's `val`
-    /// from the unit-local `#pragma binding` flat index to the
-    /// merged binding flat index produced by `linker::link::merge`.
-    /// The walker reads `val` straight off the AST snapshot, so
-    /// the snapshot needs the rewrite or the emitted
-    /// `Inst::CallExt::binding_idx` reaches the wrong libc
-    /// import.
-    pub(crate) fn rebase_sys_binding_indices(&mut self, remap: &[i64]) {
-        use crate::c5::token::Token;
-        if remap.is_empty() {
-            return;
-        }
-        for expr in &mut self.exprs {
-            if let Expr::Ident { class, val, .. } = expr
-                && *class == Token::Sys as i64
-            {
-                let idx = *val as usize;
-                if idx < remap.len() {
-                    *val = remap[idx];
-                }
-            }
-        }
-    }
-
-    /// Linker-side fixup: remap every struct type tag from the
-    /// unit-local struct id to the merged struct id. The linker
-    /// dedupes structs by name when concatenating per-unit
-    /// `structs` tables, so a unit's local id can drift relative
-    /// to its position in the merged list; without this remap the
-    /// walker's `struct_size(ty)` indexes the wrong entry and
-    /// emits the wrong `Inst::Mcpy` byte count for struct
-    /// assignments / returns / struct-by-value params.
-    /// Linker-side fixup for multi-TU builds: shift every
-    /// `SrcPos::file` carried on the parallel `expr_src` /
-    /// `stmt_src` / `decl_src` arrays by `file_offset`. The
-    /// linker concatenates per-unit `source_files` into one
-    /// merged table; each unit's parser-time file indices start
-    /// at the unit's offset in the merged table. Without this
-    /// shift the walker stamps SSA insts with unit-local file
-    /// indices, the DWARF line program emits `DW_LNS_set_file`
-    /// rows pointing at the wrong entry, and a debugger
-    /// attributes the PC to the file from another TU.
-    pub(crate) fn rebase_source_file_indices(&mut self, file_offset: u16) {
-        if file_offset == 0 {
-            return;
-        }
-        let bump = |pos: &mut SrcPos| {
-            pos.file = pos.file.saturating_add(file_offset);
-        };
-        for pos in &mut self.expr_src {
-            bump(pos);
-        }
-        for pos in &mut self.stmt_src {
-            bump(pos);
-        }
-        for pos in &mut self.decl_src {
-            bump(pos);
-        }
-    }
-
-    pub(crate) fn rebase_struct_ids(&mut self, remap: &[usize]) {
-        if remap.is_empty() {
-            return;
-        }
-        for expr in &mut self.exprs {
-            visit_expr_ty(expr, &mut |ty| *ty = remap_struct_ty(*ty, remap));
-        }
-        for decl in &mut self.decls {
-            visit_decl_ty(decl, &mut |ty| *ty = remap_struct_ty(*ty, remap));
-        }
-    }
-
     pub(crate) fn decl(&self, id: DeclId) -> &Decl {
         &self.decls[id as usize]
     }
 }
 
-/// Linker-side struct-id rebase helpers. Defined out of the
-/// `impl Ast` block so callers can also use them on raw type
-/// tags carried outside the AST (e.g. `FinishedFunction::param_tys`,
-/// `Symbol::type_`).
 /// Read the type tag off an expression node. Returns `None` for
 /// shapes that don't carry one (`Sizeof` is constant-evaluated
 /// and the walker doesn't peek into the result; intrinsics carry
@@ -1506,23 +1370,6 @@ pub(crate) fn expr_ty(e: &Expr) -> Option<i64> {
         // An asm statement carries no value type.
         Expr::InlineAsm(_) => None,
     }
-}
-
-pub(crate) fn remap_struct_ty(ty: i64, remap: &[usize]) -> i64 {
-    use crate::c5::compiler::types::{STRUCT_BASE, STRUCT_STRIDE, UNSIGNED_BIT, strip_unsigned};
-    let unsigned = ty & UNSIGNED_BIT;
-    let stripped = strip_unsigned(ty);
-    if stripped < STRUCT_BASE {
-        return ty;
-    }
-    let old_id = ((stripped - STRUCT_BASE) / STRUCT_STRIDE) as usize;
-    if old_id >= remap.len() {
-        return ty;
-    }
-    let new_id = remap[old_id] as i64;
-    let ptr_part = (stripped - STRUCT_BASE) % STRUCT_STRIDE;
-    let rebased = STRUCT_BASE + new_id * STRUCT_STRIDE + ptr_part;
-    rebased | unsigned
 }
 
 /// The expression variants whose type tag is a plain `ty` field, bound as
@@ -1561,42 +1408,6 @@ macro_rules! plain_ty_expr {
     };
 }
 pub(crate) use plain_ty_expr;
-
-fn visit_expr_ty(expr: &mut Expr, f: &mut impl FnMut(&mut i64)) {
-    match expr {
-        plain_ty_expr!(ty) => f(ty),
-        Expr::VlaSizeof { .. } => {}
-        Expr::Cast { to_ty, .. } => f(to_ty),
-        Expr::CompoundLiteral { ty, init, .. } => {
-            f(ty);
-            if let LocalInit::Runtime { elements, .. } = init {
-                for e in elements {
-                    f(&mut e.ty);
-                }
-            }
-        }
-        Expr::Sizeof(_) => {}
-        // No `ty` field; `&&label` is always a `void *`.
-        Expr::LabelAddr(_) => {}
-        // No `ty` field; the operand expressions carry their own.
-        Expr::InlineAsm(_) => {}
-    }
-}
-
-fn visit_decl_ty(decl: &mut Decl, f: &mut impl FnMut(&mut i64)) {
-    match decl {
-        Decl::Local { ty, init, .. } => {
-            f(ty);
-            if let LocalInit::Runtime { elements, .. } = init {
-                for e in elements {
-                    f(&mut e.ty);
-                }
-            }
-        }
-        Decl::Vla { elem_ty, .. } => f(elem_ty),
-        Decl::StaticLocal { .. } => {}
-    }
-}
 
 impl crate::c5::layout::DataOffsets for FinishedFunction {
     fn remap_data_offsets(&mut self, r: &dyn crate::c5::layout::DataRemap) {

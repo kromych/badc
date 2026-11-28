@@ -2445,7 +2445,6 @@ mod tests {
             clobber_regs: 0,
             clobber_fp_regs: 0,
             clobber_memory: true,
-            volatile: true,
         });
         let mut f = fresh(
             alloc::vec![
@@ -3275,7 +3274,6 @@ mod tests {
             clobber_regs: 0,
             clobber_fp_regs: 0,
             clobber_memory: true,
-            volatile: true,
         });
         let plain_store = |volatile| Inst::Store {
             addr: 2,

@@ -2038,8 +2038,6 @@ pub(crate) struct AsmBlock {
     /// A `"memory"` clobber was listed: an ordering barrier for memory
     /// accesses (C practice for `asm volatile("" ::: "memory")`).
     pub clobber_memory: bool,
-    /// The statement carried the `volatile` qualifier.
-    pub volatile: bool,
 }
 
 /// The register class operand `i` of `operands` takes: a matching input
@@ -2542,11 +2540,6 @@ impl ArgWidths {
             3 => 4,
             _ => 8,
         }
-    }
-
-    /// Every position moved up by `by`, for a hidden leading argument.
-    pub(crate) fn shifted(self, by: usize) -> ArgWidths {
-        ArgWidths(self.0.checked_shl(2 * by as u32).unwrap_or(0))
     }
 }
 

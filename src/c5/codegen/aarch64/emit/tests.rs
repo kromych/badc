@@ -25,7 +25,6 @@ mod asm_scratch_tests {
             clobber_regs: 0,
             clobber_fp_regs: 0,
             clobber_memory: true,
-            volatile: true,
         };
         FunctionSsa {
             insts: alloc::vec![
@@ -51,7 +50,6 @@ mod asm_scratch_tests {
             clobber_regs: (1 << 0) | (1 << 1) | (1 << 20),
             clobber_fp_regs: (1 << 0) | (1 << 8),
             clobber_memory: true,
-            volatile: true,
         };
         let fixed = crate::c5::codegen::FixedRegs::NONE;
         let free = asm_save_masks(&asm, &[], fixed, (0, 0)).unwrap();

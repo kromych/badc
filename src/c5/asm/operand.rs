@@ -781,7 +781,6 @@ mod tests {
                 clobber_regs: 0,
                 clobber_fp_regs: 0,
                 clobber_memory: false,
-                volatile: true,
             }),
             args: alloc::vec![arg],
         }
@@ -1040,7 +1039,6 @@ mod tests {
                 clobber_regs: 0,
                 clobber_fp_regs: 0,
                 clobber_memory: false,
-                volatile: true,
             }),
             args: alloc::vec![0, 1, 2, 3, 4, 3],
         };

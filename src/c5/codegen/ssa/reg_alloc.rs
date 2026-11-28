@@ -34,8 +34,6 @@
 //! is responsible for the actual code emission (load / store /
 //! reg-to-reg move / call-site marshalling).
 
-#![allow(dead_code)]
-
 use alloc::collections::{BTreeMap, BinaryHeap};
 use alloc::vec;
 use alloc::vec::Vec;
@@ -85,6 +83,7 @@ impl Place {
     }
 
     /// Spill-slot index when the place is `Spill`, else `None`.
+    #[cfg(test)]
     pub(crate) fn spill_slot(self) -> Option<u32> {
         if let Place::Spill(s) = self {
             Some(s)
@@ -192,14 +191,9 @@ pub(crate) struct Allocation {
     /// register for a copy, which takes its temporaries among the free ones;
     /// a bound x86-64 asm statement's scratch candidates.
     pub implicit_live: Vec<u32>,
-    /// Per-value coalescing hint: the physical register the
-    /// allocator should prefer when one is set and free at the
-    /// pick site. The pick-reg path honors the hint only when it
-    /// satisfies the live-across-call constraint; unsatisfied
-    /// hints are ignored, so a hint never compromises correctness.
-    /// `None` for any value with no preference. Populated by the
-    /// coalescing pre-passes (copy / phi congruence / call-arg /
-    /// return) layered on in subsequent iterations.
+    /// The register each value would rather take, as the coalescing
+    /// pre-passes left it; the coloring reads its own copy.
+    #[cfg(test)]
     pub hints: Vec<Option<u8>>,
     /// Per-value single-precision marker copied from
     /// [`FunctionSsa::f32_values`]. `true` when the value's FP register
@@ -2138,6 +2132,7 @@ fn allocate_keeping(
             fp_mem_operand: alloc::collections::BTreeSet::new(),
             fp_const,
             implicit_live: Vec::new(),
+            #[cfg(test)]
             hints,
             f32_values: Vec::new(),
             high_observed: Vec::new(),
@@ -3177,6 +3172,7 @@ fn allocate_keeping(
         fp_mem_operand,
         fp_const,
         implicit_live,
+        #[cfg(test)]
         hints,
         f32_values: func.f32_values.clone(),
         high_observed: crate::c5::codegen::passes::drop_redundant_extend::compute_high_observed(

@@ -79,7 +79,6 @@ pub(crate) fn walk_function(
         return_struct_size: fun.return_struct_size,
         ret_in_regs: ret.in_regs,
         ret_indirect: ret.indirect,
-        indirect_result_slot: ret.indirect_result_slot,
         scalar_return_ty: fun.return_ty,
         returns_no_value: fun.is_naked || (is_void_ty(fun.return_ty) && fun.name != "main"),
         naked: fun.is_naked,
@@ -133,9 +132,6 @@ struct ReturnAbi {
     /// A larger aggregate returned through the caller-supplied
     /// indirect-result register, also with no hidden argument.
     indirect: bool,
-    /// Body-local slot holding the saved indirect-result pointer for the
-    /// codegen prologue; zero when the return is not indirect.
-    indirect_result_slot: i64,
 }
 
 impl ReturnAbi {
@@ -155,18 +151,14 @@ impl ReturnAbi {
         b.set_ret_is_fp(is_floating_scalar(return_ty) && !agg);
         b.set_ret_type_tag(return_ty, target);
         let indirect = matches!(abi, StructReturnAbi::Indirect(_));
-        let indirect_result_slot = if indirect {
+        if indirect {
             let slot = b.alloc_synthetic_local();
             b.set_indirect_result_slot(slot);
-            slot
-        } else {
-            0
-        };
+        }
         Self {
             outptr: matches!(abi, StructReturnAbi::OutPtr),
             in_regs: matches!(abi, StructReturnAbi::Regs(_)),
             indirect,
-            indirect_result_slot,
         }
     }
 }

@@ -5108,7 +5108,6 @@ mod tests {
                     clobber_regs: 0,
                     clobber_fp_regs: 0,
                     clobber_memory: false,
-                    volatile: false,
                 }),
                 args: alloc::vec![0],
             },
@@ -5874,7 +5873,6 @@ mod tests {
             clobber_regs: 0,
             clobber_fp_regs: 0,
             clobber_memory: false,
-            volatile: false,
         };
         for t in [
             b"mov %%rsp, 24(%%rdx)".as_slice(),
@@ -6611,7 +6609,6 @@ mod tests {
             clobber_regs: 0,
             clobber_fp_regs: 0,
             clobber_memory: false,
-            volatile: false,
         };
         // Spill (params only): v0 ParamRef, v1 StoreLocal; then v2
         // LocalAddr(slot); v3 asm writes the output through v2; v4 reads
@@ -6699,7 +6696,6 @@ mod tests {
                         clobber_regs: 0,
                         clobber_fp_regs: 0,
                         clobber_memory: true,
-                        volatile: true,
                     }),
                     args: alloc::vec![0],
                 },
@@ -6844,7 +6840,6 @@ mod tests {
             clobber_regs: 0,
             clobber_fp_regs: 0,
             clobber_memory: false,
-            volatile: false,
         };
         let f = FunctionSsa {
             is_naked: true,

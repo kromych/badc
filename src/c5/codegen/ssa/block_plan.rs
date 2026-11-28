@@ -687,6 +687,7 @@ mod tests {
             fp_mem_operand: alloc::collections::BTreeSet::new(),
             fp_const: alloc::vec![false; n],
             implicit_live: alloc::vec::Vec::new(),
+            #[cfg(test)]
             hints: alloc::vec![None; n],
             f32_values: alloc::vec![false; n],
             high_observed: Vec::new(),

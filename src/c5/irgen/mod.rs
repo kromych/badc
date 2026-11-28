@@ -4,10 +4,6 @@
 //! carrying the offending node. This module holds the walk context and
 //! the error type; each submodule lowers one part of the grammar.
 
-#![allow(dead_code)]
-
-use alloc::string::String;
-
 use super::ast::{
     Ast, AtomicKind, BitfieldDesc, BlockItem, Decl, DeclId, Expr, ExprId, FinishedFunction,
     LabelId, LocalInit, LocalInitPrelude, MAX_MEM_FILL_ACCESSES, MemTransferOp, RuntimeInitValue,
@@ -70,11 +66,25 @@ type Halves = (ValueId, ValueId);
 /// invariant did not hold, and carry the AST node.
 #[derive(Debug)]
 pub(crate) enum WalkError {
-    UnsupportedExpr { id: ExprId, kind: &'static str },
+    UnsupportedExpr {
+        /// The node, which the `Debug` form shows.
+        #[allow(dead_code)]
+        id: ExprId,
+        kind: &'static str,
+    },
     Unsupported(&'static str),
-    InvalidExpr { id: ExprId, kind: &'static str },
-    InvalidStmt { id: StmtId, kind: &'static str },
-    UnknownSymbolClass { sym: u32, class: i64 },
+    InvalidExpr {
+        id: ExprId,
+        kind: &'static str,
+    },
+    InvalidStmt {
+        id: StmtId,
+        kind: &'static str,
+    },
+    UnknownSymbolClass {
+        sym: u32,
+        class: i64,
+    },
 }
 
 impl core::fmt::Display for WalkError {
@@ -115,10 +125,6 @@ impl core::fmt::Display for WalkError {
 }
 
 impl WalkError {
-    pub(crate) fn into_string(self) -> String {
-        alloc::format!("{self}")
-    }
-
     /// `true` when the error reports a broken compiler invariant rather
     /// than a construct the target does not provide. Only these carry the
     /// `internal compiler error` marker.
@@ -332,9 +338,6 @@ struct Walker<'a> {
     returns_no_value: bool,
     /// The function is naked: it keeps no frame record.
     naked: bool,
-    /// Body-local slot holding the saved x8 indirect-result pointer
-    /// when `ret_indirect` is true; zero otherwise.
-    indirect_result_slot: i64,
     /// True when the SSA optimization passes will run on this walk's
     /// output, which defers `__builtin_constant_p` to
     /// `Intrinsic::ConstantP` for the post-inline folds instead of

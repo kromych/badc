@@ -10,7 +10,6 @@
 //!
 //! ```text
 //! let mut b = SsaBuilder::new(ent_pc, n_params, is_variadic);
-//! let entry = b.entry_block();
 //! let v_n = b.load_local(2, LoadKind::I32);
 //! let v_test = b.binop_imm(BinOp::Lt, v_n, 2);
 //! let then_b = b.new_block();
@@ -27,8 +26,6 @@
 //! terminator; a value an inst reads other than through a phi is
 //! defined earlier in the same block or in a dominating block
 //! ([`super::verify`]); the entry block is block 0.
-
-#![allow(dead_code)]
 
 use alloc::vec::Vec;
 
@@ -613,11 +610,6 @@ impl SsaBuilder {
         self.local_cache.clear();
         self.pure_cache.clear();
         self.operand_free.clear();
-    }
-
-    /// The implicit entry block (block 0). Always exists.
-    pub(crate) fn entry_block(&self) -> BlockId {
-        0
     }
 
     /// Scan the in-block pure-value cache for a previously-built
@@ -2487,7 +2479,6 @@ mod tests {
         b.set_locals(8);
         let i_off: i64 = -1; // c5 slot index; codegen multiplies by 8.
 
-        let _entry = b.entry_block();
         let header = b.new_block();
         let body = b.new_block();
         let exit = b.new_block();

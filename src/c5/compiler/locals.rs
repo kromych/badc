@@ -1955,7 +1955,6 @@ impl Compiler {
         self.uses_alloca_in_current_fn = true;
         self.ast_emit_vla_decl(super::super::ast::Decl::Vla {
             sym: loc_idx as u32,
-            elem_ty,
             elem_size,
             ptr_slot,
             size_slot,
@@ -2009,7 +2008,6 @@ impl Compiler {
         self.uses_alloca_in_current_fn = true;
         self.ast_emit_vla_decl(super::super::ast::Decl::Vla {
             sym: loc_idx as u32,
-            elem_ty: Ty::Char as i64,
             elem_size: 1,
             ptr_slot,
             size_slot,

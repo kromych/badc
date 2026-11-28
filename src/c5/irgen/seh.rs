@@ -243,7 +243,6 @@ impl<'a> Walker<'a> {
             scalar_return_ty: ret_ty,
             returns_no_value: matches!(body, FuncletBody::Finally(_)),
             naked: false,
-            indirect_result_slot: 0,
             optimize: self.optimize,
             jump_tables: self.jump_tables,
             named_refs: self.named_refs,

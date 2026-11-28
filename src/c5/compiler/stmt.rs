@@ -1528,29 +1528,21 @@ impl Compiler {
     /// Shared head of an `asm` statement or a file-scope `asm`
     /// declaration: qualifiers, `(`, and the (concatenated) template
     /// string. Returns the template bytes, their start offset in the
-    /// data section (the caller truncates once done), and the
-    /// `volatile` / `goto` qualifier flags.
-    pub(super) fn parse_asm_head(
-        &mut self,
-    ) -> Result<(alloc::vec::Vec<u8>, usize, bool, bool), C5Error> {
+    /// data section (the caller truncates once done), and whether the
+    /// statement is `asm goto`.
+    pub(super) fn parse_asm_head(&mut self) -> Result<(alloc::vec::Vec<u8>, usize, bool), C5Error> {
         self.next()?; // asm / __asm__ / __asm
         // Optional qualifiers (`volatile` / `__volatile__`, `inline`,
-        // `goto`). `volatile` must not be elided and rides the parsed
-        // asm block; `goto` selects the label-list grammar and is
-        // implicitly volatile.
-        let mut is_volatile = false;
+        // `goto`). No asm statement is elided, so `volatile` adds
+        // nothing; `goto` selects the label-list grammar.
         let mut is_goto = false;
         while self.lex.tk == Token::TypeQual
             || self.lex.tk == Token::Inline
             || self.lex.tk == Token::ForceInline
             || self.lex.tk == Token::Goto
         {
-            if self.lex.tk == Token::TypeQual {
-                is_volatile = true;
-            }
             if self.lex.tk == Token::Goto {
                 is_goto = true;
-                is_volatile = true;
             }
             self.next()?;
         }
@@ -1571,7 +1563,7 @@ impl Compiler {
             self.next()?;
         }
         let template: alloc::vec::Vec<u8> = self.data[tstart..].to_vec();
-        Ok((template, tstart, is_volatile, is_goto))
+        Ok((template, tstart, is_goto))
     }
 
     /// Parse a GNU C inline-asm statement. c5 supports the operand-free
@@ -1584,17 +1576,17 @@ impl Compiler {
             return Err(self.compile_err(Code::UNSUPPORTED, crate::c5::asm::NO_INLINE_ASM));
         }
         let at = self.site();
-        let (template, tstart, is_volatile, is_goto) = self.parse_asm_head()?;
+        let (template, tstart, is_goto) = self.parse_asm_head()?;
         // `asm goto` takes the general extended-asm path directly: the
         // operand-free template shortcuts below have no label grammar.
         if is_goto {
             self.truncate_data(tstart);
-            return self.parse_extended_asm(template, is_volatile, true, at);
+            return self.parse_extended_asm(template, true, at);
         }
         // A naked function's templates are assembled as written.
         if self.current_func_attrs.is_naked {
             self.truncate_data(tstart);
-            return self.parse_extended_asm(template, is_volatile, false, at);
+            return self.parse_extended_asm(template, false, at);
         }
         // The x87 FPU control-word forms carry exactly one memory operand.
         // Detect them from the template before the operand-rejection loop.
@@ -1779,7 +1771,7 @@ impl Compiler {
         // are dropped from the data section; the parsed block references
         // its operand expressions by AST id.
         self.truncate_data(tstart);
-        self.parse_extended_asm(template, is_volatile, false, at)
+        self.parse_extended_asm(template, false, at)
     }
 
     /// Consume the `: outputs : inputs : clobbers` region and the
@@ -1822,7 +1814,6 @@ impl Compiler {
     fn parse_extended_asm(
         &mut self,
         template: alloc::vec::Vec<u8>,
-        volatile: bool,
         is_goto: bool,
         at: super::Site,
     ) -> Result<(), C5Error> {
@@ -2314,7 +2305,6 @@ impl Compiler {
             clobber_regs,
             clobber_fp_regs,
             clobber_memory,
-            volatile,
         };
         // A declared stack-pointer change is a warning, not an error.
         if clobbers_sp || sp_outputs.iter().any(|&i| block.names_operand(i)) {

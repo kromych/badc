@@ -207,7 +207,7 @@ impl Compiler {
     /// TODO: top-level instruction emission.
     fn parse_file_scope_asm(&mut self) -> Result<(), C5Error> {
         let line = self.lex.line;
-        let (template, tstart, _is_volatile, is_goto) = self.parse_asm_head()?;
+        let (template, tstart, is_goto) = self.parse_asm_head()?;
         self.truncate_data(tstart);
         if is_goto {
             return Err(self.compile_err(

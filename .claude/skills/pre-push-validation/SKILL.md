@@ -55,9 +55,9 @@ only SDK-libc target. `./scripts/validate_local_boxes.py` runs:
     and `--dry-run` prints the schedule without running it.
   * the compile-throughput check over the QuickJS corpus the demos just
     fetched: `-O0` cost over `-O` cost, and the slowest unit over the
-    median one. Both are ratios taken within the run, so the lane's own
-    speed cancels and one set of ceilings covers every box; CI's perf job
-    runs the same check.
+    next slowest one at `-O0` and at `-O`. All are ratios taken within
+    the run, so the lane's own speed cancels and one set of ceilings
+    covers every box; CI's perf job runs the same check.
   * the snapshot-drift check on every Linux lane: regenerate
     `tests/snapshots/` and fail on drift, as CI's `snapshots clean` job does.
     It needs `llvm-objdump` -- the committed snapshots were disassembled with

@@ -5,7 +5,7 @@ Absolute compile seconds are not comparable between runs: the hosted
 runner class changes underneath them, and the reference compiler on the
 same corpus has moved by a factor of six across a fortnight of CI. What
 is comparable is a ratio taken *within one run on one machine*, where
-the machine cancels. This reports two, both over the whole corpus:
+the machine cancels. This reports three, all over the whole corpus:
 
   * `-O0 / -O` -- the cost of the unoptimised build over the optimized
     one. `-O` runs the optimization passes on top of the same front end,
@@ -19,8 +19,11 @@ the machine cancels. This reports two, both over the whole corpus:
     doing real back-end work, so the per-invocation front-end floor --
     which is a property of the host, not of the compiler -- cancels out
     of them rather than setting the scale as it would against a median.
+  * `slowest / next` at `-O` -- the same ratio over the optimized
+    times. The `-O0` one cannot see a pass that only `-O` runs, and a
+    slower `-O` lowers `-O0 / -O`, which fails only when it rises.
 
-`--check` fails when either is over its committed ceiling.
+`--check` fails when any is over its committed ceiling.
 
 The corpus defaults to the eight QuickJS units `demos/quickjs/smoke.py`
 builds, on the defines it uses. They are gitignored -- `demos/quickjs/
@@ -80,9 +83,22 @@ DEFINES = ("_GNU_SOURCE", 'CONFIG_VERSION="0"', "CONFIG_ALL_UNICODE")
 # against twenty spinners on a twenty-core host it rises from 0.28 to
 # 0.34.
 #
+# The `-O` tail reads 17.6 on linux-x64, 20.3 on linux-aarch64 and 22.3
+# on macos-aarch64. 35.0 clears the highest by 57%, and the slowest
+# unit costing twice as much at `-O` passes it on every one of them
+# (35.2 on the lowest). It sees a cost that grows with the corpus's
+# largest function and no other: an allocator that reran up to 93 times
+# on a crowded 1000-line function left this corpus's `-O` times where
+# they were (quickjs.c 4904 ms against 4893 ms on linux-x64), so that
+# shape takes a generated input, not this counter.
+#
 # A ceiling moves only deliberately: measure, read the report, and
 # change the number in the commit that spends it.
-CEILINGS = {"o0_over_o": 0.45, "slowest_over_next": 25.0}
+CEILINGS = {
+    "o0_over_o": 0.45,
+    "slowest_over_next": 25.0,
+    "slowest_over_next_o": 35.0,
+}
 
 
 def compile_once(badc: Path, src: Path, opt: bool, out: Path) -> float:
@@ -129,13 +145,17 @@ def report(o0: dict[str, float], o1: dict[str, float], check: bool) -> int:
     slowest, runner_up = order[0], order[1]
     ratio = total0 / total1 if total1 else float("inf")
     tail = slowest[1] / runner_up[1] if runner_up[1] else float("inf")
+    order_o = sorted(o1.items(), key=lambda kv: -kv[1])
+    slowest_o, runner_up_o = order_o[0], order_o[1]
+    tail_o = slowest_o[1] / runner_up_o[1] if runner_up_o[1] else float("inf")
     print("| unit | -O0 (ms) | -O (ms) |\n|---|--:|--:|")
     for name in sorted(o0, key=lambda n: -o0[n]):
         print(f"| {name} | {o0[name] * 1000:.1f} | {o1[name] * 1000:.1f} |")
     print(
         f"\n[throughput] {len(o0)} units, -O0 {total0:.3f}s, -O {total1:.3f}s, "
         f"-O0/-O {ratio:.2f}, slowest/next {tail:.1f} "
-        f"({slowest[0]} over {runner_up[0]})"
+        f"({slowest[0]} over {runner_up[0]}), at -O {tail_o:.1f} "
+        f"({slowest_o[0]} over {runner_up_o[0]})"
     )
     if not check:
         return 0
@@ -155,6 +175,15 @@ def report(o0: dict[str, float], o1: dict[str, float], check: bool) -> int:
             f"{CEILINGS['slowest_over_next']:.1f} ceiling. One unit costs far "
             f"more than the next largest; look for a pass whose cost is "
             f"super-linear in the size of a single function."
+        )
+        rc = 1
+    if tail_o > CEILINGS["slowest_over_next_o"]:
+        print(
+            f"[throughput] slowest/next at -O {tail_o:.1f} is over the "
+            f"{CEILINGS['slowest_over_next_o']:.1f} ceiling. One unit costs "
+            f"far more than the next largest once the optimization passes "
+            f"run; look for an -O pass whose cost is super-linear in the "
+            f"size of a single function."
         )
         rc = 1
     return rc

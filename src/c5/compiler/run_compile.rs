@@ -328,13 +328,13 @@ impl Compiler {
                     // definition.
                     AsmSectionItem::Weak(name) => {
                         let name = sym(name);
-                        if !self.asm_weak_names.contains(&name) {
+                        if self.asm_bound_names[0].insert(name.clone()) {
                             self.asm_weak_names.push(name);
                         }
                     }
                     AsmSectionItem::Global(name) => {
                         let name = sym(name);
-                        if !self.asm_global_names.contains(&name) {
+                        if self.asm_bound_names[1].insert(name.clone()) {
                             self.asm_global_names.push(name);
                         }
                     }
@@ -3355,7 +3355,7 @@ impl Compiler {
     fn apply_pragma_weak(&mut self) -> Result<(), C5Error> {
         use crate::c5::symbol::Linkage;
         for (name, target) in core::mem::take(&mut self.pragma_weak) {
-            if !self.asm_weak_names.contains(&name) {
+            if self.asm_bound_names[0].insert(name.clone()) {
                 self.asm_weak_names.push(name.clone());
             }
             let Some(target) = target else {

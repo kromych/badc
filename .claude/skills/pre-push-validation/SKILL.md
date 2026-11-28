@@ -57,7 +57,8 @@ only SDK-libc target. `./scripts/validate_local_boxes.py` runs:
     fetched: `-O0` cost over `-O` cost, and the slowest unit over the
     next slowest one at `-O0` and at `-O`; and over a generated unit,
     the cost of 2N one-line functions over N, compiled with `-g` and
-    linked, which a per-function search of a per-unit list moves and the
+    linked, and of 2N functions holding an `asm` statement over N, which
+    a per-function search or copy of a per-unit list moves and the
     corpus does not. All are ratios taken within
     the run, so the lane's own speed cancels and one set of ceilings
     covers every box; CI's perf job runs the same check.

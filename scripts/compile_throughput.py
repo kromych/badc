@@ -5,8 +5,8 @@ Absolute compile seconds are not comparable between runs: the hosted
 runner class changes underneath them, and the reference compiler on the
 same corpus has moved by a factor of six across a fortnight of CI. What
 is comparable is a ratio taken *within one run on one machine*, where
-the machine cancels. This reports three over the whole corpus and one
-over a generated input:
+the machine cancels. This reports three over the whole corpus and two
+over generated inputs:
 
   * `-O0 / -O` -- the cost of the unoptimised build over the optimized
     one. `-O` runs the optimization passes on top of the same front end,
@@ -29,6 +29,10 @@ over a generated input:
     functions, as its largest unit holds two thousand: a search of the
     whole symbol table per function took a unit of 40,000 from 0.7 s to
     18 s and left every corpus counter where it was.
+  * `2N / N asm statements` -- the same over functions that each hold an
+    `asm` statement declaring a symbol, compiled only. A copy of the
+    unit's symbol declarations per statement took 16,000 of them from
+    0.3 s to 24 s.
 
 `--check` fails when any is over its committed ceiling.
 
@@ -105,16 +109,20 @@ DEFINES = ("_GNU_SOURCE", 'CONFIG_VERSION="0"', "CONFIG_ALL_UNICODE")
 # `2N / N functions` reads 2.0 where every per-function step is constant
 # (2.04 on macos-aarch64, 2.02 for linux-x64). One step that searched a
 # per-function list for each function read 2.9, and the searches of the
-# symbol table 7.5.
+# symbol table 7.5. `2N / N asm statements` reads 2.0 to 2.1 on all five
+# targets and read 3.8 to 4.3 while each statement copied the unit's
+# declarations.
 CEILINGS = {
     "o0_over_o": 0.45,
     "slowest_over_next": 25.0,
     "slowest_over_next_o": 35.0,
     "functions_2n_over_n": 2.6,
+    "asm_2n_over_n": 2.6,
 }
 
-# N of the generated input.
+# N of each generated input.
 SCALING_FUNCTIONS = 20000
+SCALING_ASM = 8000
 
 
 def scaling_source(n: int) -> str:
@@ -123,12 +131,20 @@ def scaling_source(n: int) -> str:
     return body + "\nint main(void) { return f0(0); }\n"
 
 
-def build_once(badc: Path, src: Path, tmp: Path) -> float:
-    """Seconds to compile `src` with `-g` and link it."""
+def asm_source(n: int) -> str:
+    """A unit of `n` functions, each with an `asm` statement that declares
+    a symbol."""
+    return "".join(f'void f{i}(void) {{ __asm__(".globl a{i}"); }}\n' for i in range(n))
+
+
+def build_once(badc: Path, src: Path, tmp: Path, link: bool) -> float:
+    """Seconds to compile `src` with `-g` and, with `link`, to link it."""
     obj, exe = tmp / "scale.o", tmp / "scale.out"
+    cmds = [[str(badc), "-g", "-c", str(src), "-o", str(obj)]]
+    if link:
+        cmds.append([str(badc), "-g", str(obj), "-o", str(exe)])
     start = time.perf_counter()
-    for cmd in ([str(badc), "-g", "-c", str(src), "-o", str(obj)],
-                [str(badc), "-g", str(obj), "-o", str(exe)]):
+    for cmd in cmds:
         r = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
         if r.returncode != 0:
             tail = (r.stderr or r.stdout).strip().splitlines()[-3:]
@@ -136,18 +152,17 @@ def build_once(badc: Path, src: Path, tmp: Path) -> float:
     return time.perf_counter() - start
 
 
-def scaling(badc: Path, reps: int, tmp: Path) -> tuple[float, float]:
-    """The minimum cost of the N and of the 2N unit, measured back to back
-    as `measure` does its two levels."""
-    sizes = (SCALING_FUNCTIONS, 2 * SCALING_FUNCTIONS)
+def scaling(badc: Path, reps: int, tmp: Path, n: int, source, link: bool) -> tuple[float, float]:
+    """The minimum cost of the unit `source` writes for `n` and for `2 * n`,
+    measured back to back as `measure` does its two levels."""
     srcs = []
-    for n in sizes:
-        srcs.append(tmp / f"scale{n}.c")
-        srcs[-1].write_text(scaling_source(n), encoding="ascii")
+    for size in (n, 2 * n):
+        srcs.append(tmp / f"{source.__name__}{size}.c")
+        srcs[-1].write_text(source(size), encoding="ascii")
     best = [float("inf"), float("inf")]
     for _ in range(reps):
         for i, src in enumerate(srcs):
-            best[i] = min(best[i], build_once(badc, src, tmp))
+            best[i] = min(best[i], build_once(badc, src, tmp, link))
     return best[0], best[1]
 
 
@@ -190,7 +205,11 @@ def measure(badc: Path, corpus: list[Path], reps: int, out: Path):
 
 
 def report(
-    o0: dict[str, float], o1: dict[str, float], scale: tuple[float, float], check: bool
+    o0: dict[str, float],
+    o1: dict[str, float],
+    scale: tuple[float, float],
+    asm: tuple[float, float],
+    check: bool,
 ) -> int:
     total0, total1 = sum(o0.values()), sum(o1.values())
     order = sorted(o0.items(), key=lambda kv: -kv[1])
@@ -214,9 +233,23 @@ def report(
         f"[throughput] {SCALING_FUNCTIONS} functions {scale[0]:.3f}s, "
         f"{2 * SCALING_FUNCTIONS} functions {scale[1]:.3f}s, 2N/N {grows:.2f}"
     )
+    asm_grows = asm[1] / asm[0] if asm[0] else float("inf")
+    print(
+        f"[throughput] {SCALING_ASM} asm statements {asm[0]:.3f}s, "
+        f"{2 * SCALING_ASM} {asm[1]:.3f}s, 2N/N {asm_grows:.2f}"
+    )
     if not check:
         return 0
     rc = 0
+    if asm_grows > CEILINGS["asm_2n_over_n"]:
+        print(
+            f"[throughput] 2N/N asm statements {asm_grows:.2f} is over the "
+            f"{CEILINGS['asm_2n_over_n']:.1f} ceiling. Twice the asm statements "
+            f"cost more than twice as much; look for a statement or a "
+            f"checkpoint that copies or searches what the unit's earlier "
+            f"statements declared."
+        )
+        rc = 1
     if grows > CEILINGS["functions_2n_over_n"]:
         print(
             f"[throughput] 2N/N functions {grows:.2f} is over the "
@@ -299,8 +332,9 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "unit.o"
         o0, o1 = measure(badc, corpus, args.reps, out)
-        scale = scaling(badc, args.reps, Path(tmp))
-    return report(o0, o1, scale, args.check)
+        scale = scaling(badc, args.reps, Path(tmp), SCALING_FUNCTIONS, scaling_source, True)
+        asm = scaling(badc, args.reps, Path(tmp), SCALING_ASM, asm_source, False)
+    return report(o0, o1, scale, asm, args.check)
 
 
 if __name__ == "__main__":

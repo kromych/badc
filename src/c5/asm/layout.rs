@@ -996,10 +996,7 @@ pub(crate) fn asm_weak_only_names<'a>(
     blocks: &'a [AsmSectionBlock],
     sink: &AsmSectionSink,
 ) -> AsmBindingNames<'a> {
-    AsmBindingNames {
-        stmt: stmt_binding_names(blocks, false),
-        counts: sink.bind_counts(true),
-    }
+    AsmBindingNames::new(stmt_binding_names(blocks, false), sink.bind_counts(true))
 }
 
 /// A binding test over the statement's own directives and the counts the
@@ -1007,11 +1004,33 @@ pub(crate) fn asm_weak_only_names<'a>(
 pub(crate) struct AsmBindingNames<'a> {
     stmt: alloc::collections::BTreeSet<&'a str>,
     counts: AsmBindCounts,
+    /// The counts as the statement found them: the answer `counts` must
+    /// give with the statement's own names.
+    #[cfg(debug_assertions)]
+    found: hashbrown::HashMap<alloc::string::String, u32>,
 }
 
-impl AsmBindingNames<'_> {
+impl<'a> AsmBindingNames<'a> {
+    fn new(stmt: alloc::collections::BTreeSet<&'a str>, counts: AsmBindCounts) -> Self {
+        #[cfg(debug_assertions)]
+        let found = counts.borrow().clone();
+        AsmBindingNames {
+            stmt,
+            counts,
+            #[cfg(debug_assertions)]
+            found,
+        }
+    }
+
     pub(crate) fn contains(&self, name: &str) -> bool {
-        self.stmt.contains(name) || self.counts.contains_key(name)
+        let bound = self.stmt.contains(name) || self.counts.borrow().contains_key(name);
+        #[cfg(debug_assertions)]
+        debug_assert_eq!(
+            bound,
+            self.stmt.contains(name) || self.found.contains_key(name),
+            "`{name}` was bound during the statement by a name that is not its own"
+        );
+        bound
     }
 }
 
@@ -1041,10 +1060,7 @@ fn asm_non_local_names<'a>(
     blocks: &'a [AsmSectionBlock],
     sink: &AsmSectionSink,
 ) -> AsmBindingNames<'a> {
-    AsmBindingNames {
-        stmt: stmt_binding_names(blocks, true),
-        counts: sink.bind_counts(false),
-    }
+    AsmBindingNames::new(stmt_binding_names(blocks, true), sink.bind_counts(false))
 }
 
 /// Measure with the branch forms `long` fixes, running the second round a

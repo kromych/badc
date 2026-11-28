@@ -227,21 +227,28 @@ fn encode_x86_asm_section_code(
     use super::super::ir::Inst;
     use crate::c5::asm::AsmSectionTarget;
     // A same-TU function operand is an `ImmCode` whose ent_pc reverses to its
-    // name here; a cross-TU one carries its name in `extern_code_names`.
-    let mut entpc2name: alloc::collections::BTreeMap<usize, &str> =
-        alloc::collections::BTreeMap::new();
-    for (n, &pc) in name2entpc {
-        entpc2name.entry(pc).or_insert(n.as_str());
-    }
+    // name here; a cross-TU one carries its name in `extern_code_names`. The
+    // reverse map is over the unit's functions: built for a statement that
+    // has such an operand.
+    let entpc2name = core::cell::OnceCell::new();
+    let function_named = |pc: usize| -> Option<&str> {
+        let by_pc = entpc2name.get_or_init(|| {
+            let mut by_pc = alloc::collections::BTreeMap::new();
+            for (n, &pc) in name2entpc {
+                by_pc.entry(pc).or_insert(n.as_str());
+            }
+            by_pc
+        });
+        by_pc.get(&pc).copied()
+    };
     let operand_target = |idx: u8| -> Option<AsmSectionTarget> {
         let arg = *args.get(idx as usize)?;
         if let Some(name) = extern_code_names.get(&arg) {
             return Some(AsmSectionTarget::Symbol(name.clone()));
         }
         match func.insts.get(arg as usize) {
-            Some(Inst::ImmCode(pc)) => entpc2name
-                .get(pc)
-                .map(|n| AsmSectionTarget::Symbol(alloc::string::String::from(*n))),
+            Some(Inst::ImmCode(pc)) => function_named(*pc)
+                .map(|n| AsmSectionTarget::Symbol(alloc::string::String::from(n))),
             _ => crate::c5::asm::asm_operand_data_target(func, arg, &|v| {
                 extern_data_names.get(&v).cloned()
             })

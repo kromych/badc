@@ -2723,9 +2723,69 @@ pub(crate) struct Build {
     /// rest of the stream is instructions, so the AArch64 mapping symbols
     /// follow from this.
     pub text_data_ranges: Vec<(usize, usize)>,
+    /// Lookups of [`Self::fn_unwind`], [`Self::a64_unwind`] and
+    /// [`Self::early_returns`] by function.
+    pub(crate) lookups: Lookups,
+}
+
+/// `list` by the text offset each record's function begins at. The first
+/// record of an offset stands, as a search in list order finds it.
+pub(crate) fn by_begin<T>(list: &[T], begin: impl Fn(&T) -> u32) -> hashbrown::HashMap<u32, &T> {
+    let mut index = hashbrown::HashMap::with_capacity(list.len());
+    for record in list {
+        index.entry(begin(record)).or_insert(record);
+    }
+    index
+}
+
+/// A [`by_begin`] index of one of a [`Build`]'s lists, as positions, built
+/// by the first lookup: the list is complete by then.
+#[derive(Debug, Default)]
+pub(crate) struct ByBegin(core::cell::OnceCell<(usize, hashbrown::HashMap<u32, u32>)>);
+
+impl ByBegin {
+    fn find<'a, T>(&self, list: &'a [T], at: usize, begin: impl Fn(&T) -> u32) -> Option<&'a T> {
+        let (len, index) = self.0.get_or_init(|| {
+            let mut index = hashbrown::HashMap::with_capacity(list.len());
+            for (i, record) in list.iter().enumerate() {
+                index.entry(begin(record)).or_insert(i as u32);
+            }
+            (list.len(), index)
+        });
+        assert_eq!(
+            *len,
+            list.len(),
+            "a record list changed after its first lookup"
+        );
+        let at = u32::try_from(at).ok()?;
+        index.get(&at).map(|&i| &list[i as usize])
+    }
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct Lookups {
+    fn_unwind: ByBegin,
+    a64_unwind: ByBegin,
+    early_returns: ByBegin,
 }
 
 impl Build {
+    /// The x86-64 unwind record of the function that begins at text offset
+    /// `at`.
+    pub(crate) fn fn_unwind_at(&self, at: usize) -> Option<&FnUnwind> {
+        (self.lookups.fn_unwind).find(&self.fn_unwind, at, |u| u.begin)
+    }
+
+    /// The arm64 unwind record of the function that begins at `at`.
+    pub(crate) fn a64_unwind_at(&self, at: usize) -> Option<&A64Unwind> {
+        (self.lookups.a64_unwind).find(&self.a64_unwind, at, |u| u.begin)
+    }
+
+    /// The early return of the function that begins at `at`.
+    pub(crate) fn early_return_at(&self, at: usize) -> Option<&EarlyReturn> {
+        (self.lookups.early_returns).find(&self.early_returns, at, |e| e.begin)
+    }
+
     /// The size of the thread-local block: the template and the
     /// zero-filled storage past it.
     pub fn tls_len(&self) -> usize {

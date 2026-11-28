@@ -1007,6 +1007,7 @@ pub(crate) mod test_support {
             patchable_entries: Vec::new(),
             mcount_sites: Vec::new(),
             early_returns: Vec::new(),
+            lookups: Default::default(),
             func_names: Vec::new(),
             func_prologue_native: BTreeMap::new(),
             promoted_local_slots: BTreeMap::new(),

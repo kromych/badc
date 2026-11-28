@@ -387,6 +387,7 @@ fn synth_program_and_build(
         patchable_entries: Vec::new(),
         mcount_sites: Vec::new(),
         early_returns,
+        lookups: Default::default(),
         func_ent_pcs: functions.ent_pcs,
         func_names: functions.names,
         func_prologue_native: functions.prologue_native,

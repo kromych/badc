@@ -5,7 +5,8 @@ Absolute compile seconds are not comparable between runs: the hosted
 runner class changes underneath them, and the reference compiler on the
 same corpus has moved by a factor of six across a fortnight of CI. What
 is comparable is a ratio taken *within one run on one machine*, where
-the machine cancels. This reports three, all over the whole corpus:
+the machine cancels. This reports three over the whole corpus and one
+over a generated input:
 
   * `-O0 / -O` -- the cost of the unoptimised build over the optimized
     one. `-O` runs the optimization passes on top of the same front end,
@@ -22,6 +23,12 @@ the machine cancels. This reports three, all over the whole corpus:
   * `slowest / next` at `-O` -- the same ratio over the optimized
     times. The `-O0` one cannot see a pass that only `-O` runs, and a
     slower `-O` lowers `-O0 / -O`, which fails only when it rises.
+  * `2N / N functions` -- the cost of compiling with `-g` and linking a
+    unit of 2N one-line functions over that of one of N. The corpus
+    cannot show a cost that grows with the square of the number of
+    functions, as its largest unit holds two thousand: a search of the
+    whole symbol table per function took a unit of 40,000 from 0.7 s to
+    18 s and left every corpus counter where it was.
 
 `--check` fails when any is over its committed ceiling.
 
@@ -94,11 +101,54 @@ DEFINES = ("_GNU_SOURCE", 'CONFIG_VERSION="0"', "CONFIG_ALL_UNICODE")
 #
 # A ceiling moves only deliberately: measure, read the report, and
 # change the number in the commit that spends it.
+#
+# `2N / N functions` reads 2.0 where every per-function step is constant
+# (2.04 on macos-aarch64, 2.02 for linux-x64). One step that searched a
+# per-function list for each function read 2.9, and the searches of the
+# symbol table 7.5.
 CEILINGS = {
     "o0_over_o": 0.45,
     "slowest_over_next": 25.0,
     "slowest_over_next_o": 35.0,
+    "functions_2n_over_n": 2.6,
 }
+
+# N of the generated input.
+SCALING_FUNCTIONS = 20000
+
+
+def scaling_source(n: int) -> str:
+    """A unit of `n` one-line functions, each with a parameter."""
+    body = "\n".join(f"int f{i}(int x) {{ return x + {i}; }}" for i in range(n))
+    return body + "\nint main(void) { return f0(0); }\n"
+
+
+def build_once(badc: Path, src: Path, tmp: Path) -> float:
+    """Seconds to compile `src` with `-g` and link it."""
+    obj, exe = tmp / "scale.o", tmp / "scale.out"
+    start = time.perf_counter()
+    for cmd in ([str(badc), "-g", "-c", str(src), "-o", str(obj)],
+                [str(badc), "-g", str(obj), "-o", str(exe)]):
+        r = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+        if r.returncode != 0:
+            tail = (r.stderr or r.stdout).strip().splitlines()[-3:]
+            raise SystemExit(f"[throughput] {src.name} failed:\n" + "\n".join(tail))
+    return time.perf_counter() - start
+
+
+def scaling(badc: Path, reps: int, tmp: Path) -> tuple[float, float]:
+    """The minimum cost of the N and of the 2N unit, measured back to back
+    as `measure` does its two levels."""
+    sizes = (SCALING_FUNCTIONS, 2 * SCALING_FUNCTIONS)
+    srcs = []
+    for n in sizes:
+        srcs.append(tmp / f"scale{n}.c")
+        srcs[-1].write_text(scaling_source(n), encoding="ascii")
+    best = [float("inf"), float("inf")]
+    for _ in range(reps):
+        for i, src in enumerate(srcs):
+            best[i] = min(best[i], build_once(badc, src, tmp))
+    return best[0], best[1]
 
 
 def compile_once(badc: Path, src: Path, opt: bool, out: Path) -> float:
@@ -139,7 +189,9 @@ def measure(badc: Path, corpus: list[Path], reps: int, out: Path):
     return best
 
 
-def report(o0: dict[str, float], o1: dict[str, float], check: bool) -> int:
+def report(
+    o0: dict[str, float], o1: dict[str, float], scale: tuple[float, float], check: bool
+) -> int:
     total0, total1 = sum(o0.values()), sum(o1.values())
     order = sorted(o0.items(), key=lambda kv: -kv[1])
     slowest, runner_up = order[0], order[1]
@@ -157,9 +209,23 @@ def report(o0: dict[str, float], o1: dict[str, float], check: bool) -> int:
         f"({slowest[0]} over {runner_up[0]}), at -O {tail_o:.1f} "
         f"({slowest_o[0]} over {runner_up_o[0]})"
     )
+    grows = scale[1] / scale[0] if scale[0] else float("inf")
+    print(
+        f"[throughput] {SCALING_FUNCTIONS} functions {scale[0]:.3f}s, "
+        f"{2 * SCALING_FUNCTIONS} functions {scale[1]:.3f}s, 2N/N {grows:.2f}"
+    )
     if not check:
         return 0
     rc = 0
+    if grows > CEILINGS["functions_2n_over_n"]:
+        print(
+            f"[throughput] 2N/N functions {grows:.2f} is over the "
+            f"{CEILINGS['functions_2n_over_n']:.1f} ceiling. Twice the "
+            f"functions cost more than twice as much to compile with -g and "
+            f"link; look for a step that searches a per-unit list -- the "
+            f"symbols, the variables, the unwind records -- once per function."
+        )
+        rc = 1
     if ratio > CEILINGS["o0_over_o"]:
         print(
             f"[throughput] -O0/-O {ratio:.2f} is over the "
@@ -233,7 +299,8 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "unit.o"
         o0, o1 = measure(badc, corpus, args.reps, out)
-    return report(o0, o1, args.check)
+        scale = scaling(badc, args.reps, Path(tmp))
+    return report(o0, o1, scale, args.check)
 
 
 if __name__ == "__main__":

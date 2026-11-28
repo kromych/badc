@@ -3325,15 +3325,13 @@ fn build_x86_64_pdata(
     // A test ahead of the frame and the return it branches to are left out
     // of the entry, which covers the frame path alone: code no entry covers
     // is a leaf, its return address at rsp.
+    let early = crate::c5::codegen::by_begin(early_returns, |e| e.begin);
     let spans: Vec<(u32, u32)> = entries
         .iter()
         .map(|uw| {
-            early_returns
-                .iter()
-                .find(|e| e.begin == uw.begin)
-                .map_or((uw.begin, uw.end), |e| {
-                    (uw.begin + e.frame, uw.begin + e.exit)
-                })
+            early.get(&uw.begin).map_or((uw.begin, uw.end), |e| {
+                (uw.begin + e.frame, uw.begin + e.exit)
+            })
         })
         .collect();
     // CodeOffset and SizeOfProlog are bytes from the entry's start.
@@ -3445,6 +3443,7 @@ fn build_aarch64_pdata(
             (body + r.begin as u32, body + r.end as u32, data)
         })
         .collect();
+    let early = crate::c5::codegen::by_begin(early_returns, |e| e.begin);
     for u in a64.iter().filter(|u| !u.steps.is_empty()) {
         let describe = |what: &str, at: u32, steps: &[crate::c5::codegen::A64Step]| {
             super::arm64_unwind::step_codes(steps).ok_or_else(|| {
@@ -3454,8 +3453,7 @@ fn build_aarch64_pdata(
             })
         };
         let codes = describe("prologue", u.begin, &u.steps)?;
-        let (begin, end) = (early_returns.iter())
-            .find(|e| e.begin == u.begin)
+        let (begin, end) = (early.get(&u.begin))
             .map_or((u.begin, u.end), |e| (u.begin + e.frame, u.begin + e.exit));
         let mut exits = Vec::with_capacity(u.exits.len());
         for e in &u.exits {

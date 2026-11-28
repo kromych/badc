@@ -383,19 +383,33 @@ impl<'a> LdsLinker<'a> {
         }
     }
 
-    /// Whether the first relocated field in `[off, off + len)` of
-    /// input section `i` names a definition that leaves the link. In
-    /// an FDE that field is the initial location, which is what
-    /// decides whether the entry still describes anything.
-    fn covers_discarded(&self, i: usize, off: usize, len: usize) -> bool {
+    /// The relocations of input section `i` as `(offset, symbol)`, by
+    /// offset; those of one offset keep their order.
+    fn relocs_by_offset(&self, i: usize) -> Vec<(usize, usize)> {
         let id = self.insecs[i];
-        let o = &self.objects[id.obj];
-        o.sections[id.sec]
-            .relocs
-            .iter()
-            .filter(|r| (r.offset as usize) >= off && (r.offset as usize) < off + len)
-            .min_by_key(|r| r.offset)
-            .is_some_and(|r| self.defines_discarded(id.obj, r.sym as usize))
+        let relocs = &self.objects[id.obj].sections[id.sec].relocs;
+        let mut by: Vec<(usize, usize)> = (relocs.iter())
+            .map(|r| (r.offset as usize, r.sym as usize))
+            .collect();
+        by.sort_by_key(|r| r.0);
+        by
+    }
+
+    /// Whether the first relocated field in `[off, off + len)` of
+    /// input section `i`, whose [`Self::relocs_by_offset`] are `relocs`,
+    /// names a definition that leaves the link. In an FDE that field is
+    /// the initial location, which is what decides whether the entry
+    /// still describes anything.
+    fn covers_discarded(
+        &self,
+        i: usize,
+        relocs: &[(usize, usize)],
+        off: usize,
+        len: usize,
+    ) -> bool {
+        let first = relocs.partition_point(|r| r.0 < off);
+        (relocs.get(first).filter(|r| r.0 < off + len))
+            .is_some_and(|r| self.defines_discarded(self.insecs[i].obj, r.1))
     }
 
     fn defines_discarded(&self, oi: usize, si: usize) -> bool {
@@ -446,6 +460,7 @@ impl<'a> LdsLinker<'a> {
         }
         let mut local: HashMap<usize, CieId> = HashMap::new();
         let mut owner: Vec<Option<CieId>> = Vec::with_capacity(ents.len());
+        let relocs = self.relocs_by_offset(i);
         for e in &ents {
             match e.cie {
                 None => {
@@ -455,7 +470,7 @@ impl<'a> LdsLinker<'a> {
                 }
                 // An FDE describing code that left the link describes
                 // nothing; the entry is dropped rather than relocated.
-                Some(_) if self.covers_discarded(i, e.off, e.len) => owner.push(None),
+                Some(_) if self.covers_discarded(i, &relocs, e.off, e.len) => owner.push(None),
                 Some(at) => {
                     let c = *local.get(&at)?;
                     used.insert(c);

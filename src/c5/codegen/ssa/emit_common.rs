@@ -2620,24 +2620,32 @@ pub(crate) trait LowerTarget {
     fn install(&mut self, build: &mut super::Build);
 }
 
+/// The functions declared with the GNU C `error` or `warning` attribute.
+fn call_diagnostic_functions(
+    program: &super::super::program::Program,
+) -> alloc::vec::Vec<&crate::c5::symbol::Symbol> {
+    use crate::c5::token::Token;
+    (program.symbols.iter())
+        .filter(|s| s.class == Token::Fun as i64 && s.call_diagnostic.is_some())
+        .collect()
+}
+
 /// The GNU C `error` and `warning` function attributes: each call `func` still
-/// makes to such a function, which the optimizer did not remove, is
-/// diagnosed with the attribute's message at the call.
+/// makes to one of the `marked` functions ([`call_diagnostic_functions`]),
+/// which the optimizer did not remove, is diagnosed with the attribute's
+/// message at the call.
 fn report_call_diagnostics(
     sink: &mut Sink,
     program: &super::super::program::Program,
     imports: &super::ResolvedImports,
+    marked: &[&crate::c5::symbol::Symbol],
     func: &crate::c5::ir::FunctionSsa,
 ) {
     use crate::c5::ir::Inst;
-    use crate::c5::token::Token;
-    let marked = || {
-        (program.symbols.iter())
-            .filter(|s| s.class == Token::Fun as i64 && s.call_diagnostic.is_some())
-    };
-    if marked().next().is_none() {
+    if marked.is_empty() {
         return;
     }
+    let marked = || marked.iter().copied();
 
     for (at, inst) in func.insts.iter().enumerate() {
         let callee = match inst {
@@ -3587,6 +3595,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         .filter(|s| s.code_align > 1 && s.class == crate::c5::token::Token::Fun as i64)
         .map(|s| (s.def_link_name(), s.code_align as usize))
         .collect();
+    let marked = call_diagnostic_functions(program);
     for (func_ssa, alloc_for) in ssa_funcs.iter().zip(ssa_allocs.iter()) {
         let ent_pc = func_ssa.ent_pc;
         let entry = super::FunctionEntry::of(func_ssa, &native);
@@ -3692,7 +3701,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
                 note,
             );
         }
-        report_call_diagnostics(&mut sink, program, imports, func_ssa);
+        report_call_diagnostics(&mut sink, program, imports, &marked, func_ssa);
         let mut asm_warnings = core::mem::take(&mut st.asm_warnings);
         asm_warnings.dedup();
         for (site, code, text) in asm_warnings {
@@ -3986,6 +3995,7 @@ pub(crate) fn lower_unit<B: LowerTarget>(
         patchable_entries: st.patchable_entries,
         mcount_sites: st.mcount_sites,
         early_returns: st.early_returns,
+        lookups: Default::default(),
         seh_rows: st.seh_rows,
         seh_handler: None,
         func_names: st.func_names,

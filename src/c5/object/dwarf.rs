@@ -316,13 +316,13 @@ impl FrameRules {
                 None
             }
         };
-        let a64 = (build.a64_unwind.iter()).find(|u| u.begin as usize == low_pc);
+        let a64 = build.a64_unwind_at(low_pc);
         if let Some(u) = a64.filter(|u| !u.steps.is_empty())
             && let Some(rules) = recorded(a64_frame_ops(build, u), A64_CFI)
         {
             return rules;
         }
-        match build.fn_unwind.iter().find(|u| u.begin as usize == low_pc) {
+        match build.fn_unwind_at(low_pc) {
             None if arch == CfiArch::Aarch64 && a64_prologue_is_hints(build, ent_pc, low_pc) => {
                 FrameRules::Leaf
             }
@@ -346,13 +346,23 @@ pub(crate) enum LoweredFrame {
 }
 
 /// Each lowered function's text offset and rules.
+/// The positions in `program.variables` of each function's variables, by
+/// the function's entry and in the order recorded.
+pub(super) fn variables_by_function(program: &Program) -> BTreeMap<u64, Vec<usize>> {
+    let mut by: BTreeMap<u64, Vec<usize>> = BTreeMap::new();
+    for (k, v) in program.variables.iter().enumerate() {
+        by.entry(v.function_bc_pc).or_default().push(k);
+    }
+    by
+}
+
 pub(crate) fn lowered_frames(build: &Build, target: Target) -> Vec<(usize, LoweredFrame)> {
     let arch = CfiArch::of(target);
     (build.func_ent_pcs.iter())
         .filter(|pc| build.func_prologue_native.contains_key(pc))
         .filter_map(|&pc| {
             let lo = *build.pc_to_native.get(pc).filter(|&&n| n != usize::MAX)?;
-            let a64 = (build.a64_unwind.iter()).find(|u| u.begin as usize == lo);
+            let a64 = build.a64_unwind_at(lo);
             let frame = match a64.map(cfi::a64_body) {
                 Some(cfi::A64Body::Fde) => LoweredFrame::Fde,
                 Some(cfi::A64Body::Record) => LoweredFrame::Record,
@@ -379,13 +389,13 @@ const X64_CFI: cfi::CfiTarget = cfi::CfiTarget {
 
 /// The CFI of the arm64 function `u` describes, at offsets from its start.
 pub(crate) fn a64_frame_ops(build: &Build, u: &A64Unwind) -> cfi::FrameOps {
-    let early = build.early_returns.iter().find(|e| e.begin == u.begin);
+    let early = build.early_return_at(u.begin as usize);
     cfi::a64_frame_ops(u, early.map_or(0, |e| e.frame), early.map(|e| e.exit))
 }
 
 /// The CFI of the x86_64 function `u` describes, at offsets from its start.
 pub(crate) fn x64_frame_ops(build: &Build, u: &FnUnwind) -> cfi::FrameOps {
-    let early = build.early_returns.iter().find(|e| e.begin == u.begin);
+    let early = build.early_return_at(u.begin as usize);
     cfi::x64_frame_ops(u, early.map(|e| e.exit))
 }
 
@@ -675,6 +685,7 @@ fn collect_subprograms(
     // lldb's `b name` returns N matches and the user can't tell which is
     // the real one.
     let mut name_seen: BTreeMap<alloc::string::String, u32> = BTreeMap::new();
+    let own_variables = variables_by_function(program);
     for (i, &ent_pc) in ent_pcs.iter().enumerate() {
         let raw_name = func_name_by_pc
             .get(&ent_pc)
@@ -710,15 +721,10 @@ fn collect_subprograms(
             continue;
         }
 
-        // Pull this subprogram's locals + parameters from
-        // `program.variables`. Captured by the c5 frontend at function-body
-        // close, indexed by the Ent's ent_pc so a simple equality check
-        // groups them.
-        let function_bc_pc = ent_pc as u64;
-        let variables = program
-            .variables
-            .iter()
-            .filter(|v| v.function_bc_pc == function_bc_pc)
+        // This subprogram's locals and parameters, which the front end
+        // records under the function's entry.
+        let variables = (own_variables.get(&(ent_pc as u64)).into_iter().flatten())
+            .map(|&k| &program.variables[k])
             .map(|v| SubprogVar {
                 name_off: strs.intern(&v.name),
                 is_parameter: v.is_parameter,
@@ -730,7 +736,7 @@ fn collect_subprograms(
             })
             .collect();
 
-        let early = build.early_returns.iter().find(|e| e.begin as usize == lo);
+        let early = build.early_return_at(lo);
         out.push(Subprog {
             name_off,
             low_pc: code_vmaddr + lo as u64,
@@ -739,9 +745,7 @@ fn collect_subprograms(
             frame_rules: (build.func_prologue_native.contains_key(&ent_pc))
                 .then(|| FrameRules::of(build, CfiArch::of(target), ent_pc, lo)),
             ra_signed_at: paciasp_offset(build, lo, early.map(|e| e.frame)),
-            sp_frame_base: (build.fn_unwind.iter())
-                .find(|u| u.begin as usize == lo)
-                .and_then(|u| u.sp_frame_base()),
+            sp_frame_base: build.fn_unwind_at(lo).and_then(|u| u.sp_frame_base()),
             // A predicted return follows the test, ahead of the frame, and
             // leaves no code after the body to take the entry's rules.
             early_return: early.map(|e| e.exit).filter(|&x| (x as usize) < hi - lo),

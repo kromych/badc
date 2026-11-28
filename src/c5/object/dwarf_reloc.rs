@@ -926,12 +926,17 @@ impl RelocInfoUnit<'_> {
             .iter()
             .map(|&i| catalog.of_symbol(&program.symbols[i]))
             .collect();
+        // The function symbols by link name; the first of a name stands.
+        let mut functions: alloc::collections::BTreeMap<&str, &crate::c5::symbol::Symbol> =
+            alloc::collections::BTreeMap::new();
+        for s in &program.symbols {
+            if s.class == super::super::token::Token::Fun as i64 {
+                functions.entry(s.link_name()).or_insert(s);
+            }
+        }
         self.fn_facts = (0..build.func_ent_pcs.len())
             .map(|i| {
-                let sym = program.symbols.iter().find(|s| {
-                    s.class == super::super::token::Token::Fun as i64
-                        && s.link_name() == subprogram_name(build, i)
-                });
+                let sym = functions.get(subprogram_name(build, i)).copied();
                 FnFacts {
                     is_variadic: sym.is_some_and(|s| s.is_variadic()),
                     external: sym.is_none_or(|s| s.linkage != crate::c5::symbol::Linkage::Internal),
@@ -1069,6 +1074,7 @@ impl RelocInfoUnit<'_> {
     fn emit_subprograms(&mut self) {
         let (program, build) = (self.program, self.build);
         let addr_width = self.addr_width;
+        let own_variables = super::dwarf::variables_by_function(program);
         for (i, &ent_pc) in build.func_ent_pcs.iter().enumerate() {
             let lo = match build.pc_to_native.get(ent_pc).copied() {
                 Some(off) if off != usize::MAX => off as u64,
@@ -1086,12 +1092,10 @@ impl RelocInfoUnit<'_> {
                 prototyped,
                 ret,
             } = self.fn_facts[i];
-            let vars: Vec<(&super::super::program::VariableInfo, TypeId)> = program
-                .variables
-                .iter()
-                .zip(self.var_types.iter().copied())
-                .filter(|(v, _)| v.function_bc_pc == ent_pc as u64)
-                .collect();
+            let vars: Vec<(&super::super::program::VariableInfo, TypeId)> =
+                (own_variables.get(&(ent_pc as u64)).into_iter().flatten())
+                    .map(|&k| (&program.variables[k], self.var_types[k]))
+                    .collect();
             let has_children = !vars.is_empty() || is_variadic;
             write_uleb128(
                 &mut self.body,
@@ -1121,8 +1125,8 @@ impl RelocInfoUnit<'_> {
             }
             // An x86-64 frame with no pointer: rsp plus the prologue's
             // movement, where rbp would stand.
-            let sp_base = (build.fn_unwind.iter())
-                .find(|u| u64::from(u.begin) == lo)
+            let sp_base = (usize::try_from(lo).ok())
+                .and_then(|lo| build.fn_unwind_at(lo))
                 .and_then(|u| u.sp_frame_base());
             if let Some(off) = sp_base {
                 let mut expr = alloc::vec![DW_OP_BREG7];

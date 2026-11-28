@@ -23,7 +23,8 @@ pub enum Check {
     /// minimum by -1, whose value its type cannot represent (C17 6.5p5).
     SignedIntegerOverflow,
     /// A left shift of a negative signed value, or of a value the result
-    /// type cannot represent shifted (C17 6.5.7p4).
+    /// type cannot represent shifted (C17 6.5.7p4). Under `-fwrapv` the
+    /// shift is defined, as gcc and clang take the option, and not checked.
     ShiftBase,
     /// A shift by a negative amount or by the promoted left operand's
     /// width or more (C17 6.5.7p3).
@@ -300,7 +301,7 @@ impl Compiler {
     /// left shift, `-fsanitize=shift-base`; whether a check was attached.
     pub(super) fn sanitize_shift(&mut self, id: ExprId, ty: i64, amount_ty: i64) -> bool {
         let left = self.node_op(id) == Some(BinOp::Shl);
-        let base = if left && !is_unsigned_ty(ty) {
+        let base = if left && !is_unsigned_ty(ty) && !self.wrapv {
             Check::ShiftBase.bit()
         } else {
             0

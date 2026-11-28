@@ -1249,6 +1249,45 @@ fn shifts_and_divisions_are_checked() {
     }
 }
 
+/// Where signed overflow wraps (`-fwrapv`, `-fno-strict-overflow`) a signed
+/// left shift is defined, and gcc and clang check its amount alone: the
+/// reports of a negative base and of bits shifted past the sign are gone,
+/// those of the amount stay.
+#[test]
+fn a_wrapping_signed_left_shift_has_no_base_to_check() {
+    let dir = TempDir::new("badc-sanitize-wrapv");
+    let src = dir.join("overflow.c");
+    std::fs::write(&src, SHIFTS).unwrap();
+    for wraps in ["-fwrapv", "-fno-strict-overflow"] {
+        for opt in ["-O0", "-O"] {
+            let exe = dir.join(format!("shifts{wraps}{opt}"));
+            let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+                .args(["-q", opt, "-fsanitize=shift", wraps, "-o"])
+                .arg(&exe)
+                .arg(&src)
+                .output()
+                .expect("run badc");
+            assert!(
+                built.status.success(),
+                "{}",
+                String::from_utf8_lossy(&built.stderr)
+            );
+            let o = run(&exe, &[]);
+            assert!(o.status.success(), "{wraps} {opt}: {o:?}");
+            assert_eq!(
+                reports(&o),
+                [
+                    "3:60: runtime error: shift exponent 32 is too large for 32-bit type 'int'",
+                    "4:60: runtime error: shift exponent -1 is negative",
+                    "7:73: runtime error: shift exponent 64 is too large for 64-bit type \
+                     'long long'",
+                ],
+                "{wraps} {opt}"
+            );
+        }
+    }
+}
+
 const COMPOUND: &str = "#include <limits.h>
 #include <stdio.h>
 int main(int argc, char **argv) {

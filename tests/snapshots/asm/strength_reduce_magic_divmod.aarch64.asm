@@ -837,22 +837,24 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x2, #0x1                // =1
                	movk	x2, #0x8000, lsl #16
-               	adrp	x4, <page>
-               	add	x4, x4, <lo12>
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
                	stur	w2, [x29, #-0xe0]
-               	ldr	w1, [x4, x0, lsl #2]
+               	ldr	w1, [x3, x0, lsl #2]
                	cmp	w1, w2
-               	cset	x3, hs
+               	cset	x4, hs
                	ldur	w5, [x29, #-0xe0]
                	udiv	w5, w1, w5
-               	cmp	w3, w5
+               	cmp	w4, w5
                	b.ne	<addr>
-               	add	x3, x3, x3, lsl #31
-               	sub	x3, x1, x3
+               	cmp	x1, x2
+               	cset	x4, hs
+               	add	x4, x4, x4, lsl #31
+               	sub	x4, x1, x4
                	ldur	w5, [x29, #-0xe0]
                	udiv	w17, w1, w5
                	msub	w1, w17, w5, w1
-               	cmp	w3, w1
+               	cmp	w4, w1
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x14
@@ -864,22 +866,24 @@ Disassembly of section .text:
                	mov	x0, #0x0                // =0
                	mov	x2, #0xfffb             // =65531
                	movk	x2, #0xffff, lsl #16
-               	adrp	x4, <page>
-               	add	x4, x4, <lo12>
+               	adrp	x3, <page>
+               	add	x3, x3, <lo12>
                	stur	w2, [x29, #-0xd8]
-               	ldr	w1, [x4, x0, lsl #2]
+               	ldr	w1, [x3, x0, lsl #2]
                	cmp	w1, w2
-               	cset	x3, hs
+               	cset	x4, hs
                	ldur	w5, [x29, #-0xd8]
                	udiv	w5, w1, w5
-               	cmp	w3, w5
+               	cmp	w4, w5
                	b.ne	<addr>
-               	mul	x3, x3, x2
-               	sub	x3, x1, x3
+               	cmp	x1, x2
+               	cset	x4, hs
+               	mul	x4, x4, x2
+               	sub	x4, x1, x4
                	ldur	w5, [x29, #-0xd8]
                	udiv	w17, w1, w5
                	msub	w1, w17, w5, w1
-               	cmp	w3, w1
+               	cmp	w4, w1
                	b.ne	<addr>
                	add	x0, x0, #0x1
                	cmp	w0, #0x14

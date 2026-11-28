@@ -334,37 +334,38 @@ pub(crate) fn split_wide_lanes(func: &mut FunctionSsa) {
 fn same_value(func: &FunctionSsa, a: ValueId, b: ValueId, depth: u32) -> bool {
     let same = |x: &ValueId, y: &ValueId| depth > 0 && same_value(func, *x, *y, depth - 1);
     a == b
-        || match (&func.insts[a as usize], &func.insts[b as usize]) {
-            (Inst::Imm(x), Inst::Imm(y)) => x == y,
-            (Inst::Copy { value: x, is_fp: f }, Inst::Copy { value: y, is_fp: g }) => {
-                same(x, y) && f == g
+        || func.marks(a) == func.marks(b)
+            && match (&func.insts[a as usize], &func.insts[b as usize]) {
+                (Inst::Imm(x), Inst::Imm(y)) => x == y,
+                (Inst::Copy { value: x, is_fp: f }, Inst::Copy { value: y, is_fp: g }) => {
+                    same(x, y) && f == g
+                }
+                (
+                    Inst::Extend {
+                        value: x,
+                        kind: k,
+                        nsw: n,
+                    },
+                    Inst::Extend {
+                        value: y,
+                        kind: l,
+                        nsw: m,
+                    },
+                ) => same(x, y) && k == l && n == m,
+                (
+                    Inst::BinopI {
+                        op: o,
+                        lhs: x,
+                        rhs_imm: i,
+                    },
+                    Inst::BinopI {
+                        op: p,
+                        lhs: y,
+                        rhs_imm: j,
+                    },
+                ) => o == p && same(x, y) && i == j,
+                _ => false,
             }
-            (
-                Inst::Extend {
-                    value: x,
-                    kind: k,
-                    nsw: n,
-                },
-                Inst::Extend {
-                    value: y,
-                    kind: l,
-                    nsw: m,
-                },
-            ) => same(x, y) && k == l && n == m,
-            (
-                Inst::BinopI {
-                    op: o,
-                    lhs: x,
-                    rhs_imm: i,
-                },
-                Inst::BinopI {
-                    op: p,
-                    lhs: y,
-                    rhs_imm: j,
-                },
-            ) => o == p && same(x, y) && i == j,
-            _ => false,
-        }
 }
 
 fn kind_is_int(kind: StoreKind) -> bool {
@@ -1985,5 +1986,29 @@ fn retype_cells(func: &mut FunctionSsa, slots: &BTreeSet<i64>, int_reads: &BTree
             Inst::Store { value, kind, .. } if bits.contains(value) => *kind = StoreKind::F64,
             _ => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::c5::ir::BinOp;
+
+    /// Two comparisons of one shape, one of them marked to read the low
+    /// words, are not one value.
+    #[test]
+    fn marks_separate_two_values_of_one_shape() {
+        let lt = Inst::BinopI {
+            op: BinOp::Lt,
+            lhs: 0,
+            rhs_imm: 5,
+        };
+        let mut f = FunctionSsa {
+            insts: alloc::vec![Inst::Imm(0), lt.clone(), lt],
+            ..Default::default()
+        };
+        assert!(same_value(&f, 1, 2, 3));
+        f.cmp32 = alloc::vec![false, true, false];
+        assert!(!same_value(&f, 1, 2, 3));
     }
 }

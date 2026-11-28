@@ -3062,6 +3062,18 @@ impl SspFacts {
     }
 }
 
+/// The entries of [`FunctionSsa::f32_values`], [`FunctionSsa::cmp32`] and
+/// [`FunctionSsa::div32`] for one value. Two instructions of one shape over
+/// the same operands are one value only under equal marks: `(float)x` and
+/// `(double)x` are one `FpCast`, and a comparison of the low words one
+/// `Binop` with the comparison of the full values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub(crate) struct Marks {
+    pub f32: bool,
+    pub cmp32: bool,
+    pub div32: bool,
+}
+
 impl FunctionSsa {
     /// [`Inst::is_pure`] in this function: under `FENV_ACCESS` on, an
     /// instruction that [touches the floating-point environment](Inst::touches_fenv)
@@ -3072,6 +3084,16 @@ impl FunctionSsa {
 
     pub(crate) fn has_seh(&self) -> bool {
         !self.seh_scopes.is_empty()
+    }
+
+    /// What value `v` is besides its instruction, from the per-value tables.
+    pub(crate) fn marks(&self, v: ValueId) -> Marks {
+        use super::codegen::passes::narrow;
+        Marks {
+            f32: self.f32_values.get(v as usize).copied().unwrap_or(false),
+            cmp32: narrow::is_cmp32(&self.cmp32, v),
+            div32: narrow::is_narrow_div(self, v),
+        }
     }
 
     /// The SVE kind of value `v`, through the copies a live-range split made.

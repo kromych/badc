@@ -461,6 +461,7 @@ pub(super) const FIXTURES: &[Fixture] = &[
     row("narrow_param_entry_extend.c", 0),
     row("qsort_scan_extend_dedup.c", 0),
     row("cross_block_cse.c", 0),
+    row("one_shape_at_two_widths_is_two_values.c", 0),
     row("divmod_pair_shared_quotient.c", 0),
     row("block_function_declaration_hides_outer_binding.c", 0),
     row("cleanup_handler_name_shadowed_at_exit.c", 0),

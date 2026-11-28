@@ -1,7 +1,10 @@
 //! Structural checks of a function's SSA after each pipeline pass, in
 //! debug builds and under `--verify-ssa`. Block ranges lie within the
 //! tape and share no instruction, and an empty block starts where no other
-//! block continues. Branches name blocks and operands name instructions.
+//! block continues. Branches name blocks and operands name instructions:
+//! the operand walks leave out the positions that may be empty (a `void`
+//! return, an asm statement's value output), so the no-value placeholder
+//! in any operand they visit is a read of nothing.
 //! In a block the entry reaches, phis come first and take one value per
 //! predecessor, defined at the end of that predecessor; every other read
 //! is of a value defined earlier in the block or in a dominating block.
@@ -110,8 +113,11 @@ pub(crate) fn check(f: &FunctionSsa) -> Result<(), String> {
                 past_phis = true;
                 let mut first = None;
                 inst.for_each_operand(|v| {
-                    if v != NO_VALUE && first.is_none() {
-                        first = unavailable(v, b, Some(pc));
+                    if first.is_none() {
+                        first = match v {
+                            NO_VALUE => Some(String::from("no value")),
+                            _ => unavailable(v, b, Some(pc)),
+                        };
                     }
                 });
                 if let Some(e) = first {
@@ -131,10 +137,15 @@ pub(crate) fn check(f: &FunctionSsa) -> Result<(), String> {
                         "phi v{pc} takes a value from block {p}, no predecessor of block {b}"
                     ));
                 }
-                if v != NO_VALUE
-                    && idom[p as usize] != NO_BLOCK
-                    && let Some(e) = unavailable(v, p, None)
-                {
+                if idom[p as usize] == NO_BLOCK {
+                    continue;
+                }
+                if v == NO_VALUE {
+                    return Err(format!(
+                        "phi v{pc} takes no value over the edge from block {p}"
+                    ));
+                }
+                if let Some(e) = unavailable(v, p, None) {
                     return Err(format!("phi v{pc} takes over the edge from block {p} {e}"));
                 }
             }
@@ -148,13 +159,17 @@ pub(crate) fn check(f: &FunctionSsa) -> Result<(), String> {
             }
         }
         let mut first = None;
-        let mut read = |v: ValueId| {
-            if v != NO_VALUE && first.is_none() {
-                first = unavailable(v, b, None);
+        blk.terminator.for_each_operand(|v| {
+            if first.is_none() {
+                first = match v {
+                    NO_VALUE => Some(String::from("no value")),
+                    _ => unavailable(v, b, None),
+                };
             }
-        };
-        blk.terminator.for_each_operand(&mut read);
-        read(blk.exit_acc);
+        });
+        if first.is_none() && blk.exit_acc != NO_VALUE {
+            first = unavailable(blk.exit_acc, b, None);
+        }
         if let Some(e) = first {
             return Err(format!("block {b} ends reading {e}"));
         }
@@ -439,6 +454,44 @@ mod tests {
             alloc::vec![block(1..2, Terminator::Return(1))],
         );
         fails(&f, "v0, which no block holds");
+    }
+
+    #[test]
+    fn an_operand_that_is_no_value_fails() {
+        let f = func(
+            alloc::vec![Inst::Imm(4), add(0, NO_VALUE)],
+            alloc::vec![block(0..2, Terminator::Return(1))],
+        );
+        fails(&f, "v1 reads no value");
+        let f = func(
+            alloc::vec![Inst::Imm(4)],
+            alloc::vec![
+                block(
+                    0..1,
+                    Terminator::Bz {
+                        cond: NO_VALUE,
+                        target: 1,
+                        fall_through: 1,
+                    }
+                ),
+                block(1..1, Terminator::Return(0)),
+            ],
+        );
+        fails(&f, "block 0 ends reading no value");
+        let f = diamond(alloc::vec![phi(alloc::vec![(1, NO_VALUE), (2, 2)])]);
+        fails(&f, "phi v3 takes no value over the edge from block 1");
+    }
+
+    /// A `void` return and a block's exit value are the positions that
+    /// may be empty.
+    #[test]
+    fn a_void_return_and_an_empty_exit_value_pass() {
+        let f = func(
+            alloc::vec![Inst::Imm(4)],
+            alloc::vec![block(0..1, Terminator::Return(NO_VALUE))],
+        );
+        assert_eq!(f.blocks[0].exit_acc, NO_VALUE);
+        assert_eq!(check(&f), Ok(()));
     }
 
     #[test]

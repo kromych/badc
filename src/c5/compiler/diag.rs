@@ -9,7 +9,7 @@
 //! at their site.
 
 use super::super::ast::expr_ty;
-use super::super::ast::{BlockItem, Expr, ExprId, ShortCircuitOp, Stmt, StmtId, UnOp};
+use super::super::ast::{Expr, ExprId, ShortCircuitOp, Stmt, StmtId, UnOp};
 use super::super::diag::{Code, Loc};
 use super::super::error::C5Error;
 use super::super::ir::BinOp;
@@ -269,10 +269,7 @@ impl Compiler {
                     if !reachable {
                         break;
                     }
-                    reachable = match item {
-                        BlockItem::Stmt(s) => self.stmt_may_fall_through(*s),
-                        BlockItem::Decl(_) => true,
-                    };
+                    reachable = self.stmt_may_fall_through(*item);
                 }
                 reachable
             }
@@ -527,10 +524,7 @@ impl Compiler {
             Stmt::While { .. } | Stmt::DoWhile { .. } | Stmt::For { .. } | Stmt::Switch { .. } => {
                 false
             }
-            Stmt::Compound(items) => items.iter().any(|it| match it {
-                BlockItem::Stmt(s) => self.stmt_has_loop_break(*s),
-                BlockItem::Decl(_) => false,
-            }),
+            Stmt::Compound(items) => items.iter().any(|s| self.stmt_has_loop_break(*s)),
             // A constant condition's dead branch is entered only by a `goto`,
             // which this walk does not follow, so its `break` does not count:
             // `for (;; ({ goto l; })) if (0) { l: break; } else return v;`

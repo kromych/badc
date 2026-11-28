@@ -336,14 +336,14 @@ impl Compiler {
         // does it explicitly.
         self.block_scopes.push(Vec::new());
         self.tag_scopes.push();
-        let mut init_ast: Option<super::super::ast::BlockItem> = None;
+        let mut init_ast: Option<super::super::ast::StmtId> = None;
         if self.lex.tk == ';' {
             self.next()?;
         } else if self.lex_is_type_start() {
             // C99 6.8.5.3p1 admits `declaration` as the for-init.
             // `parse_local_decl` pushes one or more
             // `Stmt::Decl(d)` wrappers onto the AST stmt arena;
-            // capture them into a single BlockItem so the walker
+            // capture them into a single statement so the walker
             // gets the same shape it would for an expression
             // init. Without this the walker sees `init: None`
             // and the declared counter never reaches the
@@ -373,7 +373,7 @@ impl Compiler {
                     .retain(|&(s, _)| s < init_before);
                 if !ids.is_empty() {
                     let id = self.ast_wrap_block_items(&ids);
-                    init_ast = Some(super::super::ast::BlockItem::Stmt(id));
+                    init_ast = Some(id);
                 }
             }
         } else {
@@ -385,16 +385,16 @@ impl Compiler {
             if let Some(e) = init_expr {
                 let pos = self.ast_src_pos();
                 let stmt_id = self.ast.push_stmt(super::super::ast::Stmt::Expr(e), pos);
-                init_ast = Some(super::super::ast::BlockItem::Stmt(stmt_id));
+                init_ast = Some(stmt_id);
             } else {
                 // Drain any stmts the init expression pushed
                 // (e.g. a sub-call inside the comma chain) into
                 // a Compound so the for-init slot has a single
-                // BlockItem.
+                // statement.
                 let added = self.ast.stmts.len().saturating_sub(init_before);
                 if added > 0 {
                     let id = self.ast_wrap_stmts_since(init_before);
-                    init_ast = Some(super::super::ast::BlockItem::Stmt(id));
+                    init_ast = Some(id);
                 }
             }
             self.consume(b';', "semicolon expected after for-init")?;
@@ -1022,11 +1022,8 @@ impl Compiler {
                 continue;
             };
             let items = calls.iter().chain([&jump]);
-            self.ast.stmts[site as usize] = super::super::ast::Stmt::Compound(
-                items
-                    .map(|&id| super::super::ast::BlockItem::Stmt(id))
-                    .collect(),
-            );
+            self.ast.stmts[site as usize] =
+                super::super::ast::Stmt::Compound(items.copied().collect());
         }
     }
 
@@ -1486,7 +1483,7 @@ impl Compiler {
         block: super::super::ast::StmtId,
         value_item: u32,
     ) -> Option<super::super::ast::ExprId> {
-        use super::super::ast::{BlockItem, Stmt};
+        use super::super::ast::Stmt;
         if value_item == super::super::ast::NO_VALUE_ITEM {
             return None;
         }
@@ -1496,7 +1493,7 @@ impl Compiler {
             // `Stmt::Compound` whose item at `value_item` carries the
             // value.
             Stmt::Compound(items) => match items.get(value_item as usize) {
-                Some(BlockItem::Stmt(s)) => *s,
+                Some(s) => *s,
                 _ => return None,
             },
             _ => block,

@@ -1774,10 +1774,7 @@ impl Compiler {
         if item_ids.len() == 1 {
             return item_ids[0];
         }
-        let items: alloc::vec::Vec<super::super::ast::BlockItem> = item_ids
-            .iter()
-            .map(|&id| super::super::ast::BlockItem::Stmt(id))
-            .collect();
+        let items = item_ids.to_vec();
         let pos = self.ast_src_pos();
         self.ast
             .push_stmt(super::super::ast::Stmt::Compound(items), pos)
@@ -1830,7 +1827,7 @@ impl Compiler {
     /// Push `Stmt::For { init, cond, post, body }` at the `for` keyword's position.
     pub(super) fn ast_emit_for(
         &mut self,
-        init: Option<super::super::ast::BlockItem>,
+        init: Option<super::super::ast::StmtId>,
         cond: Option<super::super::ast::ExprId>,
         post: Option<super::super::ast::ExprId>,
         body: super::super::ast::StmtId,

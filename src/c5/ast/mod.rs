@@ -612,23 +612,12 @@ pub(crate) enum Expr {
     },
 }
 
-/// One item inside a compound statement. C99 6.8.2's
-/// `block-item-list` permits declarations and statements to
-/// interleave; the variant keeps them as two distinct shapes.
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum BlockItem {
-    Stmt(StmtId),
-    // TODO: nothing builds this variant; a block item is a statement.
-    #[allow(dead_code)]
-    Decl(DeclId),
-}
-
 /// Statement node. Same arena/index pattern as [`Expr`].
 #[derive(Debug, Clone)]
 pub(crate) enum Stmt {
     /// `{ ... }` (C99 6.8.2). `items` is the block-item-list in
     /// source order.
-    Compound(Vec<BlockItem>),
+    Compound(Vec<StmtId>),
     /// Expression statement. The wrapped expression is evaluated
     /// for side effects; its value is discarded.
     Expr(ExprId),
@@ -643,10 +632,10 @@ pub(crate) enum Stmt {
     /// `do body while (cond)` (C99 6.8.5.2).
     DoWhile { body: StmtId, cond: ExprId },
     /// `for (init; cond; post) body` (C99 6.8.5.3). `init` is a
-    /// block-item to admit the C99 declaration-init shape; `cond`
-    /// and `post` are independently optional.
+    /// statement, which a declaration is wrapped in; `cond` and `post`
+    /// are independently optional.
     For {
-        init: Option<BlockItem>,
+        init: Option<StmtId>,
         cond: Option<ExprId>,
         post: Option<ExprId>,
         body: StmtId,

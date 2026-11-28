@@ -5,8 +5,8 @@
 //! the error type; each submodule lowers one part of the grammar.
 
 use super::ast::{
-    Ast, AtomicKind, BitfieldDesc, BlockItem, Decl, DeclId, Expr, ExprId, FinishedFunction,
-    LabelId, LocalInit, LocalInitPrelude, MAX_MEM_FILL_ACCESSES, MemTransferOp, RuntimeInitValue,
+    Ast, AtomicKind, BitfieldDesc, Decl, DeclId, Expr, ExprId, FinishedFunction, LabelId,
+    LocalInit, LocalInitPrelude, MAX_MEM_FILL_ACCESSES, MemTransferOp, RuntimeInitValue,
     SLOT_ALIGN, ShortCircuitOp, Stmt, StmtId, UnOp, bitfield_slice_mask, mem_transfer_accesses,
     mem_transfer_chunks,
 };

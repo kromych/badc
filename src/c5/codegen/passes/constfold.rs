@@ -1946,7 +1946,7 @@ mod tests {
             blocks: vec![Block {
                 start_pc: 0,
                 inst_range: 0..n as u32,
-                terminator: Terminator::Return(crate::c5::ir::NO_VALUE),
+                terminator: Terminator::Return(None),
             }],
             extern_call_refs: Vec::new(),
             extern_imm_code_refs: Vec::new(),

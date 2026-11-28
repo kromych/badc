@@ -177,8 +177,8 @@ fn accum_add_long() -> FunctionSsa {
                     fall_through: 2,
                 },
             ),
-            block(2..2, Terminator::Return(0)),
-            block(2..5, Terminator::Return(4)),
+            block(2..2, Terminator::Return(Some(0))),
+            block(2..5, Terminator::Return(Some(4))),
         ],
     );
     f.inst_src = vec![crate::c5::ir::InstSrc::default(); f.insts.len()];
@@ -267,7 +267,7 @@ fn narrow_return_reextends_the_accumulator() {
     f.inst_src.push(crate::c5::ir::InstSrc::default());
     f.f32_values.push(false);
     f.blocks[2].inst_range = 2..6;
-    f.blocks[2].terminator = Terminator::Return(5);
+    f.blocks[2].terminator = Terminator::Return(Some(5));
     run(core::slice::from_mut(&mut f));
     assert_well_formed(&f);
     // Two I32 extends beyond the param back edge: the accumulator step and
@@ -312,7 +312,7 @@ fn accum_narrowed_call(param: LoadKind, call: Narrow, sum: Narrow) -> FunctionSs
     f.inst_src = vec![crate::c5::ir::InstSrc::default(); f.insts.len()];
     f.f32_values = vec![false; f.insts.len()];
     f.blocks[2].inst_range = 2..7;
-    f.blocks[2].terminator = Terminator::Return(6);
+    f.blocks[2].terminator = Terminator::Return(Some(6));
     f
 }
 
@@ -385,9 +385,9 @@ fn a_base_return_the_narrowing_would_change_keeps_the_recursion() {
     f.inst_src = vec![crate::c5::ir::InstSrc::default(); f.insts.len()];
     f.f32_values = vec![false; f.insts.len()];
     f.blocks[1].inst_range = 6..7;
-    f.blocks[1].terminator = Terminator::Return(6);
+    f.blocks[1].terminator = Terminator::Return(Some(6));
     f.blocks[2].inst_range = 2..6;
-    f.blocks[2].terminator = Terminator::Return(5);
+    f.blocks[2].terminator = Terminator::Return(Some(5));
     assert!(unchanged(&f));
 }
 
@@ -432,8 +432,8 @@ fn const_void_tail() -> FunctionSsa {
                     fall_through: 1,
                 },
             ),
-            block(1..2, Terminator::Return(1)),
-            block(2..5, Terminator::Return(4)),
+            block(1..2, Terminator::Return(Some(1))),
+            block(2..5, Terminator::Return(Some(4))),
         ],
     );
     f.inst_src = vec![crate::c5::ir::InstSrc::default(); f.insts.len()];
@@ -467,8 +467,8 @@ fn const_void_tail_forms_a_loop_without_acc_phi() {
 /// function lowers them.
 fn valueless_void_tail() -> FunctionSsa {
     let mut f = const_void_tail();
-    f.blocks[1].terminator = Terminator::Return(NO_VALUE);
-    f.blocks[2].terminator = Terminator::Return(NO_VALUE);
+    f.blocks[1].terminator = Terminator::Return(None);
+    f.blocks[2].terminator = Terminator::Return(None);
     f
 }
 
@@ -487,7 +487,7 @@ fn valueless_void_tail_forms_a_loop() {
     assert!(
         f.blocks
             .iter()
-            .all(|b| !matches!(b.terminator, Terminator::Return(v) if v != NO_VALUE)),
+            .all(|b| !matches!(b.terminator, Terminator::Return(Some(_)))),
         "the exit names no value"
     );
     assert_single_backedge(&f, header);
@@ -496,7 +496,7 @@ fn valueless_void_tail_forms_a_loop() {
 #[test]
 fn differing_constant_exits_are_rejected() {
     let mut f = const_void_tail();
-    f.blocks[1].terminator = Terminator::Return(NO_VALUE);
+    f.blocks[1].terminator = Terminator::Return(None);
     assert!(unchanged(&f));
 }
 
@@ -628,8 +628,8 @@ fn pure_value_tail_is_left_to_emit_conversion() {
                     fall_through: 2,
                 },
             ),
-            block(2..2, Terminator::Return(0)),
-            block(2..4, Terminator::Return(3)),
+            block(2..2, Terminator::Return(Some(0))),
+            block(2..4, Terminator::Return(Some(3))),
         ],
     );
     f.inst_src = vec![crate::c5::ir::InstSrc::default(); f.insts.len()];

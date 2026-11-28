@@ -912,7 +912,7 @@ mod tests {
             blocks: vec![Block {
                 start_pc: 0,
                 inst_range: 0..n,
-                terminator: Terminator::Return(n - 1),
+                terminator: Terminator::Return(Some(n - 1)),
             }],
             ..Default::default()
         }];

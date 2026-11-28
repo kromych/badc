@@ -1052,14 +1052,12 @@ fn run_func<H: Host>(
         }
         match block.terminator {
             Terminator::Return(rv) => {
-                let r = if rv == super::super::ir::NO_VALUE {
-                    0
-                } else {
+                let r = rv.map_or(0, |rv| {
                     if let Some(bytes) = frame.sregs.get(&rv) {
                         mem.sve_ret = bytes.clone();
                     }
                     frame.regs[rv as usize]
-                };
+                });
                 break Ok(r);
             }
             Terminator::Jmp(target) => {

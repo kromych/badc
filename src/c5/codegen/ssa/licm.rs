@@ -1592,7 +1592,7 @@ mod tests {
                         fall_through: 3,
                     },
                 ),
-                block(8..8, Terminator::Return(NO_VALUE)),
+                block(8..8, Terminator::Return(None)),
             ],
         );
         let hoists = plan(&f, Target::LinuxAarch64);
@@ -2132,7 +2132,7 @@ mod tests {
                     },
                 ),
                 block(4..n, Terminator::Jmp(1)),
-                block(n..n, Terminator::Return(2)),
+                block(n..n, Terminator::Return(Some(2))),
             ],
         )
     }
@@ -2305,7 +2305,7 @@ mod tests {
                     },
                 ),
                 block(h + 2..h + 4, Terminator::Jmp(1)),
-                block(h + 4..h + 4, Terminator::Return(h)),
+                block(h + 4..h + 4, Terminator::Return(Some(h))),
             ],
         )
     }
@@ -2380,7 +2380,7 @@ mod tests {
                         },
                     ),
                     block(h + 2..h + 4, Terminator::Jmp(2)),
-                    block(h + 4..h + 4, Terminator::Return(h)),
+                    block(h + 4..h + 4, Terminator::Return(Some(h))),
                 ],
             )
         };

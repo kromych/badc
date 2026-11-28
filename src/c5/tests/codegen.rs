@@ -17915,7 +17915,7 @@ fn a_difference_of_pointers_to_incompatible_types_is_rejected() {
 /// and a value-returning function reaching their end return 0.
 #[test]
 fn a_void_function_returns_no_value() {
-    use crate::c5::ir::{FunctionSsa, Inst, NO_VALUE, Terminator};
+    use crate::c5::ir::{FunctionSsa, Inst, Terminator};
     use crate::{CompileOptions, Compiler, Target};
     let ssa = |src: &str| {
         let program = Compiler::with_options(
@@ -17928,7 +17928,7 @@ fn a_void_function_returns_no_value() {
         crate::c5::codegen::ssa::shadow::produce_ssa_funcs(&program, Target::LinuxX64, false, true)
             .expect("produce_ssa_funcs")
     };
-    let returns = |f: &FunctionSsa| -> alloc::vec::Vec<u32> {
+    let returns = |f: &FunctionSsa| -> alloc::vec::Vec<Option<u32>> {
         f.blocks
             .iter()
             .filter_map(|b| match b.terminator {
@@ -17940,6 +17940,7 @@ fn a_void_function_returns_no_value() {
     let returns_zero = |f: &FunctionSsa| {
         returns(f)
             .iter()
+            .flatten()
             .any(|&v| matches!(f.insts.get(v as usize), Some(Inst::Imm(0))))
     };
     let funcs = ssa("typedef void nothing;\n\
@@ -17969,7 +17970,7 @@ fn a_void_function_returns_no_value() {
         let f = func(name);
         let rets = returns(f);
         assert!(
-            !rets.is_empty() && rets.iter().all(|&v| v == NO_VALUE),
+            !rets.is_empty() && rets.iter().all(Option::is_none),
             "{name}: every return names no value: {:?}",
             f.blocks
         );

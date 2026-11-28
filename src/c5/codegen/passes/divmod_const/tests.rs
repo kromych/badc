@@ -17,7 +17,7 @@ fn func(insts: Vec<Inst>) -> FunctionSsa {
         blocks: alloc::vec![Block {
             start_pc: 0,
             inst_range: 0..n as u32,
-            terminator: Terminator::Return(n as ValueId - 1),
+            terminator: Terminator::Return(Some(n as ValueId - 1)),
         }],
         ..FunctionSsa::default()
     }
@@ -25,7 +25,7 @@ fn func(insts: Vec<Inst>) -> FunctionSsa {
 
 fn returned(f: &FunctionSsa) -> ValueId {
     match f.blocks[0].terminator {
-        Terminator::Return(r) => r,
+        Terminator::Return(Some(r)) => r,
         ref other => panic!("no return: {other:?}"),
     }
 }

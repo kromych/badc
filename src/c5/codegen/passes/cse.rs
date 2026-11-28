@@ -982,7 +982,7 @@ mod tests {
 
     fn return_val(f: &FunctionSsa, block: usize) -> ValueId {
         match f.blocks[block].terminator {
-            Terminator::Return(v) => v,
+            Terminator::Return(Some(v)) => v,
             other => panic!("expected Return, got {other:?}"),
         }
     }
@@ -995,8 +995,8 @@ mod tests {
             alloc::vec![Inst::Imm(3), Inst::Imm(5), add(0, 1), add(0, 1)],
             alloc::vec![
                 blk(0..3, bz(2, 2, 1)),
-                blk(3..4, Terminator::Return(3)),
-                blk(4..4, Terminator::Return(0)),
+                blk(3..4, Terminator::Return(Some(3))),
+                blk(4..4, Terminator::Return(Some(0))),
             ],
         )
     }
@@ -1044,8 +1044,8 @@ mod tests {
             ],
             alloc::vec![
                 blk(0..4, bz(2, 2, 1)),
-                blk(4..6, Terminator::Return(4)),
-                blk(6..6, Terminator::Return(0)),
+                blk(4..6, Terminator::Return(Some(4))),
+                blk(6..6, Terminator::Return(Some(0))),
             ],
         );
         run_one(&mut f, caps(5, 5));
@@ -1060,8 +1060,8 @@ mod tests {
             alloc::vec![Inst::Imm(3), Inst::Imm(5), muli(0, 7), add(0, 1), add(0, 1)],
             alloc::vec![
                 blk(0..3, bz(2, 2, 1)),
-                blk(3..4, Terminator::Return(3)),
-                blk(4..5, Terminator::Return(4)),
+                blk(3..4, Terminator::Return(Some(3))),
+                blk(4..5, Terminator::Return(Some(4))),
             ],
         );
         run_one(&mut f, caps(16, 8));
@@ -1086,7 +1086,7 @@ mod tests {
             alloc::vec![
                 blk(0..4, bz(3, 2, 1)),
                 blk(4..6, bz(5, 2, 1)),
-                blk(6..7, Terminator::Return(6)),
+                blk(6..7, Terminator::Return(Some(6))),
             ],
         );
         run_one(&mut f, caps(16, 8));
@@ -1107,8 +1107,8 @@ mod tests {
             alloc::vec![Inst::Imm(3), Inst::Imm(5), cmp(0, 1), cmp(0, 1)],
             alloc::vec![
                 blk(0..3, bz(2, 2, 1)),
-                blk(3..4, Terminator::Return(3)),
-                blk(4..4, Terminator::Return(0)),
+                blk(3..4, Terminator::Return(Some(3))),
+                blk(4..4, Terminator::Return(Some(0))),
             ],
         );
         run_one(&mut f, caps(16, 8));
@@ -1131,8 +1131,8 @@ mod tests {
             alloc::vec![Inst::Imm(3), Inst::Imm(5), add(0, 1), call, add(0, 1)],
             alloc::vec![
                 blk(0..4, bz(2, 2, 1)),
-                blk(4..5, Terminator::Return(4)),
-                blk(5..5, Terminator::Return(0)),
+                blk(4..5, Terminator::Return(Some(4))),
+                blk(5..5, Terminator::Return(Some(0))),
             ],
         )
     }
@@ -1178,7 +1178,7 @@ mod tests {
             alloc::vec![
                 blk(0..2, Terminator::Jmp(1)),
                 blk(2..6, bz(5, 2, 1)),
-                blk(6..6, Terminator::Return(4)),
+                blk(6..6, Terminator::Return(Some(4))),
             ],
         )
     }
@@ -1208,8 +1208,8 @@ mod tests {
             alloc::vec![Inst::Imm(3), cast(0), cast(0)],
             alloc::vec![
                 blk(0..2, bz(1, 2, 1)),
-                blk(2..3, Terminator::Return(2)),
-                blk(3..3, Terminator::Return(0)),
+                blk(2..3, Terminator::Return(Some(2))),
+                blk(3..3, Terminator::Return(Some(0))),
             ],
         );
         f.f32_values[2] = true;
@@ -1231,8 +1231,8 @@ mod tests {
                 alloc::vec![Inst::Imm(3), Inst::Imm(5), lt(), lt()],
                 alloc::vec![
                     blk(0..3, bz(0, 2, 1)),
-                    blk(3..4, Terminator::Return(3)),
-                    blk(4..4, Terminator::Return(2)),
+                    blk(3..4, Terminator::Return(Some(3))),
+                    blk(4..4, Terminator::Return(Some(2))),
                 ],
             )
         };
@@ -1269,8 +1269,8 @@ mod tests {
                 ],
                 alloc::vec![
                     blk(0..6, bz(5, 2, 1)),
-                    blk(6..9, Terminator::Return(8)),
-                    blk(9..9, Terminator::Return(0)),
+                    blk(6..9, Terminator::Return(Some(8))),
+                    blk(9..9, Terminator::Return(Some(0))),
                 ],
             )
         };
@@ -1297,8 +1297,8 @@ mod tests {
                 alloc::vec![Inst::ImmData(0), Inst::ImmData(0)],
                 alloc::vec![
                     blk(0..1, bz(0, 2, 1)),
-                    blk(1..2, Terminator::Return(1)),
-                    blk(2..2, Terminator::Return(0)),
+                    blk(1..2, Terminator::Return(Some(1))),
+                    blk(2..2, Terminator::Return(Some(0))),
                 ],
             );
             f.extern_imm_data_refs = refs;

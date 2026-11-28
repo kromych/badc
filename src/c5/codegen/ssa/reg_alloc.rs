@@ -602,7 +602,7 @@ pub(crate) fn fp_constants(func: &FunctionSsa, target: Target, reads: &[bool]) -
     let fp_return = func.ret_is_fp && func.ret_agg.is_none();
     for block in &func.blocks {
         match block.terminator {
-            Terminator::Return(v) if v != NO_VALUE => note(v, fp_return),
+            Terminator::Return(Some(v)) => note(v, fp_return),
             ref t => t.for_each_operand(|v| note(v, false)),
         }
     }
@@ -4793,7 +4793,7 @@ fn use_weights(
         };
         match block.terminator {
             Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => bump_term(cond),
-            Terminator::Return(v) => bump_term(v),
+            Terminator::Return(Some(v)) => bump_term(v),
             Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
                 bump_term(target)
             }
@@ -4837,7 +4837,7 @@ fn level_use_weights(
         }
         match block.terminator {
             Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => bump(cond),
-            Terminator::Return(v) => bump(v),
+            Terminator::Return(Some(v)) => bump(v),
             Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
                 bump(target)
             }
@@ -6270,10 +6270,10 @@ fn populate_return_hints(
     }
 
     for block in &func.blocks {
-        let Terminator::Return(v) = block.terminator else {
+        let Terminator::Return(Some(v)) = block.terminator else {
             continue;
         };
-        if v == NO_VALUE || (v as usize) >= func.insts.len() {
+        if (v as usize) >= func.insts.len() {
             continue;
         }
         // Single-block branch: require the value's def to live in this
@@ -7207,7 +7207,7 @@ mod tests {
                 blocks: vec![crate::c5::ir::Block {
                     start_pc: 0,
                     inst_range: 0..n as u32,
-                    terminator: Terminator::Return(n as u32 - 1),
+                    terminator: Terminator::Return(Some(n as u32 - 1)),
                 }],
                 insts,
                 ..Default::default()
@@ -8015,7 +8015,7 @@ int main(void) { return 0; }
             blocks: vec![Block {
                 start_pc: 0,
                 inst_range: 0..6,
-                terminator: Terminator::Return(5),
+                terminator: Terminator::Return(Some(5)),
             }],
             ..Default::default()
         };
@@ -8073,7 +8073,7 @@ int main(void) { return 0; }
             blocks: vec![Block {
                 start_pc: 0,
                 inst_range: 0..n as u32,
-                terminator: Terminator::Return(4),
+                terminator: Terminator::Return(Some(4)),
             }],
             ..Default::default()
         };
@@ -8116,7 +8116,7 @@ int main(void) { return 0; }
             blocks: vec![Block {
                 start_pc: 0,
                 inst_range: 0..n,
-                terminator: Terminator::Return(acc),
+                terminator: Terminator::Return(Some(acc)),
             }],
             ..Default::default()
         };
@@ -8921,7 +8921,7 @@ int main(void) { return 0; }
             Block {
                 start_pc: 0,
                 inst_range: 4..4,
-                terminator: Terminator::Return(1),
+                terminator: Terminator::Return(Some(1)),
             },
         ];
         let func = FunctionSsa {
@@ -9096,7 +9096,7 @@ int main(void) { return 0; }
             blocks: alloc::vec![crate::c5::ir::Block {
                 start_pc: 0,
                 inst_range: 0..n as u32,
-                terminator: Terminator::Return(NO_VALUE),
+                terminator: Terminator::Return(None),
             }],
             ..FunctionSsa::default()
         }
@@ -9268,12 +9268,12 @@ int main(void) { return 0; }
                 Block {
                     start_pc: 0,
                     inst_range: n..n,
-                    terminator: Terminator::Return(NO_VALUE),
+                    terminator: Terminator::Return(None),
                 },
                 Block {
                     start_pc: 0,
                     inst_range: n..n,
-                    terminator: Terminator::Return(NO_VALUE),
+                    terminator: Terminator::Return(None),
                 },
             ],
         )
@@ -9366,7 +9366,7 @@ int main(void) { return 0; }
             Block {
                 start_pc: 0,
                 inst_range: 6..6,
-                terminator: Terminator::Return(3),
+                terminator: Terminator::Return(Some(3)),
             },
         ];
         let f = func_with(insts, blocks);
@@ -9452,7 +9452,7 @@ int main(void) { return 0; }
             vec![Block {
                 start_pc: 0,
                 inst_range: 0..n,
-                terminator: Terminator::Return(ret),
+                terminator: Terminator::Return(Some(ret)),
             }],
         )
     }
@@ -10223,7 +10223,7 @@ int main(void) { return 0; }
                         );
                     }
                 }
-                let Terminator::Return(r) = f.blocks[0].terminator else {
+                let Terminator::Return(Some(r)) = f.blocks[0].terminator else {
                     panic!("{target:?} {name}")
                 };
                 let Inst::AggParts { parts: ret, .. } = &f.insts[r as usize] else {

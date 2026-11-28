@@ -278,8 +278,8 @@ mod tests {
                 block(0..2, bz(1, 4, 1)),
                 block(2..4, Terminator::Jmp(2)),
                 block(4..5, bz(4, 4, 3)),
-                block(5..6, Terminator::Return(5)),
-                block(6..7, Terminator::Return(6)),
+                block(5..6, Terminator::Return(Some(5))),
+                block(6..7, Terminator::Return(Some(6))),
             ],
         )
     }
@@ -321,7 +321,7 @@ mod tests {
             ],
             vec![
                 block(0..1, Terminator::Jmp(2)),
-                block(1..2, Terminator::Return(1)),
+                block(1..2, Terminator::Return(Some(1))),
                 block(2..3, bz(2, 1, 1)),
             ],
         );
@@ -330,7 +330,7 @@ mod tests {
         assert_eq!(f.blocks[0].inst_range, 0..2);
         assert!(matches!(f.insts[1], Inst::BinopI { lhs: 0, .. }));
         assert_eq!(f.blocks[0].terminator, bz(1, 1, 1));
-        assert_eq!(f.blocks[1].terminator, Terminator::Return(2));
+        assert_eq!(f.blocks[1].terminator, Terminator::Return(Some(2)));
     }
 
     #[test]
@@ -340,13 +340,13 @@ mod tests {
             vec![
                 block(0..1, Terminator::Jmp(1)),
                 block(1..2, Terminator::Jmp(2)),
-                block(2..3, Terminator::Return(2)),
+                block(2..3, Terminator::Return(Some(2))),
             ],
         );
         assert!(run_one(&mut f));
         assert_eq!(f.blocks.len(), 1);
         assert_eq!(f.blocks[0].inst_range, 0..3);
-        assert_eq!(f.blocks[0].terminator, Terminator::Return(2));
+        assert_eq!(f.blocks[0].terminator, Terminator::Return(Some(2)));
     }
 
     #[test]
@@ -356,8 +356,8 @@ mod tests {
             vec![
                 block(0..1, Terminator::Jmp(1)),
                 block(1..1, Terminator::JumpTable { idx: 0, table: 0 }),
-                block(1..2, Terminator::Return(1)),
-                block(2..3, Terminator::Return(2)),
+                block(1..2, Terminator::Return(Some(1))),
+                block(2..3, Terminator::Return(Some(2))),
             ],
         );
         f.jump_tables = vec![vec![2, 3, 2]];
@@ -391,7 +391,7 @@ mod tests {
                 block(1..3, bz(2, 4, 2)),
                 block(3..4, Terminator::Jmp(3)),
                 block(4..5, Terminator::Jmp(1)),
-                block(5..5, Terminator::Return(1)),
+                block(5..5, Terminator::Return(Some(1))),
             ],
         );
         assert!(run_one(&mut f));
@@ -414,7 +414,7 @@ mod tests {
             vec![
                 block(0..1, bz(0, 1, 2)),
                 block(1..2, Terminator::Jmp(0)),
-                block(2..3, Terminator::Return(2)),
+                block(2..3, Terminator::Return(Some(2))),
             ],
         );
         assert!(!run_one(&mut f));
@@ -444,7 +444,7 @@ mod tests {
                 vec![Inst::Imm(0), Inst::Imm(1)],
                 vec![
                     block(0..1, Terminator::Jmp(1)),
-                    block(1..2, Terminator::Return(1)),
+                    block(1..2, Terminator::Return(Some(1))),
                 ],
             )
         };
@@ -474,7 +474,7 @@ mod tests {
             vec![Inst::BlockAddr(1), Inst::Imm(1)],
             vec![
                 block(0..1, Terminator::GotoIndirect { target: 0 }),
-                block(1..2, Terminator::Return(1)),
+                block(1..2, Terminator::Return(Some(1))),
             ],
         );
         f.computed_goto_targets = vec![1];
@@ -490,15 +490,15 @@ mod tests {
             vec![
                 block(0..1, Terminator::AsmGoto { table: 0 }),
                 block(1..2, Terminator::Jmp(3)),
-                block(2..3, Terminator::Return(2)),
-                block(3..4, Terminator::Return(3)),
+                block(2..3, Terminator::Return(Some(2))),
+                block(3..4, Terminator::Return(Some(3))),
             ],
         );
         f.jump_tables = vec![vec![1, 2]];
         assert!(run_one(&mut f));
         assert_eq!(f.blocks.len(), 3);
         assert_eq!(f.blocks[1].inst_range, 1..3);
-        assert_eq!(f.blocks[1].terminator, Terminator::Return(2));
+        assert_eq!(f.blocks[1].terminator, Terminator::Return(Some(2)));
         assert_eq!(f.jump_tables[0], vec![1, 2]);
     }
 
@@ -514,8 +514,8 @@ mod tests {
             ],
             vec![
                 block(0..1, bz(0, 1, 2)),
-                block(1..2, Terminator::Return(1)),
-                block(2..3, Terminator::Return(2)),
+                block(1..2, Terminator::Return(Some(1))),
+                block(2..3, Terminator::Return(Some(2))),
             ],
         );
         assert!(!run_one(&mut f));
@@ -536,7 +536,7 @@ mod tests {
             ],
             vec![
                 block(0..1, Terminator::Jmp(1)),
-                block(1..2, Terminator::Return(1)),
+                block(1..2, Terminator::Return(Some(1))),
             ],
         );
         assert!(!run_one(&mut f));
@@ -557,7 +557,7 @@ mod tests {
             ],
             vec![
                 block(0..2, Terminator::Jmp(1)),
-                block(2..4, Terminator::Return(2)),
+                block(2..4, Terminator::Return(Some(2))),
             ],
         );
         assert!(!run_one(&mut f));
@@ -577,7 +577,7 @@ mod tests {
             vec![
                 block(0..1, bz(0, 2, 1)),
                 block(1..2, Terminator::Jmp(2)),
-                block(2..3, Terminator::Return(2)),
+                block(2..3, Terminator::Return(Some(2))),
             ],
         );
         assert!(!run_one(&mut f));
@@ -599,13 +599,13 @@ mod tests {
             vec![
                 block(0..2, bz(0, 3, 1)),
                 block(2..4, bz(3, 3, 2)),
-                block(4..5, Terminator::Return(4)),
-                block(5..6, Terminator::Return(5)),
+                block(4..5, Terminator::Return(Some(4))),
+                block(5..6, Terminator::Return(Some(5))),
             ],
         );
         assert!(run_one(&mut f));
         assert_eq!(f.blocks.len(), 4);
         assert!(matches!(f.insts[3], Inst::BinopI { lhs: 1, .. }));
-        assert_eq!(f.blocks[2].terminator, Terminator::Return(1));
+        assert_eq!(f.blocks[2].terminator, Terminator::Return(Some(1)));
     }
 }

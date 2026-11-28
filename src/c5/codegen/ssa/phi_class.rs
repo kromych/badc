@@ -268,7 +268,7 @@ mod tests {
         let blocks = vec![Block {
             start_pc: 0,
             inst_range: 0..2,
-            terminator: Terminator::Return(1),
+            terminator: Terminator::Return(Some(1)),
         }];
         let func = func_with(insts, blocks);
         let mut classes = PhiClasses::build(&func, &value_interference(&func));
@@ -316,7 +316,7 @@ mod tests {
             Block {
                 start_pc: 0,
                 inst_range: 3..4,
-                terminator: Terminator::Return(3),
+                terminator: Terminator::Return(Some(3)),
             },
         ];
         let func = func_with(insts, blocks);
@@ -368,7 +368,7 @@ mod tests {
             Block {
                 start_pc: 0,
                 inst_range: 3..4,
-                terminator: Terminator::Return(3),
+                terminator: Terminator::Return(Some(3)),
             },
         ];
         let func = func_with(insts, blocks);
@@ -431,7 +431,7 @@ mod tests {
             Block {
                 start_pc: 0,
                 inst_range: 4..4,
-                terminator: Terminator::Return(1),
+                terminator: Terminator::Return(Some(1)),
             },
         ];
         let func = func_with(insts, blocks);
@@ -508,7 +508,7 @@ mod tests {
             Block {
                 start_pc: 0,
                 inst_range: 5..5,
-                terminator: Terminator::Return(3),
+                terminator: Terminator::Return(Some(3)),
             },
         ];
         let func = func_with(insts, blocks);

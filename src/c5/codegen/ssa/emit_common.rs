@@ -2253,14 +2253,15 @@ pub(crate) fn tail_call_site(
         let inst = &func.insts[p as usize];
         !inst.is_lifetime_marker() && !inst_emits_nothing(inst, p, alloc)
     };
-    let void = ret == super::super::ir::NO_VALUE;
-    let v = if void {
-        if !crate::c5::compiler::types::is_void_ty(func.ret_type_tag?) {
-            return None;
+    let void = ret.is_none();
+    let v = match ret {
+        Some(v) => v,
+        None => {
+            if !crate::c5::compiler::types::is_void_ty(func.ret_type_tag?) {
+                return None;
+            }
+            block.inst_range.clone().rev().find(|&p| emits(p))?
         }
-        block.inst_range.clone().rev().find(|&p| emits(p))?
-    } else {
-        ret
     };
     // Lifetime markers after the call are moot once the frame is gone.
     (block.inst_range.contains(&v) && !(v + 1..block.inst_range.end).any(emits))
@@ -4141,7 +4142,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..insts.len() as u32,
-                terminator: Terminator::Return(ret),
+                terminator: Terminator::Return(Some(ret)),
             }],
             insts: insts.clone(),
             ..Default::default()

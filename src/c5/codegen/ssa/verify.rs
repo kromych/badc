@@ -416,7 +416,7 @@ mod tests {
                 ),
                 block(1..2, Terminator::Jmp(3)),
                 block(2..3, Terminator::Jmp(3)),
-                block(3..n, Terminator::Return(n - 1)),
+                block(3..n, Terminator::Return(Some(n - 1))),
             ],
         )
     }
@@ -431,7 +431,7 @@ mod tests {
     fn a_read_ahead_of_its_definition_fails() {
         let f = func(
             alloc::vec![add(1, 1), Inst::Imm(4)],
-            alloc::vec![block(0..2, Terminator::Return(0))],
+            alloc::vec![block(0..2, Terminator::Return(Some(0)))],
         );
         fails(&f, "v0 reads v1, defined later in block 0");
     }
@@ -446,7 +446,7 @@ mod tests {
     fn a_read_of_an_instruction_no_block_holds_fails() {
         let f = func(
             alloc::vec![Inst::Imm(4), add(0, 0)],
-            alloc::vec![block(1..2, Terminator::Return(1))],
+            alloc::vec![block(1..2, Terminator::Return(Some(1)))],
         );
         fails(&f, "v0, which no block holds");
     }
@@ -455,7 +455,7 @@ mod tests {
     fn an_operand_that_is_no_value_fails() {
         let f = func(
             alloc::vec![Inst::Imm(4), add(0, NO_VALUE)],
-            alloc::vec![block(0..2, Terminator::Return(1))],
+            alloc::vec![block(0..2, Terminator::Return(Some(1)))],
         );
         fails(&f, "v1 reads no value");
         let f = func(
@@ -469,7 +469,7 @@ mod tests {
                         fall_through: 1,
                     }
                 ),
-                block(1..1, Terminator::Return(0)),
+                block(1..1, Terminator::Return(Some(0))),
             ],
         );
         fails(&f, "block 0 ends reading no value");
@@ -483,7 +483,7 @@ mod tests {
     fn a_void_return_and_an_empty_exit_value_pass() {
         let f = func(
             alloc::vec![Inst::Imm(4)],
-            alloc::vec![block(0..1, Terminator::Return(NO_VALUE))],
+            alloc::vec![block(0..1, Terminator::Return(None))],
         );
         assert_eq!(check(&f), Ok(()));
     }
@@ -518,7 +518,7 @@ mod tests {
             alloc::vec![Inst::Imm(1), Inst::Imm(2)],
             alloc::vec![
                 block(0..2, Terminator::Jmp(1)),
-                block(1..2, Terminator::Return(1)),
+                block(1..2, Terminator::Return(Some(1))),
             ],
         );
         fails(&f, "blocks 0 and 1 both hold v1");
@@ -530,7 +530,7 @@ mod tests {
             alloc::vec![Inst::Imm(1), Inst::Imm(2)],
             alloc::vec![
                 block(0..2, Terminator::Jmp(1)),
-                block(1..1, Terminator::Return(NO_VALUE)),
+                block(1..1, Terminator::Return(None)),
             ],
         );
         fails(&f, "empty block 1 starts at v1, inside block 0");
@@ -540,7 +540,7 @@ mod tests {
     fn a_range_past_the_tape_fails() {
         let f = func(
             alloc::vec![Inst::Imm(1)],
-            alloc::vec![block(0..2, Terminator::Return(0))],
+            alloc::vec![block(0..2, Terminator::Return(Some(0)))],
         );
         fails(&f, "block 0 holds 0..2 of a 1-instruction tape");
     }
@@ -559,7 +559,7 @@ mod tests {
     fn a_failed_check_names_the_pass_and_the_function() {
         let f = func(
             alloc::vec![add(1, 1), Inst::Imm(4)],
-            alloc::vec![block(0..2, Terminator::Return(0))],
+            alloc::vec![block(0..2, Terminator::Return(Some(0)))],
         );
         after_pass(&[f], "some::pass");
     }

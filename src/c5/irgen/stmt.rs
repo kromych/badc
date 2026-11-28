@@ -619,7 +619,8 @@ impl<'a> Walker<'a> {
     /// function, whose value C99 6.9.1p12 leaves undefined.
     pub(super) fn return_without_value(&self, b: &mut SsaBuilder) {
         if self.returns_no_value || self.ret_in_regs || self.ret_indirect {
-            self.return_value(b, NO_VALUE);
+            self.leave_scopes(b, 0, true);
+            b.return_none();
         } else {
             let zero = b.imm(0);
             self.return_value(b, zero);

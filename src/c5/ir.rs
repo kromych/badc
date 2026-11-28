@@ -2355,10 +2355,9 @@ pub(crate) enum Terminator {
         target: BlockId,
         fall_through: BlockId,
     },
-    /// Return the accumulator value. The per-arch lowering moves
-    /// `value` into the host's int / FP return register; a `void`
-    /// function's `NO_VALUE` moves nothing.
-    Return(ValueId),
+    /// Return a value, which the per-arch lowering moves into the host's
+    /// int / FP return register, or none from a `void` function.
+    Return(Option<ValueId>),
     /// Tail-jump to a libc symbol. The trampoline shape doesn't
     /// return through here.
     TailExt(i64),
@@ -2408,7 +2407,7 @@ impl Terminator {
             Terminator::GotoIndirect { target } => f(*target),
             Terminator::JumpTable { idx, .. } => f(*idx),
             Terminator::Return(v) => {
-                if *v != NO_VALUE {
+                if let Some(v) = v {
                     f(*v);
                 }
             }
@@ -2427,7 +2426,7 @@ impl Terminator {
             Terminator::GotoIndirect { target } => f(target),
             Terminator::JumpTable { idx, .. } => f(idx),
             Terminator::Return(v) => {
-                if *v != NO_VALUE {
+                if let Some(v) = v {
                     f(v);
                 }
             }

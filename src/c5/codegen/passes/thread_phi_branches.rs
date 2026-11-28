@@ -866,8 +866,8 @@ mod tests {
                         fall_through: 5,
                     },
                 ),
-                block(5..6, Terminator::Return(5)),
-                block(6..7, Terminator::Return(6)),
+                block(5..6, Terminator::Return(Some(5))),
+                block(6..7, Terminator::Return(Some(6))),
             ],
         )
     }
@@ -1014,7 +1014,7 @@ mod tests {
                     },
                 ),
                 block(5..7, Terminator::Jmp(1)),
-                block(7..7, Terminator::Return(3)),
+                block(7..7, Terminator::Return(Some(3))),
             ],
         )
     }
@@ -1042,7 +1042,7 @@ mod tests {
         assert_eq!(f.blocks[0].terminator, Terminator::Jmp(2));
         // b3 merges the latch's next value and the dead header's `len`,
         // which reads the entry's; the prune drops the header's.
-        let Terminator::Return(r) = f.blocks[3].terminator else {
+        let Terminator::Return(Some(r)) = f.blocks[3].terminator else {
             panic!("b3 returns");
         };
         assert_eq!(f.blocks[3].inst_range, r..r + 1);
@@ -1111,7 +1111,7 @@ mod tests {
                     },
                 ),
                 block(9..11, Terminator::Jmp(4)),
-                block(11..11, Terminator::Return(8)),
+                block(11..11, Terminator::Return(Some(8))),
             ],
         );
         assert!(run_one(&mut f));
@@ -1176,8 +1176,8 @@ mod tests {
                         fall_through: 3,
                     },
                 ),
-                block(3..4, Terminator::Return(3)),
-                block(4..5, Terminator::Return(4)),
+                block(3..4, Terminator::Return(Some(3))),
+                block(4..5, Terminator::Return(Some(4))),
             ],
         );
         assert!(run_one(&mut f));
@@ -1234,8 +1234,8 @@ mod tests {
                         fall_through: 4,
                     },
                 ),
-                block(5..5, Terminator::Return(0)),
-                block(5..5, Terminator::Return(0)),
+                block(5..5, Terminator::Return(Some(0))),
+                block(5..5, Terminator::Return(Some(0))),
             ],
         )
     }
@@ -1295,7 +1295,7 @@ mod tests {
                     },
                 ),
                 block(4..5, Terminator::Jmp(1)),
-                block(5..5, Terminator::Return(ret)),
+                block(5..5, Terminator::Return(Some(ret))),
             ],
         )
     }
@@ -1306,7 +1306,7 @@ mod tests {
         assert!(run_one(&mut f));
         assert_eq!(f.blocks[0].terminator, Terminator::Jmp(3));
         // The phi read past the loop reads the entry's value.
-        assert_eq!(f.blocks[3].terminator, Terminator::Return(0));
+        assert_eq!(f.blocks[3].terminator, Terminator::Return(Some(0)));
         assert!(super::super::prune_unreachable::run_one(&mut f));
         assert_eq!(f.blocks.len(), 2);
         // Entering the loop leaves the header reached: nothing moves.
@@ -1339,7 +1339,7 @@ mod tests {
                 fall_through: 3,
             }
         );
-        let Terminator::Return(r) = f.blocks[3].terminator else {
+        let Terminator::Return(Some(r)) = f.blocks[3].terminator else {
             panic!("b3 returns");
         };
         assert!(
@@ -1386,7 +1386,7 @@ mod tests {
                         },
                     ),
                     block(5..6, Terminator::Jmp(1)),
-                    block(6..6, Terminator::Return(ret)),
+                    block(6..6, Terminator::Return(Some(ret))),
                 ],
             )
         };

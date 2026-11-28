@@ -972,7 +972,7 @@ fn layout_order(func: &FunctionSsa, loops: &[NaturalLoop], forest: &LoopForest) 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::c5::ir::{Block, LoadKind, NO_VALUE};
+    use crate::c5::ir::{Block, LoadKind};
     use alloc::vec;
 
     fn func_with(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
@@ -1082,7 +1082,7 @@ mod tests {
                 ),
                 block(2..3, Terminator::Jmp(1)),
                 block(3..4, Terminator::Jmp(2)),
-                block(4..5, Terminator::Return(4)),
+                block(4..5, Terminator::Return(Some(4))),
             ],
         )
     }
@@ -1149,7 +1149,7 @@ mod tests {
                 block(0..1, Terminator::Jmp(1)),
                 block(1..1, Terminator::Jmp(2)),
                 block(1..1, Terminator::Jmp(3)),
-                block(1..2, Terminator::Return(1)),
+                block(1..2, Terminator::Return(Some(1))),
             ],
         );
         thread_jumps(&mut f, &mut JumpChains::default());
@@ -1164,7 +1164,7 @@ mod tests {
             vec![
                 block(0..1, Terminator::Jmp(1)),
                 block(1..2, Terminator::Jmp(2)),
-                block(2..3, Terminator::Return(2)),
+                block(2..3, Terminator::Return(Some(2))),
             ],
         );
         thread_jumps(&mut f, &mut JumpChains::default());
@@ -1182,13 +1182,16 @@ mod tests {
                 block(0..1, Terminator::Jmp(1)),
                 block(1..1, Terminator::Jmp(2)),
                 block(1..1, Terminator::Jmp(3)),
-                block(1..2, Terminator::Return(1)),
+                block(1..2, Terminator::Return(Some(1))),
             ],
         );
         run_one(&mut f, &mut JumpChains::default());
         assert_eq!(f.blocks.len(), 2, "the two bypassed blocks are dropped");
         assert!(matches!(f.blocks[0].terminator, Terminator::Jmp(1)));
-        assert!(matches!(f.blocks[1].terminator, Terminator::Return(1)));
+        assert!(matches!(
+            f.blocks[1].terminator,
+            Terminator::Return(Some(1))
+        ));
     }
 
     #[test]
@@ -1215,7 +1218,7 @@ mod tests {
                     },
                 ),
                 block(1..1, Terminator::Jmp(2)),
-                block(1..2, Terminator::Return(1)),
+                block(1..2, Terminator::Return(Some(1))),
                 block(2..3, Terminator::Jmp(2)),
             ],
         );
@@ -1238,7 +1241,7 @@ mod tests {
             vec![
                 block(0..1, Terminator::Jmp(1)),
                 block(1..1, Terminator::Jmp(2)),
-                block(1..2, Terminator::Return(1)),
+                block(1..2, Terminator::Return(Some(1))),
             ],
         );
         thread_jumps(&mut f, &mut JumpChains::default());
@@ -1278,7 +1281,7 @@ mod tests {
             vec![
                 block(0..1, Terminator::Jmp(4)),
                 block(1..2, Terminator::Jmp(4)),
-                block(2..2, Terminator::Return(NO_VALUE)),
+                block(2..2, Terminator::Return(None)),
                 block(2..3, Terminator::Jmp(4)),
                 block(3..4, Terminator::GotoIndirect { target: 3 }),
             ],
@@ -1307,7 +1310,7 @@ mod tests {
                 Terminator::GotoIndirect { target: 3 },
                 Terminator::Jmp(1),
                 Terminator::Jmp(1),
-                Terminator::Return(NO_VALUE),
+                Terminator::Return(None),
             ]
         );
         assert_eq!(f.blocks[2].inst_range, 1..2);
@@ -1329,7 +1332,7 @@ mod tests {
             vec![
                 block(0..1, Terminator::Jmp(1)),
                 block(1..2, Terminator::GotoIndirect { target: 1 }),
-                block(2..2, Terminator::Return(NO_VALUE)),
+                block(2..2, Terminator::Return(None)),
             ],
         );
         f.computed_goto_targets = vec![1, 2];
@@ -1379,7 +1382,7 @@ mod tests {
                 ),
                 block(1..1, Terminator::Jmp(2)),
                 block(1..1, Terminator::Jmp(3)),
-                block(1..1, Terminator::Return(0)),
+                block(1..1, Terminator::Return(Some(0))),
             ],
         );
         assert_eq!(cold_blocks(&f), vec![false; 4]);
@@ -1418,7 +1421,7 @@ mod tests {
                         fall_through: 1,
                     },
                 ),
-                block(3..4, Terminator::Return(3)),
+                block(3..4, Terminator::Return(Some(3))),
             ],
         );
         let before: Vec<_> = f
@@ -1452,7 +1455,7 @@ mod tests {
                         fall_through: 3,
                     },
                 ),
-                block(3..4, Terminator::Return(3)),
+                block(3..4, Terminator::Return(Some(3))),
             ],
         );
         run_one(&mut f, &mut JumpChains::default());
@@ -1498,8 +1501,8 @@ mod tests {
                 block(3..4, Terminator::Jmp(5)),
                 block(4..5, Terminator::Jmp(5)),
                 block(5..6, Terminator::Jmp(1)),
-                block(6..7, Terminator::Return(6)),
-                block(7..8, Terminator::Return(7)),
+                block(6..7, Terminator::Return(Some(6))),
+                block(7..8, Terminator::Return(Some(7))),
             ],
         );
         run_one(&mut f, &mut JumpChains::default());
@@ -1535,7 +1538,7 @@ mod tests {
                 block(3..4, Terminator::Jmp(4)),
                 block(4..5, Terminator::Jmp(2)),
                 block(5..6, Terminator::Jmp(1)),
-                block(6..7, Terminator::Return(6)),
+                block(6..7, Terminator::Return(Some(6))),
             ],
         );
         run_one(&mut f, &mut JumpChains::default());
@@ -1562,7 +1565,7 @@ mod tests {
             vec![Inst::BlockAddr(1), Inst::Imm(1)],
             vec![
                 block(0..1, Terminator::Jmp(1)),
-                block(1..2, Terminator::Return(1)),
+                block(1..2, Terminator::Return(Some(1))),
             ],
         );
         super::super::remap_blocks::permute_blocks(&mut f, &[1, 0]);
@@ -1588,7 +1591,7 @@ mod tests {
         let mut blocks: Vec<Block> = (0..n)
             .map(|i| block(1..1, Terminator::Jmp(i as BlockId + 1)))
             .collect();
-        blocks.push(block(1..last, Terminator::Return(0)));
+        blocks.push(block(1..last, Terminator::Return(Some(0))));
         blocks[0] = block(0..1, Terminator::Jmp(1));
         func_with(insts, blocks)
     }

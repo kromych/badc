@@ -396,7 +396,7 @@ mod tests {
                 ),
                 block(3..5, Terminator::Jmp(3)),
                 block(5..7, Terminator::Jmp(3)),
-                block(7..9, Terminator::Return(7)),
+                block(7..9, Terminator::Return(Some(7))),
             ],
             ..Default::default()
         };

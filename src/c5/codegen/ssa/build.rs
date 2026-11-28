@@ -2145,9 +2145,14 @@ impl SsaBuilder {
         });
     }
 
-    /// Close the current block with `Terminator::Return`.
+    /// Close the current block with a `Terminator::Return` of `value`.
     pub(crate) fn return_(&mut self, value: ValueId) {
-        self.close(Terminator::Return(value));
+        self.close(Terminator::Return(Some(value)));
+    }
+
+    /// Close the current block with a `Terminator::Return` of no value.
+    pub(crate) fn return_none(&mut self) {
+        self.close(Terminator::Return(None));
     }
 
     /// Close the current block with `Terminator::Unreachable`: the

@@ -234,7 +234,7 @@ mod tests {
             ],
             vec![
                 block(0..1, Terminator::Jmp(1)),
-                block(1..2, Terminator::Return(1)),
+                block(1..2, Terminator::Return(Some(1))),
                 block(2..3, Terminator::Jmp(1)),
             ],
         );
@@ -260,7 +260,7 @@ mod tests {
             vec![Inst::Imm(0), Inst::Imm(0)],
             vec![
                 block(0..1, Terminator::Jmp(1)),
-                block(1..2, Terminator::Return(1)),
+                block(1..2, Terminator::Return(Some(1))),
             ],
         );
         run_one(&mut f);
@@ -282,7 +282,7 @@ mod tests {
             ],
             vec![
                 block(0..1, Terminator::Jmp(1)),
-                block(1..2, Terminator::Return(1)),
+                block(1..2, Terminator::Return(Some(1))),
                 block(2..3, Terminator::Jmp(1)),
             ],
         );
@@ -312,10 +312,10 @@ mod tests {
             ],
             vec![
                 block(0..1, Terminator::Jmp(1)),
-                block(1..2, Terminator::Return(1)),
+                block(1..2, Terminator::Return(Some(1))),
                 block(2..3, Terminator::AsmGoto { table: 0 }),
-                block(3..4, Terminator::Return(3)),
-                block(4..5, Terminator::Return(4)),
+                block(3..4, Terminator::Return(Some(3))),
+                block(4..5, Terminator::Return(Some(4))),
             ],
         );
         f.jump_tables = vec![vec![3, 4]];
@@ -356,9 +356,9 @@ mod tests {
             ],
             vec![
                 block(0..1, Terminator::JumpTable { idx: 0, table: 0 }),
-                block(1..2, Terminator::Return(1)),
+                block(1..2, Terminator::Return(Some(1))),
                 block(2..3, Terminator::Unreachable),
-                block(3..4, Terminator::Return(3)),
+                block(3..4, Terminator::Return(Some(3))),
             ],
         );
         f.jump_tables = vec![vec![1, 3]];
@@ -388,9 +388,9 @@ mod tests {
                 Inst::Imm(0),       // v3 (b2)
             ],
             vec![
-                block(0..1, Terminator::Return(0)),
+                block(0..1, Terminator::Return(Some(0))),
                 block(1..3, Terminator::Jmp(2)),
-                block(3..4, Terminator::Return(3)),
+                block(3..4, Terminator::Return(Some(3))),
             ],
         );
         f.computed_goto_targets = vec![1, 2];

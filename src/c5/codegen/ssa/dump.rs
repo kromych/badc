@@ -489,8 +489,8 @@ fn fmt_terminator(t: Terminator) -> String {
         } => {
             format!("Bnz {{ cond=v{cond}, target=b{target}, fall=b{fall_through} }}")
         }
-        Terminator::Return(NO_VALUE) => "Return".to_string(),
-        Terminator::Return(v) => format!("Return(v{v})"),
+        Terminator::Return(None) => "Return".to_string(),
+        Terminator::Return(Some(v)) => format!("Return(v{v})"),
         Terminator::TailExt(b) => format!("TailExt({b})"),
         Terminator::GotoIndirect { target } => format!("GotoIndirect(v{target})"),
         Terminator::JumpTable { idx, table } => {
@@ -687,7 +687,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..insts.len() as u32,
-                terminator: Terminator::Return(0),
+                terminator: Terminator::Return(Some(0)),
             }],
             insts,
             ..Default::default()

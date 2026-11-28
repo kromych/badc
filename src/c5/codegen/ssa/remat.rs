@@ -590,7 +590,7 @@ mod tests {
                 store_of(0),
                 store_of(0),
             ],
-            vec![block(0..5, Terminator::Return(NO_VALUE))],
+            vec![block(0..5, Terminator::Return(None))],
         );
         split_across_calls(&mut f, Target::LinuxAarch64);
         assert_eq!(imms(&f, 5), vec![0, 3]);
@@ -613,7 +613,7 @@ mod tests {
                 call_of(vec![]),
                 store_of(0),
             ],
-            vec![block(0..5, Terminator::Return(NO_VALUE))],
+            vec![block(0..5, Terminator::Return(None))],
         );
         split_across_calls(&mut f, Target::LinuxAarch64);
         assert_eq!(imms(&f, 5), vec![0, 2, 5]);
@@ -667,7 +667,7 @@ mod tests {
                 mul(3, 1),
                 add(11, 14),
             ],
-            vec![block(0..16, Terminator::Return(15))],
+            vec![block(0..16, Terminator::Return(Some(15)))],
         );
         split_across_calls(&mut f, Target::LinuxX64);
         assert_eq!(imms(&f, 5), vec![3, 9, 15], "{:?}", f.insts);
@@ -688,7 +688,7 @@ mod tests {
     fn a_call_argument_is_read_ahead_of_the_call() {
         let mut f = func_with(
             vec![Inst::Imm(5), call_of(vec![0]), call_of(vec![0])],
-            vec![block(0..3, Terminator::Return(NO_VALUE))],
+            vec![block(0..3, Terminator::Return(None))],
         );
         split_across_calls(&mut f, Target::LinuxAarch64);
         assert_eq!(imms(&f, 5), vec![0, 2]);
@@ -718,8 +718,8 @@ mod tests {
                         fall_through: 1,
                     },
                 ),
-                block(b1_start..b2_start, Terminator::Return(NO_VALUE)),
-                block(b2_start..end, Terminator::Return(NO_VALUE)),
+                block(b1_start..b2_start, Terminator::Return(None)),
+                block(b2_start..end, Terminator::Return(None)),
             ],
         )
     }
@@ -768,8 +768,8 @@ mod tests {
                 vec![
                     block(0..b1, branch(3, 1)),
                     block(b1..b2, branch(b2 - 1, 2)),
-                    block(b2..end, Terminator::Return(NO_VALUE)),
-                    block(end..end, Terminator::Return(NO_VALUE)),
+                    block(b2..end, Terminator::Return(None)),
+                    block(end..end, Terminator::Return(None)),
                 ],
             );
             split_across_calls(&mut f, Target::LinuxAarch64);
@@ -809,8 +809,8 @@ mod tests {
                         fall_through: 1,
                     },
                 ),
-                block(2..4, Terminator::Return(NO_VALUE)),
-                block(4..5, Terminator::Return(NO_VALUE)),
+                block(2..4, Terminator::Return(None)),
+                block(4..5, Terminator::Return(None)),
             ],
         );
         split_across_calls(&mut f, Target::LinuxAarch64);
@@ -841,7 +841,7 @@ mod tests {
                         fall_through: 2,
                     },
                 ),
-                block(4..5, Terminator::Return(NO_VALUE)),
+                block(4..5, Terminator::Return(None)),
             ],
         );
         let before = f.insts.len();
@@ -872,7 +872,7 @@ mod tests {
                     },
                 ),
                 block(3..4, Terminator::Jmp(2)),
-                block(4..5, Terminator::Return(4)),
+                block(4..5, Terminator::Return(Some(4))),
             ],
         );
         split_across_calls(&mut f, Target::LinuxAarch64);
@@ -910,7 +910,7 @@ mod tests {
                     },
                 ),
                 block(4..5, Terminator::Jmp(2)),
-                block(5..6, Terminator::Return(NO_VALUE)),
+                block(5..6, Terminator::Return(None)),
             ],
         );
         split_across_calls(&mut f, Target::LinuxAarch64);
@@ -940,7 +940,7 @@ mod tests {
                     },
                 ),
                 block(2..3, Terminator::Jmp(2)),
-                block(3..4, Terminator::Return(3)),
+                block(3..4, Terminator::Return(Some(3))),
                 block(3..3, Terminator::Jmp(2)),
             ],
         );
@@ -976,7 +976,7 @@ mod tests {
                     },
                 ),
                 block(3..3, Terminator::Jmp(3)),
-                block(3..4, Terminator::Return(3)),
+                block(3..4, Terminator::Return(Some(3))),
             ],
         );
         split_across_calls(&mut f, Target::LinuxAarch64);
@@ -998,12 +998,15 @@ mod tests {
     fn a_returned_value_past_a_call_reads_a_definition_after_it() {
         let mut f = func_with(
             vec![Inst::Imm(7), call_of(vec![])],
-            vec![block(0..2, Terminator::Return(0))],
+            vec![block(0..2, Terminator::Return(Some(0)))],
         );
         split_across_calls(&mut f, Target::LinuxAarch64);
         assert_eq!(imms(&f, 7), vec![0, 2]);
         assert_eq!(f.blocks[0].inst_range, 0..3);
-        assert!(matches!(f.blocks[0].terminator, Terminator::Return(2)));
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::Return(Some(2))
+        ));
     }
 
     /// `p = &tab[1]`, an `ImmData` plus a folded 8, read past a call: the
@@ -1019,7 +1022,7 @@ mod tests {
         };
         let mut f = func_with(
             vec![Inst::ImmData(8), plus(0, 8), call_of(vec![]), store_of(1)],
-            vec![block(0..4, Terminator::Return(NO_VALUE))],
+            vec![block(0..4, Terminator::Return(None))],
         );
         f.extern_imm_data_refs = vec![(0, 4)];
         split_across_calls(&mut f, Target::LinuxAarch64);
@@ -1041,7 +1044,7 @@ mod tests {
                 call_of(vec![]),
                 store_of(1),
             ],
-            vec![block(0..4, Terminator::Return(NO_VALUE))],
+            vec![block(0..4, Terminator::Return(None))],
         );
         split_across_calls(&mut g, Target::LinuxAarch64);
         assert_eq!(g.insts.len(), 4);
@@ -1052,7 +1055,7 @@ mod tests {
     fn a_bound_address_set_again_carries_its_binding() {
         let mut f = func_with(
             vec![Inst::ImmData(8), call_of(vec![]), store_of(0)],
-            vec![block(0..3, Terminator::Return(NO_VALUE))],
+            vec![block(0..3, Terminator::Return(None))],
         );
         f.extern_imm_data_refs = vec![(0, 4)];
         split_across_calls(&mut f, Target::LinuxX64);
@@ -1067,7 +1070,7 @@ mod tests {
         let build = || {
             func_with(
                 vec![Inst::TlsAddr(0), call_of(vec![]), store_of(0)],
-                vec![block(0..3, Terminator::Return(NO_VALUE))],
+                vec![block(0..3, Terminator::Return(None))],
             )
         };
         let mut linux = build();
@@ -1085,7 +1088,7 @@ mod tests {
     fn an_unread_reader_and_a_rebuilt_income_plan_nothing() {
         let mut f = func_with(
             vec![Inst::Imm(5), call_of(vec![]), add(0, 0)],
-            vec![block(0..3, Terminator::Return(NO_VALUE))],
+            vec![block(0..3, Terminator::Return(None))],
         );
         split_across_calls(&mut f, Target::LinuxAarch64);
         assert_eq!(f.insts.len(), 3);
@@ -1100,7 +1103,7 @@ mod tests {
             ],
             vec![
                 block(0..2, Terminator::Jmp(1)),
-                block(2..3, Terminator::Return(2)),
+                block(2..3, Terminator::Return(Some(2))),
             ],
         );
         split_across_calls(&mut g, Target::LinuxAarch64);

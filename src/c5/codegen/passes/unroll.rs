@@ -1391,7 +1391,7 @@ mod tests {
                 ),
                 block(5..6, Terminator::Jmp(3)),
                 block(6..7, Terminator::Jmp(1)),
-                block(7..8, Terminator::Return(3)),
+                block(7..8, Terminator::Return(Some(3))),
             ],
         )
     }
@@ -1439,7 +1439,7 @@ mod tests {
 
     fn returned_imm(f: &FunctionSsa) -> Option<i64> {
         for b in &f.blocks {
-            if let Terminator::Return(v) = b.terminator
+            if let Terminator::Return(Some(v)) = b.terminator
                 && let Some(Inst::Imm(k)) = f.insts.get(v as usize)
             {
                 return Some(*k);
@@ -1519,7 +1519,7 @@ mod tests {
                 ),
                 block(5..8, Terminator::Jmp(3)),
                 block(8..9, Terminator::Jmp(1)),
-                block(9..10, Terminator::Return(3)),
+                block(9..10, Terminator::Return(Some(3))),
             ],
         );
         run_one(&mut f);
@@ -1538,7 +1538,7 @@ mod tests {
     fn exit_values_resolve_through_final_header_clone() {
         let mut f = two_phi_loop(0, 3);
         // Return the header-computed v7 = phi_i + 100 instead of phi_s.
-        f.blocks[4].terminator = Terminator::Return(7);
+        f.blocks[4].terminator = Terminator::Return(Some(7));
         run_one(&mut f);
         assert_well_formed(&f);
         super::super::constfold::run(core::slice::from_mut(&mut f));
@@ -1554,7 +1554,7 @@ mod tests {
         // Merged block holds only the final header clone: the cond
         // BinopI and the exit-visible v7 clone; no body/latch copies.
         assert!(!f.insts.iter().any(|i| matches!(i, Inst::Phi { .. })));
-        let Terminator::Return(v) = f.blocks.last().unwrap().terminator else {
+        let Terminator::Return(Some(v)) = f.blocks.last().unwrap().terminator else {
             panic!("expected Return");
         };
         assert!(
@@ -1626,7 +1626,7 @@ mod tests {
             if b.inst_range.end >= body.end {
                 b.inst_range.end += pad as u32;
             }
-            if let Terminator::Return(v) = &mut b.terminator {
+            if let Terminator::Return(Some(v)) = &mut b.terminator {
                 bump(v);
             }
         }
@@ -1813,7 +1813,7 @@ mod tests {
                 block(7..8, Terminator::Jmp(1)),
                 block(8..8, Terminator::Jmp(6)),
                 block(8..8, Terminator::Jmp(6)),
-                block(8..9, Terminator::Return(8)),
+                block(8..9, Terminator::Return(Some(8))),
             ],
         )
     }
@@ -1931,7 +1931,7 @@ mod tests {
                     },
                 ),
                 block(3..6, Terminator::Jmp(1)),
-                block(6..6, Terminator::Return(NO_VALUE)),
+                block(6..6, Terminator::Return(None)),
             ],
         );
         f.extern_call_refs = vec![(4, 11)];

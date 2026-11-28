@@ -18,7 +18,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], callee_tags: &BTreeMap<usize, i64>,
             continue;
         }
         for b in 0..func.blocks.len() {
-            let Terminator::Return(v) = func.blocks[b].terminator else {
+            let Terminator::Return(Some(v)) = func.blocks[b].terminator else {
                 continue;
             };
             let Some(call) = renormalized_call(func, v, ext) else {
@@ -32,7 +32,7 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], callee_tags: &BTreeMap<usize, i64>,
                 .is_some_and(|&tag| return_extension(tag, target) == ext)
             {
                 let block = &mut func.blocks[b];
-                block.terminator = Terminator::Return(call);
+                block.terminator = Terminator::Return(Some(call));
             }
         }
     }

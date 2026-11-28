@@ -321,7 +321,7 @@ mod tests {
                 ),
                 load(-1),
             ],
-            vec![block(0..3, Terminator::Return(2))],
+            vec![block(0..3, Terminator::Return(Some(2)))],
         );
         run(&mut f);
         assert!(matches!(f.insts[0], Inst::Imm(0)), "{:?}", f.insts);
@@ -362,7 +362,7 @@ mod tests {
                     vec![0],
                 ),
             ],
-            vec![block(0..2, Terminator::Return(NO_VALUE))],
+            vec![block(0..2, Terminator::Return(None))],
         );
         run(&mut f);
         assert!(matches!(
@@ -407,7 +407,7 @@ mod tests {
                         vec![0],
                     ),
                 ],
-                vec![block(0..2, Terminator::Return(NO_VALUE))],
+                vec![block(0..2, Terminator::Return(None))],
             );
             run(&mut f);
             assert!(matches!(f.insts[1], Inst::LoadLocal { kind, .. } if kind == read));
@@ -423,7 +423,7 @@ mod tests {
                     vec![0],
                 ),
             ],
-            vec![block(0..2, Terminator::Return(NO_VALUE))],
+            vec![block(0..2, Terminator::Return(None))],
         );
         run(&mut f);
         assert!(matches!(f.insts[0], Inst::LocalAddr(-1)));
@@ -458,7 +458,7 @@ mod tests {
         let goto = |f: &mut FunctionSsa| {
             f.blocks[0].terminator = Terminator::AsmGoto { table: 0 };
             f.blocks[0].inst_range = 0..2;
-            f.blocks.push(block(2..3, Terminator::Return(2)));
+            f.blocks.push(block(2..3, Terminator::Return(Some(2))));
         };
         for shape in [mem, volatile, twice, goto] {
             let mut f = func_with(
@@ -471,7 +471,7 @@ mod tests {
                     ),
                     load(-1),
                 ],
-                vec![block(0..3, Terminator::Return(2))],
+                vec![block(0..3, Terminator::Return(Some(2)))],
             );
             shape(&mut f);
             run(&mut f);
@@ -497,7 +497,7 @@ mod tests {
                     vec![0, 1],
                 ),
             ],
-            vec![block(0..3, Terminator::Return(NO_VALUE))],
+            vec![block(0..3, Terminator::Return(None))],
         );
         run(&mut f);
         assert!(matches!(f.insts[..2], [Inst::Imm(0), Inst::Imm(0)]));
@@ -546,7 +546,7 @@ mod tests {
                     vec![0, 1],
                 ),
             ],
-            vec![block(0..3, Terminator::Return(NO_VALUE))],
+            vec![block(0..3, Terminator::Return(None))],
         );
         run(&mut f);
         assert!(matches!(

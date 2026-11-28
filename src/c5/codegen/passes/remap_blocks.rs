@@ -124,7 +124,7 @@ pub(crate) fn remap_block_ids(func: &mut FunctionSsa, new_id: &[BlockId]) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::c5::ir::{Block, LoadKind, NO_VALUE};
+    use crate::c5::ir::{Block, LoadKind};
     use alloc::vec;
 
     fn func_with(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
@@ -151,8 +151,8 @@ mod tests {
             vec![Inst::Imm(0)],
             vec![
                 block(0..1, Terminator::JumpTable { idx: 0, table: 0 }),
-                block(1..1, Terminator::Return(NO_VALUE)),
-                block(1..1, Terminator::Return(NO_VALUE)),
+                block(1..1, Terminator::Return(None)),
+                block(1..1, Terminator::Return(None)),
             ],
         );
         f.jump_tables = vec![vec![1, 2, 1]];
@@ -186,7 +186,7 @@ mod tests {
                         fall_through: 1,
                     },
                 ),
-                block(3..3, Terminator::Return(NO_VALUE)),
+                block(3..3, Terminator::Return(None)),
             ],
         );
         f.computed_goto_targets = vec![2];
@@ -219,7 +219,7 @@ mod tests {
             vec![Inst::Imm(0)],
             vec![
                 block(0..1, Terminator::Jmp(1)),
-                block(1..1, Terminator::Return(NO_VALUE)),
+                block(1..1, Terminator::Return(None)),
             ],
         );
         permute_blocks(&mut f, &[0, 0]);
@@ -232,7 +232,7 @@ mod tests {
             vec![Inst::Imm(0)],
             vec![
                 block(0..1, Terminator::Jmp(1)),
-                block(1..1, Terminator::Return(NO_VALUE)),
+                block(1..1, Terminator::Return(None)),
             ],
         );
         permute_blocks(&mut f, &[0]);

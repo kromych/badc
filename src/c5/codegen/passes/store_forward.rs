@@ -1683,12 +1683,12 @@ mod tests {
                         volatile: false,
                     },
                 ],
-                Terminator::Return(3),
+                Terminator::Return(Some(3)),
             );
             run_one(&mut f, &[]);
             let ret = if forwarded { 1 } else { 3 };
             assert!(
-                matches!(f.blocks[0].terminator, Terminator::Return(r) if r == ret),
+                matches!(f.blocks[0].terminator, Terminator::Return(Some(r)) if r == ret),
                 "slot {off}: {:?}",
                 f.blocks[0].terminator
             );
@@ -1728,12 +1728,12 @@ mod tests {
                     },
                     wide(-2),
                 ],
-                Terminator::Return(3),
+                Terminator::Return(Some(3)),
             );
             run_one(&mut f, &[]);
             let ret = if forwarded { 1 } else { 3 };
             assert!(
-                matches!(f.blocks[0].terminator, Terminator::Return(r) if r == ret),
+                matches!(f.blocks[0].terminator, Terminator::Return(Some(r)) if r == ret),
                 "store at slot {off} + {disp}: {:?}",
                 f.blocks[0].terminator
             );
@@ -1788,12 +1788,12 @@ mod tests {
                     between.clone(),
                     local(-4, 8, LoadKind::I64),
                 ],
-                Terminator::Return(4),
+                Terminator::Return(Some(4)),
             );
             run_one(&mut f, &[]);
             let ret = if forwarded { 0 } else { 4 };
             assert!(
-                matches!(f.blocks[0].terminator, Terminator::Return(r) if r == ret),
+                matches!(f.blocks[0].terminator, Terminator::Return(Some(r)) if r == ret),
                 "{between:?}: {:?}",
                 f.blocks[0].terminator
             );
@@ -1828,11 +1828,11 @@ mod tests {
                 store(4),
                 load,
             ],
-            Terminator::Return(4),
+            Terminator::Return(Some(4)),
         );
         run_one(&mut f, &[]);
         assert!(
-            matches!(f.blocks[0].terminator, Terminator::Return(2)),
+            matches!(f.blocks[0].terminator, Terminator::Return(Some(2))),
             "{:?}",
             f.blocks[0].terminator
         );
@@ -1870,11 +1870,11 @@ mod tests {
                     pc_rel: false
                 },
             ],
-            Terminator::Return(3),
+            Terminator::Return(Some(3)),
         );
         run_one(&mut f, &[]);
         assert!(
-            matches!(f.blocks[0].terminator, Terminator::Return(1)),
+            matches!(f.blocks[0].terminator, Terminator::Return(Some(1))),
             "the I64 load should redirect to the stored value v1",
         );
     }
@@ -1911,7 +1911,7 @@ mod tests {
                     pc_rel: false
                 },
             ],
-            Terminator::Return(3),
+            Terminator::Return(Some(3)),
         );
         run_one(&mut f, &[]);
         assert!(
@@ -1967,7 +1967,7 @@ mod tests {
         ] {
             let mut f = fresh(
                 alloc::vec![param(0), param(1), store_at(1, store), load_at(load)],
-                Terminator::Return(3),
+                Terminator::Return(Some(3)),
             );
             run_one(&mut f, &[]);
             assert!(
@@ -1991,7 +1991,7 @@ mod tests {
                 load_at(LoadKind::I32),
                 load_at(LoadKind::U32)
             ],
-            Terminator::Return(3),
+            Terminator::Return(Some(3)),
         );
         run_one(&mut f, &[]);
         assert!(
@@ -2013,7 +2013,7 @@ mod tests {
                 load_at(LoadKind::U16),
                 load_at(LoadKind::I16)
             ],
-            Terminator::Return(3),
+            Terminator::Return(Some(3)),
         );
         run_one(&mut f, &[]);
         assert!(
@@ -2050,7 +2050,7 @@ mod tests {
                     rhs: 5
                 },
             ],
-            Terminator::Return(6),
+            Terminator::Return(Some(6)),
         );
         run_one(&mut f, &[]);
         assert!(
@@ -2105,7 +2105,7 @@ mod tests {
             ];
             insts.extend(between);
             insts.push(store(at, 3, last));
-            let mut f = fresh(insts, Terminator::Return(ret));
+            let mut f = fresh(insts, Terminator::Return(Some(ret)));
             super::drop_overwritten_stores(&mut f, false);
             matches!(f.insts[4], Inst::Store { .. })
         };
@@ -2133,7 +2133,6 @@ mod tests {
     /// fill covers; a fill the store covers only in part stays.
     #[test]
     fn a_zero_fill_is_a_store_to_overwrite() {
-        use crate::c5::ir::NO_VALUE;
         let store = |kind| Inst::Store {
             addr: 0,
             disp: 0,
@@ -2163,7 +2162,7 @@ mod tests {
         let first_goes = |first: Inst, last: Inst| {
             let mut insts = params();
             insts.extend([first, last]);
-            let mut f = fresh(insts, Terminator::Return(NO_VALUE));
+            let mut f = fresh(insts, Terminator::Return(None));
             super::drop_overwritten_stores(&mut f, false);
             matches!(f.insts[2], Inst::Imm(0))
         };
@@ -2204,7 +2203,7 @@ mod tests {
                         align: 1,
                     },
                 ],
-                Terminator::Return(3),
+                Terminator::Return(Some(3)),
             );
             run_one(&mut f, &[]);
             f
@@ -2221,7 +2220,10 @@ mod tests {
                 ..
             }
         ));
-        assert!(matches!(f.blocks[0].terminator, Terminator::Return(1)));
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::Return(Some(1))
+        ));
         assert!(matches!(copy_of(8).insts[3], Inst::Mcpy { .. }));
     }
 
@@ -2259,7 +2261,7 @@ mod tests {
                     volatile: false,
                 },
             ],
-            Terminator::Return(5),
+            Terminator::Return(Some(5)),
         );
         run_one(&mut f, &[]);
         assert!(
@@ -2275,7 +2277,10 @@ mod tests {
             "{:?}",
             f.insts[4]
         );
-        assert!(matches!(f.blocks[0].terminator, Terminator::Return(1)));
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::Return(Some(1))
+        ));
     }
 
     /// A store to another field of a 56-byte row leaves a load of row `j`'s
@@ -2354,7 +2359,7 @@ mod tests {
                         rhs: 11
                     },
                 ],
-                Terminator::Return(12),
+                Terminator::Return(Some(12)),
             );
             run_one(&mut f, &[]);
             f.insts[12].clone()
@@ -2399,11 +2404,11 @@ mod tests {
                     pc_rel: false
                 },
             ],
-            Terminator::Return(4),
+            Terminator::Return(Some(4)),
         );
         run_one(&mut f, &[]);
         assert!(
-            matches!(f.blocks[0].terminator, Terminator::Return(4)),
+            matches!(f.blocks[0].terminator, Terminator::Return(Some(4))),
             "the load past a block copy must not forward",
         );
         assert!(matches!(f.insts[4], Inst::Load { .. }));
@@ -2453,11 +2458,11 @@ mod tests {
                     pc_rel: false
                 },
             ],
-            Terminator::Return(4),
+            Terminator::Return(Some(4)),
         );
         run_one(&mut f, &[]);
         assert!(
-            matches!(f.blocks[0].terminator, Terminator::Return(4)),
+            matches!(f.blocks[0].terminator, Terminator::Return(Some(4))),
             "a load must not forward across an asm barrier",
         );
     }
@@ -2494,11 +2499,11 @@ mod tests {
                     pc_rel: false
                 },
             ],
-            Terminator::Return(3),
+            Terminator::Return(Some(3)),
         );
         run_one(&mut f, &[]);
         assert!(
-            matches!(f.blocks[0].terminator, Terminator::Return(3)),
+            matches!(f.blocks[0].terminator, Terminator::Return(Some(3))),
             "a load after a volatile store must not forward",
         );
         assert!(matches!(f.insts[3], Inst::Load { .. }));
@@ -2549,7 +2554,7 @@ mod tests {
                     rhs: 4
                 },
             ],
-            Terminator::Return(5),
+            Terminator::Return(Some(5)),
         );
         run_one(&mut f, &[]);
         assert!(
@@ -2583,11 +2588,11 @@ mod tests {
                     volatile: false,
                 },
             ],
-            Terminator::Return(2),
+            Terminator::Return(Some(2)),
         );
         run_one(&mut f, &[]);
         assert!(
-            matches!(f.blocks[0].terminator, Terminator::Return(0)),
+            matches!(f.blocks[0].terminator, Terminator::Return(Some(0))),
             "the slot reload should redirect to the stored value v0",
         );
     }
@@ -2626,10 +2631,10 @@ mod tests {
                         volatile: false,
                     },
                 ],
-                Terminator::Return(2),
+                Terminator::Return(Some(2)),
             );
             run_one(&mut f, &[]);
-            let redirected = matches!(f.blocks[0].terminator, Terminator::Return(0));
+            let redirected = matches!(f.blocks[0].terminator, Terminator::Return(Some(0)));
             assert_eq!(redirected, forwards, "{:?}", f.insts[0]);
         }
     }
@@ -2683,7 +2688,7 @@ mod tests {
                 rhs: load,
             });
             let n = insts.len() as ValueId - 1;
-            let mut f = fresh(insts, Terminator::Return(n));
+            let mut f = fresh(insts, Terminator::Return(Some(n)));
             run_one(&mut f, &[]);
             let forwarded = matches!(f.insts[n as usize], Inst::Binop { rhs: 0, .. });
             assert_eq!(forwarded, forwards, "live arithmetic in between: {live}");
@@ -2764,7 +2769,7 @@ mod tests {
                         volatile: false,
                     },
                 ],
-                Terminator::Return(4),
+                Terminator::Return(Some(4)),
             );
             run_one(&mut f, &[]);
             assert_eq!(format!("{:?}", f.insts[4]), format!("{want:?}"));
@@ -2796,7 +2801,7 @@ mod tests {
                 },
                 load.clone(),
             ],
-            Terminator::Return(3),
+            Terminator::Return(Some(3)),
         );
         run_one(&mut f, &[]);
         assert_eq!(format!("{:?}", f.insts[3]), format!("{load:?}"));
@@ -2842,11 +2847,11 @@ mod tests {
                     volatile: false,
                 },
             ],
-            Terminator::Return(3),
+            Terminator::Return(Some(3)),
         );
         run_one(&mut f, &[]);
         assert!(
-            matches!(f.blocks[0].terminator, Terminator::Return(3)),
+            matches!(f.blocks[0].terminator, Terminator::Return(Some(3))),
             "a reload after a call must stay a reload",
         );
     }
@@ -2887,11 +2892,11 @@ mod tests {
                     volatile: false,
                 },
             ],
-            Terminator::Return(4),
+            Terminator::Return(Some(4)),
         );
         run_one(&mut f, &[]);
         assert!(
-            matches!(f.blocks[0].terminator, Terminator::Return(4)),
+            matches!(f.blocks[0].terminator, Terminator::Return(Some(4))),
             "an address-taken slot must not forward",
         );
     }
@@ -2921,11 +2926,11 @@ mod tests {
                     volatile: false,
                 },
             ],
-            Terminator::Return(2),
+            Terminator::Return(Some(2)),
         );
         run_one(&mut f, &[]);
         assert!(
-            matches!(f.blocks[0].terminator, Terminator::Return(2)),
+            matches!(f.blocks[0].terminator, Terminator::Return(Some(2))),
             "a volatile-stored slot must not forward",
         );
     }
@@ -2967,11 +2972,11 @@ mod tests {
                     volatile: false,
                 },
             ],
-            Terminator::Return(4),
+            Terminator::Return(Some(4)),
         );
         run_one(&mut f, &[]);
         assert!(
-            matches!(f.blocks[0].terminator, Terminator::Return(1)),
+            matches!(f.blocks[0].terminator, Terminator::Return(Some(1))),
             "the reload should forward to the second store's value",
         );
     }
@@ -3001,7 +3006,7 @@ mod tests {
                     volatile: false,
                 },
             ],
-            Terminator::Return(2),
+            Terminator::Return(Some(2)),
         );
         run_one(&mut f, &[]);
         assert!(
@@ -3056,11 +3061,11 @@ mod tests {
                     volatile: false,
                 },
             ],
-            Terminator::Return(3),
+            Terminator::Return(Some(3)),
         );
         run_one(&mut f, &[]);
         assert!(
-            matches!(f.blocks[0].terminator, Terminator::Return(3)),
+            matches!(f.blocks[0].terminator, Terminator::Return(Some(3))),
             "a call result slot must not forward across the call",
         );
     }
@@ -3101,7 +3106,7 @@ mod tests {
                     rhs: 3
                 },
             ],
-            Terminator::Return(4),
+            Terminator::Return(Some(4)),
         );
         run_one(&mut f, &[]);
         // v3 redirects to v2, so the add reads v2 twice.
@@ -3150,9 +3155,9 @@ mod tests {
         insts.extend(between);
         let last = insts.len() as u32;
         insts.push(load_indexed(0, 1, 1, kind));
-        let mut f = fresh(insts, Terminator::Return(last));
+        let mut f = fresh(insts, Terminator::Return(Some(last)));
         run_one(&mut f, &[]);
-        let Terminator::Return(v) = f.blocks[0].terminator else {
+        let Terminator::Return(Some(v)) = f.blocks[0].terminator else {
             unreachable!()
         };
         (v, f.insts[last as usize].clone())
@@ -3370,10 +3375,13 @@ mod tests {
                     pc_rel: false
                 },
             ],
-            Terminator::Return(4),
+            Terminator::Return(Some(4)),
         );
         run_one(&mut f, &[]);
-        assert!(matches!(f.blocks[0].terminator, Terminator::Return(4)));
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::Return(Some(4))
+        ));
     }
 
     use crate::c5::ir::{BinOp, ValueId};
@@ -3393,7 +3401,7 @@ mod tests {
     /// second, which returns `ret`.
     fn two_blocks(insts: Vec<Inst>, split: u32, ret: ValueId) -> FunctionSsa {
         let n = insts.len() as u32;
-        let mut f = fresh(insts, Terminator::Return(ret));
+        let mut f = fresh(insts, Terminator::Return(Some(ret)));
         let block = |r: core::ops::Range<u32>, terminator| crate::c5::ir::Block {
             start_pc: 0,
             inst_range: r,
@@ -3401,7 +3409,7 @@ mod tests {
         };
         f.blocks = alloc::vec![
             block(0..split, Terminator::Jmp(1)),
-            block(split..n, Terminator::Return(ret)),
+            block(split..n, Terminator::Return(Some(ret))),
         ];
         f
     }
@@ -3436,7 +3444,7 @@ mod tests {
     fn a_store_of_the_value_the_location_holds_goes() {
         let gone = |insts: Vec<Inst>, store: usize| {
             let n = insts.len() as ValueId;
-            let mut f = fresh(insts, Terminator::Return(n - 1));
+            let mut f = fresh(insts, Terminator::Return(Some(n - 1)));
             run_one(&mut f, &[]);
             matches!(f.insts[store], Inst::Imm(_))
         };
@@ -3490,7 +3498,7 @@ mod tests {
             },
         ]);
         let n = insts.len() as u32;
-        let mut f = fresh(insts, Terminator::Return(n - 1));
+        let mut f = fresh(insts, Terminator::Return(Some(n - 1)));
         let block = |r: core::ops::Range<u32>, terminator| crate::c5::ir::Block {
             start_pc: 0,
             inst_range: r,
@@ -3505,8 +3513,8 @@ mod tests {
                     fall_through: 1,
                 }
             ),
-            block(2..reload, Terminator::Return(chain)),
-            block(reload..n, Terminator::Return(n - 1)),
+            block(2..reload, Terminator::Return(Some(chain))),
+            block(reload..n, Terminator::Return(Some(n - 1))),
         ];
         run_one(&mut f, &[]);
         assert!(
@@ -3610,7 +3618,7 @@ mod tests {
                     },
                     store(-3, 2, restored),
                 ],
-                Terminator::Return(2),
+                Terminator::Return(Some(2)),
             );
             run_one(&mut f, &[]);
             assert!(
@@ -3657,11 +3665,11 @@ mod tests {
                         volatile: false,
                     },
                 ],
-                Terminator::Return(2),
+                Terminator::Return(Some(2)),
             );
             run_one(&mut f, &[]);
             let ret = match f.blocks[0].terminator {
-                Terminator::Return(r) => r,
+                Terminator::Return(Some(r)) => r,
                 _ => unreachable!(),
             };
             match want {
@@ -3712,7 +3720,7 @@ mod tests {
                     load.clone(),
                     load,
                 ],
-                Terminator::Return(3),
+                Terminator::Return(Some(3)),
             );
             run_one(&mut f, &[]);
             assert!(
@@ -3724,7 +3732,7 @@ mod tests {
                 f.insts[2]
             );
             assert!(
-                matches!(f.blocks[0].terminator, Terminator::Return(2)),
+                matches!(f.blocks[0].terminator, Terminator::Return(Some(2))),
                 "{loaded:?}: {:?}",
                 f.blocks[0].terminator
             );

@@ -186,10 +186,10 @@ enum ConstExit {
 }
 
 /// The constant exit a `Return` of `r` names, if it names one.
-fn const_exit(func: &FunctionSsa, r: ValueId) -> Option<ConstExit> {
-    if r == NO_VALUE {
+fn const_exit(func: &FunctionSsa, r: Option<ValueId>) -> Option<ConstExit> {
+    let Some(r) = r else {
         return Some(ConstExit::NoValue);
-    }
+    };
     match func.insts.get(r as usize) {
         Some(Inst::Imm(k)) => Some(ConstExit::Imm(*k)),
         _ => None,
@@ -270,7 +270,7 @@ fn use_mask(func: &FunctionSsa) -> Vec<bool> {
     }
     for blk in &func.blocks {
         match blk.terminator {
-            Terminator::Return(v) => mark(v),
+            Terminator::Return(Some(v)) => mark(v),
             Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(cond),
             Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
                 mark(target)
@@ -399,14 +399,14 @@ fn classify(func: &FunctionSsa, b: BlockId) -> Class {
     // A pure tail call whose value is returned is left to the emit-time
     // `jmp` conversion; mixing it with the loop forms would need the
     // accumulator to carry the recursion result.
-    if r == call_pc {
+    if r == Some(call_pc) {
         return Class::Bail;
     }
     let cone = call_cone(func, blk.inst_range.clone(), call_pc);
     // Constant tail: the return names no value or a literal, and the call
     // result is dead (its cone reaches nothing that the return reads).
     if let Some(exit) = const_exit(func, r)
-        && !cone.contains(&r)
+        && !r.is_some_and(|r| cone.contains(&r))
     {
         return Class::TailConst(
             TailBlock {
@@ -423,6 +423,10 @@ fn classify(func: &FunctionSsa, b: BlockId) -> Class {
     // least as wide stacked under the return's (the sum's own `nsw`
     // re-narrowing, an `int` promotion's) keep the bits it keeps, so the
     // stack narrows as the outermost does.
+    // A return of no value took the constant form above.
+    let Some(r) = r else {
+        return Class::Bail;
+    };
     let (combine, narrow) = match narrowing(func, r) {
         Some((mut v, outer)) => {
             while let Some((inner, n)) = narrowing(func, v)
@@ -599,9 +603,7 @@ fn analyze(func: &FunctionSsa) -> Option<Plan> {
                 let Terminator::Return(r) = func.blocks[b as usize].terminator else {
                     continue;
                 };
-                if r == NO_VALUE {
-                    return None;
-                }
+                let r = r?;
                 if let Some(n) = narrow
                     && !n.keeps(super::value_range::arg_range(&func.insts, r))
                 {
@@ -811,7 +813,7 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
                 for pc in blk.inst_range.clone() {
                     emit_old!(pc);
                 }
-                let Terminator::Return(r) = blk.terminator else {
+                let Terminator::Return(Some(r)) = blk.terminator else {
                     unreachable!("base block classified with a Return terminator");
                 };
                 let x = map_v(r, &remap);
@@ -824,7 +826,7 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
                     Some(n) => emit_new!(n.inst(sum)),
                     None => sum,
                 };
-                terminator = Terminator::Return(ret);
+                terminator = Terminator::Return(Some(ret));
             } else {
                 for pc in blk.inst_range.clone() {
                     emit_old!(pc);

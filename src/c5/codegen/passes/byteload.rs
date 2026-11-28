@@ -764,7 +764,7 @@ fn run_one(func: &mut FunctionSsa, target_little_endian: bool) {
 mod tests {
     use super::{run, run_one};
     use crate::c5::ir::{
-        BinOp, Block, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
+        BinOp, Block, FunctionSsa, Inst, LoadKind, StoreKind, Terminator, ValueId,
     };
     use alloc::vec::Vec;
 
@@ -911,7 +911,7 @@ mod tests {
                 or(8, 5),      // v9
                 or(9, 7),      // v10
             ],
-            Terminator::Return(10),
+            Terminator::Return(Some(10)),
         );
         run_one(&mut f, true);
         assert!(
@@ -949,7 +949,7 @@ mod tests {
                 u8_load(0, 3), // v9
                 or(8, 9),      // v10
             ],
-            Terminator::Return(10),
+            Terminator::Return(Some(10)),
         );
         run_one(&mut f, true);
         let Inst::Bswap { value, width: 4 } = f.insts[10] else {
@@ -999,7 +999,7 @@ mod tests {
             });
         }
         let root = acc.unwrap();
-        let mut f = fresh(insts, Terminator::Return(root));
+        let mut f = fresh(insts, Terminator::Return(Some(root)));
         run_one(&mut f, true);
         let Inst::Bswap { value, width: 8 } = f.insts[root as usize] else {
             panic!(
@@ -1033,7 +1033,7 @@ mod tests {
                     rhs: 2,
                 },
             ],
-            Terminator::Return(3),
+            Terminator::Return(Some(3)),
         );
         run_one(&mut f, true);
         assert!(matches!(f.insts[3], Inst::Binop { op: BinOp::Add, .. }));
@@ -1057,7 +1057,7 @@ mod tests {
                 or(8, 6),      // v9
                 or(9, 7),      // v10
             ],
-            Terminator::Return(10),
+            Terminator::Return(Some(10)),
         );
         run_one(&mut f, false);
         assert!(
@@ -1074,7 +1074,7 @@ mod tests {
         // The little-endian assembly is the reversed one there.
         let mut g = fresh(
             alloc::vec![param(0), u8_load(0, 0), u8_load(0, 1), shl(2, 8), or(1, 3),],
-            Terminator::Return(4),
+            Terminator::Return(Some(4)),
         );
         run_one(&mut g, false);
         assert!(
@@ -1103,7 +1103,7 @@ mod tests {
                 shl(2, 8),     // v3
                 or(1, 3),      // v4
             ],
-            Terminator::Return(4),
+            Terminator::Return(Some(4)),
         );
         run_one(&mut f, true);
         assert!(matches!(f.insts[4], Inst::Binop { op: BinOp::Or, .. }));
@@ -1115,7 +1115,7 @@ mod tests {
     fn strict_align_declines() {
         let mut f = fresh(
             alloc::vec![param(0), u8_load(0, 0), u8_load(0, 1), shl(2, 8), or(1, 3),],
-            Terminator::Return(4),
+            Terminator::Return(Some(4)),
         );
         run(core::slice::from_mut(&mut f), true, true);
         assert!(matches!(f.insts[4], Inst::Binop { op: BinOp::Or, .. }));
@@ -1142,7 +1142,7 @@ mod tests {
                 shl(4, 8),         // v5
                 or(2, 5),          // v6
             ],
-            Terminator::Return(6),
+            Terminator::Return(Some(6)),
         );
         run_one(&mut f, true);
         assert!(matches!(f.insts[6], Inst::Binop { op: BinOp::Or, .. }));
@@ -1174,7 +1174,7 @@ mod tests {
                 shl(3, 8),     // v4
                 or(1, 4),      // v5
             ],
-            Terminator::Return(5),
+            Terminator::Return(Some(5)),
         );
         run_one(&mut f, true);
         assert!(matches!(f.insts[5], Inst::Binop { op: BinOp::Or, .. }));
@@ -1194,7 +1194,7 @@ mod tests {
                 or(1, 3),      // v6
                 or(6, 5),      // v7
             ],
-            Terminator::Return(7),
+            Terminator::Return(Some(7)),
         );
         run_one(&mut f, true);
         assert!(matches!(f.insts[7], Inst::Binop { op: BinOp::Or, .. }));
@@ -1217,7 +1217,7 @@ mod tests {
                 or(8, 5),      // v9
                 or(9, 7),      // v10
             ],
-            Terminator::Return(10),
+            Terminator::Return(Some(10)),
         );
         run_one(&mut f, true);
         assert!(matches!(f.insts[10], Inst::Binop { op: BinOp::Or, .. }));
@@ -1241,7 +1241,7 @@ mod tests {
                 or(8, 5),      // v9
                 or(9, 7),      // v10
             ],
-            Terminator::Return(10),
+            Terminator::Return(Some(10)),
         );
         run_one(&mut f, true);
         assert!(matches!(f.insts[10], Inst::Binop { op: BinOp::Or, .. }));
@@ -1266,7 +1266,7 @@ mod tests {
                 or(8, 5),      // v9
                 or(9, 7),      // v10
             ],
-            Terminator::Return(10),
+            Terminator::Return(Some(10)),
         );
         run_one(&mut f, true);
         assert!(matches!(f.insts[10], Inst::Binop { op: BinOp::Or, .. }));
@@ -1289,7 +1289,7 @@ mod tests {
                 }, // v4 clears byte 1
                 or(1, 4),      // v5
             ],
-            Terminator::Return(5),
+            Terminator::Return(Some(5)),
         );
         run_one(&mut f, true);
         assert!(matches!(f.insts[5], Inst::Binop { op: BinOp::Or, .. }));
@@ -1307,7 +1307,7 @@ mod tests {
                 or(1, 3),      // v4
                 or(4, 1),      // v5 second use of v1
             ],
-            Terminator::Return(5),
+            Terminator::Return(Some(5)),
         );
         run_one(&mut f, true);
         assert!(matches!(f.insts[4], Inst::Binop { op: BinOp::Or, .. }));
@@ -1329,7 +1329,7 @@ mod tests {
                 shru(1, 24),       // v7
                 i8_store(0, 3, 7), // v8
             ],
-            Terminator::Return(NO_VALUE),
+            Terminator::Return(None),
         );
         run_one(&mut f, true);
         assert!(
@@ -1366,7 +1366,7 @@ mod tests {
             }
         }
         let last = (insts.len() - 1) as ValueId;
-        let mut f = fresh(insts, Terminator::Return(NO_VALUE));
+        let mut f = fresh(insts, Terminator::Return(None));
         run_one(&mut f, true);
         let Inst::Store {
             value,
@@ -1402,7 +1402,7 @@ mod tests {
                 i8_store(0, 2, 1), // v5
                 i8_store(0, 3, 3), // v6
             ],
-            Terminator::Return(NO_VALUE),
+            Terminator::Return(None),
         );
         run_one(&mut f, true);
         assert!(
@@ -1443,7 +1443,7 @@ mod tests {
                 shru(1, 8),        // v4
                 i8_store(0, 1, 4), // v5
             ],
-            Terminator::Return(NO_VALUE),
+            Terminator::Return(None),
         );
         run_one(&mut f, true);
         assert!(matches!(
@@ -1471,7 +1471,7 @@ mod tests {
                     rhs_imm: 1
                 }, // v5 reads the store's value
             ],
-            Terminator::Return(5),
+            Terminator::Return(Some(5)),
         );
         run_one(&mut f, true);
         assert!(matches!(

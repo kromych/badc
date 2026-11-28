@@ -571,7 +571,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..n,
-                terminator: Terminator::Return(0),
+                terminator: Terminator::Return(Some(0)),
             }],
             ..Default::default()
         }

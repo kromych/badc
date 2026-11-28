@@ -354,7 +354,7 @@ mod tests {
             vec![Block {
                 start_pc: 0,
                 inst_range: 0..1,
-                terminator: Terminator::Return(0),
+                terminator: Terminator::Return(Some(0)),
             }],
         );
         let n_before = f.blocks.len();
@@ -382,12 +382,12 @@ mod tests {
                 Block {
                     start_pc: 0,
                     inst_range: 1..2,
-                    terminator: Terminator::Return(1),
+                    terminator: Terminator::Return(Some(1)),
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 2..3,
-                    terminator: Terminator::Return(2),
+                    terminator: Terminator::Return(Some(2)),
                 },
             ],
         );
@@ -431,7 +431,7 @@ mod tests {
                 Block {
                     start_pc: 0,
                     inst_range: 2..3,
-                    terminator: Terminator::Return(2),
+                    terminator: Terminator::Return(Some(2)),
                 },
             ],
         );
@@ -497,7 +497,7 @@ mod tests {
                 Block {
                     start_pc: 0,
                     inst_range: 2..3,
-                    terminator: Terminator::Return(2),
+                    terminator: Terminator::Return(Some(2)),
                 },
             ],
         );
@@ -550,12 +550,12 @@ mod tests {
                 Block {
                     start_pc: 0,
                     inst_range: 1..2,
-                    terminator: Terminator::Return(1),
+                    terminator: Terminator::Return(Some(1)),
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 2..3,
-                    terminator: Terminator::Return(2),
+                    terminator: Terminator::Return(Some(2)),
                 },
             ],
         );
@@ -600,7 +600,7 @@ mod tests {
                 Block {
                     start_pc: 0,
                     inst_range: 1..2,
-                    terminator: Terminator::Return(1),
+                    terminator: Terminator::Return(Some(1)),
                 },
             ],
         );
@@ -643,12 +643,12 @@ mod tests {
                 Block {
                     start_pc: 0,
                     inst_range: 1..2,
-                    terminator: Terminator::Return(1),
+                    terminator: Terminator::Return(Some(1)),
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 2..3,
-                    terminator: Terminator::Return(2),
+                    terminator: Terminator::Return(Some(2)),
                 },
                 Block {
                     start_pc: 0,
@@ -732,12 +732,12 @@ mod tests {
                 Block {
                     start_pc: 0,
                     inst_range: 1..2,
-                    terminator: Terminator::Return(1),
+                    terminator: Terminator::Return(Some(1)),
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 2..3,
-                    terminator: Terminator::Return(2),
+                    terminator: Terminator::Return(Some(2)),
                 },
                 Block {
                     start_pc: 0,

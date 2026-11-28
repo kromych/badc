@@ -841,7 +841,7 @@ mod tests {
                 ),
                 block(1..2, Terminator::Jmp(3)),
                 block(2..3, Terminator::Jmp(3)),
-                block(3..4, Terminator::Return(ret)),
+                block(3..4, Terminator::Return(Some(ret))),
             ],
         )
     }
@@ -1027,12 +1027,12 @@ mod tests {
                 Block {
                     start_pc: 0,
                     inst_range: 2..3,
-                    terminator: Terminator::Return(2),
+                    terminator: Terminator::Return(Some(2)),
                 }, // b1
                 Block {
                     start_pc: 0,
                     inst_range: 1..2,
-                    terminator: Terminator::Return(1),
+                    terminator: Terminator::Return(Some(1)),
                 }, // b2
                 Block {
                     start_pc: 0,
@@ -1133,12 +1133,12 @@ mod tests {
             Block {
                 start_pc: 0,
                 inst_range: 2..2,
-                terminator: Terminator::Return(NO_VALUE as ValueId),
+                terminator: Terminator::Return(None),
             },
             Block {
                 start_pc: 0,
                 inst_range: 2..2,
-                terminator: Terminator::Return(NO_VALUE as ValueId),
+                terminator: Terminator::Return(None),
             },
         ]
     }
@@ -1276,7 +1276,7 @@ mod tests {
             };
             let mut f = fresh(vec![load, narrow], zero_test_blocks(term));
             if read_again {
-                f.blocks[1].terminator = Terminator::Return(1);
+                f.blocks[1].terminator = Terminator::Return(Some(1));
             }
             strip_zero_test_conds(&mut f);
             let Terminator::Bz { cond, .. } = f.blocks[0].terminator else {
@@ -1326,7 +1326,7 @@ mod tests {
             f.blocks[0].inst_range = 0..3;
             f.cmp32 = vec![false, false, true];
             if read_again {
-                f.blocks[1].terminator = Terminator::Return(2);
+                f.blocks[1].terminator = Terminator::Return(Some(2));
             }
             assert!(strip_zero_test_conds(&mut f));
             let Terminator::Bz { cond, .. } = f.blocks[0].terminator else {

@@ -780,7 +780,7 @@ mod tests {
                 ),
                 block(2..5, Terminator::Jmp(3)),
                 block(5..6, Terminator::Jmp(3)),
-                block(6..7, Terminator::Return(NO_VALUE)),
+                block(6..7, Terminator::Return(None)),
             ],
             ..Default::default()
         }

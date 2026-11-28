@@ -233,7 +233,7 @@ fn multi_block_slots(func: &FunctionSsa, addrs: &BTreeMap<ValueId, (i64, i64)>) 
             }
         }
         match &block.terminator {
-            Terminator::Return(v)
+            Terminator::Return(Some(v))
             | Terminator::Bz { cond: v, .. }
             | Terminator::Bnz { cond: v, .. }
             | Terminator::GotoIndirect { target: v }
@@ -393,7 +393,7 @@ fn promote_once(func: &mut FunctionSsa, strict_align: bool) -> bool {
         }
         // A slot address used by the block terminator escapes it.
         match &block.terminator {
-            Terminator::Return(v)
+            Terminator::Return(Some(v))
             | Terminator::Bz { cond: v, .. }
             | Terminator::Bnz { cond: v, .. }
             | Terminator::GotoIndirect { target: v }
@@ -712,7 +712,7 @@ fn escaped_slots(func: &FunctionSsa, addrs: &BTreeMap<ValueId, (i64, i64)>) -> B
             }
         }
         match &block.terminator {
-            Terminator::Return(v)
+            Terminator::Return(Some(v))
             | Terminator::Bz { cond: v, .. }
             | Terminator::Bnz { cond: v, .. }
             | Terminator::GotoIndirect { target: v }

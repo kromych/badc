@@ -2815,6 +2815,52 @@ impl<'a> SitePlan<'a> {
         }
     }
 
+    /// The argument a live callee instruction stands for, taking no
+    /// instruction of its own: a parameter read at its full width, through
+    /// its `ParamRef` or its forwarded cell, and a bound parameter cell's
+    /// address.
+    fn stands_for_arg(&self, ce_pc: usize) -> Option<usize> {
+        match &self.callee.insts[ce_pc] {
+            Inst::ParamRef { idx, kind } if param_read_insts(*kind) == 0 => Some(*idx as usize),
+            Inst::LoadLocal {
+                disp: 0, off, kind, ..
+            } if self.facts.forwarded.contains(off) && param_read_insts(*kind) == 0 => {
+                Some((*off - 2) as usize)
+            }
+            Inst::LocalAddr(s) => self.param_slot_arg.get(s).copied(),
+            _ => None,
+        }
+    }
+
+    /// Point each instruction that stands for an argument, and a result
+    /// that is one, at the id `remap` holds for it; whether any moved. An
+    /// argument that is another site's result has its id once that site is
+    /// counted, which block order places on either side of this one.
+    fn settle_arguments(&mut self, remap: &mut [ValueId]) -> bool {
+        let callee = self.callee;
+        let mut moved = false;
+        for ce_pc in callee.blocks.iter().flat_map(|b| b.inst_range.clone()) {
+            let ce_pc = ce_pc as usize;
+            if !self.facts.live[ce_pc] {
+                continue;
+            }
+            if let Some(i) = self.stands_for_arg(ce_pc) {
+                let arg = self.args.get(i).map_or(NO_VALUE, |&a| map_v(a, remap));
+                moved |= core::mem::replace(&mut self.callee_remap[ce_pc], arg) != arg;
+            }
+        }
+        if self.ret_pieces.is_none() && !self.use_join {
+            for cblock in &callee.blocks {
+                if let Terminator::Return(v) = cblock.terminator {
+                    let result = map_v(v, &self.callee_remap);
+                    moved |=
+                        core::mem::replace(&mut remap[self.call_pc as usize], result) != result;
+                }
+            }
+        }
+        moved
+    }
+
     /// Assign ids to the callee body's instructions from `at`, as the
     /// emission will issue them, and the call's result; `remap` holds the
     /// caller's ids, which the arguments read.
@@ -3060,6 +3106,18 @@ fn splice_sites(caller: &mut FunctionSsa, sites: &[Site<'_>], whole_vector: u32,
     }
     for p in plans.iter_mut() {
         p.count_body(&mut remap, &mut at);
+    }
+    // A site counted ahead of the one whose result it takes as an argument
+    // read no id for it, and a result that is such an argument follows it:
+    // settle until none moves. A result is no argument of its own call, so
+    // each round fixes at least one site.
+    for _ in 0..plans.len() {
+        if !plans
+            .iter_mut()
+            .fold(false, |moved, p| p.settle_arguments(&mut remap) | moved)
+        {
+            break;
+        }
     }
 
     let mut out = Emitted {

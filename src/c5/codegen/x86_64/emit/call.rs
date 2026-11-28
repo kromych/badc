@@ -268,7 +268,7 @@ impl Marshal<'_> {
             for b in (words * unit)..size {
                 let o = b as i32;
                 super::encode::emit_movzx_r_mem8(code, t, base, o);
-                super::encode::emit_mov_mem8_r(code, Reg::RSP, off as i32 + o, t);
+                super::encode::emit_mov_mem_r8(code, Reg::RSP, off as i32 + o, t);
             }
         }
         Ok(())

@@ -4337,7 +4337,7 @@ fn emit_asm_load_width(code: &mut CodeBuf, dst: Reg, base: Reg, disp: i32, width
     match width {
         1 => super::encode::emit_movzx_r_mem8(code, dst, base, disp),
         2 => super::encode::emit_movzx_r_mem16(code, dst, base, disp),
-        4 => super::encode::emit_mov_r_mem32(code, dst, base, disp),
+        4 => super::encode::emit_mov_r32_mem(code, dst, base, disp),
         _ => super::encode::emit_mov_r_mem(code, dst, base, disp),
     }
 }

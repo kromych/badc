@@ -2344,7 +2344,7 @@ fn emit_struct_stack_param_copy(
             match width {
                 4 => {
                     super::encode::emit_mov_r32_mem(code, Reg::R10, src_base, src);
-                    super::encode::emit_mov_mem32_r(code, dst_base, dst, Reg::R10);
+                    super::encode::emit_mov_mem_r32(code, dst_base, dst, Reg::R10);
                 }
                 2 => {
                     super::encode::emit_movzx_r_mem16(code, Reg::R10, src_base, src);
@@ -2352,7 +2352,7 @@ fn emit_struct_stack_param_copy(
                 }
                 _ => {
                     super::encode::emit_movzx_r_mem8(code, Reg::R10, src_base, src);
-                    super::encode::emit_mov_mem8_r(code, dst_base, dst, Reg::R10);
+                    super::encode::emit_mov_mem_r8(code, dst_base, dst, Reg::R10);
                 }
             }
             o += width;

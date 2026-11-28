@@ -599,21 +599,10 @@ pub(crate) fn emit_mov_r_mem(code: &mut CodeBuf, dst: Reg, base: Reg, disp: i32)
     super::table::encode_into(code, Mnem::Mov, Some(8), &[rw(dst, 8), mw(base, disp, 8)]);
 }
 
-/// `MOV r32, [base + disp]` -- 32-bit load (zero-extends to 64).
-/// Encoding: `8B /r` (no REX.W).
-pub(crate) fn emit_mov_r_mem32(code: &mut CodeBuf, dst: Reg, base: Reg, disp: i32) {
-    super::table::encode_into(code, Mnem::Mov, Some(4), &[rw(dst, 4), mw(base, disp, 4)]);
-}
-
 /// `MOV [base + disp], r64` -- 64-bit memory store.
 /// Encoding: `REX.W + 89 /r`.
 pub(crate) fn emit_mov_mem_r(code: &mut CodeBuf, base: Reg, disp: i32, src: Reg) {
     super::table::encode_into(code, Mnem::Mov, Some(8), &[mw(base, disp, 8), rw(src, 8)]);
-}
-
-/// `MOV [base + disp], r32` -- 32-bit store.
-pub(crate) fn emit_mov_mem_r32(code: &mut CodeBuf, base: Reg, disp: i32, src: Reg) {
-    super::table::encode_into(code, Mnem::Mov, Some(4), &[mw(base, disp, 4), rw(src, 4)]);
 }
 
 /// `MOV [base + disp], r16` -- 16-bit store.
@@ -655,7 +644,7 @@ pub(crate) fn emit_mov_r32_mem(code: &mut CodeBuf, dst: Reg, base: Reg, disp: i3
 /// of `src`. Encoding: no REX.W, just `89 /r` (with REX only if any
 /// operand register needs the high bank). Companion to
 /// [`emit_movsxd_r_mem`] for the `StoreKind::I32` lowering.
-pub(crate) fn emit_mov_mem32_r(code: &mut CodeBuf, base: Reg, disp: i32, src: Reg) {
+pub(crate) fn emit_mov_mem_r32(code: &mut CodeBuf, base: Reg, disp: i32, src: Reg) {
     super::table::encode_into(code, Mnem::Mov, Some(4), &[mw(base, disp, 4), rw(src, 4)]);
 }
 
@@ -2253,19 +2242,6 @@ pub(crate) fn emit_movsx_r_mem8(code: &mut CodeBuf, dst: Reg, base: Reg, disp: i
 /// can treat any of the 16 GPRs as an 8-bit source.
 pub(crate) fn emit_movzx_r_r8(code: &mut CodeBuf, dst: Reg, src: Reg) {
     super::table::encode_into(code, Mnem::Movzx, None, &[rw(dst, 8), rw(src, 1)]);
-}
-
-/// `MOV byte ptr [base + disp], r8` -- store the low byte of `src`.
-/// Encoding: `MOV r/m8, r8` = `88 /r`. REX is mandatory when storing
-/// from one of the upper or new low-byte registers.
-pub(crate) fn emit_mov_mem8_r(code: &mut CodeBuf, base: Reg, disp: i32, src: Reg) {
-    let at = code.len();
-    emit_byte(code, rex(false, src.high(), false, base.high()));
-    emit_byte(code, 0x88);
-    emit_modrm_mem(code, src, base, disp);
-    code.describe(at, || {
-        format!("movb {}, {}", t::gpr(src.0, 1), t::mem_at(base.0, disp))
-    });
 }
 
 // ---- Branches. All forms encode the displacement relative to the

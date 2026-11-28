@@ -1446,6 +1446,49 @@ fn subscripts_are_held_to_the_array_bound() {
     }
 }
 
+/// gcc's `bounds-strict` is `bounds` reaching the trailing members too, so
+/// its checks trap, stop recovering, and turn off wherever `bounds` does:
+/// by either name and by the group `undefined`, which names `bounds`.
+#[test]
+fn bounds_strict_traps_recovers_and_turns_off_as_bounds_does() {
+    let dir = TempDir::new("badc-sanitize-strict");
+    let src = dir.join("overflow.c");
+    std::fs::write(&src, BOUNDS).unwrap();
+    let handlers = |flags: [&str; 2]| {
+        let listing = dir.join("overflow.s");
+        let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+            .args(["-q", "-O0", "-S"])
+            .args(flags)
+            .arg("-o")
+            .arg(&listing)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{flags:?}: {}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let text = std::fs::read_to_string(&listing).unwrap();
+        let all = text.matches("__ubsan_handle_out_of_bounds").count();
+        let aborting = text.matches("__ubsan_handle_out_of_bounds_abort").count();
+        (all - aborting, aborting)
+    };
+    let strict = "-fsanitize=bounds-strict";
+    let (returning, aborting) = handlers([strict, "-fsanitize-recover=all"]);
+    assert!(returning > 0 && aborting == 0, "{returning} {aborting}");
+    for name in ["undefined", "bounds", "bounds-strict"] {
+        let trap = format!("-fsanitize-trap={name}");
+        assert_eq!(handlers([&trap, strict]), (0, 0), "{trap}");
+        let abort = format!("-fno-sanitize-recover={name}");
+        assert_eq!(handlers([strict, &abort]), (0, returning), "{abort}");
+        let off = format!("-fno-sanitize={name}");
+        assert_eq!(handlers([strict, &off]), (0, 0), "{off}");
+    }
+    let off = handlers(["-fsanitize=bounds", "-fno-sanitize=bounds-strict"]);
+    assert_eq!(off, (0, 0));
+}
+
 const BOOLS: &str = "#include <stdio.h>
 #include <string.h>
 struct in { int v[2]; };

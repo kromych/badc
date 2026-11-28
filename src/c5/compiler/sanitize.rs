@@ -38,7 +38,9 @@ pub enum Check {
     /// for a trailing member taken to extend past its bound; clang's
     /// `array-bounds`. An address one past the last element is in bounds.
     Bounds,
-    /// [`Check::Bounds`] on those trailing members as well.
+    /// gcc's `bounds-strict`: [`Check::Bounds`] reaches those trailing
+    /// members as well. The option names both, and a subscript's check is
+    /// `bounds` wherever it is turned off, trapped, or recovered.
     BoundsStrict,
     /// A load of a `_Bool` whose byte is neither 0 nor 1 (C17 6.2.6.1p5,
     /// a trap representation).
@@ -191,6 +193,7 @@ impl Check {
             }
             "shift" => Some(Check::ShiftBase.bit() | Check::ShiftExponent.bit()),
             "array-bounds" => Some(Check::Bounds.bit()),
+            "bounds-strict" => Some(Check::Bounds.bit() | Check::BoundsStrict.bit()),
             _ => (Check::ALL.iter())
                 .find(|c| c.name() == name)
                 .map(|c| c.bit()),
@@ -581,13 +584,11 @@ impl Compiler {
         stride: i64,
         begin: (u32, u32),
     ) {
-        let check = if self.sanitize.runs(Check::BoundsStrict) {
-            Check::BoundsStrict
-        } else if self.sanitize.runs(Check::Bounds) && !base.flexible {
-            Check::Bounds
-        } else {
+        let check = Check::Bounds;
+        if !self.sanitize.runs(check) || (base.flexible && !self.sanitize.runs(Check::BoundsStrict))
+        {
             return;
-        };
+        }
         let Some(bytes) = base.bound.filter(|_| base.addr && stride > 0) else {
             return;
         };

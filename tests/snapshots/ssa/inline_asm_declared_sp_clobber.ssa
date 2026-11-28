@@ -281,7 +281,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v26  Imm(0)                                           -> -
     v27  Imm(158)                                         -> -
     v28  BinopI { op=ne, lhs=v6, rhs_imm=158 }            -> x0
-    v29  BinopI { op=ne, lhs=v28, rhs_imm=0 }             -> -
+    v29  BinopI { op=ne, lhs=v28, rhs_imm=0 }             -> - [cmp32]
     v30  Imm(0)                                           -> -
     v31  Imm(0)                                           -> -
     v32  Imm(0)                                           -> -
@@ -291,7 +291,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
   block 4  start_pc=0
     v35  Imm(0)                                           -> -
     v36  BinopI { op=ne, lhs=v9, rhs_imm=84 }             -> x0
-    v37  BinopI { op=ne, lhs=v36, rhs_imm=0 }             -> -
+    v37  BinopI { op=ne, lhs=v36, rhs_imm=0 }             -> - [cmp32]
     v38  Imm(0)                                           -> -
     v39  Imm(0)                                           -> -
     v40  Imm(0)                                           -> -

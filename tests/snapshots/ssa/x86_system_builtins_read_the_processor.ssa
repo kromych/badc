@@ -69,7 +69,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v46  BinopI { op=shl, lhs=v41, rhs_imm=32 }           -> x2
     v47  Binop { op=or, lhs=v46, rhs=v40 }                -> x2
     v48  BinopI { op=and, lhs=v47, rhs_imm=3 }            -> x2
-    v49  BinopI { op=ne, lhs=v48, rhs_imm=3 }             -> x0
+    v49  BinopI { op=ne, lhs=v48, rhs_imm=3 }             -> x0 [cmp32]
     v50  Imm(0)                                           -> -
     v51  Imm(0)                                           -> -
     v52  Imm(0)                                           -> -
@@ -85,15 +85,15 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v58  Imm(0)                                           -> -
     v59  Imm(0)                                           -> -
     v60  BinopI { op=and, lhs=v55, rhs_imm=2 }            -> x1
-    v61  BinopI { op=eq, lhs=v60, rhs_imm=0 }             -> -
+    v61  BinopI { op=eq, lhs=v60, rhs_imm=0 }             -> - [cmp32]
     v62  Imm(1)                                           -> -
     v63  Imm(0)                                           -> -
     terminator Bz { cond=v60, target=b9, fall=b7 }   (low word)   (exit_acc=v61)
   block 7  start_pc=0
     v64  Imm(0)                                           -> -
     v65  BinopI { op=and, lhs=v55, rhs_imm=512 }          -> x1
-    v66  BinopI { op=eq, lhs=v65, rhs_imm=0 }             -> -
-    v67  BinopI { op=ne, lhs=v66, rhs_imm=0 }             -> -
+    v66  BinopI { op=eq, lhs=v65, rhs_imm=0 }             -> - [cmp32]
+    v67  BinopI { op=ne, lhs=v66, rhs_imm=0 }             -> - [cmp32]
     v68  Imm(0)                                           -> -
     v69  Imm(0)                                           -> -
     v70  Imm(0)                                           -> -

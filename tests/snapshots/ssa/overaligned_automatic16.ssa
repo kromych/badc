@@ -79,7 +79,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v67  BinopI { op=add, lhs=v65, rhs_imm=3 }            -> x2
     v68  Extend { value=v67, kind=I32, nsw }              -> x2
     v69  Binop { op=ne, lhs=v62, rhs=v68 }                -> x0
-    v70  BinopI { op=ne, lhs=v69, rhs_imm=0 }             -> -
+    v70  BinopI { op=ne, lhs=v69, rhs_imm=0 }             -> - [cmp32]
     v71  Imm(0)                                           -> -
     v72  Imm(0)                                           -> -
     v73  Imm(0)                                           -> -
@@ -188,7 +188,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=1
     v66  BinopI { op=add, lhs=v64, rhs_imm=3 }            -> x1
     v67  Extend { value=v66, kind=I32, nsw }              -> x1
     v68  Binop { op=ne, lhs=v61, rhs=v67 }                -> x0
-    v69  BinopI { op=ne, lhs=v68, rhs_imm=0 }             -> -
+    v69  BinopI { op=ne, lhs=v68, rhs_imm=0 }             -> - [cmp32]
     v70  Imm(0)                                           -> -
     v71  Imm(0)                                           -> -
     v72  Imm(0)                                           -> -
@@ -243,7 +243,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=12
     v18  Imm(0)                                           -> -
     v19  Call { target_pc=1, args=[v1], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v20  Imm(0)                                           -> -
-    v21  BinopI { op=gt, lhs=v1, rhs_imm=0 }              -> x0
+    v21  BinopI { op=gt, lhs=v1, rhs_imm=0 }              -> x0 [cmp32]
     terminator Bz { cond=v21, target=b8, fall=b1 }   (exit_acc=v21)
   block 1  start_pc=0
     v22  Imm(0)                                           -> -
@@ -261,7 +261,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=12
     v34  Store { addr=v33, disp=0, value=v23, kind=I64, volatile } -> -
     v35  Call { target_pc=0, args=[v23], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v36  Call { target_pc=1, args=[v23], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v37  BinopI { op=gt, lhs=v23, rhs_imm=0 }             -> x0
+    v37  BinopI { op=gt, lhs=v23, rhs_imm=0 }             -> x0 [cmp32]
     terminator Bz { cond=v37, target=b7, fall=b2 }   (exit_acc=v37)
   block 2  start_pc=0
     v52  BinopI { op=sub, lhs=v23, rhs_imm=1 }            -> x13
@@ -278,7 +278,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=12
     v63  Store { addr=v62, disp=0, value=v52, kind=I64, volatile } -> -
     v64  Call { target_pc=0, args=[v52], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v65  Call { target_pc=1, args=[v52], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v66  BinopI { op=gt, lhs=v52, rhs_imm=0 }             -> x0
+    v66  BinopI { op=gt, lhs=v52, rhs_imm=0 }             -> x0 [cmp32]
     terminator Bz { cond=v66, target=b6, fall=b3 }   (exit_acc=v66)
   block 3  start_pc=0
     v77  BinopI { op=sub, lhs=v52, rhs_imm=1 }            -> x1
@@ -295,7 +295,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=12
     v88  Store { addr=v87, disp=0, value=v77, kind=I64, volatile } -> -
     v89  Call { target_pc=0, args=[v77], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v90  Call { target_pc=1, args=[v77], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
-    v91  BinopI { op=gt, lhs=v77, rhs_imm=0 }             -> x0
+    v91  BinopI { op=gt, lhs=v77, rhs_imm=0 }             -> x0 [cmp32]
     terminator Bz { cond=v91, target=b5, fall=b4 }   (exit_acc=v91)
   block 4  start_pc=0
     v102 BinopI { op=sub, lhs=v77, rhs_imm=1 }            -> x7

@@ -170,10 +170,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v164 Imm(16)                                          -> -
     v165 Extend { value=v163, kind=I32 }                  -> -
     v166 Imm(16)                                          -> -
-    v167 BinopI { op=eq, lhs=v163, rhs_imm=16 }           -> x0
+    v167 BinopI { op=eq, lhs=v163, rhs_imm=16 }           -> x0 [cmp32]
     v168 Extend { value=v167, kind=I32 }                  -> -
     v169 Extend { value=v167, kind=I32 }                  -> -
-    v170 BinopI { op=eq, lhs=v167, rhs_imm=0 }            -> -
+    v170 BinopI { op=eq, lhs=v167, rhs_imm=0 }            -> - [cmp32]
     terminator Bnz { cond=v167, target=b2, fall=b1 }   (low word)   (exit_acc=v170)
   block 1  start_pc=0
     v191 Imm(21)                                          -> x0
@@ -184,10 +184,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v194 Imm(8)                                           -> -
     v195 Extend { value=v193, kind=I32 }                  -> -
     v196 Imm(8)                                           -> -
-    v197 BinopI { op=eq, lhs=v193, rhs_imm=8 }            -> x0
+    v197 BinopI { op=eq, lhs=v193, rhs_imm=8 }            -> x0 [cmp32]
     v198 Extend { value=v197, kind=I32 }                  -> -
     v199 Extend { value=v197, kind=I32 }                  -> -
-    v200 BinopI { op=eq, lhs=v197, rhs_imm=0 }            -> -
+    v200 BinopI { op=eq, lhs=v197, rhs_imm=0 }            -> - [cmp32]
     terminator Bnz { cond=v197, target=b4, fall=b3 }   (low word)   (exit_acc=v200)
   block 3  start_pc=0
     v201 Imm(22)                                          -> x0
@@ -198,10 +198,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v204 Imm(0)                                           -> -
     v205 Extend { value=v203, kind=I32 }                  -> -
     v206 Imm(0)                                           -> -
-    v207 BinopI { op=eq, lhs=v203, rhs_imm=0 }            -> -
+    v207 BinopI { op=eq, lhs=v203, rhs_imm=0 }            -> - [cmp32]
     v208 Extend { value=v207, kind=I32 }                  -> -
     v209 Extend { value=v207, kind=I32 }                  -> -
-    v210 BinopI { op=eq, lhs=v207, rhs_imm=0 }            -> -
+    v210 BinopI { op=eq, lhs=v207, rhs_imm=0 }            -> - [cmp32]
     terminator Bz { cond=v203, target=b6, fall=b5 }   (low word)   (exit_acc=v210)
   block 5  start_pc=0
     v211 Imm(23)                                          -> x0
@@ -246,10 +246,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v248 Imm(16)                                          -> -
     v249 Extend { value=v247, kind=I32 }                  -> -
     v250 Imm(16)                                          -> -
-    v251 BinopI { op=eq, lhs=v247, rhs_imm=16 }           -> x0
+    v251 BinopI { op=eq, lhs=v247, rhs_imm=16 }           -> x0 [cmp32]
     v252 Extend { value=v251, kind=I32 }                  -> -
     v253 Extend { value=v251, kind=I32 }                  -> -
-    v254 BinopI { op=eq, lhs=v251, rhs_imm=0 }            -> -
+    v254 BinopI { op=eq, lhs=v251, rhs_imm=0 }            -> - [cmp32]
     terminator Bnz { cond=v251, target=b8, fall=b7 }   (low word)   (exit_acc=v254)
   block 7  start_pc=0
     v259 Imm(28)                                          -> x0
@@ -260,10 +260,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v262 Imm(0)                                           -> -
     v263 Extend { value=v261, kind=I32 }                  -> -
     v264 Imm(0)                                           -> -
-    v265 BinopI { op=eq, lhs=v261, rhs_imm=0 }            -> -
+    v265 BinopI { op=eq, lhs=v261, rhs_imm=0 }            -> - [cmp32]
     v266 Extend { value=v265, kind=I32 }                  -> -
     v267 Extend { value=v265, kind=I32 }                  -> -
-    v268 BinopI { op=eq, lhs=v265, rhs_imm=0 }            -> -
+    v268 BinopI { op=eq, lhs=v265, rhs_imm=0 }            -> - [cmp32]
     terminator Bz { cond=v261, target=b10, fall=b9 }   (low word)   (exit_acc=v268)
   block 9  start_pc=0
     v269 Imm(29)                                          -> x0

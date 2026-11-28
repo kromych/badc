@@ -119,7 +119,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v85  Imm(16)                                          -> -
     v86  Imm(0)                                           -> -
     v87  Imm(0)                                           -> -
-    v88  BinopI { op=ne, lhs=v73, rhs_imm=9 }             -> x0
+    v88  BinopI { op=ne, lhs=v73, rhs_imm=9 }             -> x0 [cmp32]
     terminator Bz { cond=v88, target=b20, fall=b9 }   (exit_acc=v88)
   block 9  start_pc=0
     v3651 Imm(16)                                          -> x0
@@ -2974,7 +2974,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v3991 Imm(0)                                           -> -
     v3992 Imm(0)                                           -> -
     v3993 Imm(0)                                           -> -
-    v3994 BinopI { op=ne, lhs=v2324, rhs_imm=-1 }          -> x0
+    v3994 BinopI { op=ne, lhs=v2324, rhs_imm=-1 }          -> x0 [cmp32]
     terminator Bz { cond=v3994, target=b19, fall=b18 }   (exit_acc=v3994)
   block 18  start_pc=0
     v3995 Imm(122)                                         -> -

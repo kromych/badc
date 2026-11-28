@@ -221,8 +221,8 @@ fn ent_pc=11 n_params=2 variadic=false locals=0
     v20  Imm(0)                                           -> -
     v21  Imm(0)                                           -> -
     v22  Imm(0)                                           -> -
-    v23  Select { cond=v3, a=v10, b=v8, kind=I64 }        -> x2
-    v24  Select { cond=v3, a=v8, b=v10, kind=I64 }        -> x0
+    v23  Select { cond=v3, a=v10, b=v8, kind=I64 }        -> x2 [cmp32]
+    v24  Select { cond=v3, a=v8, b=v10, kind=I64 }        -> x0 [cmp32]
     terminator Jmp(b1)
   block 1  start_pc=0
     v35  Copy { value=v23, fp=false }                     -> -

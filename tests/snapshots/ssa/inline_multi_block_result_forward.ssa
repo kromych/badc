@@ -22,7 +22,7 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
     v16  Extend { value=v13, kind=I32 }                   -> -
     v17  Imm(0)                                           -> -
     v18  Imm(0)                                           -> -
-    v19  BinopI { op=gt, lhs=v1, rhs_imm=3 }              -> x1
+    v19  BinopI { op=gt, lhs=v1, rhs_imm=3 }              -> x1 [cmp32]
     terminator Bz { cond=v19, target=b2, fall=b1 }   (exit_acc=v19)
   block 1  start_pc=0
     v20  Imm(0)                                           -> -

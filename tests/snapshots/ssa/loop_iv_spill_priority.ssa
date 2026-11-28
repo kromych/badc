@@ -93,7 +93,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v58  Phi { incoming=[b0:v6, b1:v81], kind=I64 }       -> x0
     v59  BinopI { op=and, lhs=v57, rhs_imm=4294967295 }   -> -
     v60  Imm(1000)                                        -> -
-    v61  BinopI { op=ult, lhs=v57, rhs_imm=1000 }         -> x2
+    v61  BinopI { op=ult, lhs=v57, rhs_imm=1000 }         -> x2 [cmp32]
     terminator Bz { cond=v61, target=b3, fall=b1 }   (exit_acc=v61)
   block 3  start_pc=0
     v87  BinopI { op=and, lhs=v58, rhs_imm=4294967295 }   -> -

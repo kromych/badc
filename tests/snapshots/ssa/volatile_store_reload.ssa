@@ -10,10 +10,10 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v4   Load { addr=v1, disp=0, kind=I32, volatile pc_rel } -> x0
     v5   Imm(0)                                           -> -
     v6   Extend { value=v4, kind=I32 }                    -> -
-    v7   BinopI { op=eq, lhs=v4, rhs_imm=5 }              -> -
+    v7   BinopI { op=eq, lhs=v4, rhs_imm=5 }              -> - [cmp32]
     v8   Imm(0)                                           -> x1
     v9   Imm(1)                                           -> x2
-    v10  BinopI { op=eq, lhs=v4, rhs_imm=5 }              -> x0
+    v10  BinopI { op=eq, lhs=v4, rhs_imm=5 }              -> x0 [cmp32]
     v11  Select { cond=v10, a=v8, b=v9, kind=I64 }        -> x0
     terminator Jmp(b1)
   block 1  start_pc=0

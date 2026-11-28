@@ -10,7 +10,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v4   Store { addr=v1, disp=0, value=v3, kind=I32 pc_rel } -> -
     v5   Imm(64)                                          -> -
     v6   BinopI { op=and, lhs=v1, rhs_imm=63 }            -> x1
-    v7   BinopI { op=ne, lhs=v6, rhs_imm=0 }              -> -
+    v7   BinopI { op=ne, lhs=v6, rhs_imm=0 }              -> - [cmp32]
     terminator Bz { cond=v6, target=b2, fall=b1 }   (low word)   (exit_acc=v7)
   block 1  start_pc=0
     v8   Imm(1)                                           -> x0
@@ -19,7 +19,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v9   ImmData(8192)                                    -> -
     v10  Imm(0)                                           -> -
     v11  Load { addr=v1, disp=0, kind=I32 pc_rel }        -> -
-    v12  Imm(0)                                           -> -
+    v12  Imm(0)                                           -> - [cmp32]
     terminator Jmp(b3)   (exit_acc=v12)
   block 3  start_pc=0
     v14  ImmData(12288)                                   -> x1
@@ -28,7 +28,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v17  Store { addr=v14, disp=0, value=v16, kind=I8 pc_rel } -> -
     v18  Imm(4096)                                        -> -
     v19  BinopI { op=and, lhs=v14, rhs_imm=4095 }         -> x1
-    v20  BinopI { op=ne, lhs=v19, rhs_imm=0 }             -> -
+    v20  BinopI { op=ne, lhs=v19, rhs_imm=0 }             -> - [cmp32]
     terminator Bz { cond=v19, target=b5, fall=b4 }   (low word)   (exit_acc=v20)
   block 4  start_pc=0
     v21  Imm(3)                                           -> -
@@ -37,13 +37,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v22  ImmData(12288)                                   -> -
     v23  Imm(0)                                           -> -
     v24  Load { addr=v14, disp=0, kind=I8 pc_rel }        -> -
-    v25  Imm(0)                                           -> -
+    v25  Imm(0)                                           -> - [cmp32]
     terminator Jmp(b6)   (exit_acc=v25)
   block 6  start_pc=0
     v27  ImmData(4096)                                    -> x0
     v28  Imm(64)                                          -> -
     v29  BinopI { op=and, lhs=v27, rhs_imm=63 }           -> x0
-    v30  BinopI { op=ne, lhs=v29, rhs_imm=0 }             -> -
+    v30  BinopI { op=ne, lhs=v29, rhs_imm=0 }             -> - [cmp32]
     terminator Bz { cond=v29, target=b8, fall=b7 }   (low word)   (exit_acc=v30)
   block 7  start_pc=0
     v31  Imm(5)                                           -> x0
@@ -51,7 +51,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 8  start_pc=0
     v32  ImmData(4096)                                    -> -
     v33  Load { addr=v27, disp=0, kind=I32 pc_rel }       -> x0
-    v34  BinopI { op=ne, lhs=v33, rhs_imm=11 }            -> x0
+    v34  BinopI { op=ne, lhs=v33, rhs_imm=11 }            -> x0 [cmp32]
     terminator Bz { cond=v34, target=b10, fall=b9 }   (exit_acc=v34)
   block 9  start_pc=0
     v35  Imm(6)                                           -> x0
@@ -59,7 +59,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 10  start_pc=0
     v38  ImmData(4224)                                    -> x0
     v39  BinopI { op=and, lhs=v38, rhs_imm=127 }          -> x0
-    v40  BinopI { op=ne, lhs=v39, rhs_imm=0 }             -> -
+    v40  BinopI { op=ne, lhs=v39, rhs_imm=0 }             -> - [cmp32]
     terminator Bz { cond=v39, target=b13, fall=b11 }   (low word)   (exit_acc=v40)
   block 11  start_pc=0
     v41  Imm(0)                                           -> -
@@ -74,7 +74,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v45  Extend { value=v43, kind=I32 }                   -> -
     v46  Imm(0)                                           -> -
     v47  Extend { value=v43, kind=I32 }                   -> -
-    v48  BinopI { op=ne, lhs=v43, rhs_imm=7 }             -> x0
+    v48  BinopI { op=ne, lhs=v43, rhs_imm=7 }             -> x0 [cmp32]
     terminator Bz { cond=v48, target=b14, fall=b12 }   (exit_acc=v48)
   block 14  start_pc=0
     v37  Imm(0)                                           -> x0

@@ -317,7 +317,7 @@ fn ent_pc=0 n_params=2 variadic=false locals=0
     v122 Extend { value=v121, kind=I32 }                  -> -
     v123 BinopI { op=add, lhs=v121, rhs_imm=-1 }          -> x3
     v124 Extend { value=v123, kind=I32, nsw }             -> -
-    v125 BinopI { op=gt, lhs=v121, rhs_imm=0 }            -> x6
+    v125 BinopI { op=gt, lhs=v121, rhs_imm=0 }            -> x6 [cmp32]
     terminator Bz { cond=v125, target=b3, fall=b1 }   (exit_acc=v125)
   block 3  start_pc=0
     v311 Imm(0)                                           -> -

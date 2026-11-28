@@ -140,7 +140,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v139 Store { addr=v116, disp=8, value=v137, kind=I64, align=1 pc_rel } -> -
     v140 Load { addr=v116, disp=0, kind=I64, align=1 pc_rel } -> -
     v141 Extend { value=v134, kind=I32 }                  -> -
-    v142 BinopI { op=ne, lhs=v134, rhs_imm=12 }           -> x2
+    v142 BinopI { op=ne, lhs=v134, rhs_imm=12 }           -> x2 [cmp32]
     v143 Imm(0)                                           -> -
     terminator Bnz { cond=v142, target=b3, fall=b2 }   (exit_acc=v142)
   block 2  start_pc=0
@@ -182,7 +182,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v177 Store { addr=v116, disp=8, value=v175, kind=I64, align=1 pc_rel } -> -
     v178 Load { addr=v116, disp=0, kind=I64, align=1 pc_rel } -> -
     v179 Extend { value=v172, kind=I32 }                  -> -
-    v180 BinopI { op=ne, lhs=v172, rhs_imm=13 }           -> x0
+    v180 BinopI { op=ne, lhs=v172, rhs_imm=13 }           -> x0 [cmp32]
     terminator Bz { cond=v180, target=b6, fall=b5 }   (exit_acc=v180)
   block 5  start_pc=0
     v181 Imm(8)                                           -> x0

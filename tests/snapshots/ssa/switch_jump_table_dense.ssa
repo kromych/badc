@@ -15,18 +15,18 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
   block 2  start_pc=0
     v3   Phi { incoming=[b0:v1, b1:v7], kind=I64 }        -> x1
     v4   Extend { value=v3, kind=I32 }                    -> -
-    v5   BinopI { op=le, lhs=v3, rhs_imm=19 }             -> x0
+    v5   BinopI { op=le, lhs=v3, rhs_imm=19 }             -> x0 [cmp32]
     terminator Bz { cond=v5, target=b25, fall=b3 }   (exit_acc=v5)
   block 3  start_pc=0
     v9   Extend { value=v3, kind=I32 }                    -> -
-    v10  BinopI { op=eq, lhs=v3, rhs_imm=15 }             -> x0
+    v10  BinopI { op=eq, lhs=v3, rhs_imm=15 }             -> x0 [cmp32]
     terminator Bz { cond=v10, target=b4, fall=b1 }   (exit_acc=v10)
   block 4  start_pc=0
     v292 Extend { value=v3, kind=I32 }                    -> -
-    v293 BinopI { op=lt, lhs=v3, rhs_imm=15 }             -> -
+    v293 BinopI { op=lt, lhs=v3, rhs_imm=15 }             -> - [cmp32]
     v294 BinopI { op=sub, lhs=v3, rhs_imm=2 }             -> x0
     v295 BinopI { op=sub, lhs=v3, rhs_imm=3 }             -> x2
-    v296 BinopI { op=lt, lhs=v3, rhs_imm=15 }             -> x6
+    v296 BinopI { op=lt, lhs=v3, rhs_imm=15 }             -> x6 [cmp32]
     v297 Select { cond=v296, a=v294, b=v295, kind=I64 }   -> x2
     terminator Jmp(b5)
   block 5  start_pc=0
@@ -45,7 +45,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v365 Phi { incoming=[b6:v348, b8:v349, b9:v350, b10:v351, b11:v352, b12:v353, b13:v354, b14:v355, b15:v356, b16:v357, b17:v358, b18:v359, b20:v360, b21:v361, b22:v362, b23:v363, b19:v364], kind=I64 } -> x0
     v366 Extend { value=v365, kind=I32 }                  -> -
     v367 Extend { value=v297, kind=I32 }                  -> -
-    v368 Binop { op=ne, lhs=v365, rhs=v297 }              -> x0
+    v368 Binop { op=ne, lhs=v365, rhs=v297 }              -> x0 [cmp32]
     terminator Bz { cond=v368, target=b1, fall=b24 }   (exit_acc=v368)
   block 8  start_pc=0
     v349 Imm(2)                                           -> x0

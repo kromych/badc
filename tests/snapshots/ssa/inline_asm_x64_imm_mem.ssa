@@ -112,9 +112,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v62  InlineAsm { template="testb $0x01, %1\n\tsete %0", ops=2, args=[-, v61] } -> x0
     v63  Imm(0)                                           -> -
     v64  BinopI { op=and, lhs=v62, rhs_imm=255 }          -> x0
-    v65  BinopI { op=ne, lhs=v64, rhs_imm=1 }             -> x0
+    v65  BinopI { op=ne, lhs=v64, rhs_imm=1 }             -> x0 [cmp32]
     v66  BinopI { op=and, lhs=v65, rhs_imm=4294967295 }   -> -
-    v67  BinopI { op=ne, lhs=v64, rhs_imm=1 }             -> -
+    v67  BinopI { op=ne, lhs=v64, rhs_imm=1 }             -> - [cmp32]
     terminator Bz { cond=v65, target=b24, fall=b23 }   (exit_acc=v67)
   block 23  start_pc=0
     v68  Imm(12)                                          -> x0
@@ -125,9 +125,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v71  InlineAsm { template="cmpb $0x2a, %1\n\tsete %0", ops=2, args=[-, v70] } -> x0
     v72  Imm(0)                                           -> -
     v73  BinopI { op=and, lhs=v71, rhs_imm=255 }          -> x0
-    v74  BinopI { op=ne, lhs=v73, rhs_imm=1 }             -> x0
+    v74  BinopI { op=ne, lhs=v73, rhs_imm=1 }             -> x0 [cmp32]
     v75  BinopI { op=and, lhs=v74, rhs_imm=4294967295 }   -> -
-    v76  BinopI { op=ne, lhs=v73, rhs_imm=1 }             -> -
+    v76  BinopI { op=ne, lhs=v73, rhs_imm=1 }             -> - [cmp32]
     terminator Bz { cond=v74, target=b26, fall=b25 }   (exit_acc=v76)
   block 25  start_pc=0
     v77  Imm(13)                                          -> x0

@@ -14,17 +14,17 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     terminator Jmp(b4)   (exit_acc=v5)
   block 1  start_pc=0
     v16  Extend { value=v9, kind=I32 }                    -> -
-    v17  BinopI { op=eq, lhs=v9, rhs_imm=5 }              -> x2
+    v17  BinopI { op=eq, lhs=v9, rhs_imm=5 }              -> x2 [cmp32]
     terminator Bz { cond=v17, target=b2, fall=b5 }   (exit_acc=v17)
   block 2  start_pc=0
     v20  Extend { value=v9, kind=I32 }                    -> -
     v21  Imm(2)                                           -> -
     v22  BinopI { op=and, lhs=v9, rhs_imm=1 }             -> x2
     v23  Extend { value=v22, kind=I32, nsw }              -> -
-    v24  BinopI { op=eq, lhs=v22, rhs_imm=0 }             -> -
+    v24  BinopI { op=eq, lhs=v22, rhs_imm=0 }             -> - [cmp32]
     v25  Binop { op=add, lhs=v8, rhs=v9 }                 -> x6
-    v26  BinopI { op=eq, lhs=v22, rhs_imm=0 }             -> -
-    v27  Select { cond=v22, a=v25, b=v8, kind=I64 }       -> x1
+    v26  BinopI { op=eq, lhs=v22, rhs_imm=0 }             -> - [cmp32]
+    v27  Select { cond=v22, a=v25, b=v8, kind=I64 }       -> x1 [cmp32]
     terminator Jmp(b3)
   block 3  start_pc=0
     v12  Copy { value=v27, fp=false }                     -> -
@@ -36,7 +36,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v8   Phi { incoming=[b0:v5, b3:v27], kind=I64 }       -> x1
     v9   Phi { incoming=[b0:v5, b3:v14], kind=I64 }       -> x0
     v10  Extend { value=v9, kind=I32 }                    -> -
-    v11  BinopI { op=lt, lhs=v9, rhs_imm=10 }             -> x2
+    v11  BinopI { op=lt, lhs=v9, rhs_imm=10 }             -> x2 [cmp32]
     terminator Bz { cond=v11, target=b5, fall=b1 }   (exit_acc=v11)
   block 5  start_pc=0
     v18  Extend { value=v8, kind=I32 }                    -> -

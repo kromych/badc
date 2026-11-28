@@ -19,7 +19,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v13  Binop { op=or, lhs=v10, rhs=v12 }                -> x0
     v14  Imm(0)                                           -> -
     v15  Imm(0)                                           -> -
-    v16  BinopI { op=ne, lhs=v13, rhs_imm=0 }             -> -
+    v16  BinopI { op=ne, lhs=v13, rhs_imm=0 }             -> - [cmp32]
     terminator Bz { cond=v13, target=b2, fall=b1 }   (low word)   (exit_acc=v16)
   block 1  start_pc=0
     v17  Imm(1)                                           -> x0
@@ -50,7 +50,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v40  LocalAddr(-21)                                   -> -
     v41  Imm(0)                                           -> -
     v42  LoadLocal { off=-21, kind=I8 }                   -> -
-    v43  Imm(0)                                           -> -
+    v43  Imm(0)                                           -> - [cmp32]
     v44  Imm(1)                                           -> -
     v45  Imm(0)                                           -> -
     terminator Jmp(b3)   (exit_acc=v43)
@@ -59,8 +59,8 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v47  Imm(12)                                          -> -
     v48  BinopI { op=add, lhs=v5, rhs_imm=12 }            -> -
     v49  LoadLocal { off=-23, disp=12, kind=I32 }         -> x0
-    v50  BinopI { op=ne, lhs=v49, rhs_imm=22 }            -> x0
-    v51  BinopI { op=ne, lhs=v50, rhs_imm=0 }             -> -
+    v50  BinopI { op=ne, lhs=v49, rhs_imm=22 }            -> x0 [cmp32]
+    v51  BinopI { op=ne, lhs=v50, rhs_imm=0 }             -> - [cmp32]
     v52  Imm(0)                                           -> -
     v53  Imm(0)                                           -> -
     v54  Imm(0)                                           -> -
@@ -70,7 +70,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 4  start_pc=0
     v57  LoadLocal { off=-22, kind=I64 }                  -> -
     v58  Imm(0)                                           -> -
-    v59  Imm(0)                                           -> -
+    v59  Imm(0)                                           -> - [cmp32]
     v60  Imm(0)                                           -> -
     v61  Imm(0)                                           -> -
     v62  Imm(0)                                           -> -

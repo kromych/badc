@@ -31,7 +31,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v25  Imm(0)                                           -> -
     v26  Imm(0)                                           -> -
     v27  LoadLocal { off=-4, kind=I32 }                   -> -
-    v28  Imm(0)                                           -> -
+    v28  Imm(0)                                           -> - [cmp32]
     v29  Imm(1)                                           -> -
     v30  Imm(0)                                           -> -
     terminator Jmp(b1)   (exit_acc=v28)
@@ -42,8 +42,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v34  Imm(0)                                           -> -
     v35  Imm(0)                                           -> -
     v36  LoadLocal { off=-3, kind=I32 }                   -> -
-    v37  Imm(0)                                           -> -
-    v38  Imm(0)                                           -> -
+    v37  Imm(0)                                           -> - [cmp32]
+    v38  Imm(0)                                           -> - [cmp32]
     v39  Imm(0)                                           -> -
     v40  Imm(0)                                           -> -
     v41  Imm(0)                                           -> -
@@ -57,8 +57,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v47  Imm(0)                                           -> -
     v48  Imm(0)                                           -> -
     v49  LoadLocal { off=-2, kind=I32 }                   -> -
-    v50  Imm(0)                                           -> -
-    v51  Imm(0)                                           -> -
+    v50  Imm(0)                                           -> - [cmp32]
+    v51  Imm(0)                                           -> - [cmp32]
     v52  Imm(0)                                           -> -
     v53  Imm(0)                                           -> -
     v54  Imm(0)                                           -> -
@@ -72,7 +72,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v60  Imm(0)                                           -> -
     v61  Imm(0)                                           -> -
     v62  LoadLocal { off=-1, kind=I32 }                   -> -
-    v63  Imm(0)                                           -> -
+    v63  Imm(0)                                           -> - [cmp32]
     v64  Imm(0)                                           -> -
     v65  Imm(0)                                           -> -
     v66  Imm(0)                                           -> -

@@ -65,7 +65,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v41  Imm(0)                                           -> -
     v42  ImmCode(ent_pc=1)                                -> x1
     v43  Binop { op=ne, lhs=v13, rhs=v42 }                -> x1
-    v44  BinopI { op=ne, lhs=v43, rhs_imm=0 }             -> -
+    v44  BinopI { op=ne, lhs=v43, rhs_imm=0 }             -> - [cmp32]
     v45  Imm(0)                                           -> -
     v46  Imm(0)                                           -> -
     v47  Imm(0)                                           -> -
@@ -77,7 +77,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v51  ImmData(4)                                       -> x1
     v52  BinopI { op=add, lhs=v51, rhs_imm=16 }           -> x1
     v53  Binop { op=ne, lhs=v22, rhs=v52 }                -> x1
-    v54  BinopI { op=ne, lhs=v53, rhs_imm=0 }             -> -
+    v54  BinopI { op=ne, lhs=v53, rhs_imm=0 }             -> - [cmp32]
     v55  Imm(0)                                           -> -
     v56  Imm(0)                                           -> -
     v57  Imm(0)                                           -> -

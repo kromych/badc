@@ -292,7 +292,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=0
     v190 LifetimeEnd(0)                                   -> -
     v191 Imm(0)                                           -> -
     v192 Extend { value=v174, kind=I32 }                  -> -
-    v193 BinopI { op=ne, lhs=v174, rhs_imm=2 }            -> x0
+    v193 BinopI { op=ne, lhs=v174, rhs_imm=2 }            -> x0 [cmp32]
     v194 Imm(1)                                           -> -
     v195 Imm(0)                                           -> -
     terminator Bnz { cond=v193, target=b19, fall=b17 }   (exit_acc=v193)
@@ -300,8 +300,8 @@ fn ent_pc=11 n_params=0 variadic=false locals=0
     v196 Imm(0)                                           -> -
     v197 Imm(0)                                           -> -
     v198 Extend { value=v179, kind=I32 }                  -> -
-    v199 BinopI { op=ne, lhs=v179, rhs_imm=4 }            -> x0
-    v200 BinopI { op=ne, lhs=v199, rhs_imm=0 }            -> -
+    v199 BinopI { op=ne, lhs=v179, rhs_imm=4 }            -> x0 [cmp32]
+    v200 BinopI { op=ne, lhs=v199, rhs_imm=0 }            -> - [cmp32]
     v201 Imm(0)                                           -> -
     v202 Imm(0)                                           -> -
     v203 Imm(0)                                           -> -
@@ -311,7 +311,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=0
     v205 Imm(0)                                           -> -
     v206 Imm(0)                                           -> -
     v207 Extend { value=v184, kind=I32 }                  -> -
-    v208 BinopI { op=ne, lhs=v184, rhs_imm=6 }            -> x0
+    v208 BinopI { op=ne, lhs=v184, rhs_imm=6 }            -> x0 [cmp32]
     v209 Imm(0)                                           -> -
     v210 Imm(0)                                           -> -
     v211 Imm(0)                                           -> -

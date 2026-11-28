@@ -20,7 +20,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v10  Phi { incoming=[b0:v1, b1:v8], kind=I32 }        -> x0
     v11  Imm(0)                                           -> -
     v12  Imm(0)                                           -> -
-    v13  BinopI { op=eq, lhs=v10, rhs_imm=0 }             -> -
+    v13  BinopI { op=eq, lhs=v10, rhs_imm=0 }             -> - [cmp32]
     terminator Bnz { cond=v10, target=b1, fall=b3 }   (low word)   (exit_acc=v13)
   block 3  start_pc=0
     terminator Return

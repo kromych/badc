@@ -10,7 +10,7 @@ fn ent_pc=13 n_params=2 variadic=false locals=7
     v4   Imm(0)                                           -> -
     v5   Imm(0)                                           -> -
     v6   Imm(0)                                           -> -
-    v7   BinopI { op=lt, lhs=v1, rhs_imm=0 }              -> x0
+    v7   BinopI { op=lt, lhs=v1, rhs_imm=0 }              -> x0 [cmp32]
     terminator Bz { cond=v7, target=b2, fall=b1 }   (exit_acc=v7)
   block 1  start_pc=0
     v8   LocalAddr(-2)                                    -> x0

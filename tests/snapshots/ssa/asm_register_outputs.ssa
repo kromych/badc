@@ -58,7 +58,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=2
     v40  BinopI { op=and, lhs=v38, rhs_imm=65535 }        -> x0
     v41  Binop { op=add, lhs=v39, rhs=v40 }               -> x0
     v42  Imm(35414)                                       -> -
-    v43  BinopI { op=ne, lhs=v41, rhs_imm=35414 }         -> x0
+    v43  BinopI { op=ne, lhs=v41, rhs_imm=35414 }         -> x0 [cmp32]
     terminator Bz { cond=v43, target=b8, fall=b7 }   (exit_acc=v43)
   block 7  start_pc=0
     v44  Imm(4)                                           -> x0

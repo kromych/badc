@@ -26,7 +26,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v10  Load { addr=v9, disp=0, kind=I64 pc_rel }        -> x1
     v11  Imm(0)                                           -> -
     v12  Binop { op=ne, lhs=v10, rhs=v1 }                 -> x1
-    v13  BinopI { op=ne, lhs=v12, rhs_imm=0 }             -> -
+    v13  BinopI { op=ne, lhs=v12, rhs_imm=0 }             -> - [cmp32]
     v14  Imm(0)                                           -> -
     v15  Imm(0)                                           -> -
     v16  Imm(0)                                           -> -
@@ -38,7 +38,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v20  Load { addr=v19, disp=0, kind=I64 pc_rel }       -> x1
     v21  Imm(0)                                           -> -
     v22  Binop { op=ne, lhs=v20, rhs=v1 }                 -> x1
-    v23  BinopI { op=ne, lhs=v22, rhs_imm=0 }             -> -
+    v23  BinopI { op=ne, lhs=v22, rhs_imm=0 }             -> - [cmp32]
     v24  Imm(0)                                           -> -
     v25  Imm(0)                                           -> -
     v26  Imm(0)                                           -> -
@@ -50,7 +50,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v30  Load { addr=v29, disp=0, kind=I64 pc_rel }       -> x1
     v31  Imm(0)                                           -> -
     v32  Binop { op=ne, lhs=v30, rhs=v1 }                 -> x1
-    v33  BinopI { op=ne, lhs=v32, rhs_imm=0 }             -> -
+    v33  BinopI { op=ne, lhs=v32, rhs_imm=0 }             -> - [cmp32]
     v34  Imm(0)                                           -> -
     v35  Imm(0)                                           -> -
     v36  Imm(0)                                           -> -
@@ -103,7 +103,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v69  ImmData(224)                                     -> x7
     v70  BinopI { op=add, lhs=v69, rhs_imm=4 }            -> x7
     v71  Binop { op=ne, lhs=v68, rhs=v70 }                -> x6
-    v72  BinopI { op=ne, lhs=v71, rhs_imm=0 }             -> -
+    v72  BinopI { op=ne, lhs=v71, rhs_imm=0 }             -> - [cmp32]
     v73  Imm(0)                                           -> -
     v74  Imm(0)                                           -> -
     v75  Imm(0)                                           -> -
@@ -135,7 +135,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v93  Imm(8)                                           -> -
     v94  BinopI { op=add, lhs=v92, rhs_imm=8 }            -> x7
     v95  Binop { op=ne, lhs=v91, rhs=v94 }                -> x6
-    v96  BinopI { op=ne, lhs=v95, rhs_imm=0 }             -> -
+    v96  BinopI { op=ne, lhs=v95, rhs_imm=0 }             -> - [cmp32]
     v97  Imm(0)                                           -> -
     v98  Imm(0)                                           -> -
     v99  Imm(0)                                           -> -
@@ -169,7 +169,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v119 Load { addr=v111, disp=8, kind=I64 pc_rel }      -> x6
     v120 ImmCode(ent_pc=0)                                -> -
     v121 Binop { op=ne, lhs=v119, rhs=v48 }               -> x6
-    v122 BinopI { op=ne, lhs=v121, rhs_imm=0 }            -> -
+    v122 BinopI { op=ne, lhs=v121, rhs_imm=0 }            -> - [cmp32]
     v123 Imm(0)                                           -> -
     v124 Imm(0)                                           -> -
     v125 Imm(0)                                           -> -
@@ -204,7 +204,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v146 Load { addr=v136, disp=8, kind=I64 pc_rel }      -> x6
     v147 ImmCode(ent_pc=0)                                -> -
     v148 Binop { op=ne, lhs=v146, rhs=v48 }               -> x1
-    v149 BinopI { op=ne, lhs=v148, rhs_imm=0 }            -> -
+    v149 BinopI { op=ne, lhs=v148, rhs_imm=0 }            -> - [cmp32]
     v150 Imm(0)                                           -> -
     v151 Imm(0)                                           -> -
     v152 Imm(0)                                           -> -

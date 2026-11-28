@@ -11,7 +11,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v5   Imm(16)                                          -> -
     v6   Imm(15)                                          -> -
     v7   BinopI { op=and, lhs=v3, rhs_imm=15 }            -> x1
-    v8   BinopI { op=ne, lhs=v7, rhs_imm=0 }              -> -
+    v8   BinopI { op=ne, lhs=v7, rhs_imm=0 }              -> - [cmp32]
     v9   Extend { value=v8, kind=I32 }                    -> -
     v10  Extend { value=v8, kind=I32 }                    -> -
     terminator Bz { cond=v7, target=b2, fall=b1 }   (low word)   (exit_acc=v8)
@@ -52,7 +52,7 @@ fn ent_pc=7 n_params=1 variadic=false locals=0
     v38  Load { addr=v24, disp=0, kind=I8 }               -> -
     v39  BinopI { op=add, lhs=v36, rhs_imm=2 }            -> x0
     v40  Extend { value=v39, kind=I32, nsw }              -> -
-    v41  BinopI { op=ne, lhs=v39, rhs_imm=3 }             -> x0
+    v41  BinopI { op=ne, lhs=v39, rhs_imm=3 }             -> x0 [cmp32]
     terminator Bz { cond=v41, target=b6, fall=b5 }   (exit_acc=v41)
   block 5  start_pc=0
     v42  Imm(0)                                           -> -

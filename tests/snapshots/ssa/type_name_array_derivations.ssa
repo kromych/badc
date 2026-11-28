@@ -200,7 +200,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=6
     v138 Imm(0)                                           -> -
     v139 Imm(0)                                           -> -
     v140 LoadLocal { off=-2, kind=I32 }                   -> -
-    v141 Imm(0)                                           -> -
+    v141 Imm(0)                                           -> - [cmp32]
     terminator Jmp(b12)   (exit_acc=v141)
   block 12  start_pc=0
     v146 Imm(0)                                           -> -

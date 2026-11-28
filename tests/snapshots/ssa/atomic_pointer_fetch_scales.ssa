@@ -119,7 +119,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v89  AtomicRmw { op=Add, addr=v87, value=v88, width=4, order=SeqCst } -> x6
     v90  BinopI { op=shl, lhs=v89, rhs_imm=32 }           -> -
     v91  Extend { value=v89, kind=I32 }                   -> -
-    v92  BinopI { op=ne, lhs=v89, rhs_imm=5 }             -> x6
+    v92  BinopI { op=ne, lhs=v89, rhs_imm=5 }             -> x6 [cmp32]
     v93  Imm(1)                                           -> -
     v94  Imm(0)                                           -> -
     terminator Bnz { cond=v92, target=b15, fall=b13 }   (exit_acc=v92)
@@ -129,8 +129,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v97  AtomicRmw { op=Sub, addr=v87, value=v96, width=4, order=SeqCst } -> x6
     v98  BinopI { op=shl, lhs=v97, rhs_imm=32 }           -> -
     v99  Extend { value=v97, kind=I32 }                   -> -
-    v100 BinopI { op=ne, lhs=v97, rhs_imm=7 }             -> x6
-    v101 BinopI { op=ne, lhs=v100, rhs_imm=0 }            -> -
+    v100 BinopI { op=ne, lhs=v97, rhs_imm=7 }             -> x6 [cmp32]
+    v101 BinopI { op=ne, lhs=v100, rhs_imm=0 }            -> - [cmp32]
     v102 Imm(0)                                           -> -
     v103 Imm(0)                                           -> -
     v104 Imm(0)                                           -> -
@@ -141,7 +141,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v107 AtomicLoad { addr=v87, width=4, order=SeqCst }   -> x2
     v108 BinopI { op=shl, lhs=v107, rhs_imm=32 }          -> -
     v109 Extend { value=v107, kind=I32 }                  -> -
-    v110 BinopI { op=ne, lhs=v107, rhs_imm=6 }            -> x2
+    v110 BinopI { op=ne, lhs=v107, rhs_imm=6 }            -> x2 [cmp32]
     v111 Imm(0)                                           -> -
     v112 Imm(0)                                           -> -
     v113 Imm(0)                                           -> -

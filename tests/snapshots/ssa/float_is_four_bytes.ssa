@@ -169,9 +169,9 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v155 Imm(0)                                           -> -
     v156 Imm(0)                                           -> -
     v157 BinopI { op=and, lhs=v154, rhs_imm=4294967295 }  -> -
-    v158 BinopI { op=ne, lhs=v154, rhs_imm=1065353216 }   -> x1
+    v158 BinopI { op=ne, lhs=v154, rhs_imm=1065353216 }   -> x1 [cmp32]
     v159 BinopI { op=and, lhs=v158, rhs_imm=4294967295 }  -> -
-    v160 BinopI { op=ne, lhs=v154, rhs_imm=1065353216 }   -> -
+    v160 BinopI { op=ne, lhs=v154, rhs_imm=1065353216 }   -> - [cmp32]
     terminator Bz { cond=v158, target=b13, fall=b11 }   (exit_acc=v160)
   block 11  start_pc=0
     v183 ImmData(104)                                     -> -

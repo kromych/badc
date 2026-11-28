@@ -51,7 +51,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=15
     v37  LoadLocal { off=-8, disp=59, kind=U8 }           -> -
     v38  Imm(0)                                           -> -
     v39  Imm(0)                                           -> -
-    v40  Imm(0)                                           -> -
+    v40  Imm(0)                                           -> - [cmp32]
     terminator Jmp(b5)   (exit_acc=v40)
   block 5  start_pc=0
     v49  LifetimeEnd(-8)                                  -> -

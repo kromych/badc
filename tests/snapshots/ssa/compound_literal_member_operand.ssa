@@ -15,7 +15,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v9   Imm(0)                                           -> -
     v10  Imm(0)                                           -> -
     v11  Imm(-1)                                          -> -
-    v12  BinopI { op=ne, lhs=v0, rhs_imm=-1 }             -> x0
+    v12  BinopI { op=ne, lhs=v0, rhs_imm=-1 }             -> x0 [cmp32]
     v13  Extend { value=v12, kind=I32 }                   -> -
     v14  LifetimeEnd(0)                                   -> -
     terminator Return(v12)   (exit_acc=v12)
@@ -36,7 +36,7 @@ fn ent_pc=1 n_params=1 variadic=false locals=0
     v9   Imm(0)                                           -> -
     v10  Imm(0)                                           -> -
     v11  Imm(-1)                                          -> -
-    v12  BinopI { op=eq, lhs=v0, rhs_imm=-1 }             -> x0
+    v12  BinopI { op=eq, lhs=v0, rhs_imm=-1 }             -> x0 [cmp32]
     v13  Extend { value=v12, kind=I32 }                   -> -
     v14  LifetimeEnd(0)                                   -> -
     terminator Return(v12)   (exit_acc=v12)
@@ -79,7 +79,7 @@ fn ent_pc=3 n_params=1 variadic=false locals=0
     v9   Imm(-1)                                          -> -
     v10  Imm(0)                                           -> -
     v11  Extend { value=v0, kind=I32 }                    -> -
-    v12  BinopI { op=ne, lhs=v0, rhs_imm=-1 }             -> x0
+    v12  BinopI { op=ne, lhs=v0, rhs_imm=-1 }             -> x0 [cmp32]
     v13  Extend { value=v12, kind=I32 }                   -> -
     v14  LifetimeEnd(0)                                   -> -
     terminator Return(v12)   (exit_acc=v12)

@@ -57,7 +57,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=3
     v12  LoadLocal { off=-3, kind=I64, volatile }         -> x0
     v13  Imm(128)                                         -> -
     v14  BinopI { op=and, lhs=v12, rhs_imm=127 }          -> x0
-    v15  BinopI { op=ne, lhs=v14, rhs_imm=0 }             -> -
+    v15  BinopI { op=ne, lhs=v14, rhs_imm=0 }             -> - [cmp32]
     v16  Imm(0)                                           -> -
     v17  Imm(0)                                           -> -
     v18  Imm(0)                                           -> -
@@ -93,10 +93,10 @@ fn ent_pc=4 n_params=0 variadic=false locals=3
     v42  Imm(2)                                           -> -
     v43  BinopI { op=add, lhs=v39, rhs_imm=2 }            -> x0
     v44  Extend { value=v43, kind=I32, nsw }              -> -
-    v45  BinopI { op=eq, lhs=v43, rhs_imm=8 }             -> -
+    v45  BinopI { op=eq, lhs=v43, rhs_imm=8 }             -> - [cmp32]
     v46  Imm(0)                                           -> x1
     v47  Imm(2)                                           -> x2
-    v48  BinopI { op=eq, lhs=v43, rhs_imm=8 }             -> x0
+    v48  BinopI { op=eq, lhs=v43, rhs_imm=8 }             -> x0 [cmp32]
     v49  Select { cond=v48, a=v46, b=v47, kind=I64 }      -> x1
     terminator Jmp(b5)
   block 5  start_pc=0

@@ -72,7 +72,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v66  Imm(0)                                           -> -
     v67  Imm(0)                                           -> -
     v68  Extend { value=v56, kind=I32 }                   -> -
-    v69  BinopI { op=ne, lhs=v56, rhs_imm=60 }            -> x0
+    v69  BinopI { op=ne, lhs=v56, rhs_imm=60 }            -> x0 [cmp32]
     terminator Bz { cond=v69, target=b2, fall=b1 }   (exit_acc=v69)
   block 1  start_pc=0
     v70  Imm(6)                                           -> x0

@@ -17,7 +17,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v18  LoadIndexed { base=v1, index=v10, scale=1, kind=I8 } -> x6
     v19  Binop { op=add, lhs=v3, rhs=v10 }                -> -
     v20  LoadIndexed { base=v3, index=v10, scale=1, kind=I8 } -> x7
-    v21  Binop { op=ne, lhs=v18, rhs=v20 }                -> x6
+    v21  Binop { op=ne, lhs=v18, rhs=v20 }                -> x6 [cmp32]
     terminator Bz { cond=v21, target=b2, fall=b10 }   (exit_acc=v21)
   block 2  start_pc=0
     v13  Extend { value=v10, kind=I32 }                   -> -
@@ -27,7 +27,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
   block 3  start_pc=0
     v10  Phi { incoming=[b0:v6, b2:v14], kind=I64 }       -> x0
     v11  Extend { value=v10, kind=I32 }                   -> -
-    v12  BinopI { op=lt, lhs=v10, rhs_imm=12 }            -> x6
+    v12  BinopI { op=lt, lhs=v10, rhs_imm=12 }            -> x6 [cmp32]
     terminator Bz { cond=v12, target=b4, fall=b1 }   (exit_acc=v12)
   block 4  start_pc=0
     v22  Imm(1)                                           -> -
@@ -104,7 +104,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
     v102 LoadIndexed { base=v80, index=v94, scale=1, kind=I8 } -> x6
     v103 Binop { op=add, lhs=v85, rhs=v94 }               -> -
     v104 LoadIndexed { base=v85, index=v94, scale=1, kind=I8 } -> x7
-    v105 Binop { op=ne, lhs=v102, rhs=v104 }              -> x6
+    v105 Binop { op=ne, lhs=v102, rhs=v104 }              -> x6 [cmp32]
     terminator Bz { cond=v105, target=b6, fall=b9 }   (exit_acc=v105)
   block 6  start_pc=0
     v97  Extend { value=v94, kind=I32 }                   -> -
@@ -114,7 +114,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=2
   block 7  start_pc=0
     v94  Phi { incoming=[b4:v88, b6:v98], kind=I64 }      -> x0
     v95  Extend { value=v94, kind=I32 }                   -> -
-    v96  BinopI { op=lt, lhs=v94, rhs_imm=12 }            -> x6
+    v96  BinopI { op=lt, lhs=v94, rhs_imm=12 }            -> x6 [cmp32]
     terminator Bz { cond=v96, target=b8, fall=b5 }   (exit_acc=v96)
   block 8  start_pc=0
     v106 Imm(1)                                           -> -

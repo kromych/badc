@@ -47,7 +47,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v5   Imm(16)                                          -> -
     v6   Imm(21)                                          -> -
     v7   Imm(28)                                          -> -
-    v8   BinopI { op=ne, lhs=v2, rhs_imm=28 }             -> x0
+    v8   BinopI { op=ne, lhs=v2, rhs_imm=28 }             -> x0 [cmp32]
     terminator Bz { cond=v8, target=b2, fall=b1 }   (exit_acc=v8)
   block 1  start_pc=0
     v9   Imm(1)                                           -> x0
@@ -60,7 +60,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v14  Imm(13)                                          -> -
     v15  Imm(17)                                          -> -
     v16  Imm(24)                                          -> -
-    v17  BinopI { op=ne, lhs=v11, rhs_imm=24 }            -> x0
+    v17  BinopI { op=ne, lhs=v11, rhs_imm=24 }            -> x0 [cmp32]
     terminator Bz { cond=v17, target=b4, fall=b3 }   (exit_acc=v17)
   block 3  start_pc=0
     v18  Imm(2)                                           -> x0

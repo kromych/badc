@@ -120,13 +120,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v101 Imm(8)                                           -> -
     v102 Imm(0)                                           -> -
     v103 Imm(0)                                           -> -
-    v104 Imm(0)                                           -> -
+    v104 Imm(0)                                           -> - [cmp32]
     v105 Imm(0)                                           -> -
     terminator Jmp(b1)   (exit_acc=v104)
   block 1  start_pc=0
     v107 ImmData(16)                                      -> -
     v108 Load { addr=v72, disp=0, kind=I32 pc_rel }       -> -
-    v109 Imm(0)                                           -> -
+    v109 Imm(0)                                           -> - [cmp32]
     v110 Imm(0)                                           -> -
     v111 Imm(0)                                           -> -
     v112 Imm(0)                                           -> -
@@ -160,14 +160,14 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v139 Imm(200)                                         -> -
     v140 Imm(0)                                           -> -
     v141 Imm(0)                                           -> -
-    v142 Imm(0)                                           -> -
+    v142 Imm(0)                                           -> - [cmp32]
     v143 Imm(1)                                           -> -
     v144 Imm(0)                                           -> -
     terminator Jmp(b3)   (exit_acc=v142)
   block 3  start_pc=0
     v145 Imm(0)                                           -> -
-    v146 Imm(0)                                           -> -
-    v147 Imm(0)                                           -> -
+    v146 Imm(0)                                           -> - [cmp32]
+    v147 Imm(0)                                           -> - [cmp32]
     v148 Imm(0)                                           -> -
     v149 Imm(0)                                           -> -
     v150 Imm(0)                                           -> -
@@ -176,7 +176,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 4  start_pc=0
     v152 ImmData(16)                                      -> -
     v153 Load { addr=v152, disp=0, kind=I32 pc_rel }      -> x0
-    v154 BinopI { op=ne, lhs=v153, rhs_imm=2 }            -> x0
+    v154 BinopI { op=ne, lhs=v153, rhs_imm=2 }            -> x0 [cmp32]
     v155 Imm(0)                                           -> -
     v156 Imm(0)                                           -> -
     v157 Imm(0)                                           -> -
@@ -215,13 +215,13 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v186 Imm(5)                                           -> -
     v187 Imm(0)                                           -> -
     v188 Imm(0)                                           -> -
-    v189 Imm(0)                                           -> -
+    v189 Imm(0)                                           -> - [cmp32]
     v190 Imm(0)                                           -> -
     terminator Jmp(b7)   (exit_acc=v189)
   block 7  start_pc=0
     v191 ImmData(16)                                      -> -
     v192 Load { addr=v152, disp=0, kind=I32 pc_rel }      -> -
-    v193 Imm(0)                                           -> -
+    v193 Imm(0)                                           -> - [cmp32]
     v194 Imm(0)                                           -> -
     v195 Imm(0)                                           -> -
     v196 Imm(0)                                           -> -
@@ -246,7 +246,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v214 Extend { value=v212, kind=I32 }                  -> -
     v215 ImmData(16)                                      -> -
     v216 Load { addr=v208, disp=0, kind=I32 pc_rel }      -> -
-    v217 BinopI { op=ne, lhs=v212, rhs_imm=2 }            -> x1
+    v217 BinopI { op=ne, lhs=v212, rhs_imm=2 }            -> x1 [cmp32]
     terminator Bz { cond=v217, target=b10, fall=b9 }   (exit_acc=v217)
   block 9  start_pc=0
     v218 Imm(6)                                           -> x0

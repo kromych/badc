@@ -469,10 +469,10 @@ fn ent_pc=8 n_params=0 variadic=false locals=6
     v359 Imm(8)                                           -> -
     v360 Imm(9)                                           -> -
     v361 Imm(10)                                          -> -
-    v362 BinopI { op=ne, lhs=v356, rhs_imm=10 }           -> -
+    v362 BinopI { op=ne, lhs=v356, rhs_imm=10 }           -> - [cmp32]
     v363 BinopI { op=or, lhs=v345, rhs_imm=128 }          -> x0
     v364 Load { addr=v355, disp=0, kind=I32 pc_rel }      -> x1
-    v365 BinopI { op=ne, lhs=v364, rhs_imm=10 }           -> x1
+    v365 BinopI { op=ne, lhs=v364, rhs_imm=10 }           -> x1 [cmp32]
     v366 Select { cond=v365, a=v363, b=v345, kind=I64 }   -> x0
     terminator Jmp(b7)
   block 7  start_pc=0

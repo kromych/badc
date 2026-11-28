@@ -30,10 +30,10 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     terminator Bz { cond=v13, target=b3, fall=b1 }   (exit_acc=v13)
   block 3  start_pc=0
     v20  Extend { value=v11, kind=I32 }                   -> -
-    v21  BinopI { op=gt, lhs=v11, rhs_imm=0 }             -> -
+    v21  BinopI { op=gt, lhs=v11, rhs_imm=0 }             -> - [cmp32]
     v22  Imm(0)                                           -> x0
     v23  Imm(1)                                           -> x2
-    v24  BinopI { op=gt, lhs=v11, rhs_imm=0 }             -> x1
+    v24  BinopI { op=gt, lhs=v11, rhs_imm=0 }             -> x1 [cmp32]
     v25  Select { cond=v24, a=v22, b=v23, kind=I64 }      -> x0
     terminator Jmp(b4)
   block 4  start_pc=0

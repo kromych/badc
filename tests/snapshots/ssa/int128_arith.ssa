@@ -70,7 +70,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v804 Imm(0)                                           -> -
     v805 Imm(0)                                           -> -
     v806 Imm(0)                                           -> -
-    v807 BinopI { op=ne, lhs=v39, rhs_imm=1 }             -> x7
+    v807 BinopI { op=ne, lhs=v39, rhs_imm=1 }             -> x7 [cmp32]
     v808 Imm(0)                                           -> -
     terminator Bz { cond=v807, target=b81, fall=b2 }   (exit_acc=v807)
   block 2  start_pc=0
@@ -131,7 +131,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v823 Imm(0)                                           -> -
     v824 Imm(0)                                           -> -
     v825 Imm(0)                                           -> -
-    v826 BinopI { op=ne, lhs=v74, rhs_imm=0 }             -> -
+    v826 BinopI { op=ne, lhs=v74, rhs_imm=0 }             -> - [cmp32]
     v827 Imm(0)                                           -> -
     terminator Bz { cond=v74, target=b80, fall=b7 }   (low word)   (exit_acc=v826)
   block 7  start_pc=0
@@ -327,7 +327,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v880 Imm(0)                                           -> -
     v881 Imm(0)                                           -> -
     v882 Imm(0)                                           -> -
-    v883 Binop { op=ne, lhs=v189, rhs=v197 }              -> x0
+    v883 Binop { op=ne, lhs=v189, rhs=v197 }              -> x0 [cmp32]
     v884 Imm(0)                                           -> -
     terminator Bz { cond=v883, target=b77, fall=b22 }   (exit_acc=v883)
   block 22  start_pc=0
@@ -679,7 +679,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v436 Binop { op=xor, lhs=v420, rhs=v423 }             -> -
     v437 Binop { op=or, lhs=v423, rhs=v420 }              -> x2
     v438 BinopI { op=eq, lhs=v437, rhs_imm=0 }            -> -
-    v439 BinopI { op=ne, lhs=v438, rhs_imm=0 }            -> -
+    v439 BinopI { op=ne, lhs=v438, rhs_imm=0 }            -> - [cmp32]
     v440 Imm(0)                                           -> -
     v441 Imm(0)                                           -> -
     v442 Imm(0)                                           -> -

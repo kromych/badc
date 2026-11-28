@@ -142,14 +142,14 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v71  Imm(0)                                           -> -
     v72  Call { target_pc=1, args=[v71], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v73  Extend { value=v72, kind=I32 }                   -> -
-    v74  BinopI { op=ne, lhs=v72, rhs_imm=13 }            -> x0
+    v74  BinopI { op=ne, lhs=v72, rhs_imm=13 }            -> x0 [cmp32]
     v75  Imm(0)                                           -> -
     terminator Bnz { cond=v74, target=b2, fall=b1 }   (exit_acc=v74)
   block 1  start_pc=0
     v78  Imm(1)                                           -> -
     v79  Call { target_pc=1, args=[v78], fixed_args=1, fp_return=false, fp_arg_mask=0x0 } -> x0
     v80  Extend { value=v79, kind=I32 }                   -> -
-    v81  BinopI { op=ne, lhs=v79, rhs_imm=23 }            -> x0
+    v81  BinopI { op=ne, lhs=v79, rhs_imm=23 }            -> x0 [cmp32]
     v82  Imm(0)                                           -> -
     v83  Imm(0)                                           -> -
     v84  Imm(0)                                           -> -

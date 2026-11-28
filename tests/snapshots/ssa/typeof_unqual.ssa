@@ -33,7 +33,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v15  LoadLocal { off=-1, kind=I32, volatile }         -> x0
     v16  Extend { value=v15, kind=I32 }                   -> -
     v17  Extend { value=v15, kind=I32 }                   -> -
-    v18  BinopI { op=ne, lhs=v15, rhs_imm=7 }             -> x0
+    v18  BinopI { op=ne, lhs=v15, rhs_imm=7 }             -> x0 [cmp32]
     terminator Bz { cond=v18, target=b2, fall=b1 }   (exit_acc=v18)
   block 1  start_pc=0
     v19  Imm(1)                                           -> x0
@@ -81,7 +81,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v59  Imm(0)                                           -> -
     v60  Imm(0)                                           -> -
     v61  LoadLocal { off=-1, kind=I32 }                   -> -
-    v62  Imm(0)                                           -> -
+    v62  Imm(0)                                           -> - [cmp32]
     terminator Jmp(b3)   (exit_acc=v62)
   block 3  start_pc=0
     v73  Imm(0)                                           -> x0

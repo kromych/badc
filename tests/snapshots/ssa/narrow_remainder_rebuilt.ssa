@@ -79,9 +79,9 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v73  ImmData(16)                                      -> -
     v74  Load { addr=v73, disp=0, kind=I32 pc_rel }       -> x6
     v75  BinopI { op=and, lhs=v74, rhs_imm=4294967295 }   -> -
-    v76  Binop { op=divu, lhs=v46, rhs=v74 }              -> -
+    v76  Binop { op=divu, lhs=v46, rhs=v74 }              -> - [div32]
     v77  Binop { op=mul, lhs=v76, rhs=v74 }               -> -
-    v78  Binop { op=modu, lhs=v46, rhs=v74 }              -> x3
+    v78  Binop { op=modu, lhs=v46, rhs=v74 }              -> x3 [div32]
     v79  Imm(0)                                           -> -
     v80  BinopI { op=and, lhs=v78, rhs_imm=4294967295 }   -> -
     v81  BinopI { op=and, lhs=v78, rhs_imm=4294967295 }   -> -
@@ -189,7 +189,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v183 BinopI { op=and, lhs=v78, rhs_imm=4294967295 }   -> -
     v184 BinopI { op=xor, lhs=v78, rhs_imm=3 }            -> -
     v185 BinopI { op=and, lhs=v184, rhs_imm=4294967295 }  -> -
-    v186 BinopI { op=ne, lhs=v78, rhs_imm=3 }             -> x0
+    v186 BinopI { op=ne, lhs=v78, rhs_imm=3 }             -> x0 [cmp32]
     v187 Extend { value=v186, kind=I32 }                  -> -
     terminator Return(v186)   (exit_acc=v186)
 ; --- SSA dump (ok=true) ent_pc=0 ---

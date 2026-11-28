@@ -53,7 +53,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=42
     v47  BinopI { op=add, lhs=v45, rhs_imm=8 }            -> -
     v48  StoreLocal { off=-42, disp=8, value=v1, kind=I64 } -> -
     v49  AtomicCas16 { addr=v17, expected=v23, desired=v45, order=SeqCst } -> x6
-    v50  BinopI { op=eq, lhs=v49, rhs_imm=0 }             -> -
+    v50  BinopI { op=eq, lhs=v49, rhs_imm=0 }             -> - [cmp32]
     v51  Imm(0)                                           -> -
     terminator Bz { cond=v49, target=b2, fall=b1 }   (low word)   (exit_acc=v50)
   block 1  start_pc=0
@@ -702,7 +702,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=42
     v624 BinopI { op=add, lhs=v622, rhs_imm=8 }           -> -
     v625 StoreLocal { off=-14, disp=8, value=v569, kind=I64 } -> -
     v626 AtomicCas16 { addr=v17, expected=v611, desired=v622, order=SeqCst } -> x1
-    v627 BinopI { op=ne, lhs=v626, rhs_imm=0 }            -> -
+    v627 BinopI { op=ne, lhs=v626, rhs_imm=0 }            -> - [cmp32]
     v628 Imm(0)                                           -> -
     v629 Imm(0)                                           -> -
     v630 Imm(0)                                           -> -
@@ -844,7 +844,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=42
     v750 BinopI { op=xor, lhs=v744, rhs_imm=-1 }          -> x2
     v751 Binop { op=or, lhs=v749, rhs=v750 }              -> x1
     v752 BinopI { op=ne, lhs=v751, rhs_imm=0 }            -> -
-    v753 BinopI { op=ne, lhs=v752, rhs_imm=0 }            -> -
+    v753 BinopI { op=ne, lhs=v752, rhs_imm=0 }            -> - [cmp32]
     v754 Imm(0)                                           -> -
     v755 Imm(0)                                           -> -
     v756 Imm(0)                                           -> -
@@ -902,7 +902,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=42
     v802 BinopI { op=add, lhs=v800, rhs_imm=8 }           -> -
     v803 StoreLocal { off=-6, disp=8, value=v792, kind=I64 } -> -
     v804 AtomicCas16 { addr=v17, expected=v783, desired=v800, order=SeqCst } -> x1
-    v805 BinopI { op=eq, lhs=v804, rhs_imm=0 }            -> -
+    v805 BinopI { op=eq, lhs=v804, rhs_imm=0 }            -> - [cmp32]
     v806 Imm(0)                                           -> -
     terminator Bz { cond=v804, target=b49, fall=b48 }   (low word)   (exit_acc=v805)
   block 48  start_pc=0

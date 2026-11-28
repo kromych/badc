@@ -50,7 +50,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=0
     v36  InlineAsm { template="bswapl %0", ops=2, args=[-, v35] } -> x0
     v37  BinopI { op=and, lhs=v36, rhs_imm=4294967295 }   -> -
     v38  BinopI { op=and, lhs=v36, rhs_imm=4294967295 }   -> -
-    v39  BinopI { op=ne, lhs=v36, rhs_imm=1144201745 }    -> x0
+    v39  BinopI { op=ne, lhs=v36, rhs_imm=1144201745 }    -> x0 [cmp32]
     terminator Bz { cond=v39, target=b6, fall=b5 }   (exit_acc=v39)
   block 5  start_pc=0
     v40  Imm(3)                                           -> x0

@@ -53,7 +53,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v37  BinopI { op=sub, lhs=v21, rhs_imm=1 }            -> x2
     v38  Binop { op=add, lhs=v35, rhs=v37 }               -> -
     v39  LoadIndexed { base=v35, index=v37, scale=1, kind=I8 } -> x1
-    v40  BinopI { op=eq, lhs=v39, rhs_imm=10 }            -> x2
+    v40  BinopI { op=eq, lhs=v39, rhs_imm=10 }            -> x2 [cmp32]
     v41  Imm(1)                                           -> -
     v42  Imm(0)                                           -> -
     terminator Bnz { cond=v40, target=b5, fall=b8 }   (exit_acc=v40)
@@ -63,8 +63,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v45  BinopI { op=sub, lhs=v21, rhs_imm=1 }            -> -
     v46  Binop { op=add, lhs=v35, rhs=v37 }               -> -
     v47  LoadIndexed { base=v35, index=v37, scale=1, kind=I8 } -> -
-    v48  BinopI { op=eq, lhs=v39, rhs_imm=13 }            -> x2
-    v49  BinopI { op=ne, lhs=v48, rhs_imm=0 }             -> -
+    v48  BinopI { op=eq, lhs=v39, rhs_imm=13 }            -> x2 [cmp32]
+    v49  BinopI { op=ne, lhs=v48, rhs_imm=0 }             -> - [cmp32]
     v50  Imm(0)                                           -> -
     v51  Imm(0)                                           -> -
     v52  Imm(0)                                           -> -
@@ -77,8 +77,8 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v57  BinopI { op=sub, lhs=v21, rhs_imm=1 }            -> -
     v58  Binop { op=add, lhs=v35, rhs=v37 }               -> -
     v59  LoadIndexed { base=v35, index=v37, scale=1, kind=I8 } -> -
-    v60  BinopI { op=eq, lhs=v39, rhs_imm=32 }            -> x1
-    v61  BinopI { op=ne, lhs=v60, rhs_imm=0 }             -> -
+    v60  BinopI { op=eq, lhs=v39, rhs_imm=32 }            -> x1 [cmp32]
+    v61  BinopI { op=ne, lhs=v60, rhs_imm=0 }             -> - [cmp32]
     v62  Imm(0)                                           -> -
     v63  Imm(0)                                           -> -
     v64  Imm(0)                                           -> -

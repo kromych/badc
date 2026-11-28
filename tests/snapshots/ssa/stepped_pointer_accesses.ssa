@@ -808,7 +808,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=42
   block 2  start_pc=0
     v10  Phi { incoming=[b0:v1, b1:v37], kind=I64 }       -> x0
     v11  Extend { value=v10, kind=I32 }                   -> -
-    v12  BinopI { op=lt, lhs=v10, rhs_imm=64 }            -> x1
+    v12  BinopI { op=lt, lhs=v10, rhs_imm=64 }            -> x1 [cmp32]
     terminator Bz { cond=v12, target=b3, fall=b1 }   (exit_acc=v12)
   block 3  start_pc=0
     v76  ImmData(48)                                      -> -
@@ -981,7 +981,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=42
     v209 LoadIndexed { base=v192, index=v201, scale=2, kind=U16 } -> x2
     v210 BinopI { op=and, lhs=v202, rhs_imm=4294967295 }  -> -
     v211 BinopI { op=and, lhs=v202, rhs_imm=65535 }       -> x6
-    v212 Binop { op=ne, lhs=v209, rhs=v211 }              -> x2
+    v212 Binop { op=ne, lhs=v209, rhs=v211 }              -> x2 [cmp32]
     v213 Imm(0)                                           -> -
     terminator Bnz { cond=v212, target=b50, fall=b23 }   (exit_acc=v212)
   block 23  start_pc=0
@@ -991,7 +991,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=42
     v404 Binop { op=add, lhs=v401, rhs=v403 }             -> -
     v405 LoadIndexed { base=v401, index=v201, scale=4, kind=U32 } -> x2
     v406 BinopI { op=and, lhs=v202, rhs_imm=4294967295 }  -> -
-    v407 Binop { op=ne, lhs=v405, rhs=v202 }              -> x2
+    v407 Binop { op=ne, lhs=v405, rhs=v202 }              -> x2 [cmp32]
     v408 Imm(0)                                           -> -
     v409 Imm(0)                                           -> -
     v410 Imm(0)                                           -> -
@@ -1011,7 +1011,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=42
     v201 Phi { incoming=[b21:v199, b24:v424], kind=I64 }  -> x0
     v202 Phi { incoming=[b21:v197, b24:v420], kind=I64 }  -> x1
     v203 Extend { value=v201, kind=I32 }                  -> -
-    v204 BinopI { op=lt, lhs=v201, rhs_imm=40 }           -> x2
+    v204 BinopI { op=lt, lhs=v201, rhs_imm=40 }           -> x2 [cmp32]
     terminator Bz { cond=v204, target=b26, fall=b22 }   (exit_acc=v204)
   block 26  start_pc=0
     v214 Imm(0)                                           -> -
@@ -1200,7 +1200,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=42
     v397 Imm(2)                                           -> -
     v398 BinopI { op=add, lhs=v395, rhs_imm=2 }           -> -
     v399 LoadLocal { off=-42, disp=2, kind=U16 }          -> x0
-    v400 BinopI { op=ne, lhs=v399, rhs_imm=0 }            -> -
+    v400 BinopI { op=ne, lhs=v399, rhs_imm=0 }            -> - [cmp32]
     terminator Bz { cond=v399, target=b28, fall=b27 }   (low word)   (exit_acc=v400)
   block 27  start_pc=0
     v537 Imm(12)                                          -> x0
@@ -1221,7 +1221,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=42
     v433 Imm(4)                                           -> -
     v434 BinopI { op=add, lhs=v395, rhs_imm=4 }           -> -
     v435 LoadLocal { off=-42, disp=4, kind=U16 }          -> x0
-    v436 BinopI { op=ne, lhs=v435, rhs_imm=0 }            -> -
+    v436 BinopI { op=ne, lhs=v435, rhs_imm=0 }            -> - [cmp32]
     terminator Bz { cond=v435, target=b29, fall=b27 }   (low word)   (exit_acc=v436)
   block 29  start_pc=0
     v437 Imm(2)                                           -> -
@@ -1234,7 +1234,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=42
     v444 Imm(6)                                           -> -
     v445 BinopI { op=add, lhs=v395, rhs_imm=6 }           -> -
     v446 LoadLocal { off=-42, disp=6, kind=U16 }          -> x0
-    v447 BinopI { op=ne, lhs=v446, rhs_imm=0 }            -> -
+    v447 BinopI { op=ne, lhs=v446, rhs_imm=0 }            -> - [cmp32]
     terminator Bz { cond=v446, target=b30, fall=b27 }   (low word)   (exit_acc=v447)
   block 30  start_pc=0
     v448 Imm(3)                                           -> -
@@ -1247,7 +1247,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=42
     v455 Imm(8)                                           -> -
     v456 BinopI { op=add, lhs=v395, rhs_imm=8 }           -> -
     v457 LoadLocal { off=-42, disp=8, kind=U16 }          -> x0
-    v458 BinopI { op=ne, lhs=v457, rhs_imm=0 }            -> -
+    v458 BinopI { op=ne, lhs=v457, rhs_imm=0 }            -> - [cmp32]
     terminator Bz { cond=v457, target=b31, fall=b27 }   (low word)   (exit_acc=v458)
   block 31  start_pc=0
     v459 Imm(4)                                           -> -
@@ -1260,7 +1260,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=42
     v466 Imm(10)                                          -> -
     v467 BinopI { op=add, lhs=v395, rhs_imm=10 }          -> -
     v468 LoadLocal { off=-42, disp=10, kind=U16 }         -> x0
-    v469 BinopI { op=ne, lhs=v468, rhs_imm=0 }            -> -
+    v469 BinopI { op=ne, lhs=v468, rhs_imm=0 }            -> - [cmp32]
     terminator Bz { cond=v468, target=b32, fall=b27 }   (low word)   (exit_acc=v469)
   block 32  start_pc=0
     v470 Imm(5)                                           -> -
@@ -1273,7 +1273,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=42
     v477 Imm(12)                                          -> -
     v478 BinopI { op=add, lhs=v395, rhs_imm=12 }          -> -
     v479 LoadLocal { off=-42, disp=12, kind=U16 }         -> x0
-    v480 BinopI { op=ne, lhs=v479, rhs_imm=0 }            -> -
+    v480 BinopI { op=ne, lhs=v479, rhs_imm=0 }            -> - [cmp32]
     terminator Bz { cond=v479, target=b33, fall=b27 }   (low word)   (exit_acc=v480)
   block 33  start_pc=0
     v481 Imm(6)                                           -> -
@@ -1286,7 +1286,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=42
     v488 Imm(14)                                          -> -
     v489 BinopI { op=add, lhs=v395, rhs_imm=14 }          -> -
     v490 LoadLocal { off=-42, disp=14, kind=U16 }         -> x0
-    v491 BinopI { op=ne, lhs=v490, rhs_imm=0 }            -> -
+    v491 BinopI { op=ne, lhs=v490, rhs_imm=0 }            -> - [cmp32]
     terminator Bz { cond=v490, target=b34, fall=b27 }   (low word)   (exit_acc=v491)
   block 34  start_pc=0
     v492 Imm(7)                                           -> -
@@ -1299,7 +1299,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=42
     v499 Imm(16)                                          -> -
     v500 BinopI { op=add, lhs=v395, rhs_imm=16 }          -> -
     v501 LoadLocal { off=-42, disp=16, kind=U16 }         -> x0
-    v502 BinopI { op=ne, lhs=v501, rhs_imm=0 }            -> -
+    v502 BinopI { op=ne, lhs=v501, rhs_imm=0 }            -> - [cmp32]
     terminator Bz { cond=v501, target=b35, fall=b27 }   (low word)   (exit_acc=v502)
   block 35  start_pc=0
     v503 Imm(8)                                           -> -
@@ -1312,7 +1312,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=42
     v510 Imm(18)                                          -> -
     v511 BinopI { op=add, lhs=v395, rhs_imm=18 }          -> -
     v512 LoadLocal { off=-42, disp=18, kind=U16 }         -> x0
-    v513 BinopI { op=ne, lhs=v512, rhs_imm=0 }            -> -
+    v513 BinopI { op=ne, lhs=v512, rhs_imm=0 }            -> - [cmp32]
     terminator Bz { cond=v512, target=b36, fall=b27 }   (low word)   (exit_acc=v513)
   block 36  start_pc=0
     v514 Imm(9)                                           -> -
@@ -1325,7 +1325,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=42
     v521 Imm(20)                                          -> -
     v522 BinopI { op=add, lhs=v395, rhs_imm=20 }          -> -
     v523 LoadLocal { off=-42, disp=20, kind=U16 }         -> x0
-    v524 BinopI { op=ne, lhs=v523, rhs_imm=0 }            -> -
+    v524 BinopI { op=ne, lhs=v523, rhs_imm=0 }            -> - [cmp32]
     terminator Bz { cond=v523, target=b37, fall=b27 }   (low word)   (exit_acc=v524)
   block 37  start_pc=0
     v525 Imm(10)                                          -> -
@@ -1336,9 +1336,9 @@ fn ent_pc=20 n_params=0 variadic=false locals=42
     v530 LocalAddr(-42)                                   -> x0
     v531 Imm(0)                                           -> -
     v532 LoadLocal { off=-42, kind=U16 }                  -> x1
-    v533 BinopI { op=ne, lhs=v532, rhs_imm=32768 }        -> x1
+    v533 BinopI { op=ne, lhs=v532, rhs_imm=32768 }        -> x1 [cmp32]
     v534 BinopI { op=and, lhs=v533, rhs_imm=4294967295 }  -> -
-    v535 BinopI { op=ne, lhs=v532, rhs_imm=32768 }        -> -
+    v535 BinopI { op=ne, lhs=v532, rhs_imm=32768 }        -> - [cmp32]
     v536 Imm(0)                                           -> -
     terminator Bnz { cond=v533, target=b39, fall=b38 }   (exit_acc=v535)
   block 38  start_pc=0
@@ -1346,9 +1346,9 @@ fn ent_pc=20 n_params=0 variadic=false locals=42
     v544 Imm(22)                                          -> -
     v545 BinopI { op=add, lhs=v530, rhs_imm=22 }          -> -
     v546 LoadLocal { off=-42, disp=22, kind=U16 }         -> x1
-    v547 BinopI { op=ne, lhs=v546, rhs_imm=32779 }        -> x1
+    v547 BinopI { op=ne, lhs=v546, rhs_imm=32779 }        -> x1 [cmp32]
     v548 BinopI { op=and, lhs=v547, rhs_imm=4294967295 }  -> -
-    v549 BinopI { op=ne, lhs=v546, rhs_imm=32779 }        -> -
+    v549 BinopI { op=ne, lhs=v546, rhs_imm=32779 }        -> - [cmp32]
     v550 Imm(0)                                           -> -
     v551 Imm(0)                                           -> -
     v552 Imm(0)                                           -> -
@@ -1382,8 +1382,8 @@ fn ent_pc=20 n_params=0 variadic=false locals=42
     v574 Imm(6)                                           -> -
     v575 BinopI { op=add, lhs=v567, rhs_imm=6 }           -> -
     v576 LoadLocal { off=-42, disp=6, kind=U16 }          -> x0
-    v577 BinopI { op=ne, lhs=v576, rhs_imm=0 }            -> -
-    v578 BinopI { op=ne, lhs=v577, rhs_imm=0 }            -> -
+    v577 BinopI { op=ne, lhs=v576, rhs_imm=0 }            -> - [cmp32]
+    v578 BinopI { op=ne, lhs=v577, rhs_imm=0 }            -> - [cmp32]
     v579 Imm(0)                                           -> -
     v580 Imm(0)                                           -> -
     v581 Imm(0)                                           -> -
@@ -1433,7 +1433,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=42
     v623 Extend { value=v622, kind=I32, nsw }             -> -
     v624 Binop { op=add, lhs=v619, rhs=v622 }             -> -
     v625 LoadIndexed { base=v619, index=v622, scale=1, kind=I8 } -> x1
-    v626 Binop { op=ne, lhs=v618, rhs=v625 }              -> x1
+    v626 Binop { op=ne, lhs=v618, rhs=v625 }              -> x1 [cmp32]
     terminator Bz { cond=v626, target=b46, fall=b49 }   (exit_acc=v626)
   block 46  start_pc=0
     v612 Extend { value=v609, kind=I32 }                  -> -
@@ -1443,7 +1443,7 @@ fn ent_pc=20 n_params=0 variadic=false locals=42
   block 47  start_pc=0
     v609 Phi { incoming=[b44:v607, b46:v613], kind=I64 }  -> x0
     v610 Extend { value=v609, kind=I32 }                  -> -
-    v611 BinopI { op=lt, lhs=v609, rhs_imm=32 }           -> x1
+    v611 BinopI { op=lt, lhs=v609, rhs_imm=32 }           -> x1 [cmp32]
     terminator Bz { cond=v611, target=b48, fall=b45 }   (exit_acc=v611)
   block 48  start_pc=0
     v627 Imm(0)                                           -> x0

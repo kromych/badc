@@ -113,7 +113,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v107 Imm(0)                                           -> -
     v108 ImmData(16)                                      -> -
     v109 Extend { value=v102, kind=I32 }                  -> x0
-    v110 BinopI { op=ne, lhs=v109, rhs_imm=7 }            -> x0
+    v110 BinopI { op=ne, lhs=v109, rhs_imm=7 }            -> x0 [cmp32]
     terminator Bz { cond=v110, target=b2, fall=b1 }   (exit_acc=v110)
   block 1  start_pc=0
     v111 Imm(1)                                           -> x0

@@ -44,10 +44,10 @@ fn ent_pc=2 n_params=1 variadic=false locals=1
     v16  LocalAddr(-14)                                   -> x0
     v17  LoadLocal { off=-1, kind=I64 }                   -> x2
     v18  BinopI { op=and, lhs=v16, rhs_imm=63 }           -> x1
-    v19  BinopI { op=ne, lhs=v18, rhs_imm=0 }             -> x1
+    v19  BinopI { op=ne, lhs=v18, rhs_imm=0 }             -> x1 [cmp32]
     v20  BinopI { op=add, lhs=v16, rhs_imm=63 }           -> -
     v21  LoadLocal { off=-14, disp=63, kind=I8 }          -> x6
-    v22  BinopI { op=ne, lhs=v21, rhs_imm=3 }             -> x6
+    v22  BinopI { op=ne, lhs=v21, rhs_imm=3 }             -> x6 [cmp32]
     v23  BinopI { op=shl, lhs=v22, rhs_imm=1 }            -> x6
     v24  Extend { value=v23, kind=I32 }                   -> -
     v25  Binop { op=or, lhs=v19, rhs=v23 }                -> x1
@@ -93,10 +93,10 @@ fn ent_pc=4 n_params=1 variadic=false locals=1
     v17  LocalAddr(-15)                                   -> x0
     v18  Imm(0)                                           -> -
     v19  BinopI { op=and, lhs=v17, rhs_imm=63 }           -> x1
-    v20  BinopI { op=ne, lhs=v19, rhs_imm=0 }             -> x1
+    v20  BinopI { op=ne, lhs=v19, rhs_imm=0 }             -> x1 [cmp32]
     v21  BinopI { op=add, lhs=v17, rhs_imm=63 }           -> -
     v22  LoadLocal { off=-15, disp=63, kind=I8 }          -> x2
-    v23  BinopI { op=ne, lhs=v22, rhs_imm=3 }             -> x2
+    v23  BinopI { op=ne, lhs=v22, rhs_imm=3 }             -> x2 [cmp32]
     v24  BinopI { op=shl, lhs=v23, rhs_imm=1 }            -> x2
     v25  Extend { value=v24, kind=I32 }                   -> -
     v26  Binop { op=or, lhs=v20, rhs=v24 }                -> x1

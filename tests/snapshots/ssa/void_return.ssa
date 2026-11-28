@@ -36,7 +36,7 @@ fn ent_pc=4 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> -
     v3   Imm(0)                                           -> -
     v4   Load { addr=v1, disp=0, kind=I32 }               -> x0
-    v5   BinopI { op=lt, lhs=v4, rhs_imm=0 }              -> x1
+    v5   BinopI { op=lt, lhs=v4, rhs_imm=0 }              -> x1 [cmp32]
     terminator Bz { cond=v5, target=b2, fall=b1 }   (exit_acc=v5)
   block 1  start_pc=0
     v6   Imm(0)                                           -> -
@@ -152,7 +152,7 @@ fn ent_pc=10 n_params=2 variadic=false locals=0
     v15  Imm(0)                                           -> -
     v16  Imm(0)                                           -> -
     v17  Imm(0)                                           -> -
-    v18  BinopI { op=eq, lhs=v13, rhs_imm=0 }             -> -
+    v18  BinopI { op=eq, lhs=v13, rhs_imm=0 }             -> - [cmp32]
     terminator Bnz { cond=v13, target=b1, fall=b3 }   (low word)   (exit_acc=v18)
   block 3  start_pc=0
     terminator Return
@@ -172,7 +172,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=1
     v8   Imm(0)                                           -> -
     v9   LocalAddr(-1)                                    -> -
     v10  LoadLocal { off=-1, kind=I32 }                   -> -
-    v11  Imm(1)                                           -> -
+    v11  Imm(1)                                           -> - [cmp32]
     terminator Jmp(b1)   (exit_acc=v11)
   block 1  start_pc=0
     v35  Imm(0)                                           -> -

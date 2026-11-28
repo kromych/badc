@@ -105,7 +105,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
   block 2  start_pc=0
     v33  Imm(-2147483647)                                 -> x0
     v34  Imm(0)                                           -> -
-    v35  BinopI { op=gt, lhs=v1, rhs_imm=0 }              -> x1
+    v35  BinopI { op=gt, lhs=v1, rhs_imm=0 }              -> x1 [cmp32]
     v36  Binop { op=sub, lhs=v33, rhs=v35 }               -> x0
     v37  Extend { value=v36, kind=I32, nsw }              -> -
     v38  Imm(0)                                           -> -

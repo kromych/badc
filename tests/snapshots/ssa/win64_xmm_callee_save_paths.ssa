@@ -50,7 +50,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v32  LifetimeEnd(0)                                   -> -
     v33  Imm(0)                                           -> -
     v34  Extend { value=v19, kind=I32 }                   -> -
-    v35  BinopI { op=ne, lhs=v19, rhs_imm=44 }            -> x0
+    v35  BinopI { op=ne, lhs=v19, rhs_imm=44 }            -> x0 [cmp32]
     terminator Bz { cond=v35, target=b2, fall=b1 }   (exit_acc=v35)
   block 1  start_pc=0
     v36  Imm(1)                                           -> x0
@@ -61,7 +61,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v39  Imm(0)                                           -> -
     v40  Imm(0)                                           -> -
     v41  Extend { value=v26, kind=I32 }                   -> -
-    v42  BinopI { op=ne, lhs=v26, rhs_imm=89 }            -> x0
+    v42  BinopI { op=ne, lhs=v26, rhs_imm=89 }            -> x0 [cmp32]
     terminator Bz { cond=v42, target=b4, fall=b3 }   (exit_acc=v42)
   block 3  start_pc=0
     v43  Imm(2)                                           -> x0
@@ -103,7 +103,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v77  LifetimeEnd(0)                                   -> -
     v78  Imm(0)                                           -> -
     v79  Extend { value=v64, kind=I32 }                   -> -
-    v80  BinopI { op=ne, lhs=v64, rhs_imm=10 }            -> x0
+    v80  BinopI { op=ne, lhs=v64, rhs_imm=10 }            -> x0 [cmp32]
     terminator Bz { cond=v80, target=b6, fall=b5 }   (exit_acc=v80)
   block 5  start_pc=0
     v81  Imm(3)                                           -> x0
@@ -114,7 +114,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v84  Imm(0)                                           -> -
     v85  Imm(0)                                           -> -
     v86  Extend { value=v71, kind=I32 }                   -> -
-    v87  BinopI { op=ne, lhs=v71, rhs_imm=30 }            -> x0
+    v87  BinopI { op=ne, lhs=v71, rhs_imm=30 }            -> x0 [cmp32]
     terminator Bz { cond=v87, target=b8, fall=b7 }   (exit_acc=v87)
   block 7  start_pc=0
     v88  Imm(4)                                           -> x0

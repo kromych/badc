@@ -40,7 +40,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v0   AllocaInit(0)                                    -> -
     v1   ImmData(40)                                      -> -
     v2   Load { addr=v1, disp=0, kind=I32 pc_rel }        -> x0
-    v3   BinopI { op=gt, lhs=v2, rhs_imm=2 }              -> [spill 0]
+    v3   BinopI { op=gt, lhs=v2, rhs_imm=2 }              -> [spill 0] [cmp32]
     v4   Imm(0)                                           -> -
     v5   ImmData(16)                                      -> x0
     v6   Load { addr=v5, disp=0, kind=F80 }               -> d0
@@ -361,7 +361,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   block 33  start_pc=0
     v265 ImmData(92)                                      -> -
     v266 Load { addr=v265, disp=0, kind=I32 pc_rel }      -> x0
-    v267 BinopI { op=ne, lhs=v266, rhs_imm=2 }            -> x0
+    v267 BinopI { op=ne, lhs=v266, rhs_imm=2 }            -> x0 [cmp32]
     v268 Imm(0)                                           -> -
     v269 Imm(0)                                           -> -
     v270 Imm(0)                                           -> -
@@ -408,7 +408,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   block 39  start_pc=0
     v300 ImmData(40)                                      -> -
     v301 Load { addr=v300, disp=0, kind=I32 pc_rel }      -> x0
-    v302 BinopI { op=eq, lhs=v301, rhs_imm=3 }            -> x0
+    v302 BinopI { op=eq, lhs=v301, rhs_imm=3 }            -> x0 [cmp32]
     terminator Bnz { cond=v302, target=b41, fall=b40 }   (exit_acc=v302)
   block 40  start_pc=0
     v304 Imm(29)                                          -> x0
@@ -426,7 +426,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v312 Imm(0)                                           -> -
     v313 StoreLocal { off=-63, value=v311, kind=F80 }     -> -
     v314 Extend { value=v3, kind=I32 }                    -> -
-    v315 BinopI { op=eq, lhs=v3, rhs_imm=0 }              -> -
+    v315 BinopI { op=eq, lhs=v3, rhs_imm=0 }              -> - [cmp32]
     terminator Bnz { cond=v3, target=b51, fall=b44 }   (low word)   (exit_acc=v315)
   block 44  start_pc=0
     v316 Imm(4607182418800017408)                         -> -

@@ -9,7 +9,7 @@ fn ent_pc=6 n_params=2 variadic=false locals=41
     v3   ParamRef(1, kind=I64)                            -> x12
     v4   Imm(0)                                           -> -
     v5   Imm(0)                                           -> -
-    v6   BinopI { op=lt, lhs=v1, rhs_imm=2 }              -> x0
+    v6   BinopI { op=lt, lhs=v1, rhs_imm=2 }              -> x0 [cmp32]
     terminator Bz { cond=v6, target=b2, fall=b1 }   (exit_acc=v6)
   block 1  start_pc=0
     v7   Imm(2)                                           -> x0
@@ -225,7 +225,7 @@ fn ent_pc=6 n_params=2 variadic=false locals=41
     v211 BinopI { op=eq, lhs=v210, rhs_imm=0 }            -> x3
     v212 CallExt { binding_idx=0, args=[], fp_arg_mask=0x0 } -> x0
     v213 Load { addr=v212, disp=0, kind=I32 }             -> x0
-    v214 BinopI { op=eq, lhs=v213, rhs_imm=2 }            -> x2
+    v214 BinopI { op=eq, lhs=v213, rhs_imm=2 }            -> x2 [cmp32]
     v215 ImmData(162)                                     -> -
     v216 CallExt { binding_idx=26, args=[v215, v211, v214], fp_arg_mask=0x0 } -> x0
     v217 Imm(0)                                           -> x0

@@ -46,7 +46,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v40  Extend { value=v37, kind=I32 }                   -> -
     v41  Imm(0)                                           -> -
     v42  Imm(0)                                           -> -
-    v43  BinopI { op=ne, lhs=v37, rhs_imm=64 }            -> x0
+    v43  BinopI { op=ne, lhs=v37, rhs_imm=64 }            -> x0 [cmp32]
     terminator Bz { cond=v43, target=b2, fall=b1 }   (exit_acc=v43)
   block 1  start_pc=0
     v44  Imm(1)                                           -> x0
@@ -84,7 +84,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v74  Extend { value=v37, kind=I32, nsw }              -> -
     v75  Extend { value=v37, kind=I32 }                   -> -
     v76  Extend { value=v37, kind=I32 }                   -> -
-    v77  Imm(0)                                           -> -
+    v77  Imm(0)                                           -> - [cmp32]
     terminator Jmp(b3)   (exit_acc=v77)
   block 3  start_pc=0
     v79  Imm(0)                                           -> x0

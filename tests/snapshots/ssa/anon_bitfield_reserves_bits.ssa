@@ -354,7 +354,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v348 LoadLocal { off=-2, kind=U32 }                   -> -
     v349 Imm(0)                                           -> -
     v350 Imm(0)                                           -> -
-    v351 Imm(0)                                           -> -
+    v351 Imm(0)                                           -> - [cmp32]
     terminator Jmp(b1)   (exit_acc=v351)
   block 1  start_pc=0
     v364 LocalAddr(-2)                                    -> -
@@ -363,7 +363,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v367 LoadLocal { off=-2, disp=8, kind=U32 }           -> -
     v368 Imm(0)                                           -> -
     v369 Imm(0)                                           -> -
-    v370 Imm(0)                                           -> -
+    v370 Imm(0)                                           -> - [cmp32]
     v371 Imm(0)                                           -> -
     terminator Jmp(b2)   (exit_acc=v370)
   block 2  start_pc=0
@@ -374,7 +374,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v376 LoadLocal { off=-2, disp=12, kind=U32 }          -> -
     v377 Imm(0)                                           -> -
     v378 Imm(0)                                           -> -
-    v379 Imm(0)                                           -> -
+    v379 Imm(0)                                           -> - [cmp32]
     v380 Imm(0)                                           -> -
     v381 Imm(0)                                           -> -
     v382 Imm(0)                                           -> -

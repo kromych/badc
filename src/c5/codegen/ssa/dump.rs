@@ -64,17 +64,19 @@ pub(crate) fn dump_ssa(func: &FunctionSsa, alloc: Option<&Allocation>) -> String
             let place = alloc
                 .and_then(|a| a.places.get(v as usize).copied())
                 .unwrap_or(Place::None);
-            let f32_mark = if func.f32_values.get(v as usize).copied().unwrap_or(false) {
-                " [f32]"
-            } else {
-                ""
-            };
-            out.push_str(&format!(
-                "    v{v:<3} {:<48} -> {}{}\n",
-                fmt_inst(inst),
-                fmt_place(place),
-                f32_mark,
-            ));
+            let marks = func.marks(v);
+            let mut line = format!("    v{v:<3} {:<48} -> {}", fmt_inst(inst), fmt_place(place));
+            for (set, name) in [
+                (marks.f32, "f32"),
+                (marks.cmp32, "cmp32"),
+                (marks.div32, "div32"),
+            ] {
+                if set {
+                    line.push_str(&format!(" [{name}]"));
+                }
+            }
+            line.push('\n');
+            out.push_str(&line);
         }
         out.push_str(&format!(
             "    terminator {}",
@@ -668,4 +670,44 @@ pub(crate) fn enabled(options: &super::NativeOptions) -> bool {
     #[cfg(not(feature = "codegen_test"))]
     let env = false;
     options.dump_ssa || env
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::c5::ir::{BinOp, Block};
+
+    /// A value's marks print after its place: two instructions of one shape
+    /// that differ in a mark are two lines.
+    #[test]
+    fn marks_print_after_the_place() {
+        let op = |op| Inst::Binop { op, lhs: 0, rhs: 0 };
+        let insts = alloc::vec![Inst::Imm(1), op(BinOp::Lt), op(BinOp::Lt), op(BinOp::Divu)];
+        let f = FunctionSsa {
+            f32_values: alloc::vec![true, false, false, false],
+            cmp32: alloc::vec![false, false, true, false],
+            div32: alloc::vec![false, false, false, true],
+            blocks: alloc::vec![Block {
+                start_pc: 0,
+                inst_range: 0..insts.len() as u32,
+                terminator: Terminator::Return(0),
+                exit_acc: 0,
+            }],
+            insts,
+            ..Default::default()
+        };
+        let text = dump_ssa(&f, None);
+        let tail = |v: usize| {
+            let line = text
+                .lines()
+                .find(|l| l.trim_start().starts_with(&format!("v{v} ")));
+            line.and_then(|l| l.split("-> ").nth(1))
+                .unwrap_or_default()
+                .to_string()
+        };
+        assert_eq!(
+            [tail(0), tail(1), tail(2), tail(3)],
+            ["- [f32]", "-", "- [cmp32]", "- [div32]"]
+        );
+    }
 }

@@ -10,7 +10,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v4   Imm(0)                                           -> -
     v5   Imm(0)                                           -> -
     v6   Imm(9)                                           -> x1
-    v7   Select { cond=v3, a=v6, b=v1, kind=I64 }         -> x0
+    v7   Select { cond=v3, a=v6, b=v1, kind=I64 }         -> x0 [cmp32]
     terminator Jmp(b1)
   block 1  start_pc=0
     v25  Copy { value=v7, fp=false }                      -> -
@@ -61,7 +61,7 @@ fn ent_pc=3 n_params=2 variadic=false locals=0
     v9   Phi { incoming=[b0:v5, b1:v51], kind=I64 }       -> x2
     v10  Extend { value=v8, kind=I32 }                    -> -
     v11  Imm(0)                                           -> -
-    v12  BinopI { op=lt, lhs=v8, rhs_imm=4 }              -> x1
+    v12  BinopI { op=lt, lhs=v8, rhs_imm=4 }              -> x1 [cmp32]
     terminator Bz { cond=v12, target=b6, fall=b3 }   (exit_acc=v12)
   block 3  start_pc=0
     v13  Extend { value=v8, kind=I32 }                    -> -

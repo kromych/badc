@@ -78,10 +78,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=1
     v59  Extend { value=v58, kind=I32, nsw }              -> -
     v60  Extend { value=v58, kind=I32 }                   -> -
     v61  LifetimeEnd(-1)                                  -> -
-    v62  BinopI { op=eq, lhs=v58, rhs_imm=410 }           -> -
+    v62  BinopI { op=eq, lhs=v58, rhs_imm=410 }           -> - [cmp32]
     v63  Imm(0)                                           -> x1
     v64  Imm(2)                                           -> x2
-    v65  BinopI { op=eq, lhs=v58, rhs_imm=410 }           -> x0
+    v65  BinopI { op=eq, lhs=v58, rhs_imm=410 }           -> x0 [cmp32]
     v66  Select { cond=v65, a=v63, b=v64, kind=I64 }      -> x1
     terminator Jmp(b1)
   block 1  start_pc=0

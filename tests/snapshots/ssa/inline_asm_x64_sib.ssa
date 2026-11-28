@@ -24,7 +24,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
   block 2  start_pc=0
     v4   Phi { incoming=[b0:v1, b1:v16], kind=I64 }       -> x0
     v5   Extend { value=v4, kind=I32 }                    -> -
-    v6   BinopI { op=lt, lhs=v4, rhs_imm=64 }             -> x2
+    v6   BinopI { op=lt, lhs=v4, rhs_imm=64 }             -> x2 [cmp32]
     terminator Bz { cond=v6, target=b3, fall=b1 }   (exit_acc=v6)
   block 3  start_pc=0
     v18  Undef                                            -> -

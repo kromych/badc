@@ -68,7 +68,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=2
     v62  Binop { op=add, lhs=v58, rhs=v61 }               -> x0
     v63  BinopI { op=shr, lhs=v62, rhs_imm=2 }            -> x0
     v64  BinopI { op=ne, lhs=v63, rhs_imm=2 }             -> x0
-    v65  BinopI { op=ne, lhs=v64, rhs_imm=0 }             -> -
+    v65  BinopI { op=ne, lhs=v64, rhs_imm=0 }             -> - [cmp32]
     v66  Imm(0)                                           -> -
     v67  Imm(0)                                           -> -
     v68  Imm(0)                                           -> -
@@ -97,7 +97,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=2
     v90  LoadLocal { off=-2, disp=4, kind=U32 }           -> -
     v91  Imm(0)                                           -> -
     v92  Imm(0)                                           -> -
-    v93  Imm(0)                                           -> -
+    v93  Imm(0)                                           -> - [cmp32]
     v94  Imm(0)                                           -> -
     terminator Jmp(b3)   (exit_acc=v93)
   block 3  start_pc=0

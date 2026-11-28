@@ -58,7 +58,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v52  Imm(0)                                           -> -
     v53  Imm(0)                                           -> -
     v54  Load { addr=v10, disp=0, kind=I32 pc_rel }       -> x0
-    v55  BinopI { op=ne, lhs=v54, rhs_imm=10 }            -> x0
+    v55  BinopI { op=ne, lhs=v54, rhs_imm=10 }            -> x0 [cmp32]
     terminator Bz { cond=v55, target=b2, fall=b1 }   (exit_acc=v55)
   block 1  start_pc=0
     v58  Imm(2)                                           -> x0
@@ -108,7 +108,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v104 Imm(0)                                           -> -
     v105 Imm(0)                                           -> -
     v106 Load { addr=v36, disp=0, kind=I32 }              -> x0
-    v107 BinopI { op=ne, lhs=v106, rhs_imm=30 }           -> x0
+    v107 BinopI { op=ne, lhs=v106, rhs_imm=30 }           -> x0 [cmp32]
     terminator Bz { cond=v107, target=b5, fall=b4 }   (exit_acc=v107)
   block 4  start_pc=0
     v108 Imm(6)                                           -> x0

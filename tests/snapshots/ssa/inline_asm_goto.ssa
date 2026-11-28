@@ -114,7 +114,7 @@ fn ent_pc=6 n_params=1 variadic=false locals=0
     v3   Imm(5)                                           -> x0
     v4   Imm(0)                                           -> -
     v5   Imm(0)                                           -> -
-    v6   BinopI { op=gt, lhs=v1, rhs_imm=10 }             -> x1
+    v6   BinopI { op=gt, lhs=v1, rhs_imm=10 }             -> x1 [cmp32]
     terminator Bz { cond=v6, target=b3, fall=b1 }   (exit_acc=v6)
   block 1  start_pc=0
     v7   Imm(9)                                           -> x0
@@ -199,7 +199,7 @@ fn ent_pc=7 n_params=0 variadic=false locals=0
     v57  Extend { value=v50, kind=I32 }                   -> -
     v58  Extend { value=v50, kind=I32 }                   -> -
     v59  Extend { value=v50, kind=I32 }                   -> -
-    v60  BinopI { op=ne, lhs=v50, rhs_imm=7 }             -> x0
+    v60  BinopI { op=ne, lhs=v50, rhs_imm=7 }             -> x0 [cmp32]
     terminator Bz { cond=v60, target=b13, fall=b12 }   (exit_acc=v60)
   block 12  start_pc=0
     v4   Imm(5)                                           -> x0

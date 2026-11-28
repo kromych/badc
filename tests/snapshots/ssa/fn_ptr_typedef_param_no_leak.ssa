@@ -35,7 +35,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v29  Imm(0)                                           -> -
     v30  ImmData(16)                                      -> -
     v31  Load { addr=v18, disp=0, kind=I32 pc_rel }       -> -
-    v32  Imm(0)                                           -> -
+    v32  Imm(0)                                           -> - [cmp32]
     terminator Jmp(b1)   (exit_acc=v32)
   block 1  start_pc=0
     v39  Imm(0)                                           -> x0

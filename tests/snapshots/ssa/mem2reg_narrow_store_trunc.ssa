@@ -9,10 +9,10 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v3   Imm(0)                                           -> -
     v4   Imm(0)                                           -> -
     v5   Extend { value=v1, kind=I8 }                     -> x0
-    v6   BinopI { op=eq, lhs=v5, rhs_imm=44 }             -> -
+    v6   BinopI { op=eq, lhs=v5, rhs_imm=44 }             -> - [cmp32]
     v7   Imm(0)                                           -> x1
     v8   Imm(1)                                           -> x2
-    v9   BinopI { op=eq, lhs=v5, rhs_imm=44 }             -> x0
+    v9   BinopI { op=eq, lhs=v5, rhs_imm=44 }             -> x0 [cmp32]
     v10  Select { cond=v9, a=v7, b=v8, kind=I64 }         -> x0
     terminator Jmp(b1)
   block 1  start_pc=0

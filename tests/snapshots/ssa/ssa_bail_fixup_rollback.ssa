@@ -487,7 +487,7 @@ fn ent_pc=2 n_params=5 variadic=false locals=10
   block 3  start_pc=0
     v146 Phi { incoming=[b1:v141, b2:v165], kind=I64 }    -> x0
     v147 BinopI { op=and, lhs=v146, rhs_imm=4294967295 }  -> -
-    v148 BinopI { op=ult, lhs=v146, rhs_imm=64 }          -> x1
+    v148 BinopI { op=ult, lhs=v146, rhs_imm=64 }          -> x1 [cmp32]
     terminator Bz { cond=v148, target=b4, fall=b2 }   (exit_acc=v148)
   block 4  start_pc=0
     v167 Imm(0)                                           -> -
@@ -504,7 +504,7 @@ fn ent_pc=2 n_params=5 variadic=false locals=10
     v132 Phi { incoming=[b0:v3, b4:v132], kind=I64 }      -> -
     v133 Phi { incoming=[b0:v5, b4:v168], kind=I64 }      -> x0
     v134 Imm(0)                                           -> -
-    v135 BinopI { op=uge, lhs=v133, rhs_imm=64 }          -> x0
+    v135 BinopI { op=uge, lhs=v133, rhs_imm=64 }          -> x0 [cmp32]
     terminator Bz { cond=v135, target=b6, fall=b1 }   (exit_acc=v135)
   block 6  start_pc=0
     v143 Imm(0)                                           -> x0
@@ -538,7 +538,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=13
   block 2  start_pc=0
     v8   Phi { incoming=[b0:v6, b1:v17], kind=I64 }       -> x0
     v9   Extend { value=v8, kind=I32 }                    -> -
-    v10  BinopI { op=lt, lhs=v8, rhs_imm=32 }             -> x1
+    v10  BinopI { op=lt, lhs=v8, rhs_imm=32 }             -> x1 [cmp32]
     terminator Bz { cond=v10, target=b3, fall=b1 }   (exit_acc=v10)
   block 3  start_pc=0
     v19  LocalAddr(-8)                                    -> -
@@ -553,10 +553,10 @@ fn ent_pc=3 n_params=0 variadic=false locals=13
     v28  LoadLocal { off=-8, kind=U8 }                    -> x0
     v29  BinopI { op=xor, lhs=v28, rhs_imm=77 }           -> -
     v30  BinopI { op=and, lhs=v29, rhs_imm=4294967295 }   -> -
-    v31  BinopI { op=eq, lhs=v28, rhs_imm=77 }            -> -
+    v31  BinopI { op=eq, lhs=v28, rhs_imm=77 }            -> - [cmp32]
     v32  Imm(0)                                           -> x1
     v33  Imm(1)                                           -> x2
-    v34  BinopI { op=eq, lhs=v28, rhs_imm=77 }            -> x0
+    v34  BinopI { op=eq, lhs=v28, rhs_imm=77 }            -> x0 [cmp32]
     v35  Select { cond=v34, a=v32, b=v33, kind=I64 }      -> x1
     terminator Jmp(b4)
   block 4  start_pc=0

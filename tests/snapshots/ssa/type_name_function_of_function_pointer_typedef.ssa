@@ -16,7 +16,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v10  Store { addr=v7, disp=0, value=v9, kind=I32 pc_rel } -> -
     v11  ImmData(16)                                      -> -
     v12  Extend { value=v9, kind=I32 }                    -> x0
-    v13  BinopI { op=ne, lhs=v12, rhs_imm=3 }             -> x1
+    v13  BinopI { op=ne, lhs=v12, rhs_imm=3 }             -> x1 [cmp32]
     terminator Bz { cond=v13, target=b2, fall=b1 }   (exit_acc=v13)
   block 1  start_pc=0
     v14  Imm(7)                                           -> x0
@@ -32,7 +32,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v22  Store { addr=v7, disp=0, value=v21, kind=I32 pc_rel } -> -
     v23  ImmData(16)                                      -> -
     v24  Extend { value=v21, kind=I32 }                   -> x0
-    v25  BinopI { op=ne, lhs=v24, rhs_imm=7 }             -> x0
+    v25  BinopI { op=ne, lhs=v24, rhs_imm=7 }             -> x0 [cmp32]
     terminator Bz { cond=v25, target=b4, fall=b3 }   (exit_acc=v25)
   block 3  start_pc=0
     v26  Imm(8)                                           -> x0

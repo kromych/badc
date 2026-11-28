@@ -52,7 +52,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v28  Imm(0)                                           -> -
     v29  Imm(0)                                           -> -
     v30  Load { addr=v22, disp=0, kind=I8 }               -> x0
-    v31  BinopI { op=ne, lhs=v30, rhs_imm=50 }            -> x0
+    v31  BinopI { op=ne, lhs=v30, rhs_imm=50 }            -> x0 [cmp32]
     v32  Imm(0)                                           -> -
     v33  Imm(0)                                           -> -
     v34  Imm(0)                                           -> -

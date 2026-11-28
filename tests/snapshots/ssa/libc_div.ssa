@@ -50,12 +50,12 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
     v7   Extend { value=v2, kind=I32 }                    -> -
     v8   Extend { value=v5, kind=I32 }                    -> -
     v9   Imm(0)                                           -> -
-    v10  Binop { op=div, lhs=v2, rhs=v5 }                 -> x6
+    v10  Binop { op=div, lhs=v2, rhs=v5 }                 -> x6 [div32]
     v11  Extend { value=v10, kind=I32, nsw }              -> -
     v12  Imm(0)                                           -> -
     v13  Imm(0)                                           -> -
     v14  Imm(0)                                           -> -
-    v15  Binop { op=div, lhs=v2, rhs=v5 }                 -> -
+    v15  Binop { op=div, lhs=v2, rhs=v5 }                 -> - [div32]
     v16  Binop { op=mul, lhs=v10, rhs=v5 }                -> x1
     v17  Binop { op=sub, lhs=v2, rhs=v16 }                -> x3
     v18  Extend { value=v17, kind=I32, nsw }              -> -
@@ -67,14 +67,14 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
     v24  LifetimeEnd(0)                                   -> -
     v25  Imm(0)                                           -> -
     v26  Extend { value=v10, kind=I32 }                   -> -
-    v27  BinopI { op=ne, lhs=v10, rhs_imm=3 }             -> x0
+    v27  BinopI { op=ne, lhs=v10, rhs_imm=3 }             -> x0 [cmp32]
     v28  Imm(0)                                           -> -
     terminator Bnz { cond=v27, target=b2, fall=b1 }   (exit_acc=v27)
   block 1  start_pc=0
     v29  Imm(0)                                           -> -
     v30  Imm(0)                                           -> -
     v31  Extend { value=v17, kind=I32 }                   -> -
-    v32  BinopI { op=ne, lhs=v17, rhs_imm=2 }             -> x0
+    v32  BinopI { op=ne, lhs=v17, rhs_imm=2 }             -> x0 [cmp32]
     v33  Imm(0)                                           -> -
     v34  Imm(0)                                           -> -
     v35  Imm(0)                                           -> -
@@ -96,12 +96,12 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
     v47  Extend { value=v42, kind=I32 }                   -> -
     v48  Extend { value=v45, kind=I32 }                   -> -
     v49  Imm(0)                                           -> -
-    v50  Binop { op=div, lhs=v42, rhs=v45 }               -> x6
+    v50  Binop { op=div, lhs=v42, rhs=v45 }               -> x6 [div32]
     v51  Extend { value=v50, kind=I32, nsw }              -> -
     v52  Imm(0)                                           -> -
     v53  Imm(0)                                           -> -
     v54  Imm(0)                                           -> -
-    v55  Binop { op=div, lhs=v42, rhs=v45 }               -> -
+    v55  Binop { op=div, lhs=v42, rhs=v45 }               -> - [div32]
     v56  Binop { op=mul, lhs=v50, rhs=v45 }               -> x1
     v57  Binop { op=sub, lhs=v42, rhs=v56 }               -> x3
     v58  Extend { value=v57, kind=I32, nsw }              -> -
@@ -113,14 +113,14 @@ fn ent_pc=9 n_params=0 variadic=false locals=0
     v64  LifetimeEnd(0)                                   -> -
     v65  Imm(0)                                           -> -
     v66  Extend { value=v50, kind=I32 }                   -> -
-    v67  BinopI { op=ne, lhs=v50, rhs_imm=-3 }            -> x0
+    v67  BinopI { op=ne, lhs=v50, rhs_imm=-3 }            -> x0 [cmp32]
     v68  Imm(0)                                           -> -
     terminator Bnz { cond=v67, target=b5, fall=b4 }   (exit_acc=v67)
   block 4  start_pc=0
     v69  Imm(0)                                           -> -
     v70  Imm(0)                                           -> -
     v71  Extend { value=v57, kind=I32 }                   -> -
-    v72  BinopI { op=ne, lhs=v57, rhs_imm=-2 }            -> x0
+    v72  BinopI { op=ne, lhs=v57, rhs_imm=-2 }            -> x0 [cmp32]
     v73  Imm(0)                                           -> -
     v74  Imm(0)                                           -> -
     v75  Imm(0)                                           -> -

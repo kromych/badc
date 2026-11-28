@@ -94,9 +94,9 @@ fn ent_pc=4 n_params=1 variadic=false locals=0
     v88  Imm(0)                                           -> -
     v89  Imm(0)                                           -> -
     v90  BinopI { op=and, lhs=v29, rhs_imm=4294967295 }   -> -
-    v91  Binop { op=ult, lhs=v68, rhs=v29 }               -> -
+    v91  Binop { op=ult, lhs=v68, rhs=v29 }               -> - [cmp32]
     v92  BinopI { op=add, lhs=v60, rhs_imm=1 }            -> x0
-    v93  Binop { op=ult, lhs=v68, rhs=v29 }               -> x2
+    v93  Binop { op=ult, lhs=v68, rhs=v29 }               -> x2 [cmp32]
     v94  Select { cond=v93, a=v92, b=v60, kind=I64 }      -> x0
     terminator Jmp(b1)
   block 1  start_pc=0
@@ -214,9 +214,9 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     v88  Imm(0)                                           -> -
     v89  Imm(0)                                           -> -
     v90  BinopI { op=and, lhs=v29, rhs_imm=4294967295 }   -> -
-    v91  Binop { op=ult, lhs=v68, rhs=v29 }               -> -
+    v91  Binop { op=ult, lhs=v68, rhs=v29 }               -> - [cmp32]
     v92  BinopI { op=add, lhs=v60, rhs_imm=1 }            -> x0
-    v93  Binop { op=ult, lhs=v68, rhs=v29 }               -> x2
+    v93  Binop { op=ult, lhs=v68, rhs=v29 }               -> x2 [cmp32]
     v94  Select { cond=v93, a=v92, b=v60, kind=I64 }      -> x0
     terminator Jmp(b1)
   block 1  start_pc=0

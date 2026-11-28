@@ -88,7 +88,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=5
   block 12  start_pc=0
     v52  Phi { incoming=[b10:v49, b11:v60], kind=I64 }    -> x0
     v53  Extend { value=v52, kind=I32 }                   -> -
-    v54  BinopI { op=lt, lhs=v52, rhs_imm=1000000 }       -> x1
+    v54  BinopI { op=lt, lhs=v52, rhs_imm=1000000 }       -> x1 [cmp32]
     terminator Bz { cond=v54, target=b13, fall=b11 }   (exit_acc=v54)
   block 13  start_pc=0
     v62  Imm(1)                                           -> -

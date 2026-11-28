@@ -38,9 +38,9 @@ fn ent_pc=4 n_params=2 variadic=false locals=0
     v3   ParamRef(1, kind=I64)                            -> x6
     v4   Imm(0)                                           -> -
     v5   BinopI { op=and, lhs=v1, rhs_imm=4294967295 }    -> -
-    v6   BinopI { op=ne, lhs=v1, rhs_imm=64 }             -> x0
+    v6   BinopI { op=ne, lhs=v1, rhs_imm=64 }             -> x0 [cmp32]
     v7   BinopI { op=and, lhs=v6, rhs_imm=4294967295 }    -> -
-    v8   BinopI { op=eq, lhs=v1, rhs_imm=64 }             -> -
+    v8   BinopI { op=eq, lhs=v1, rhs_imm=64 }             -> - [cmp32]
     v9   Imm(0)                                           -> -
     v10  Imm(0)                                           -> -
     terminator Bnz { cond=v6, target=b5, fall=b1 }   (exit_acc=v8)
@@ -48,7 +48,7 @@ fn ent_pc=4 n_params=2 variadic=false locals=0
     v11  Imm(0)                                           -> -
     v12  Imm(0)                                           -> -
     v13  BinopI { op=ne, lhs=v3, rhs_imm=0 }              -> -
-    v14  BinopI { op=ne, lhs=v13, rhs_imm=0 }             -> -
+    v14  BinopI { op=ne, lhs=v13, rhs_imm=0 }             -> - [cmp32]
     v15  Imm(0)                                           -> -
     v16  Imm(0)                                           -> -
     v17  Imm(0)                                           -> -
@@ -175,11 +175,11 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v54  Extend { value=v53, kind=I32, nsw }              -> -
     v55  ImmData(16)                                      -> -
     v56  Load { addr=v55, disp=0, kind=I32 pc_rel }       -> -
-    v57  BinopI { op=eq, lhs=v56, rhs_imm=2 }             -> -
+    v57  BinopI { op=eq, lhs=v56, rhs_imm=2 }             -> - [cmp32]
     v58  Imm(0)                                           -> x1
     v59  Imm(4)                                           -> x2
     v60  Load { addr=v55, disp=0, kind=I32 pc_rel }       -> x6
-    v61  BinopI { op=eq, lhs=v60, rhs_imm=2 }             -> x6
+    v61  BinopI { op=eq, lhs=v60, rhs_imm=2 }             -> x6 [cmp32]
     v62  Select { cond=v61, a=v58, b=v59, kind=I64 }      -> x1
     terminator Jmp(b1)
   block 1  start_pc=0

@@ -1272,10 +1272,10 @@ fn ent_pc=5 n_params=0 variadic=false locals=1
     v935 BinopI { op=and, lhs=v934, rhs_imm=4294967295 }  -> -
     v936 Imm(0)                                           -> -
     v937 BinopI { op=and, lhs=v934, rhs_imm=4294967295 }  -> -
-    v938 BinopI { op=eq, lhs=v934, rhs_imm=3448371014 }   -> -
+    v938 BinopI { op=eq, lhs=v934, rhs_imm=3448371014 }   -> - [cmp32]
     v939 Imm(0)                                           -> x1
     v940 Imm(1)                                           -> x2
-    v941 BinopI { op=eq, lhs=v934, rhs_imm=3448371014 }   -> x0
+    v941 BinopI { op=eq, lhs=v934, rhs_imm=3448371014 }   -> x0 [cmp32]
     v942 Select { cond=v941, a=v939, b=v940, kind=I64 }   -> x1
     terminator Jmp(b1)
   block 1  start_pc=0

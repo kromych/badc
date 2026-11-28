@@ -31,7 +31,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v17  Load { addr=v16, disp=0, kind=I64 pc_rel }       -> x1
     v18  Imm(0)                                           -> -
     v19  Load { addr=v17, disp=0, kind=I8 }               -> x2
-    v20  BinopI { op=ne, lhs=v19, rhs_imm=99 }            -> x2
+    v20  BinopI { op=ne, lhs=v19, rhs_imm=99 }            -> x2 [cmp32]
     v21  Imm(0)                                           -> -
     terminator Bnz { cond=v20, target=b6, fall=b5 }   (exit_acc=v20)
   block 5  start_pc=0
@@ -40,7 +40,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v24  Imm(1)                                           -> -
     v25  BinopI { op=add, lhs=v17, rhs_imm=1 }            -> -
     v26  Load { addr=v17, disp=1, kind=I8 }               -> x1
-    v27  BinopI { op=ne, lhs=v26, rhs_imm=100 }           -> x1
+    v27  BinopI { op=ne, lhs=v26, rhs_imm=100 }           -> x1 [cmp32]
     v28  Imm(0)                                           -> -
     v29  Imm(0)                                           -> -
     v30  Imm(0)                                           -> -

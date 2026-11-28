@@ -86,7 +86,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     v66  Imm(0)                                           -> -
     v67  Imm(0)                                           -> -
     v68  Imm(0)                                           -> -
-    v69  BinopI { op=ne, lhs=v39, rhs_imm=1 }             -> x0
+    v69  BinopI { op=ne, lhs=v39, rhs_imm=1 }             -> x0 [cmp32]
     v70  Imm(0)                                           -> -
     v71  Imm(0)                                           -> -
     v72  Imm(0)                                           -> -
@@ -240,7 +240,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     v208 Imm(0)                                           -> -
     v209 Imm(0)                                           -> -
     v210 Imm(0)                                           -> -
-    v211 BinopI { op=ne, lhs=v184, rhs_imm=-1 }           -> x0
+    v211 BinopI { op=ne, lhs=v184, rhs_imm=-1 }           -> x0 [cmp32]
     v212 Imm(0)                                           -> -
     v213 Imm(0)                                           -> -
     v214 Imm(0)                                           -> -
@@ -457,7 +457,7 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     v624 LifetimeEnd(0)                                   -> -
     v625 LifetimeEnd(0)                                   -> -
     v626 BinopI { op=and, lhs=v622, rhs_imm=255 }         -> -
-    v627 BinopI { op=eq, lhs=v622, rhs_imm=0 }            -> -
+    v627 BinopI { op=eq, lhs=v622, rhs_imm=0 }            -> - [cmp32]
     v628 Imm(1)                                           -> -
     v629 Imm(0)                                           -> -
     terminator Bz { cond=v622, target=b19, fall=b17 }   (low word)   (exit_acc=v627)
@@ -502,8 +502,8 @@ fn ent_pc=10 n_params=0 variadic=false locals=0
     v438 LifetimeEnd(0)                                   -> -
     v439 LifetimeEnd(0)                                   -> -
     v440 BinopI { op=and, lhs=v435, rhs_imm=255 }         -> -
-    v441 BinopI { op=eq, lhs=v435, rhs_imm=0 }            -> -
-    v442 BinopI { op=ne, lhs=v441, rhs_imm=0 }            -> -
+    v441 BinopI { op=eq, lhs=v435, rhs_imm=0 }            -> - [cmp32]
+    v442 BinopI { op=ne, lhs=v441, rhs_imm=0 }            -> - [cmp32]
     v443 Imm(0)                                           -> -
     v444 Imm(0)                                           -> -
     v445 Imm(0)                                           -> -

@@ -14,7 +14,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v8   Imm(0)                                           -> -
     v9   ImmData(4)                                       -> -
     v10  Load { addr=v9, disp=0, kind=I32 pc_rel }        -> x0
-    v11  BinopI { op=ne, lhs=v10, rhs_imm=1 }             -> x0
+    v11  BinopI { op=ne, lhs=v10, rhs_imm=1 }             -> x0 [cmp32]
     terminator Bz { cond=v11, target=b2, fall=b1 }   (exit_acc=v11)
   block 1  start_pc=0
     v12  Imm(1)                                           -> x0
@@ -24,7 +24,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v14  ImmData(4)                                       -> -
     v15  BinopI { op=add, lhs=v9, rhs_imm=8 }             -> -
     v16  Load { addr=v9, disp=8, kind=I32 pc_rel }        -> x0
-    v17  BinopI { op=ne, lhs=v16, rhs_imm=3 }             -> x0
+    v17  BinopI { op=ne, lhs=v16, rhs_imm=3 }             -> x0 [cmp32]
     terminator Bz { cond=v17, target=b4, fall=b3 }   (exit_acc=v17)
   block 3  start_pc=0
     v18  Imm(2)                                           -> x0
@@ -34,7 +34,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v20  ImmData(4)                                       -> -
     v21  BinopI { op=add, lhs=v9, rhs_imm=24 }            -> -
     v22  Load { addr=v9, disp=24, kind=I32 pc_rel }       -> x0
-    v23  BinopI { op=ne, lhs=v22, rhs_imm=13 }            -> x0
+    v23  BinopI { op=ne, lhs=v22, rhs_imm=13 }            -> x0 [cmp32]
     terminator Bz { cond=v23, target=b6, fall=b5 }   (exit_acc=v23)
   block 5  start_pc=0
     v24  Imm(3)                                           -> x0
@@ -44,7 +44,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v26  ImmData(48)                                      -> -
     v27  BinopI { op=add, lhs=v1, rhs_imm=36 }            -> -
     v28  Load { addr=v1, disp=36, kind=I32 pc_rel }       -> -
-    v29  Imm(0)                                           -> -
+    v29  Imm(0)                                           -> - [cmp32]
     terminator Jmp(b7)   (exit_acc=v29)
   block 7  start_pc=0
     v31  Imm(0)                                           -> x0

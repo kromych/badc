@@ -16,11 +16,11 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v2   Imm(0)                                           -> -
     v3   ImmData(1)                                       -> -
     v4   Load { addr=v3, disp=0, kind=I8 pc_rel }         -> -
-    v5   BinopI { op=ne, lhs=v4, rhs_imm=0 }              -> -
+    v5   BinopI { op=ne, lhs=v4, rhs_imm=0 }              -> - [cmp32]
     v6   Imm(1)                                           -> x6
     v7   Load { addr=v3, disp=0, kind=I8 pc_rel }         -> x1
-    v8   BinopI { op=ne, lhs=v7, rhs_imm=0 }              -> -
-    v9   Select { cond=v7, a=v6, b=v1, kind=I64 }         -> x6
+    v8   BinopI { op=ne, lhs=v7, rhs_imm=0 }              -> - [cmp32]
+    v9   Select { cond=v7, a=v6, b=v1, kind=I64 }         -> x6 [cmp32]
     terminator Jmp(b1)
   block 1  start_pc=0
     v14  Copy { value=v9, fp=false }                      -> -
@@ -31,10 +31,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v19  ImmData(48)                                      -> x1
     v20  Imm(0)                                           -> -
     v21  Load { addr=v19, disp=0, kind=I8 pc_rel }        -> -
-    v22  BinopI { op=ne, lhs=v21, rhs_imm=104 }           -> -
+    v22  BinopI { op=ne, lhs=v21, rhs_imm=104 }           -> - [cmp32]
     v23  BinopI { op=or, lhs=v9, rhs_imm=4 }              -> x2
     v24  Load { addr=v19, disp=0, kind=I8 pc_rel }        -> x7
-    v25  BinopI { op=ne, lhs=v24, rhs_imm=104 }           -> x7
+    v25  BinopI { op=ne, lhs=v24, rhs_imm=104 }           -> x7 [cmp32]
     v26  Select { cond=v25, a=v23, b=v9, kind=I64 }       -> x6
     terminator Jmp(b2)
   block 2  start_pc=0
@@ -52,10 +52,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
     v50  ImmData(9)                                       -> -
     v51  Binop { op=add, lhs=v38, rhs=v40 }               -> -
     v52  LoadIndexed { base=v38, index=v40, scale=1, kind=I8 } -> x8
-    v53  Binop { op=ne, lhs=v49, rhs=v52 }                -> -
+    v53  Binop { op=ne, lhs=v49, rhs=v52 }                -> - [cmp32]
     v54  BinopI { op=or, lhs=v41, rhs_imm=8 }             -> x9
     v55  LoadIndexed { base=v19, index=v40, scale=1, kind=I8 } -> x10
-    v56  Binop { op=ne, lhs=v55, rhs=v52 }                -> x8
+    v56  Binop { op=ne, lhs=v55, rhs=v52 }                -> x8 [cmp32]
     v57  Select { cond=v56, a=v54, b=v41, kind=I64 }      -> x6
     terminator Jmp(b4)
   block 4  start_pc=0

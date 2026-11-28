@@ -203,7 +203,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=0
     v97  Phi { incoming=[b0:v82, b1:v184], kind=I64 }     -> x0
     v98  BinopI { op=and, lhs=v96, rhs_imm=4294967295 }   -> -
     v99  Imm(100)                                         -> -
-    v100 BinopI { op=ult, lhs=v96, rhs_imm=100 }          -> x7
+    v100 BinopI { op=ult, lhs=v96, rhs_imm=100 }          -> x7 [cmp32]
     terminator Bz { cond=v100, target=b3, fall=b1 }   (exit_acc=v100)
   block 3  start_pc=0
     v189 Imm(0)                                           -> -
@@ -325,7 +325,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v77  Imm(0)                                           -> -
     v78  BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> -
     v79  Imm(0)                                           -> -
-    v80  BinopI { op=eq, lhs=v3, rhs_imm=0 }              -> -
+    v80  BinopI { op=eq, lhs=v3, rhs_imm=0 }              -> - [cmp32]
     v81  Imm(0)                                           -> -
     terminator Bnz { cond=v3, target=b2, fall=b1 }   (low word)   (exit_acc=v80)
   block 1  start_pc=0
@@ -339,7 +339,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
   block 2  start_pc=0
     v88  BinopI { op=and, lhs=v3, rhs_imm=4294967295 }    -> -
     v89  BinopI { op=and, lhs=v3, rhs_imm=1 }             -> x0
-    v90  BinopI { op=ne, lhs=v89, rhs_imm=0 }             -> -
+    v90  BinopI { op=ne, lhs=v89, rhs_imm=0 }             -> - [cmp32]
     terminator Bz { cond=v89, target=b8, fall=b3 }   (low word)   (exit_acc=v90)
   block 3  start_pc=0
     v91  Imm(0)                                           -> x0
@@ -411,7 +411,7 @@ fn ent_pc=2 n_params=2 variadic=false locals=0
     v156 BinopI { op=add, lhs=v93, rhs_imm=-1 }           -> x6
     v157 Imm(0)                                           -> -
     v158 BinopI { op=and, lhs=v156, rhs_imm=4294967295 }  -> -
-    v159 BinopI { op=eq, lhs=v156, rhs_imm=0 }            -> -
+    v159 BinopI { op=eq, lhs=v156, rhs_imm=0 }            -> - [cmp32]
     terminator Bnz { cond=v156, target=b6, fall=b5 }   (low word)   (exit_acc=v159)
   block 5  start_pc=0
     v221 Imm(0)                                           -> -

@@ -37,7 +37,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=516
     terminator Jmp(b2)   (exit_acc=v67)
   block 2  start_pc=0
     v62  Phi { incoming=[b0:v24, b1:v67], kind=I64 }      -> x0
-    v63  BinopI { op=lt, lhs=v62, rhs_imm=32 }            -> x2
+    v63  BinopI { op=lt, lhs=v62, rhs_imm=32 }            -> x2 [cmp32]
     terminator Bz { cond=v63, target=b3, fall=b1 }   (exit_acc=v63)
   block 3  start_pc=0
     v25  Imm(0)                                           -> -

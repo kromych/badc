@@ -28,7 +28,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v22  Imm(0)                                           -> -
     v23  Imm(0)                                           -> -
     v24  LoadLocal { off=-2, kind=I32 }                   -> -
-    v25  Imm(0)                                           -> -
+    v25  Imm(0)                                           -> - [cmp32]
     terminator Jmp(b1)   (exit_acc=v25)
   block 1  start_pc=0
     v30  Imm(0)                                           -> -
@@ -37,7 +37,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v33  Imm(0)                                           -> -
     v34  Imm(0)                                           -> -
     v35  LoadLocal { off=-1, kind=I32 }                   -> -
-    v36  Imm(0)                                           -> -
+    v36  Imm(0)                                           -> - [cmp32]
     terminator Jmp(b2)   (exit_acc=v36)
   block 2  start_pc=0
     v41  Imm(0)                                           -> -
@@ -59,7 +59,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=2
     v57  Imm(11)                                          -> -
     v58  Imm(0)                                           -> -
     v59  LoadLocal { off=-2, kind=I32 }                   -> -
-    v60  Imm(0)                                           -> -
+    v60  Imm(0)                                           -> - [cmp32]
     terminator Jmp(b3)   (exit_acc=v60)
   block 3  start_pc=0
     v73  Imm(0)                                           -> x0

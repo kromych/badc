@@ -1444,7 +1444,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=8
     v969 Binop { op=add, lhs=v920, rhs=v926 }             -> -
     v970 LoadIndexed { base=v920, index=v926, scale=1, kind=I8 } -> x1
     v971 Extend { value=v965, kind=I8 }                   -> x2
-    v972 Binop { op=ne, lhs=v970, rhs=v971 }              -> x1
+    v972 Binop { op=ne, lhs=v970, rhs=v971 }              -> x1 [cmp32]
     terminator Bz { cond=v972, target=b2, fall=b51 }   (exit_acc=v972)
   block 2  start_pc=0
     v929 Extend { value=v926, kind=I32 }                  -> -
@@ -1454,7 +1454,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=8
   block 3  start_pc=0
     v926 Phi { incoming=[b0:v924, b2:v930], kind=I64 }    -> x0
     v927 Extend { value=v926, kind=I32 }                  -> -
-    v928 BinopI { op=lt, lhs=v926, rhs_imm=16 }           -> x1
+    v928 BinopI { op=lt, lhs=v926, rhs_imm=16 }           -> x1 [cmp32]
     terminator Bz { cond=v928, target=b4, fall=b1 }   (exit_acc=v928)
   block 4  start_pc=0
     v973 LocalAddr(-126)                                  -> x3
@@ -1506,7 +1506,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=8
     v1057 Binop { op=add, lhs=v1043, rhs=v1056 }           -> x1
     v1058 Extend { value=v1057, kind=I32, nsw }            -> -
     v1059 Extend { value=v1057, kind=I16 }                 -> x1
-    v1060 Binop { op=ne, lhs=v1030, rhs=v1059 }            -> x1
+    v1060 Binop { op=ne, lhs=v1030, rhs=v1059 }            -> x1 [cmp32]
     terminator Bz { cond=v1060, target=b6, fall=b50 }   (exit_acc=v1060)
   block 6  start_pc=0
     v1023 Extend { value=v1020, kind=I32 }                 -> -
@@ -1516,7 +1516,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=8
   block 7  start_pc=0
     v1020 Phi { incoming=[b4:v984, b6:v1024], kind=I64 }   -> x0
     v1021 Extend { value=v1020, kind=I32 }                 -> -
-    v1022 BinopI { op=lt, lhs=v1020, rhs_imm=8 }           -> x1
+    v1022 BinopI { op=lt, lhs=v1020, rhs_imm=8 }           -> x1 [cmp32]
     terminator Bz { cond=v1022, target=b8, fall=b5 }   (exit_acc=v1022)
   block 8  start_pc=0
     v1061 LocalAddr(-128)                                  -> x9

@@ -58,7 +58,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v32  Load { addr=v31, disp=0, kind=I64 }              -> x0
     v33  BinopI { op=add, lhs=v32, rhs_imm=16 }           -> -
     v34  Load { addr=v32, disp=16, kind=I32 }             -> x0
-    v35  BinopI { op=ne, lhs=v34, rhs_imm=42 }            -> x0
+    v35  BinopI { op=ne, lhs=v34, rhs_imm=42 }            -> x0 [cmp32]
     terminator Bz { cond=v35, target=b12, fall=b11 }   (exit_acc=v35)
   block 11  start_pc=0
     v36  Imm(6)                                           -> x0

@@ -139,7 +139,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=12
     v42  Imm(0)                                           -> -
     v43  Imm(0)                                           -> -
     v44  BinopI { op=ne, lhs=v24, rhs_imm=22 }            -> x0
-    v45  BinopI { op=ne, lhs=v44, rhs_imm=0 }             -> -
+    v45  BinopI { op=ne, lhs=v44, rhs_imm=0 }             -> - [cmp32]
     v46  Imm(0)                                           -> -
     v47  Imm(0)                                           -> -
     v48  Imm(0)                                           -> -
@@ -217,7 +217,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=12
     v110 Imm(0)                                           -> -
     v111 Imm(0)                                           -> -
     v112 BinopI { op=ne, lhs=v92, rhs_imm=22 }            -> x0
-    v113 BinopI { op=ne, lhs=v112, rhs_imm=0 }            -> -
+    v113 BinopI { op=ne, lhs=v112, rhs_imm=0 }            -> - [cmp32]
     v114 Imm(0)                                           -> -
     v115 Imm(0)                                           -> -
     v116 Imm(0)                                           -> -
@@ -287,7 +287,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=12
     v170 Imm(0)                                           -> -
     v171 Imm(0)                                           -> -
     v172 BinopI { op=ne, lhs=v157, rhs_imm=26 }           -> x0
-    v173 BinopI { op=ne, lhs=v172, rhs_imm=0 }            -> -
+    v173 BinopI { op=ne, lhs=v172, rhs_imm=0 }            -> - [cmp32]
     v174 Imm(0)                                           -> -
     v175 Imm(0)                                           -> -
     v176 Imm(0)                                           -> -
@@ -299,7 +299,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=12
     v180 Imm(0)                                           -> -
     v181 Imm(0)                                           -> -
     v182 BinopI { op=ne, lhs=v159, rhs_imm=37 }           -> x0
-    v183 BinopI { op=ne, lhs=v182, rhs_imm=0 }            -> -
+    v183 BinopI { op=ne, lhs=v182, rhs_imm=0 }            -> - [cmp32]
     v184 Imm(0)                                           -> -
     v185 Imm(0)                                           -> -
     v186 Imm(0)                                           -> -

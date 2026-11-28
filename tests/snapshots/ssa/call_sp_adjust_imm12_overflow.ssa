@@ -3731,7 +3731,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   block 2  start_pc=0
     v10  Phi { incoming=[b0:v7, b1:v26], kind=I64 }       -> x0
     v11  Imm(0)                                           -> -
-    v12  BinopI { op=lt, lhs=v10, rhs_imm=261 }           -> x1
+    v12  BinopI { op=lt, lhs=v10, rhs_imm=261 }           -> x1 [cmp32]
     terminator Bz { cond=v12, target=b3, fall=b1 }   (exit_acc=v12)
   block 3  start_pc=0
     v28  ImmData(16)                                      -> x0

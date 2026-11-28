@@ -10,7 +10,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v4   Extend { value=v3, kind=I32 }                    -> -
     v5   Imm(0)                                           -> -
     v6   Imm(0)                                           -> -
-    v7   BinopI { op=le, lhs=v3, rhs_imm=0 }              -> x0
+    v7   BinopI { op=le, lhs=v3, rhs_imm=0 }              -> x0 [cmp32]
     terminator Bz { cond=v7, target=b2, fall=b1 }   (exit_acc=v7)
   block 1  start_pc=0
     v8   Imm(1)                                           -> x0

@@ -319,14 +319,14 @@ fn ent_pc=11 n_params=0 variadic=false locals=0
     v73  Extend { value=v72, kind=I32, nsw }              -> -
     v74  Extend { value=v72, kind=I32 }                   -> -
     v75  Extend { value=v72, kind=I32 }                   -> -
-    v76  BinopI { op=ne, lhs=v72, rhs_imm=110 }           -> x0
+    v76  BinopI { op=ne, lhs=v72, rhs_imm=110 }           -> x0 [cmp32]
     v77  Imm(1)                                           -> -
     v78  Imm(0)                                           -> -
     terminator Bnz { cond=v76, target=b16, fall=b14 }   (exit_acc=v76)
   block 14  start_pc=0
     v79  Call { target_pc=9, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v80  BinopI { op=ne, lhs=v79, rhs_imm=1 }             -> x0
-    v81  BinopI { op=ne, lhs=v80, rhs_imm=0 }             -> -
+    v81  BinopI { op=ne, lhs=v80, rhs_imm=0 }             -> - [cmp32]
     v82  Imm(0)                                           -> -
     v83  Imm(0)                                           -> -
     v84  Imm(0)                                           -> -
@@ -351,7 +351,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=0
     v101 Extend { value=v100, kind=I32, nsw }             -> -
     v102 Extend { value=v100, kind=I32 }                  -> -
     v103 Extend { value=v100, kind=I32 }                  -> -
-    v104 BinopI { op=ne, lhs=v100, rhs_imm=110 }          -> x0
+    v104 BinopI { op=ne, lhs=v100, rhs_imm=110 }          -> x0 [cmp32]
     v105 Imm(0)                                           -> -
     v106 Imm(0)                                           -> -
     v107 Imm(0)                                           -> -

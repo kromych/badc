@@ -41,7 +41,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=32
   block 2  start_pc=0
     v24  Phi { incoming=[b0:v19, b1:v36], kind=I64 }      -> x0
     v25  Extend { value=v24, kind=I32 }                   -> -
-    v26  BinopI { op=lt, lhs=v24, rhs_imm=64 }            -> x1
+    v26  BinopI { op=lt, lhs=v24, rhs_imm=64 }            -> x1 [cmp32]
     terminator Bz { cond=v26, target=b3, fall=b1 }   (exit_acc=v26)
   block 3  start_pc=0
     v38  LocalAddr(-32)                                   -> -

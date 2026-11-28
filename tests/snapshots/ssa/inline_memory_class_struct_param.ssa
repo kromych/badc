@@ -268,7 +268,7 @@ fn ent_pc=11 n_params=0 variadic=false locals=10
     v42  BinopI { op=add, lhs=v36, rhs_imm=32 }           -> -
     v43  Load { addr=v36, disp=32, kind=I64 pc_rel }      -> x0
     v44  BinopI { op=ne, lhs=v43, rhs_imm=77 }            -> x0
-    v45  BinopI { op=ne, lhs=v44, rhs_imm=0 }             -> -
+    v45  BinopI { op=ne, lhs=v44, rhs_imm=0 }             -> - [cmp32]
     v46  Imm(0)                                           -> -
     v47  Imm(0)                                           -> -
     v48  Imm(0)                                           -> -

@@ -53,7 +53,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     v56  Imm(0)                                           -> -
     v57  BinopI { op=add, lhs=v41, rhs_imm=16 }           -> -
     v58  Load { addr=v41, disp=16, kind=I32 }             -> x1
-    v59  BinopI { op=ne, lhs=v58, rhs_imm=42 }            -> x1
+    v59  BinopI { op=ne, lhs=v58, rhs_imm=42 }            -> x1 [cmp32]
     terminator Bz { cond=v59, target=b3, fall=b2 }   (exit_acc=v59)
   block 2  start_pc=0
     v60  Imm(4)                                           -> x0
@@ -85,7 +85,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=3
     v82  Imm(0)                                           -> -
     v83  BinopI { op=add, lhs=v79, rhs_imm=16 }           -> -
     v84  Load { addr=v79, disp=16, kind=I32 }             -> x0
-    v85  BinopI { op=ne, lhs=v84, rhs_imm=42 }            -> x0
+    v85  BinopI { op=ne, lhs=v84, rhs_imm=42 }            -> x0 [cmp32]
     terminator Bz { cond=v85, target=b8, fall=b7 }   (exit_acc=v85)
   block 7  start_pc=0
     v86  Imm(5)                                           -> x0

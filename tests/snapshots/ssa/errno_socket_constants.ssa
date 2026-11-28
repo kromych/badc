@@ -20,7 +20,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v19  BinopI { op=shl, lhs=v10, rhs_imm=2 }            -> -
     v20  Binop { op=add, lhs=v17, rhs=v19 }               -> -
     v21  LoadIndexed { base=v17, index=v10, scale=4, kind=I32 } -> x0
-    v22  BinopI { op=le, lhs=v21, rhs_imm=0 }             -> x0
+    v22  BinopI { op=le, lhs=v21, rhs_imm=0 }             -> x0 [cmp32]
     terminator Bz { cond=v22, target=b2, fall=b10 }   (exit_acc=v22)
   block 2  start_pc=0
     v27  Extend { value=v10, kind=I32 }                   -> -
@@ -39,7 +39,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v45  BinopI { op=shl, lhs=v31, rhs_imm=2 }            -> -
     v46  Binop { op=add, lhs=v17, rhs=v45 }               -> -
     v47  LoadIndexed { base=v17, index=v31, scale=4, kind=I32 } -> x7
-    v48  Binop { op=eq, lhs=v42, rhs=v47 }                -> x6
+    v48  Binop { op=eq, lhs=v42, rhs=v47 }                -> x6 [cmp32]
     terminator Bz { cond=v48, target=b4, fall=b9 }   (exit_acc=v48)
   block 4  start_pc=0
     v35  Extend { value=v31, kind=I32 }                   -> -
@@ -50,7 +50,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v31  Phi { incoming=[b2:v28, b4:v36], kind=I64 }      -> x0
     v32  Extend { value=v31, kind=I32 }                   -> -
     v33  Imm(0)                                           -> -
-    v34  BinopI { op=lt, lhs=v31, rhs_imm=16 }            -> x6
+    v34  BinopI { op=lt, lhs=v31, rhs_imm=16 }            -> x6 [cmp32]
     terminator Bz { cond=v34, target=b6, fall=b3 }   (exit_acc=v34)
   block 6  start_pc=0
     v14  Extend { value=v10, kind=I32 }                   -> -
@@ -61,7 +61,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=8
     v10  Phi { incoming=[b0:v8, b6:v15], kind=I64 }       -> x2
     v11  Extend { value=v10, kind=I32 }                   -> -
     v12  Imm(0)                                           -> -
-    v13  BinopI { op=lt, lhs=v10, rhs_imm=16 }            -> x0
+    v13  BinopI { op=lt, lhs=v10, rhs_imm=16 }            -> x0 [cmp32]
     terminator Bz { cond=v13, target=b8, fall=b1 }   (exit_acc=v13)
   block 8  start_pc=0
     v23  Imm(0)                                           -> x0

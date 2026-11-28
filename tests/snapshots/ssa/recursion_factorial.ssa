@@ -19,7 +19,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v12  Phi { incoming=[b0:v2, b1:v9], kind=I32 }        -> x0
     v13  Imm(0)                                           -> -
     v14  Imm(0)                                           -> -
-    v15  BinopI { op=lt, lhs=v11, rhs_imm=2 }             -> x1
+    v15  BinopI { op=lt, lhs=v11, rhs_imm=2 }             -> x1 [cmp32]
     terminator Bz { cond=v15, target=b1, fall=b3 }   (exit_acc=v15)
   block 3  start_pc=0
     v3   Imm(1)                                           -> -

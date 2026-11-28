@@ -27,13 +27,13 @@ fn ent_pc=5 n_params=1 variadic=false locals=0
     v21  Imm(1)                                           -> -
     v22  Load { addr=v1, disp=0, kind=I64 }               -> -
     v23  BinopI { op=and, lhs=v10, rhs_imm=8 }            -> x0
-    v24  BinopI { op=ne, lhs=v23, rhs_imm=0 }             -> -
+    v24  BinopI { op=ne, lhs=v23, rhs_imm=0 }             -> - [cmp32]
     v25  Extend { value=v24, kind=I32 }                   -> -
     v26  Extend { value=v24, kind=I32 }                   -> -
     v27  Imm(1)                                           -> x2
     v28  Imm(0)                                           -> x6
-    v29  BinopI { op=ne, lhs=v23, rhs_imm=0 }             -> -
-    v30  Select { cond=v23, a=v27, b=v28, kind=I64 }      -> x2
+    v29  BinopI { op=ne, lhs=v23, rhs_imm=0 }             -> - [cmp32]
+    v30  Select { cond=v23, a=v27, b=v28, kind=I64 }      -> x2 [cmp32]
     terminator Jmp(b1)
   block 1  start_pc=0
     v35  Copy { value=v30, fp=false }                     -> -
@@ -118,7 +118,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v68  Imm(1)                                           -> -
     v69  LoadLocal { off=-1, kind=I64 }                   -> -
     v70  Imm(0)                                           -> -
-    v71  Imm(0)                                           -> -
+    v71  Imm(0)                                           -> - [cmp32]
     v72  Imm(0)                                           -> -
     v73  Imm(0)                                           -> -
     terminator Jmp(b1)   (exit_acc=v71)
@@ -163,7 +163,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v173 Imm(1)                                           -> -
     v174 LoadLocal { off=-1, kind=I64 }                   -> -
     v175 Imm(0)                                           -> -
-    v176 Imm(0)                                           -> -
+    v176 Imm(0)                                           -> - [cmp32]
     v177 Imm(0)                                           -> -
     v178 Imm(0)                                           -> -
     terminator Jmp(b3)   (exit_acc=v176)
@@ -208,7 +208,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v215 Imm(1)                                           -> -
     v216 LoadLocal { off=-1, kind=I64 }                   -> -
     v217 Imm(0)                                           -> -
-    v218 Imm(0)                                           -> -
+    v218 Imm(0)                                           -> - [cmp32]
     v219 Imm(0)                                           -> -
     v220 Imm(0)                                           -> -
     terminator Jmp(b5)   (exit_acc=v218)
@@ -253,7 +253,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v257 Imm(1)                                           -> -
     v258 LoadLocal { off=-1, kind=I64 }                   -> -
     v259 Imm(0)                                           -> -
-    v260 Imm(0)                                           -> -
+    v260 Imm(0)                                           -> - [cmp32]
     v261 Imm(0)                                           -> -
     v262 Imm(0)                                           -> -
     terminator Jmp(b7)   (exit_acc=v260)
@@ -298,7 +298,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v299 Imm(1)                                           -> -
     v300 LoadLocal { off=-1, kind=I64 }                   -> -
     v301 Imm(0)                                           -> -
-    v302 Imm(0)                                           -> -
+    v302 Imm(0)                                           -> - [cmp32]
     v303 Imm(0)                                           -> -
     v304 Imm(0)                                           -> -
     terminator Jmp(b9)   (exit_acc=v302)
@@ -343,7 +343,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v341 Imm(1)                                           -> -
     v342 LoadLocal { off=-1, kind=I64 }                   -> -
     v343 Imm(0)                                           -> -
-    v344 Imm(0)                                           -> -
+    v344 Imm(0)                                           -> - [cmp32]
     v345 Imm(0)                                           -> -
     v346 Imm(0)                                           -> -
     terminator Jmp(b11)   (exit_acc=v344)
@@ -388,7 +388,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v383 Imm(1)                                           -> -
     v384 LoadLocal { off=-1, kind=I64 }                   -> -
     v385 Imm(0)                                           -> -
-    v386 Imm(0)                                           -> -
+    v386 Imm(0)                                           -> - [cmp32]
     v387 Imm(0)                                           -> -
     v388 Imm(0)                                           -> -
     terminator Jmp(b13)   (exit_acc=v386)
@@ -433,7 +433,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v425 Imm(1)                                           -> -
     v426 LoadLocal { off=-1, kind=I64 }                   -> -
     v427 Imm(8)                                           -> -
-    v428 Imm(1)                                           -> -
+    v428 Imm(1)                                           -> - [cmp32]
     v429 Imm(1)                                           -> -
     v430 Imm(1)                                           -> -
     terminator Jmp(b15)   (exit_acc=v428)
@@ -478,7 +478,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v467 Imm(1)                                           -> -
     v468 LoadLocal { off=-1, kind=I64 }                   -> -
     v469 Imm(8)                                           -> -
-    v470 Imm(1)                                           -> -
+    v470 Imm(1)                                           -> - [cmp32]
     v471 Imm(1)                                           -> -
     v472 Imm(1)                                           -> -
     terminator Jmp(b17)   (exit_acc=v470)
@@ -523,7 +523,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v509 Imm(1)                                           -> -
     v510 LoadLocal { off=-1, kind=I64 }                   -> -
     v511 Imm(8)                                           -> -
-    v512 Imm(1)                                           -> -
+    v512 Imm(1)                                           -> - [cmp32]
     v513 Imm(1)                                           -> -
     v514 Imm(1)                                           -> -
     terminator Jmp(b19)   (exit_acc=v512)
@@ -568,7 +568,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v551 Imm(1)                                           -> -
     v552 LoadLocal { off=-1, kind=I64 }                   -> -
     v553 Imm(8)                                           -> -
-    v554 Imm(1)                                           -> -
+    v554 Imm(1)                                           -> - [cmp32]
     v555 Imm(1)                                           -> -
     v556 Imm(1)                                           -> -
     terminator Jmp(b21)   (exit_acc=v554)
@@ -613,7 +613,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v593 Imm(1)                                           -> -
     v594 LoadLocal { off=-1, kind=I64 }                   -> -
     v595 Imm(8)                                           -> -
-    v596 Imm(1)                                           -> -
+    v596 Imm(1)                                           -> - [cmp32]
     v597 Imm(1)                                           -> -
     v598 Imm(1)                                           -> -
     terminator Jmp(b23)   (exit_acc=v596)
@@ -658,7 +658,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v635 Imm(1)                                           -> -
     v636 LoadLocal { off=-1, kind=I64 }                   -> -
     v637 Imm(8)                                           -> -
-    v638 Imm(1)                                           -> -
+    v638 Imm(1)                                           -> - [cmp32]
     v639 Imm(1)                                           -> -
     v640 Imm(1)                                           -> -
     terminator Jmp(b25)   (exit_acc=v638)
@@ -703,7 +703,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v677 Imm(1)                                           -> -
     v678 LoadLocal { off=-1, kind=I64 }                   -> -
     v679 Imm(8)                                           -> -
-    v680 Imm(1)                                           -> -
+    v680 Imm(1)                                           -> - [cmp32]
     v681 Imm(1)                                           -> -
     v682 Imm(1)                                           -> -
     terminator Jmp(b27)   (exit_acc=v680)
@@ -748,7 +748,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v719 Imm(1)                                           -> -
     v720 LoadLocal { off=-1, kind=I64 }                   -> -
     v721 Imm(8)                                           -> -
-    v722 Imm(1)                                           -> -
+    v722 Imm(1)                                           -> - [cmp32]
     v723 Imm(1)                                           -> -
     v724 Imm(1)                                           -> -
     terminator Jmp(b29)   (exit_acc=v722)
@@ -770,7 +770,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=1
     v738 Imm(0)                                           -> -
     v739 Imm(0)                                           -> -
     v740 Imm(0)                                           -> -
-    v741 Imm(0)                                           -> -
+    v741 Imm(0)                                           -> - [cmp32]
     terminator Jmp(b31)   (exit_acc=v741)
   block 31  start_pc=0
     v77  LocalAddr(-1)                                    -> -

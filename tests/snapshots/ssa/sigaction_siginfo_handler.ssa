@@ -28,10 +28,10 @@ fn ent_pc=0 n_params=3 variadic=false locals=0
     v22  Imm(0)                                           -> -
     v23  Load { addr=v3, disp=0, kind=I32 }               -> -
     v24  Imm(0)                                           -> -
-    v25  Binop { op=eq, lhs=v23, rhs=v1 }                 -> -
+    v25  Binop { op=eq, lhs=v23, rhs=v1 }                 -> - [cmp32]
     v26  Imm(-1)                                          -> x0
     v27  Load { addr=v3, disp=0, kind=I32 }               -> x2
-    v28  Binop { op=eq, lhs=v27, rhs=v1 }                 -> x2
+    v28  Binop { op=eq, lhs=v27, rhs=v1 }                 -> x2 [cmp32]
     v29  Select { cond=v28, a=v1, b=v26, kind=I64 }       -> x0
     terminator Jmp(b1)
   block 1  start_pc=0
@@ -185,7 +185,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=38
     v120 BinopI { op=add, lhs=v114, rhs_imm=136 }         -> -
     v121 LoadLocal { off=-19, disp=136, kind=I32 }        -> x0
     v122 BinopI { op=and, lhs=v121, rhs_imm=4 }           -> x0
-    v123 BinopI { op=eq, lhs=v122, rhs_imm=0 }            -> -
+    v123 BinopI { op=eq, lhs=v122, rhs_imm=0 }            -> - [cmp32]
     v124 Imm(0)                                           -> -
     v125 Imm(0)                                           -> -
     v126 Imm(0)                                           -> -
@@ -200,7 +200,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=38
     v131 CallExt { binding_idx=1, args=[v130], fp_arg_mask=0x0 } -> x0
     v132 ImmData(16)                                      -> -
     v133 Load { addr=v132, disp=0, kind=I32, volatile pc_rel } -> x0
-    v134 BinopI { op=ne, lhs=v133, rhs_imm=1 }            -> x0
+    v134 BinopI { op=ne, lhs=v133, rhs_imm=1 }            -> x0 [cmp32]
     terminator Bz { cond=v134, target=b9, fall=b8 }   (exit_acc=v134)
   block 8  start_pc=0
     v135 Imm(1)                                           -> x0
@@ -210,7 +210,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=38
   block 9  start_pc=0
     v138 ImmData(20)                                      -> -
     v139 Load { addr=v138, disp=0, kind=I32, volatile pc_rel } -> x0
-    v140 BinopI { op=ne, lhs=v139, rhs_imm=10 }           -> x0
+    v140 BinopI { op=ne, lhs=v139, rhs_imm=10 }           -> x0 [cmp32]
     terminator Bz { cond=v140, target=b11, fall=b10 }   (exit_acc=v140)
   block 10  start_pc=0
     v141 Imm(5)                                           -> x0

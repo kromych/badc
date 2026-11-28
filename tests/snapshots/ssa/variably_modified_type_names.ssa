@@ -59,7 +59,7 @@ fn ent_pc=1 n_params=2 variadic=false locals=6
     v49  BinopI { op=add, lhs=v12, rhs_imm=16 }           -> -
     v50  BinopI { op=add, lhs=v12, rhs_imm=24 }           -> -
     v51  LoadLocal { off=-6, disp=24, kind=I32 }          -> -
-    v52  Imm(0)                                           -> -
+    v52  Imm(0)                                           -> - [cmp32]
     terminator Jmp(b3)   (exit_acc=v52)
   block 3  start_pc=0
     v56  Imm(0)                                           -> -

@@ -481,15 +481,15 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v499 Imm(0)                                           -> -
     v500 Extend { value=v486, kind=I32 }                  -> -
     v501 Imm(0)                                           -> -
-    v502 BinopI { op=eq, lhs=v486, rhs_imm=120 }          -> x0
+    v502 BinopI { op=eq, lhs=v486, rhs_imm=120 }          -> x0 [cmp32]
     v503 Imm(0)                                           -> -
     v504 Imm(0)                                           -> -
     terminator Bz { cond=v502, target=b10, fall=b7 }   (exit_acc=v502)
   block 7  start_pc=0
     v58  LocalAddr(-39)                                   -> x0
     v59  BinopI { op=and, lhs=v58, rhs_imm=15 }           -> x0
-    v60  BinopI { op=eq, lhs=v59, rhs_imm=0 }             -> -
-    v61  BinopI { op=ne, lhs=v60, rhs_imm=0 }             -> -
+    v60  BinopI { op=eq, lhs=v59, rhs_imm=0 }             -> - [cmp32]
+    v61  BinopI { op=ne, lhs=v60, rhs_imm=0 }             -> - [cmp32]
     v62  Imm(0)                                           -> -
     v63  Imm(0)                                           -> -
     v64  Imm(0)                                           -> -

@@ -13,16 +13,16 @@ fn ent_pc=5 n_params=0 variadic=false locals=14
     v7   InlineAsm { template="xchgl %0, %P1", ops=2, args=[v6, v3] } -> x0
     v8   BinopI { op=and, lhs=v7, rhs_imm=4294967295 }    -> -
     v9   BinopI { op=and, lhs=v7, rhs_imm=4294967295 }    -> -
-    v10  BinopI { op=ne, lhs=v7, rhs_imm=5 }              -> x0
+    v10  BinopI { op=ne, lhs=v7, rhs_imm=5 }              -> x0 [cmp32]
     v11  BinopI { op=and, lhs=v10, rhs_imm=4294967295 }   -> -
-    v12  BinopI { op=ne, lhs=v7, rhs_imm=5 }              -> -
+    v12  BinopI { op=ne, lhs=v7, rhs_imm=5 }              -> - [cmp32]
     v13  Imm(0)                                           -> -
     terminator Bnz { cond=v10, target=b2, fall=b1 }   (exit_acc=v12)
   block 1  start_pc=0
     v14  LoadLocal { off=-14, kind=U32 }                  -> x0
-    v15  BinopI { op=ne, lhs=v14, rhs_imm=7 }             -> x0
+    v15  BinopI { op=ne, lhs=v14, rhs_imm=7 }             -> x0 [cmp32]
     v16  BinopI { op=and, lhs=v15, rhs_imm=4294967295 }   -> -
-    v17  BinopI { op=ne, lhs=v14, rhs_imm=7 }             -> -
+    v17  BinopI { op=ne, lhs=v14, rhs_imm=7 }             -> - [cmp32]
     v18  Imm(0)                                           -> -
     v19  Imm(0)                                           -> -
     v20  Imm(0)                                           -> -
@@ -44,7 +44,7 @@ fn ent_pc=5 n_params=0 variadic=false locals=14
     v32  LocalAddr(-8)                                    -> -
     v33  Imm(0)                                           -> -
     v34  LoadLocal { off=-8, kind=I8 }                    -> x0
-    v35  BinopI { op=ne, lhs=v34, rhs_imm=3 }             -> x0
+    v35  BinopI { op=ne, lhs=v34, rhs_imm=3 }             -> x0 [cmp32]
     terminator Bz { cond=v35, target=b5, fall=b4 }   (exit_acc=v35)
   block 4  start_pc=0
     v36  Imm(2)                                           -> x0

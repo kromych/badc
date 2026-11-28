@@ -35,7 +35,7 @@ fn ent_pc=0 n_params=8 variadic=false locals=0
     v28  AtomicRmw { op=Add, addr=v15, value=v27, width=8, order=SeqCst } -> x2
     v29  Imm(0)                                           -> -
     v30  Extend { value=v19, kind=I32 }                   -> -
-    v31  BinopI { op=ne, lhs=v19, rhs_imm=0 }             -> -
+    v31  BinopI { op=ne, lhs=v19, rhs_imm=0 }             -> - [cmp32]
     terminator Bz { cond=v19, target=b3, fall=b2 }   (exit_acc=v19)
   block 2  start_pc=0
     v32  Imm(1)                                           -> x0

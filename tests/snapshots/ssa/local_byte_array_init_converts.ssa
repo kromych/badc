@@ -33,17 +33,17 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
     v29  Extend { value=v22, kind=I32 }                   -> -
     v30  Binop { op=add, lhs=v1, rhs=v22 }                -> -
     v31  LoadIndexed { base=v1, index=v22, scale=1, kind=U8 } -> x6
-    v32  BinopI { op=eq, lhs=v22, rhs_imm=1 }             -> -
+    v32  BinopI { op=eq, lhs=v22, rhs_imm=1 }             -> - [cmp32]
     v33  Imm(1)                                           -> x7
-    v34  BinopI { op=eq, lhs=v22, rhs_imm=1 }             -> x8
+    v34  BinopI { op=eq, lhs=v22, rhs_imm=1 }             -> x8 [cmp32]
     v35  Select { cond=v34, a=v20, b=v33, kind=I64 }      -> x7
     terminator Jmp(b2)
   block 2  start_pc=0
     v100 Copy { value=v35, fp=false }                     -> -
     v101 Imm(0)                                           -> -
-    v102 Binop { op=ne, lhs=v31, rhs=v35 }                -> x6
+    v102 Binop { op=ne, lhs=v31, rhs=v35 }                -> x6 [cmp32]
     v103 BinopI { op=and, lhs=v102, rhs_imm=4294967295 }  -> -
-    v104 Binop { op=ne, lhs=v31, rhs=v35 }                -> -
+    v104 Binop { op=ne, lhs=v31, rhs=v35 }                -> - [cmp32]
     terminator Bz { cond=v102, target=b3, fall=b6 }   (exit_acc=v104)
   block 3  start_pc=0
     v25  Extend { value=v22, kind=I32 }                   -> -
@@ -53,7 +53,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=1
   block 4  start_pc=0
     v22  Phi { incoming=[b0:v20, b3:v26], kind=I64 }      -> x0
     v23  Extend { value=v22, kind=I32 }                   -> -
-    v24  BinopI { op=lt, lhs=v22, rhs_imm=5 }             -> x6
+    v24  BinopI { op=lt, lhs=v22, rhs_imm=5 }             -> x6 [cmp32]
     terminator Bz { cond=v24, target=b5, fall=b1 }   (exit_acc=v24)
   block 5  start_pc=0
     v36  Imm(0)                                           -> -

@@ -334,7 +334,7 @@ fn ent_pc=6 n_params=0 variadic=false locals=0
     v328 Imm(0)                                           -> -
     v329 ImmData(16)                                      -> -
     v330 Load { addr=v329, disp=0, kind=I32 pc_rel }      -> x0
-    v331 BinopI { op=eq, lhs=v330, rhs_imm=0 }            -> -
+    v331 BinopI { op=eq, lhs=v330, rhs_imm=0 }            -> - [cmp32]
     terminator Bnz { cond=v330, target=b2, fall=b1 }   (low word)   (exit_acc=v331)
   block 1  start_pc=0
     v683 ImmData(1)                                       -> -

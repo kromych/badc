@@ -26,7 +26,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v20  ImmData(16)                                      -> -
     v21  BinopI { op=add, lhs=v1, rhs_imm=36 }            -> -
     v22  Load { addr=v1, disp=36, kind=I32 pc_rel }       -> x0
-    v23  BinopI { op=ne, lhs=v22, rhs_imm=21 }            -> x0
+    v23  BinopI { op=ne, lhs=v22, rhs_imm=21 }            -> x0 [cmp32]
     terminator Bz { cond=v23, target=b2, fall=b1 }   (exit_acc=v23)
   block 1  start_pc=0
     v24  Imm(1)                                           -> x0
@@ -36,7 +36,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v26  ImmData(64)                                      -> -
     v27  BinopI { op=add, lhs=v8, rhs_imm=92 }            -> -
     v28  Load { addr=v8, disp=92, kind=I32 pc_rel }       -> x0
-    v29  BinopI { op=ne, lhs=v28, rhs_imm=99 }            -> x0
+    v29  BinopI { op=ne, lhs=v28, rhs_imm=99 }            -> x0 [cmp32]
     terminator Bz { cond=v29, target=b4, fall=b3 }   (exit_acc=v29)
   block 3  start_pc=0
     v30  Imm(2)                                           -> x0
@@ -45,7 +45,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=0
     v31  Imm(0)                                           -> -
     v32  ImmData(16)                                      -> -
     v33  Load { addr=v1, disp=0, kind=I32 pc_rel }        -> -
-    v34  Imm(0)                                           -> -
+    v34  Imm(0)                                           -> - [cmp32]
     terminator Jmp(b5)   (exit_acc=v34)
   block 5  start_pc=0
     v36  Imm(0)                                           -> x0

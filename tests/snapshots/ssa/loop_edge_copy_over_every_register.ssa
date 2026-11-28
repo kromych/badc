@@ -1910,7 +1910,7 @@ fn ent_pc=0 n_params=3 variadic=false locals=0
     v247 Phi { incoming=[b0:v229, b1:v1902], kind=I64 }   -> [spill 10]
     v248 Extend { value=v247, kind=I32 }                  -> -
     v249 Copy { value=v247, fp=false }                    -> [spill 10]
-    v250 BinopI { op=lt, lhs=v249, rhs_imm=10 }           -> x10
+    v250 BinopI { op=lt, lhs=v249, rhs_imm=10 }           -> x10 [cmp32]
     terminator Bz { cond=v250, target=b3, fall=b1 }   (exit_acc=v250)
   block 3  start_pc=0
     v1904 Imm(0)                                           -> -

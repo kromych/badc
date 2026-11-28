@@ -31,7 +31,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=64
     v23  Imm(263)                                         -> -
     v24  BinopI { op=add, lhs=v22, rhs_imm=263 }          -> -
     v25  LoadLocal { off=-64, disp=263, kind=I8 }         -> x0
-    v26  BinopI { op=ne, lhs=v25, rhs_imm=48 }            -> x0
+    v26  BinopI { op=ne, lhs=v25, rhs_imm=48 }            -> x0 [cmp32]
     v27  Imm(0)                                           -> -
     v28  Imm(0)                                           -> -
     v29  Imm(0)                                           -> -
@@ -45,7 +45,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=64
     v33  Imm(156)                                         -> -
     v34  BinopI { op=add, lhs=v22, rhs_imm=156 }          -> -
     v35  LoadLocal { off=-64, disp=156, kind=I8 }         -> x0
-    v36  BinopI { op=ne, lhs=v35, rhs_imm=53 }            -> x0
+    v36  BinopI { op=ne, lhs=v35, rhs_imm=53 }            -> x0 [cmp32]
     v37  Extend { value=v36, kind=I32 }                   -> -
     v38  LifetimeEnd(-64)                                 -> -
     terminator Return(v36)   (exit_acc=v36)

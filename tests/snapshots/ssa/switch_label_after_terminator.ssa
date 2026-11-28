@@ -9,13 +9,13 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v3   Imm(0)                                           -> -
     v4   Imm(0)                                           -> -
     v5   Imm(0)                                           -> -
-    v6   BinopI { op=lt, lhs=v1, rhs_imm=2 }              -> x0
+    v6   BinopI { op=lt, lhs=v1, rhs_imm=2 }              -> x0 [cmp32]
     terminator Bnz { cond=v6, target=b7, fall=b1 }   (exit_acc=v6)
   block 1  start_pc=0
-    v13  BinopI { op=lt, lhs=v1, rhs_imm=3 }              -> x0
+    v13  BinopI { op=lt, lhs=v1, rhs_imm=3 }              -> x0 [cmp32]
     terminator Bnz { cond=v13, target=b6, fall=b2 }   (exit_acc=v13)
   block 2  start_pc=0
-    v17  BinopI { op=eq, lhs=v1, rhs_imm=3 }              -> x0
+    v17  BinopI { op=eq, lhs=v1, rhs_imm=3 }              -> x0 [cmp32]
     terminator Bnz { cond=v17, target=b4, fall=b3 }   (exit_acc=v17)
   block 3  start_pc=0
     v11  Imm(-1)                                          -> x0
@@ -37,7 +37,7 @@ fn ent_pc=0 n_params=1 variadic=false locals=0
     v16  Imm(0)                                           -> -
     terminator Jmp(b5)   (exit_acc=v15)
   block 7  start_pc=0
-    v12  BinopI { op=eq, lhs=v1, rhs_imm=1 }              -> x0
+    v12  BinopI { op=eq, lhs=v1, rhs_imm=1 }              -> x0 [cmp32]
     terminator Bnz { cond=v12, target=b8, fall=b3 }   (exit_acc=v12)
   block 8  start_pc=0
     v7   Imm(1)                                           -> x0

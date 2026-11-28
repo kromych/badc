@@ -49,60 +49,60 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v26  BinopI { op=and, lhs=v14, rhs_imm=4294967295 }   -> -
     v27  BinopI { op=xor, lhs=v14, rhs_imm=81 }           -> -
     v28  BinopI { op=and, lhs=v27, rhs_imm=4294967295 }   -> -
-    v29  BinopI { op=eq, lhs=v14, rhs_imm=81 }            -> x6
+    v29  BinopI { op=eq, lhs=v14, rhs_imm=81 }            -> x6 [cmp32]
     v30  ImmData(4)                                       -> x2
     v31  Extend { value=v3, kind=I32 }                    -> -
     v32  BinopI { op=shl, lhs=v3, rhs_imm=2 }             -> -
     v33  Binop { op=add, lhs=v30, rhs=v32 }               -> -
     v34  LoadIndexed { base=v30, index=v3, scale=4, kind=U32 } -> x1
-    v35  BinopI { op=eq, lhs=v34, rhs_imm=81 }            -> x7
-    v36  Binop { op=ne, lhs=v29, rhs=v35 }                -> x6
+    v35  BinopI { op=eq, lhs=v34, rhs_imm=81 }            -> x7 [cmp32]
+    v36  Binop { op=ne, lhs=v29, rhs=v35 }                -> x6 [cmp32]
     terminator Bz { cond=v36, target=b2, fall=b15 }   (exit_acc=v36)
   block 2  start_pc=0
     v39  BinopI { op=and, lhs=v14, rhs_imm=4294967295 }   -> -
     v40  BinopI { op=xor, lhs=v14, rhs_imm=-1 }           -> -
     v41  BinopI { op=and, lhs=v40, rhs_imm=4294967295 }   -> -
-    v42  BinopI { op=eq, lhs=v14, rhs_imm=-1 }            -> x6
+    v42  BinopI { op=eq, lhs=v14, rhs_imm=-1 }            -> x6 [cmp32]
     v43  ImmData(4)                                       -> -
     v44  Extend { value=v3, kind=I32 }                    -> -
     v45  BinopI { op=shl, lhs=v3, rhs_imm=2 }             -> -
     v46  Binop { op=add, lhs=v30, rhs=v45 }               -> -
     v47  LoadIndexed { base=v30, index=v3, scale=4, kind=U32 } -> -
-    v48  BinopI { op=eq, lhs=v34, rhs_imm=4294967295 }    -> x7
-    v49  Binop { op=ne, lhs=v42, rhs=v48 }                -> x6
+    v48  BinopI { op=eq, lhs=v34, rhs_imm=4294967295 }    -> x7 [cmp32]
+    v49  Binop { op=ne, lhs=v42, rhs=v48 }                -> x6 [cmp32]
     terminator Bz { cond=v49, target=b3, fall=b14 }   (exit_acc=v49)
   block 3  start_pc=0
     v51  Imm(0)                                           -> -
     v52  BinopI { op=xor, lhs=v23, rhs_imm=4294967295 }   -> -
     v53  BinopI { op=and, lhs=v52, rhs_imm=4294967295 }   -> -
-    v54  BinopI { op=eq, lhs=v23, rhs_imm=4294967295 }    -> x6
+    v54  BinopI { op=eq, lhs=v23, rhs_imm=4294967295 }    -> x6 [cmp32]
     v55  ImmData(4)                                       -> -
     v56  Extend { value=v3, kind=I32 }                    -> -
     v57  BinopI { op=shl, lhs=v3, rhs_imm=2 }             -> -
     v58  Binop { op=add, lhs=v30, rhs=v57 }               -> -
     v59  LoadIndexed { base=v30, index=v3, scale=4, kind=U32 } -> -
-    v60  BinopI { op=eq, lhs=v34, rhs_imm=4294967295 }    -> x1
-    v61  Binop { op=ne, lhs=v54, rhs=v60 }                -> x1
+    v60  BinopI { op=eq, lhs=v34, rhs_imm=4294967295 }    -> x1 [cmp32]
+    v61  Binop { op=ne, lhs=v54, rhs=v60 }                -> x1 [cmp32]
     terminator Bz { cond=v61, target=b4, fall=b13 }   (exit_acc=v61)
   block 4  start_pc=0
     v63  BinopI { op=and, lhs=v14, rhs_imm=4294967295 }   -> -
     v64  Imm(0)                                           -> -
-    v65  Binop { op=ne, lhs=v14, rhs=v23 }                -> x1
+    v65  Binop { op=ne, lhs=v14, rhs=v23 }                -> x1 [cmp32]
     v66  BinopI { op=and, lhs=v65, rhs_imm=4294967295 }   -> -
-    v67  Binop { op=ne, lhs=v14, rhs=v23 }                -> -
+    v67  Binop { op=ne, lhs=v14, rhs=v23 }                -> - [cmp32]
     terminator Bz { cond=v65, target=b5, fall=b12 }   (exit_acc=v67)
   block 5  start_pc=0
     v69  Imm(0)                                           -> -
     v70  BinopI { op=xor, lhs=v23, rhs_imm=2147483648 }   -> -
     v71  BinopI { op=and, lhs=v70, rhs_imm=4294967295 }   -> -
-    v72  BinopI { op=eq, lhs=v23, rhs_imm=2147483648 }    -> x1
+    v72  BinopI { op=eq, lhs=v23, rhs_imm=2147483648 }    -> x1 [cmp32]
     v73  ImmData(4)                                       -> -
     v74  Extend { value=v3, kind=I32 }                    -> -
     v75  BinopI { op=shl, lhs=v3, rhs_imm=2 }             -> -
     v76  Binop { op=add, lhs=v30, rhs=v75 }               -> -
     v77  LoadIndexed { base=v30, index=v3, scale=4, kind=U32 } -> x0
-    v78  BinopI { op=eq, lhs=v77, rhs_imm=2147483648 }    -> x2
-    v79  Binop { op=ne, lhs=v72, rhs=v78 }                -> x1
+    v78  BinopI { op=eq, lhs=v77, rhs_imm=2147483648 }    -> x2 [cmp32]
+    v79  Binop { op=ne, lhs=v72, rhs=v78 }                -> x1 [cmp32]
     terminator Bz { cond=v79, target=b6, fall=b11 }   (exit_acc=v79)
   block 6  start_pc=0
     v81  BinopI { op=and, lhs=v14, rhs_imm=4294967295 }   -> -
@@ -110,14 +110,14 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v83  Imm(-2147483648)                                 -> -
     v84  BinopI { op=xor, lhs=v14, rhs_imm=-2147483648 }  -> -
     v85  BinopI { op=and, lhs=v84, rhs_imm=4294967295 }   -> -
-    v86  BinopI { op=eq, lhs=v14, rhs_imm=-2147483648 }   -> x1
+    v86  BinopI { op=eq, lhs=v14, rhs_imm=-2147483648 }   -> x1 [cmp32]
     v87  ImmData(4)                                       -> -
     v88  Extend { value=v3, kind=I32 }                    -> -
     v89  BinopI { op=shl, lhs=v3, rhs_imm=2 }             -> -
     v90  Binop { op=add, lhs=v30, rhs=v89 }               -> -
     v91  LoadIndexed { base=v30, index=v3, scale=4, kind=U32 } -> -
-    v92  BinopI { op=eq, lhs=v77, rhs_imm=2147483648 }    -> x0
-    v93  Binop { op=ne, lhs=v86, rhs=v92 }                -> x0
+    v92  BinopI { op=eq, lhs=v77, rhs_imm=2147483648 }    -> x0 [cmp32]
+    v93  Binop { op=ne, lhs=v86, rhs=v92 }                -> x0 [cmp32]
     terminator Bz { cond=v93, target=b7, fall=b10 }   (exit_acc=v93)
   block 7  start_pc=0
     v6   Extend { value=v3, kind=I32 }                    -> -
@@ -127,7 +127,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
   block 8  start_pc=0
     v3   Phi { incoming=[b0:v1, b7:v7], kind=I64 }        -> x3
     v4   Extend { value=v3, kind=I32 }                    -> -
-    v5   BinopI { op=lt, lhs=v3, rhs_imm=6 }              -> x0
+    v5   BinopI { op=lt, lhs=v3, rhs_imm=6 }              -> x0 [cmp32]
     terminator Bz { cond=v5, target=b9, fall=b1 }   (exit_acc=v5)
   block 9  start_pc=0
     v37  Imm(0)                                           -> x0

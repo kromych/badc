@@ -25,7 +25,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v19  BinopI { op=add, lhs=v11, rhs_imm=5 }            -> x0
     v20  Extend { value=v19, kind=I32, nsw }              -> -
     v21  Extend { value=v19, kind=I32 }                   -> -
-    v22  BinopI { op=ne, lhs=v19, rhs_imm=105 }           -> x0
+    v22  BinopI { op=ne, lhs=v19, rhs_imm=105 }           -> x0 [cmp32]
     terminator Bz { cond=v22, target=b2, fall=b1 }   (exit_acc=v22)
   block 1  start_pc=0
     v23  Imm(2)                                           -> x0
@@ -35,7 +35,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v25  Imm(0)                                           -> -
     v26  ImmData(4)                                       -> -
     v27  Load { addr=v10, disp=0, kind=I32 pc_rel }       -> -
-    v28  Imm(0)                                           -> -
+    v28  Imm(0)                                           -> - [cmp32]
     terminator Jmp(b3)   (exit_acc=v28)
   block 3  start_pc=0
     v30  ImmData(12)                                      -> -
@@ -45,7 +45,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v34  Extend { value=v33, kind=I32, nsw }              -> -
     v35  Extend { value=v33, kind=I32 }                   -> -
     v36  Extend { value=v33, kind=I32 }                   -> -
-    v37  BinopI { op=ne, lhs=v33, rhs_imm=64 }            -> x0
+    v37  BinopI { op=ne, lhs=v33, rhs_imm=64 }            -> x0 [cmp32]
     terminator Bz { cond=v37, target=b5, fall=b4 }   (exit_acc=v37)
   block 4  start_pc=0
     v38  Imm(5)                                           -> x0
@@ -60,7 +60,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=0
     v45  Extend { value=v44, kind=I32, nsw }              -> -
     v46  Extend { value=v44, kind=I32 }                   -> -
     v47  Extend { value=v44, kind=I32 }                   -> -
-    v48  BinopI { op=ne, lhs=v44, rhs_imm=80 }            -> x0
+    v48  BinopI { op=ne, lhs=v44, rhs_imm=80 }            -> x0 [cmp32]
     terminator Bz { cond=v48, target=b7, fall=b6 }   (exit_acc=v48)
   block 6  start_pc=0
     v49  Imm(6)                                           -> x0

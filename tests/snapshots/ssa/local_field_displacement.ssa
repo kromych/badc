@@ -80,7 +80,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=516
     v44  LocalAddr(-512)                                  -> -
     v45  Imm(0)                                           -> -
     v46  LoadLocal { off=-512, kind=I8, volatile }        -> x0
-    v47  BinopI { op=ne, lhs=v46, rhs_imm=1 }             -> x0
+    v47  BinopI { op=ne, lhs=v46, rhs_imm=1 }             -> x0 [cmp32]
     terminator Bz { cond=v47, target=b2, fall=b1 }   (exit_acc=v47)
   block 1  start_pc=0
     v48  Imm(1)                                           -> x0

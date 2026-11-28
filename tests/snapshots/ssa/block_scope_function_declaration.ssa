@@ -19,7 +19,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 1  start_pc=0
     v63  Load { addr=v52, disp=0, kind=I8 }               -> -
     v64  Load { addr=v53, disp=0, kind=I8 }               -> x6
-    v65  Binop { op=eq, lhs=v54, rhs=v64 }                -> x2
+    v65  Binop { op=eq, lhs=v54, rhs=v64 }                -> x2 [cmp32]
     v66  Imm(0)                                           -> -
     terminator Bz { cond=v65, target=b4, fall=b2 }   (exit_acc=v65)
   block 2  start_pc=0
@@ -34,10 +34,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 4  start_pc=0
     v57  Load { addr=v52, disp=0, kind=I8 }               -> x0
     v58  Load { addr=v53, disp=0, kind=I8 }               -> x1
-    v59  Binop { op=eq, lhs=v57, rhs=v58 }                -> x0
+    v59  Binop { op=eq, lhs=v57, rhs=v58 }                -> x0 [cmp32]
     v60  Extend { value=v59, kind=I32 }                   -> -
     v61  Extend { value=v59, kind=I32 }                   -> -
-    v62  BinopI { op=eq, lhs=v59, rhs_imm=0 }             -> -
+    v62  BinopI { op=eq, lhs=v59, rhs_imm=0 }             -> - [cmp32]
     terminator Bnz { cond=v59, target=b6, fall=b5 }   (low word)   (exit_acc=v62)
   block 5  start_pc=0
     v13  Imm(2)                                           -> x0
@@ -59,7 +59,7 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 7  start_pc=0
     v81  Load { addr=v67, disp=0, kind=I8 }               -> -
     v82  Load { addr=v68, disp=0, kind=I8 }               -> x6
-    v83  Binop { op=eq, lhs=v69, rhs=v82 }                -> x2
+    v83  Binop { op=eq, lhs=v69, rhs=v82 }                -> x2 [cmp32]
     v84  Imm(0)                                           -> -
     terminator Bz { cond=v83, target=b10, fall=b8 }   (exit_acc=v83)
   block 8  start_pc=0
@@ -74,10 +74,10 @@ fn ent_pc=1 n_params=0 variadic=false locals=0
   block 10  start_pc=0
     v72  Load { addr=v67, disp=0, kind=I8 }               -> x0
     v73  Load { addr=v68, disp=0, kind=I8 }               -> x1
-    v74  Binop { op=eq, lhs=v72, rhs=v73 }                -> x0
+    v74  Binop { op=eq, lhs=v72, rhs=v73 }                -> x0 [cmp32]
     v75  Extend { value=v74, kind=I32 }                   -> -
     v76  Extend { value=v74, kind=I32 }                   -> -
-    v77  BinopI { op=eq, lhs=v74, rhs_imm=0 }             -> -
+    v77  BinopI { op=eq, lhs=v74, rhs_imm=0 }             -> - [cmp32]
     v78  Imm(0)                                           -> -
     v79  Imm(0)                                           -> -
     v80  Imm(0)                                           -> -

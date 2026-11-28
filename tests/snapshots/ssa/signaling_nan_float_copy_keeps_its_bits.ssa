@@ -23,7 +23,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v17  BinopI { op=and, lhs=v14, rhs_imm=4294967295 }   -> -
     v18  Imm(0)                                           -> -
     v19  Imm(2139095041)                                  -> x1
-    v20  Binop { op=ne, lhs=v14, rhs=v19 }                -> x0
+    v20  Binop { op=ne, lhs=v14, rhs=v19 }                -> x0 [cmp32]
     v21  Imm(0)                                           -> -
     terminator Bnz { cond=v20, target=b2, fall=b1 }   (exit_acc=v20)
   block 1  start_pc=0
@@ -89,9 +89,9 @@ fn ent_pc=0 n_params=0 variadic=false locals=4
     v71  Imm(0)                                           -> -
     v72  Imm(0)                                           -> -
     v73  BinopI { op=and, lhs=v70, rhs_imm=4294967295 }   -> -
-    v74  BinopI { op=ne, lhs=v70, rhs_imm=2143289345 }    -> x0
+    v74  BinopI { op=ne, lhs=v70, rhs_imm=2143289345 }    -> x0 [cmp32]
     v75  BinopI { op=and, lhs=v74, rhs_imm=4294967295 }   -> -
-    v76  BinopI { op=eq, lhs=v70, rhs_imm=2143289345 }    -> -
+    v76  BinopI { op=eq, lhs=v70, rhs_imm=2143289345 }    -> - [cmp32]
     v77  Imm(0)                                           -> -
     terminator Bnz { cond=v74, target=b10, fall=b7 }   (exit_acc=v76)
   block 7  start_pc=0

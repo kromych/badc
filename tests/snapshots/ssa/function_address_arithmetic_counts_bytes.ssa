@@ -36,7 +36,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v12  ImmCode(ent_pc=1)                                -> -
     v13  Binop { op=sub, lhs=v11, rhs=v1 }                -> x1
     v14  BinopI { op=ne, lhs=v13, rhs_imm=-2 }            -> x1
-    v15  BinopI { op=ne, lhs=v14, rhs_imm=0 }             -> -
+    v15  BinopI { op=ne, lhs=v14, rhs_imm=0 }             -> - [cmp32]
     v16  Imm(0)                                           -> -
     v17  Imm(0)                                           -> -
     v18  Imm(0)                                           -> -
@@ -49,7 +49,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v23  ImmCode(ent_pc=1)                                -> -
     v24  Binop { op=sub, lhs=v22, rhs=v1 }                -> x1
     v25  BinopI { op=ne, lhs=v24, rhs_imm=3 }             -> x1
-    v26  BinopI { op=ne, lhs=v25, rhs_imm=0 }             -> -
+    v26  BinopI { op=ne, lhs=v25, rhs_imm=0 }             -> - [cmp32]
     v27  Imm(0)                                           -> -
     v28  Imm(0)                                           -> -
     v29  Imm(0)                                           -> -
@@ -62,7 +62,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v34  ImmCode(ent_pc=1)                                -> -
     v35  Binop { op=sub, lhs=v33, rhs=v1 }                -> x1
     v36  BinopI { op=ne, lhs=v35, rhs_imm=1 }             -> x1
-    v37  BinopI { op=ne, lhs=v36, rhs_imm=0 }             -> -
+    v37  BinopI { op=ne, lhs=v36, rhs_imm=0 }             -> - [cmp32]
     v38  Imm(0)                                           -> -
     v39  Imm(0)                                           -> -
     v40  Imm(0)                                           -> -
@@ -95,7 +95,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v59  ImmCode(ent_pc=1)                                -> -
     v60  Binop { op=sub, lhs=v58, rhs=v1 }                -> x1
     v61  BinopI { op=ne, lhs=v60, rhs_imm=3 }             -> x1
-    v62  BinopI { op=ne, lhs=v61, rhs_imm=0 }             -> -
+    v62  BinopI { op=ne, lhs=v61, rhs_imm=0 }             -> - [cmp32]
     v63  Imm(0)                                           -> -
     v64  Imm(0)                                           -> -
     v65  Imm(0)                                           -> -
@@ -129,7 +129,7 @@ fn ent_pc=3 n_params=0 variadic=false locals=0
     v85  ImmCode(ent_pc=1)                                -> x1
     v86  Binop { op=sub, lhs=v84, rhs=v85 }               -> x0
     v87  BinopI { op=ne, lhs=v86, rhs_imm=6 }             -> x0
-    v88  BinopI { op=ne, lhs=v87, rhs_imm=0 }             -> -
+    v88  BinopI { op=ne, lhs=v87, rhs_imm=0 }             -> - [cmp32]
     v89  Imm(0)                                           -> -
     v90  Imm(0)                                           -> -
     v91  Imm(0)                                           -> -

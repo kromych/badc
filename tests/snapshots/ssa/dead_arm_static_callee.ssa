@@ -28,10 +28,10 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v4   Store { addr=v1, disp=0, value=v3, kind=I32 pc_rel } -> -
     v5   ImmData(16)                                      -> -
     v6   Extend { value=v3, kind=I32 }                    -> x0
-    v7   BinopI { op=eq, lhs=v6, rhs_imm=10 }             -> -
+    v7   BinopI { op=eq, lhs=v6, rhs_imm=10 }             -> - [cmp32]
     v8   Imm(0)                                           -> x1
     v9   Imm(1)                                           -> x2
-    v10  BinopI { op=eq, lhs=v6, rhs_imm=10 }             -> x0
+    v10  BinopI { op=eq, lhs=v6, rhs_imm=10 }             -> x0 [cmp32]
     v11  Select { cond=v10, a=v8, b=v9, kind=I64 }        -> x0
     terminator Jmp(b1)
   block 1  start_pc=0

@@ -23,7 +23,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
     v17  Imm(0)                                           -> -
     v18  BinopI { op=and, lhs=v14, rhs_imm=65535 }        -> -
     v19  BinopI { op=and, lhs=v3, rhs_imm=65535 }         -> -
-    v20  Binop { op=ne, lhs=v14, rhs=v3 }                 -> x0
+    v20  Binop { op=ne, lhs=v14, rhs=v3 }                 -> x0 [cmp32]
     terminator Bz { cond=v20, target=b2, fall=b1 }   (exit_acc=v20)
   block 1  start_pc=0
     v21  ImmData(1)                                       -> -
@@ -35,7 +35,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=1
   block 2  start_pc=0
     v26  BinopI { op=and, lhs=v3, rhs_imm=65535 }         -> -
     v27  BinopI { op=and, lhs=v3, rhs_imm=4095 }          -> x0
-    v28  BinopI { op=ne, lhs=v27, rhs_imm=895 }           -> x0
+    v28  BinopI { op=ne, lhs=v27, rhs_imm=895 }           -> x0 [cmp32]
     terminator Bz { cond=v28, target=b4, fall=b3 }   (exit_acc=v28)
   block 3  start_pc=0
     v29  ImmData(24)                                      -> -

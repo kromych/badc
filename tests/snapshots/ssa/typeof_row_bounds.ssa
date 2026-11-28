@@ -257,7 +257,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     v251 Imm(12)                                          -> -
     v252 BinopI { op=add, lhs=v189, rhs_imm=44 }          -> -
     v253 LoadLocal { off=-6, disp=44, kind=I32 }          -> -
-    v254 Imm(0)                                           -> -
+    v254 Imm(0)                                           -> - [cmp32]
     v255 Imm(0)                                           -> -
     terminator Jmp(b1)   (exit_acc=v254)
   block 1  start_pc=0
@@ -266,7 +266,7 @@ fn ent_pc=0 n_params=0 variadic=false locals=6
     v258 BinopI { op=add, lhs=v189, rhs_imm=16 }          -> -
     v259 Imm(0)                                           -> -
     v260 LoadLocal { off=-6, disp=16, kind=I32 }          -> x0
-    v261 BinopI { op=ne, lhs=v260, rhs_imm=10 }           -> x0
+    v261 BinopI { op=ne, lhs=v260, rhs_imm=10 }           -> x0 [cmp32]
     v262 Imm(0)                                           -> -
     v263 Imm(0)                                           -> -
     v264 Imm(0)                                           -> -

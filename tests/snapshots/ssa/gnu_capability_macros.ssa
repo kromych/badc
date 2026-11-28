@@ -23,7 +23,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     terminator Return(v8)   (exit_acc=v8)
   block 2  start_pc=0
     v15  LoadLocal { off=-9, kind=I8 }                    -> x6
-    v16  BinopI { op=ne, lhs=v15, rhs_imm=1 }             -> x6
+    v16  BinopI { op=ne, lhs=v15, rhs_imm=1 }             -> x6 [cmp32]
     terminator Bz { cond=v16, target=b4, fall=b3 }   (exit_acc=v16)
   block 3  start_pc=0
     v17  Imm(4)                                           -> x0
@@ -40,7 +40,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v26  AtomicRmw { op=Xchg, addr=v3, value=v4, width=1, order=SeqCst } -> x6
     v27  BinopI { op=shl, lhs=v26, rhs_imm=56 }           -> -
     v28  Extend { value=v26, kind=I8 }                    -> x6
-    v29  BinopI { op=eq, lhs=v28, rhs_imm=0 }             -> -
+    v29  BinopI { op=eq, lhs=v28, rhs_imm=0 }             -> - [cmp32]
     terminator Bnz { cond=v28, target=b6, fall=b5 }   (low word)   (exit_acc=v29)
   block 5  start_pc=0
     v30  Imm(5)                                           -> x0
@@ -56,7 +56,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v38  Imm(0)                                           -> -
     v39  AtomicStore { addr=v3, value=v1, width=1, order=SeqCst } -> -
     v40  LoadLocal { off=-9, kind=I8 }                    -> x0
-    v41  BinopI { op=ne, lhs=v40, rhs_imm=0 }             -> -
+    v41  BinopI { op=ne, lhs=v40, rhs_imm=0 }             -> - [cmp32]
     terminator Bz { cond=v40, target=b8, fall=b7 }   (low word)   (exit_acc=v41)
   block 7  start_pc=0
     v42  Imm(6)                                           -> x0
@@ -76,13 +76,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v54  LocalAddr(-8)                                    -> x6
     v55  Imm(2)                                           -> x2
     v56  AtomicCas { addr=v54, expected=v4, desired=v55, width=1, order=SeqCst } -> x0
-    v57  BinopI { op=eq, lhs=v56, rhs_imm=1 }             -> x0
-    v58  BinopI { op=eq, lhs=v57, rhs_imm=0 }             -> -
+    v57  BinopI { op=eq, lhs=v56, rhs_imm=1 }             -> x0 [cmp32]
+    v58  BinopI { op=eq, lhs=v57, rhs_imm=0 }             -> - [cmp32]
     v59  Imm(0)                                           -> -
     terminator Bz { cond=v57, target=b10, fall=b9 }   (low word)   (exit_acc=v58)
   block 9  start_pc=0
     v60  LoadLocal { off=-8, kind=I8 }                    -> x0
-    v61  BinopI { op=ne, lhs=v60, rhs_imm=2 }             -> x0
+    v61  BinopI { op=ne, lhs=v60, rhs_imm=2 }             -> x0 [cmp32]
     v62  Imm(0)                                           -> -
     v63  Imm(0)                                           -> -
     v64  Imm(0)                                           -> -
@@ -101,13 +101,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v73  Imm(1)                                           -> -
     v74  Imm(2)                                           -> -
     v75  AtomicCas { addr=v72, expected=v4, desired=v55, width=2, order=SeqCst } -> x0
-    v76  BinopI { op=eq, lhs=v75, rhs_imm=1 }             -> x0
-    v77  BinopI { op=eq, lhs=v76, rhs_imm=0 }             -> -
+    v76  BinopI { op=eq, lhs=v75, rhs_imm=1 }             -> x0 [cmp32]
+    v77  BinopI { op=eq, lhs=v76, rhs_imm=0 }             -> - [cmp32]
     v78  Imm(0)                                           -> -
     terminator Bz { cond=v76, target=b13, fall=b12 }   (low word)   (exit_acc=v77)
   block 12  start_pc=0
     v79  LoadLocal { off=-7, kind=I16 }                   -> x0
-    v80  BinopI { op=ne, lhs=v79, rhs_imm=2 }             -> x0
+    v80  BinopI { op=ne, lhs=v79, rhs_imm=2 }             -> x0 [cmp32]
     v81  Imm(0)                                           -> -
     v82  Imm(0)                                           -> -
     v83  Imm(0)                                           -> -
@@ -126,13 +126,13 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v92  Imm(1)                                           -> -
     v93  Imm(2)                                           -> -
     v94  AtomicCas { addr=v91, expected=v4, desired=v55, width=4, order=SeqCst } -> x0
-    v95  BinopI { op=eq, lhs=v94, rhs_imm=1 }             -> x0
-    v96  BinopI { op=eq, lhs=v95, rhs_imm=0 }             -> -
+    v95  BinopI { op=eq, lhs=v94, rhs_imm=1 }             -> x0 [cmp32]
+    v96  BinopI { op=eq, lhs=v95, rhs_imm=0 }             -> - [cmp32]
     v97  Imm(0)                                           -> -
     terminator Bz { cond=v95, target=b16, fall=b15 }   (low word)   (exit_acc=v96)
   block 15  start_pc=0
     v98  LoadLocal { off=-6, kind=I32 }                   -> x0
-    v99  BinopI { op=ne, lhs=v98, rhs_imm=2 }             -> x0
+    v99  BinopI { op=ne, lhs=v98, rhs_imm=2 }             -> x0 [cmp32]
     v100 Imm(0)                                           -> -
     v101 Imm(0)                                           -> -
     v102 Imm(0)                                           -> -
@@ -152,7 +152,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v112 Imm(2)                                           -> -
     v113 AtomicCas { addr=v110, expected=v4, desired=v55, width=8, order=SeqCst } -> x0
     v114 BinopI { op=eq, lhs=v113, rhs_imm=1 }            -> x0
-    v115 BinopI { op=eq, lhs=v114, rhs_imm=0 }            -> -
+    v115 BinopI { op=eq, lhs=v114, rhs_imm=0 }            -> - [cmp32]
     v116 Imm(0)                                           -> -
     terminator Bz { cond=v114, target=b19, fall=b18 }   (low word)   (exit_acc=v115)
   block 18  start_pc=0
@@ -206,7 +206,7 @@ fn ent_pc=2 n_params=0 variadic=false locals=9
     v160 BinopI { op=add, lhs=v158, rhs_imm=8 }           -> -
     v161 StoreLocal { off=-2, disp=8, value=v132, kind=I64 } -> -
     v162 AtomicCas16 { addr=v135, expected=v147, desired=v158, order=SeqCst } -> x1
-    v163 BinopI { op=eq, lhs=v162, rhs_imm=0 }            -> -
+    v163 BinopI { op=eq, lhs=v162, rhs_imm=0 }            -> - [cmp32]
     v164 Imm(0)                                           -> -
     terminator Bz { cond=v162, target=b22, fall=b21 }   (low word)   (exit_acc=v163)
   block 21  start_pc=0

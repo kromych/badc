@@ -379,7 +379,7 @@ impl<'a> LdsLinker<'a> {
         for pi in 0..pieces_len {
             match self.outs[oi].pieces[pi].clone() {
                 Piece::Inputs(v) => {
-                    self.place_inputs(oi, &v, start, alloc, lay);
+                    self.place_inputs(&v, start, alloc, lay);
                     if veneer_len > 0 && Some(pi) == last_inputs_pi {
                         lay.move_to(align_up(lay.off, 4), true);
                         lay.push(veneer_len, ChunkSrc::Veneers, true);
@@ -425,14 +425,7 @@ impl<'a> LdsLinker<'a> {
     }
 
     /// Place the input sections of one spec, each at its alignment.
-    fn place_inputs(
-        &mut self,
-        oi: usize,
-        inputs: &[usize],
-        start: u64,
-        alloc: bool,
-        lay: &mut ChunkLayout,
-    ) {
+    fn place_inputs(&mut self, inputs: &[usize], start: u64, alloc: bool, lay: &mut ChunkLayout) {
         for &i in inputs {
             // A merged-away member (not its pool's representative)
             // contributes no bytes and no alignment: its storage lives
@@ -441,7 +434,6 @@ impl<'a> LdsLinker<'a> {
                 && self.pools[pl].rep != i
             {
                 self.placements[i] = Placement {
-                    out: oi,
                     off: lay.off,
                     placed: true,
                 };
@@ -458,7 +450,6 @@ impl<'a> LdsLinker<'a> {
             };
             lay.move_to(align_up(lay.off, a), !nobits);
             self.placements[i] = Placement {
-                out: oi,
                 off: lay.off,
                 placed: true,
             };

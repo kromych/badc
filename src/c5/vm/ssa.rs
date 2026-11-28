@@ -6,8 +6,6 @@
 //! the host-bridge / argv staging / exit-code plumbing lives in
 //! `super::Vm`.
 
-#![allow(dead_code)]
-
 use alloc::format;
 use alloc::string::ToString;
 use alloc::vec::Vec;
@@ -642,20 +640,12 @@ impl Frame<'_> {
             .ok_or_else(|| C5Error::Runtime(format!("vm_ssa: v{v} is not a vector value")))
     }
 
-    fn v128(&self, v: ValueId) -> Result<[u8; 16], C5Error> {
-        Ok(self.vbytes(v)?[..16].try_into().unwrap())
-    }
-
     /// Value `v`, the low `bytes.len()` bytes of the register.
     fn set_vbytes(&mut self, v: ValueId, bytes: &[u8]) {
         let mut b = [0u8; 64];
         b[..bytes.len()].copy_from_slice(bytes);
         self.regs[v as usize] = 0;
         self.vregs.insert(v, b);
-    }
-
-    fn set_v128(&mut self, v: ValueId, bytes: [u8; 16]) {
-        self.set_vbytes(v, &bytes);
     }
 
     /// The link a call at instruction `call` of this frame hands `callee`.
@@ -700,6 +690,7 @@ impl Frame<'_> {
     }
 }
 
+#[cfg(test)]
 /// Single-function entry: wrap `func` in a one-element `Program`
 /// with an empty data segment and a `NullHost`. `Inst::Call` in
 /// this shape fails with a "not found" runtime error because
@@ -711,6 +702,7 @@ pub(super) fn run_ssa(func: &FunctionSsa) -> Result<i64, C5Error> {
     run_program(funcs, &[], &[], func.ent_pc, &mut host, target)
 }
 
+#[cfg(test)]
 /// Multi-function entry: pick the function at `entry_pc` and run
 /// it with no arguments. `Inst::Call` resolves callees through
 /// `funcs`' `ent_pc` lookup; `Inst::ImmData(off)` indexes into
@@ -737,6 +729,7 @@ pub(super) fn run_program<H: Host>(
 /// When `args` is empty both pass through as 0; C99 5.1.2.2.1
 /// allows that shape for a hosted program.
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 pub(super) fn run_program_with_args<H: Host>(
     funcs: &[FunctionSsa],
     data: &[u8],
@@ -898,12 +891,14 @@ fn stage_argv(data: &[u8], args: &[alloc::string::String]) -> (Vec<u8>, i64, i64
     (out, argc as i64, argv_addr as i64)
 }
 
+#[cfg(test)]
 /// Host trait stand-in for SSA-VM call sites that don't route
 /// IO -- the regression tests for pure-math fixtures. Returns
 /// EBADF-shaped errors on every syscall so a stray call surfaces
 /// loudly.
 struct NullHost;
 
+#[cfg(test)]
 impl Host for NullHost {
     fn read(&mut self, _fd: i64, _buf: &mut [u8]) -> i64 {
         -1

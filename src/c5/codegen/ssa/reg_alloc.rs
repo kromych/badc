@@ -3754,6 +3754,10 @@ fn check_allocation(
         first.borrow_mut().get_or_insert(msg);
     };
     let covered = |v: usize| liveness.in_cfg(v as ValueId);
+    // An instruction the emit skips writes no register.
+    let skipped = |v: usize| {
+        super::emit_common::is_dead_pure_counts(func, &func.insts[v], v as ValueId, use_counts)
+    };
 
     // Block coverage: a value no block's `inst_range` covers must have no
     // reader inside one.
@@ -3922,22 +3926,11 @@ fn check_allocation(
             });
         }
         for block in &func.blocks {
-            match &block.terminator {
-                Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
-                    if (*cond as usize) < used.len() {
-                        used[*cond as usize] = true;
-                    }
+            block.terminator.for_each_operand(|op| {
+                if (op as usize) < used.len() {
+                    used[op as usize] = true;
                 }
-                Terminator::Return(v) if (*v as usize) < used.len() => {
-                    used[*v as usize] = true;
-                }
-                Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
-                    if (*target as usize) < used.len() =>
-                {
-                    used[*target as usize] = true;
-                }
-                _ => {}
-            }
+            });
         }
         let plan = param_incoming_plan(func, target);
         // (value index, home, incoming register) for each used integer
@@ -3968,7 +3961,8 @@ fn check_allocation(
             if batched && run.contains(&vid) {
                 continue;
             }
-            for v in (0..vid).filter(|&v| covered(v) && produces_value(&func.insts[v])) {
+            let writes = |v: &usize| covered(*v) && produces_value(&func.insts[*v]) && !skipped(*v);
+            for v in (0..vid).filter(writes) {
                 let home = places.get(v).copied().unwrap_or(Place::None);
                 if matches!(home, Place::IntReg(r) if r == incoming) {
                     report(alloc::format!(
@@ -4005,7 +3999,7 @@ fn check_allocation(
                 };
                 let implicit =
                     target.is_x86_64() && !fp && x86_implicit_writes(inst) >> reg & 1 != 0;
-                if (held && produces_value(inst)) || implicit {
+                if ((held && produces_value(inst)) || implicit) && !skipped(u as usize) {
                     report(alloc::format!(
                         "ret-part-clobber: v{u} writes the result register RetPart v{v} reads"
                     ));
@@ -6439,30 +6433,7 @@ fn compute_param_incoming_forbid(
     let mut forbid = alloc::vec![0u64; func.insts.len()];
     // Only protect parameters that are read: an unused `ParamRef` is not
     // materialized, so its incoming register need not survive.
-    let mut used = alloc::vec![false; func.insts.len()];
-    for inst in &func.insts {
-        for_each_operand(inst, |op| {
-            if (op as usize) < used.len() {
-                used[op as usize] = true;
-            }
-        });
-    }
-    for block in &func.blocks {
-        match &block.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
-                if (*cond as usize) < used.len() {
-                    used[*cond as usize] = true;
-                }
-            }
-            Terminator::Return(v) if (*v as usize) < used.len() => used[*v as usize] = true,
-            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
-                if (*target as usize) < used.len() =>
-            {
-                used[*target as usize] = true;
-            }
-            _ => {}
-        }
-    }
+    let used: Vec<bool> = operand_reads(func).iter().map(|&n| n > 0).collect();
     // A `RetPart` reads its call's result register, which stays live from
     // the call to the part: a value defined between them stays off it.
     let tls_call = tls_addr_is_call(target, func);
@@ -7200,6 +7171,80 @@ mod tests {
             .map(|s| s.as_str())
             .unwrap_or_default();
         assert!(text.starts_with("ICE: allocation check: `f`:"), "{text}");
+    }
+
+    /// A definition the emit skips writes no register: homed in the
+    /// incoming register of a parameter read placed after it, it clobbers
+    /// nothing, where the same definition with a reader does. A dead
+    /// member of a class holds the class's register this way.
+    #[cfg(feature = "codegen_test")]
+    #[test]
+    fn the_allocation_check_counts_no_write_for_a_skipped_definition() {
+        let target = Target::LinuxX64;
+        let param = |idx| Inst::ParamRef {
+            idx,
+            kind: LoadKind::I64,
+        };
+        let add = |lhs, rhs| Inst::Binop {
+            op: BinOp::Add,
+            lhs,
+            rhs,
+        };
+        // v1 is the definition. v2 is read, which ends the entry read run,
+        // so v3 is placed at its own position.
+        let build = |read: bool| {
+            let mut insts = vec![param(0), Inst::Imm(5), Inst::Imm(9), param(1)];
+            insts.extend([add(0, 3), add(4, 2)]);
+            if read {
+                insts.push(add(5, 1));
+            }
+            let n = insts.len();
+            FunctionSsa {
+                name: "f".into(),
+                n_params: 2,
+                inst_src: vec![crate::c5::ir::InstSrc::default(); n],
+                f32_values: vec![false; n],
+                blocks: vec![crate::c5::ir::Block {
+                    start_pc: 0,
+                    inst_range: 0..n as u32,
+                    terminator: Terminator::Return(n as u32 - 1),
+                }],
+                insts,
+                ..Default::default()
+            }
+        };
+        let verdict = |read: bool| {
+            let func = build(read);
+            let alloc =
+                with_pool_size_override(1, 1, || super::allocate(&func, target, FixedRegs::NONE));
+            let (_, incoming) = incoming_reg(&param_incoming_plan(&func, target), &func.insts[3])
+                .expect("an incoming register");
+            let mut places = alloc.places.clone();
+            places[1] = Place::IntReg(incoming);
+            let reads = operands_read(&func, &alloc.use_counts);
+            let fp_const = fp_constants(&func, target, &reads);
+            let liveness = super::super::liveness::Liveness::compute_reading(&func, reads);
+            let banks = RegBanks::new(target, FixedRegs::NONE);
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                check_allocation(
+                    &func,
+                    &places,
+                    (target, &banks),
+                    &liveness,
+                    &fp_const,
+                    &alloc.use_counts,
+                    (&|_, _| false, &alloc.call_saves),
+                )
+            }))
+            .map_err(|m| {
+                m.downcast_ref::<alloc::string::String>()
+                    .cloned()
+                    .unwrap_or_default()
+            })
+        };
+        let text = verdict(true).expect_err("a read definition in the incoming register passes");
+        assert!(text.contains("param-shuffle-clobber: v1"), "{text}");
+        assert_eq!(verdict(false), Ok(()));
     }
 
     /// A callee-saved register an inline-asm block writes rides the

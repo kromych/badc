@@ -29,9 +29,6 @@
 //! comparison, a runtime index, a terminator operand, an atomic or
 //! segment-relative access -- can reach the object through a pointer
 //! this pass does not track, and declines it.
-//! `Block::exit_acc` is not such a use: it names the block's last
-//! defined value for liveness, and every rewrite here leaves that id
-//! defining something.
 //!
 //! A copy out of a split object stores each field in its span, bytes a block
 //! write defined included, through its destination, or into the field's slot
@@ -159,7 +156,6 @@ pub(crate) fn param_footprints(funcs: &[FunctionSsa]) -> FootprintMap {
         for block in &func.blocks {
             let mut term = block.terminator;
             term.for_each_operand_mut(|v| mark(*v, &mut used));
-            mark(block.exit_acc, &mut used);
         }
         for (i, inst) in func.insts.iter().enumerate() {
             let cell = match inst {
@@ -757,7 +753,7 @@ fn split_objects(
             .map(|(b, _)| b)
             .filter(|b| cells_of.contains_key(b))
     };
-    // Values an operand or a terminator reads; `Block::exit_acc` is no reader.
+    // Values an operand or a terminator reads.
     let mut consumed: Vec<bool> = alloc::vec![false; n];
     for inst in &func.insts {
         for_each_operand(inst, |v| {
@@ -1935,7 +1931,6 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
         func.blocks[bi].inst_range = start..new_insts.len() as u32;
     }
     for block in func.blocks.iter_mut() {
-        block.exit_acc = remap(block.exit_acc);
         block.terminator.for_each_operand_mut(|v| *v = remap(*v));
     }
     // The per-site cross-TU relocation tables key on the value id of the
@@ -2160,7 +2155,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..n,
                 terminator: term,
-                exit_acc: NO_VALUE,
             }],
             multi_cell_slots: multi_cell,
             locals: 4,
@@ -2591,22 +2585,6 @@ mod tests {
             "the field reads and writes its cell: {:?}",
             f.insts
         );
-    }
-
-    /// `Block::exit_acc` naming an address into the object is a liveness
-    /// pin, not a use of the address, so it must not decline the split;
-    /// the neutralized expression still defines a value there.
-    #[test]
-    fn base_address_as_exit_acc_still_splits() {
-        let mut f = two_elem_array();
-        f.blocks[0].exit_acc = 9; // LocalAddr(-2)
-        let split = split_objects(&mut f, 64);
-        assert_eq!(split.len(), 1);
-        assert_eq!(
-            (split[0].base, split[0].slots.clone()),
-            (-2, alloc::vec![-2, -1])
-        );
-        assert!(matches!(f.insts[9], Inst::Imm(0)));
     }
 
     #[test]
@@ -3987,7 +3965,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..n,
                 terminator: term,
-                exit_acc: NO_VALUE,
             }],
             ..FunctionSsa::default()
         }

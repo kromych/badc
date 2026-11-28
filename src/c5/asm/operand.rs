@@ -714,7 +714,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..n,
                 terminator: Terminator::Return(n - 1),
-                exit_acc: n - 1,
             }],
             insts,
             ..Default::default()

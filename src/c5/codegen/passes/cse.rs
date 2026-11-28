@@ -858,9 +858,6 @@ fn run_one(func: &mut FunctionSsa, caps: BankCapacity) {
         inst.for_each_operand_mut(|op| *op = resolve(&redirect, *op));
     }
     for block in func.blocks.iter_mut() {
-        if block.exit_acc != NO_VALUE {
-            block.exit_acc = resolve(&redirect, block.exit_acc);
-        }
         block
             .terminator
             .for_each_operand_mut(|v| *v = resolve(&redirect, *v));
@@ -967,12 +964,11 @@ mod tests {
         }
     }
 
-    fn blk(range: core::ops::Range<u32>, term: Terminator, acc: ValueId) -> Block {
+    fn blk(range: core::ops::Range<u32>, term: Terminator) -> Block {
         Block {
             start_pc: 0,
             inst_range: range,
             terminator: term,
-            exit_acc: acc,
         }
     }
 
@@ -998,9 +994,9 @@ mod tests {
         fresh(
             alloc::vec![Inst::Imm(3), Inst::Imm(5), add(0, 1), add(0, 1)],
             alloc::vec![
-                blk(0..3, bz(2, 2, 1), 2),
-                blk(3..4, Terminator::Return(3), 3),
-                blk(4..4, Terminator::Return(0), 0),
+                blk(0..3, bz(2, 2, 1)),
+                blk(3..4, Terminator::Return(3)),
+                blk(4..4, Terminator::Return(0)),
             ],
         )
     }
@@ -1047,9 +1043,9 @@ mod tests {
                 add(3, 3),
             ],
             alloc::vec![
-                blk(0..4, bz(2, 2, 1), 2),
-                blk(4..6, Terminator::Return(4), 4),
-                blk(6..6, Terminator::Return(0), 0),
+                blk(0..4, bz(2, 2, 1)),
+                blk(4..6, Terminator::Return(4)),
+                blk(6..6, Terminator::Return(0)),
             ],
         );
         run_one(&mut f, caps(5, 5));
@@ -1063,9 +1059,9 @@ mod tests {
         let mut f = fresh(
             alloc::vec![Inst::Imm(3), Inst::Imm(5), muli(0, 7), add(0, 1), add(0, 1)],
             alloc::vec![
-                blk(0..3, bz(2, 2, 1), 2),
-                blk(3..4, Terminator::Return(3), 3),
-                blk(4..5, Terminator::Return(4), 4),
+                blk(0..3, bz(2, 2, 1)),
+                blk(3..4, Terminator::Return(3)),
+                blk(4..5, Terminator::Return(4)),
             ],
         );
         run_one(&mut f, caps(16, 8));
@@ -1088,9 +1084,9 @@ mod tests {
                 add(0, 1)
             ],
             alloc::vec![
-                blk(0..4, bz(3, 2, 1), 3),
-                blk(4..6, bz(5, 2, 1), 5),
-                blk(6..7, Terminator::Return(6), 6),
+                blk(0..4, bz(3, 2, 1)),
+                blk(4..6, bz(5, 2, 1)),
+                blk(6..7, Terminator::Return(6)),
             ],
         );
         run_one(&mut f, caps(16, 8));
@@ -1110,9 +1106,9 @@ mod tests {
         let mut f = fresh(
             alloc::vec![Inst::Imm(3), Inst::Imm(5), cmp(0, 1), cmp(0, 1)],
             alloc::vec![
-                blk(0..3, bz(2, 2, 1), 2),
-                blk(3..4, Terminator::Return(3), 3),
-                blk(4..4, Terminator::Return(0), 0),
+                blk(0..3, bz(2, 2, 1)),
+                blk(3..4, Terminator::Return(3)),
+                blk(4..4, Terminator::Return(0)),
             ],
         );
         run_one(&mut f, caps(16, 8));
@@ -1134,9 +1130,9 @@ mod tests {
         fresh(
             alloc::vec![Inst::Imm(3), Inst::Imm(5), add(0, 1), call, add(0, 1)],
             alloc::vec![
-                blk(0..4, bz(2, 2, 1), 2),
-                blk(4..5, Terminator::Return(4), 4),
-                blk(5..5, Terminator::Return(0), 0),
+                blk(0..4, bz(2, 2, 1)),
+                blk(4..5, Terminator::Return(4)),
+                blk(5..5, Terminator::Return(0)),
             ],
         )
     }
@@ -1180,9 +1176,9 @@ mod tests {
                 muli(2, 2)
             ],
             alloc::vec![
-                blk(0..2, Terminator::Jmp(1), 1),
-                blk(2..6, bz(5, 2, 1), 5),
-                blk(6..6, Terminator::Return(4), 4),
+                blk(0..2, Terminator::Jmp(1)),
+                blk(2..6, bz(5, 2, 1)),
+                blk(6..6, Terminator::Return(4)),
             ],
         )
     }
@@ -1211,9 +1207,9 @@ mod tests {
         let mut f = fresh(
             alloc::vec![Inst::Imm(3), cast(0), cast(0)],
             alloc::vec![
-                blk(0..2, bz(1, 2, 1), 1),
-                blk(2..3, Terminator::Return(2), 2),
-                blk(3..3, Terminator::Return(0), 0),
+                blk(0..2, bz(1, 2, 1)),
+                blk(2..3, Terminator::Return(2)),
+                blk(3..3, Terminator::Return(0)),
             ],
         );
         f.f32_values[2] = true;
@@ -1234,9 +1230,9 @@ mod tests {
             fresh(
                 alloc::vec![Inst::Imm(3), Inst::Imm(5), lt(), lt()],
                 alloc::vec![
-                    blk(0..3, bz(0, 2, 1), 2),
-                    blk(3..4, Terminator::Return(3), 3),
-                    blk(4..4, Terminator::Return(2), 2),
+                    blk(0..3, bz(0, 2, 1)),
+                    blk(3..4, Terminator::Return(3)),
+                    blk(4..4, Terminator::Return(2)),
                 ],
             )
         };
@@ -1272,9 +1268,9 @@ mod tests {
                     add(6, 7)
                 ],
                 alloc::vec![
-                    blk(0..6, bz(5, 2, 1), 5),
-                    blk(6..9, Terminator::Return(8), 8),
-                    blk(9..9, Terminator::Return(0), 0),
+                    blk(0..6, bz(5, 2, 1)),
+                    blk(6..9, Terminator::Return(8)),
+                    blk(9..9, Terminator::Return(0)),
                 ],
             )
         };
@@ -1300,9 +1296,9 @@ mod tests {
             let mut f = fresh(
                 alloc::vec![Inst::ImmData(0), Inst::ImmData(0)],
                 alloc::vec![
-                    blk(0..1, bz(0, 2, 1), 0),
-                    blk(1..2, Terminator::Return(1), 1),
-                    blk(2..2, Terminator::Return(0), 0),
+                    blk(0..1, bz(0, 2, 1)),
+                    blk(1..2, Terminator::Return(1)),
+                    blk(2..2, Terminator::Return(0)),
                 ],
             );
             f.extern_imm_data_refs = refs;

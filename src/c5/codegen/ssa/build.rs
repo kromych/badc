@@ -202,11 +202,6 @@ pub(crate) struct SsaBuilder {
     /// Per-block terminator. Mirrors [`Block::terminator`] until
     /// [`Self::finish`] folds it into the final block list.
     block_terminators: Vec<Option<Terminator>>,
-    /// Per-block exit accumulator. Mirrors [`Block::exit_acc`].
-    block_exit_accs: Vec<ValueId>,
-    /// Last value defined in the current block. Used as the default
-    /// `exit_acc` if the block's terminator doesn't specify one.
-    last_def: ValueId,
     /// When set, a modulo with a register divisor is built as a
     /// divide plus `n - q*d` so a division over the same operands
     /// shares the quotient. See [`Self::binop`].
@@ -306,8 +301,6 @@ impl SsaBuilder {
             block_starts: Vec::new(),
             block_ends: Vec::new(),
             block_terminators: Vec::new(),
-            block_exit_accs: Vec::new(),
-            last_def: NO_VALUE,
             cur_src: Default::default(),
             split_modulo: false,
             defer_divmod: false,
@@ -589,7 +582,6 @@ impl SsaBuilder {
         self.block_starts.push(self.func.insts.len() as u32);
         self.block_ends.push(self.func.insts.len() as u32);
         self.block_terminators.push(None);
-        self.block_exit_accs.push(NO_VALUE);
         id
     }
 
@@ -603,7 +595,6 @@ impl SsaBuilder {
         let idx = block as usize;
         self.block_starts[idx] = self.func.insts.len() as u32;
         self.current = Some(block);
-        self.last_def = NO_VALUE;
         // Entering a new block starts a fresh CSE region. Stale
         // entries from the prior block don't dominate the new
         // block's first uses (would need phi to merge them).
@@ -648,7 +639,6 @@ impl SsaBuilder {
         self.func.insts.push(inst);
         self.func.inst_src.push(self.cur_src);
         self.func.f32_values.push(false);
-        self.last_def = id;
         id
     }
 
@@ -943,7 +933,7 @@ impl SsaBuilder {
     /// (`goto *expr`); `target` holds the destination code
     /// address.
     pub(crate) fn goto_indirect(&mut self, target: ValueId) {
-        self.close(Terminator::GotoIndirect { target }, target);
+        self.close(Terminator::GotoIndirect { target });
     }
 
     /// Close the current block with `Terminator::JumpTable`:
@@ -953,7 +943,7 @@ impl SsaBuilder {
     pub(crate) fn jump_table(&mut self, idx: ValueId, targets: alloc::vec::Vec<BlockId>) {
         let table = self.func.jump_tables.len() as u32;
         self.func.jump_tables.push(targets);
-        self.close(Terminator::JumpTable { idx, table }, idx);
+        self.close(Terminator::JumpTable { idx, table });
     }
 
     /// `Inst::ImmCode(0)` whose target lives in another TU.
@@ -2062,7 +2052,7 @@ impl SsaBuilder {
         let _ = self.push(Inst::InlineAsm { asm, args });
         let table = self.func.jump_tables.len() as u32;
         self.func.jump_tables.push(targets);
-        self.close(Terminator::AsmGoto { table }, NO_VALUE);
+        self.close(Terminator::AsmGoto { table });
     }
 
     /// Record that the function calls a returns-twice function (the
@@ -2130,7 +2120,7 @@ impl SsaBuilder {
 
     /// Close the current block with `Terminator::Jmp`.
     pub(crate) fn jmp(&mut self, target: BlockId) {
-        self.close(Terminator::Jmp(target), self.last_def);
+        self.close(Terminator::Jmp(target));
     }
 
     /// Close the current block with `Terminator::Bz`. `cond` is the
@@ -2138,32 +2128,26 @@ impl SsaBuilder {
     /// falls through to `fall_through`.
     pub(crate) fn branch_zero(&mut self, cond: ValueId, target: BlockId, fall_through: BlockId) {
         self.predict(false);
-        self.close(
-            Terminator::Bz {
-                cond,
-                target,
-                fall_through,
-            },
+        self.close(Terminator::Bz {
             cond,
-        );
+            target,
+            fall_through,
+        });
     }
 
     /// Close the current block with `Terminator::Bnz`.
     pub(crate) fn branch_nonzero(&mut self, cond: ValueId, target: BlockId, fall_through: BlockId) {
         self.predict(true);
-        self.close(
-            Terminator::Bnz {
-                cond,
-                target,
-                fall_through,
-            },
+        self.close(Terminator::Bnz {
             cond,
-        );
+            target,
+            fall_through,
+        });
     }
 
     /// Close the current block with `Terminator::Return`.
     pub(crate) fn return_(&mut self, value: ValueId) {
-        self.close(Terminator::Return(value), value);
+        self.close(Terminator::Return(value));
     }
 
     /// Close the current block with `Terminator::Unreachable`: the
@@ -2172,7 +2156,7 @@ impl SsaBuilder {
     /// `return`, this is not counted as a return path by the inliner and
     /// lowers to a trap.
     pub(crate) fn unreachable(&mut self) {
-        self.close(Terminator::Unreachable, NO_VALUE);
+        self.close(Terminator::Unreachable);
     }
 
     /// Close the current block with `Terminator::TailExt`. Used
@@ -2181,7 +2165,7 @@ impl SsaBuilder {
     /// setup owns the host ABI; the trampoline itself doesn't
     /// touch the stack.
     pub(crate) fn tail_ext(&mut self, binding_idx: i64) {
-        self.close(Terminator::TailExt(binding_idx), NO_VALUE);
+        self.close(Terminator::TailExt(binding_idx));
     }
 
     /// True if a block is currently open (the caller can still
@@ -2225,7 +2209,7 @@ impl SsaBuilder {
         }
     }
 
-    fn close(&mut self, term: Terminator, exit_acc: ValueId) {
+    fn close(&mut self, term: Terminator) {
         self.expected = None;
         let id = self
             .current
@@ -2236,10 +2220,8 @@ impl SsaBuilder {
             "SsaBuilder: block {idx} already terminated",
         );
         self.block_terminators[idx] = Some(term);
-        self.block_exit_accs[idx] = exit_acc;
         self.block_ends[idx] = self.func.insts.len() as u32;
         self.current = None;
-        self.last_def = NO_VALUE;
     }
 
     /// Finalize the builder and return the populated [`FunctionSsa`].
@@ -2270,7 +2252,6 @@ impl SsaBuilder {
                 start_pc: 0,
                 inst_range: start..end,
                 terminator,
-                exit_acc: self.block_exit_accs[i],
             });
         }
         self.func.blocks = blocks;

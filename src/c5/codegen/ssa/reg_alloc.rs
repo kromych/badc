@@ -5066,18 +5066,6 @@ pub(crate) fn operand_reads(func: &FunctionSsa) -> Vec<u32> {
     counts
 }
 
-/// [`operand_reads`] with each block's exit accumulator read too: the
-/// counts a pass asks whether a value has a reader besides one.
-pub(crate) fn value_reads(func: &FunctionSsa) -> Vec<u32> {
-    let mut counts = operand_reads(func);
-    for block in &func.blocks {
-        if let Some(c) = counts.get_mut(block.exit_acc as usize) {
-            *c += 1;
-        }
-    }
-    counts
-}
-
 /// Invoke `f` for each operand `ValueId` referenced by `inst`, for the
 /// allocator's use counting.
 ///
@@ -5658,7 +5646,6 @@ fn place_crowded(
             for_each_operand(&func.insts[idx as usize], |op| cover(op, idx));
         }
         blk.terminator.for_each_operand(|op| cover(op, end));
-        cover(blk.exit_acc, end);
         liveness
             .block_liveness()
             .for_each_live_out(b as crate::c5::ir::BlockId, |v| cover(v, end));
@@ -7984,7 +7971,6 @@ int main(void) { return 0; }
                 start_pc: 0,
                 inst_range: 0..6,
                 terminator: Terminator::Return(5),
-                exit_acc: 5,
             }],
             ..Default::default()
         };
@@ -8043,7 +8029,6 @@ int main(void) { return 0; }
                 start_pc: 0,
                 inst_range: 0..n as u32,
                 terminator: Terminator::Return(4),
-                exit_acc: 4,
             }],
             ..Default::default()
         };
@@ -8087,7 +8072,6 @@ int main(void) { return 0; }
                 start_pc: 0,
                 inst_range: 0..n,
                 terminator: Terminator::Return(acc),
-                exit_acc: acc,
             }],
             ..Default::default()
         };
@@ -8874,7 +8858,6 @@ int main(void) { return 0; }
                 start_pc: 0,
                 inst_range: 0..1,
                 terminator: Terminator::Jmp(1),
-                exit_acc: 0,
             },
             Block {
                 start_pc: 0,
@@ -8884,19 +8867,16 @@ int main(void) { return 0; }
                     target: 3,
                     fall_through: 2,
                 },
-                exit_acc: 1,
             },
             Block {
                 start_pc: 0,
                 inst_range: 2..4,
                 terminator: Terminator::Jmp(1),
-                exit_acc: 3,
             },
             Block {
                 start_pc: 0,
                 inst_range: 4..4,
                 terminator: Terminator::Return(1),
-                exit_acc: 1,
             },
         ];
         let func = FunctionSsa {
@@ -9072,7 +9052,6 @@ int main(void) { return 0; }
                 start_pc: 0,
                 inst_range: 0..n as u32,
                 terminator: Terminator::Return(NO_VALUE),
-                exit_acc: NO_VALUE,
             }],
             ..FunctionSsa::default()
         }
@@ -9240,19 +9219,16 @@ int main(void) { return 0; }
                         target: 1,
                         fall_through: 2,
                     },
-                    exit_acc: cond,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: n..n,
                     terminator: Terminator::Return(NO_VALUE),
-                    exit_acc: NO_VALUE,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: n..n,
                     terminator: Terminator::Return(NO_VALUE),
-                    exit_acc: NO_VALUE,
                 },
             ],
         )
@@ -9332,7 +9308,6 @@ int main(void) { return 0; }
                 start_pc: 0,
                 inst_range: 0..1,
                 terminator: Terminator::Jmp(1),
-                exit_acc: 0,
             },
             Block {
                 start_pc: 0,
@@ -9342,13 +9317,11 @@ int main(void) { return 0; }
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 5,
             },
             Block {
                 start_pc: 0,
                 inst_range: 6..6,
                 terminator: Terminator::Return(3),
-                exit_acc: 3,
             },
         ];
         let f = func_with(insts, blocks);
@@ -9435,7 +9408,6 @@ int main(void) { return 0; }
                 start_pc: 0,
                 inst_range: 0..n,
                 terminator: Terminator::Return(ret),
-                exit_acc: NO_VALUE,
             }],
         )
     }

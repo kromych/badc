@@ -85,7 +85,6 @@ fn forward_phis(func: &mut FunctionSsa, preds: &[Vec<BlockId>]) -> bool {
         inst.for_each_operand_mut(|op| *op = resolve(*op));
     }
     for block in func.blocks.iter_mut() {
-        block.exit_acc = resolve(block.exit_acc);
         block.terminator.for_each_operand_mut(|v| *v = resolve(*v));
     }
     for &(phi, _) in &to {
@@ -182,7 +181,6 @@ fn merge(func: &mut FunctionSsa, preds: &[Vec<BlockId>]) -> bool {
     for chain in &chains {
         let (head, last) = (chain[0] as usize, chain[chain.len() - 1] as usize);
         func.blocks[head].terminator = func.blocks[last].terminator;
-        func.blocks[head].exit_acc = func.blocks[last].exit_acc;
         if let Some(&arm) = func.predicted.get(last)
             && let Some(slot) = func.predicted.get_mut(head)
         {
@@ -190,7 +188,6 @@ fn merge(func: &mut FunctionSsa, preds: &[Vec<BlockId>]) -> bool {
         }
         for &b in &chain[1..] {
             func.blocks[b as usize].terminator = Terminator::Unreachable;
-            func.blocks[b as usize].exit_acc = NO_VALUE;
             into[b as usize] = chain[0];
         }
     }
@@ -230,7 +227,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 
@@ -291,14 +287,12 @@ mod tests {
     #[test]
     fn the_second_operand_of_a_conjunction_branches_in_its_own_block() {
         let mut f = second_operand_behind_a_phi();
-        f.blocks[2].exit_acc = 4;
         assert!(run_one(&mut f));
         assert_eq!(f.blocks.len(), 4);
         // b1 took the branch, which now reads the comparison; b3 and b4
         // moved down one id.
         assert_eq!(f.blocks[1].inst_range, 2..5);
         assert_eq!(f.blocks[1].terminator, bz(3, 3, 2));
-        assert_eq!(f.blocks[1].exit_acc, 3);
         assert!(matches!(f.insts[4], Inst::Imm(0)));
         assert_eq!(f.blocks[0].terminator, bz(1, 3, 1));
         assert!(!run_one(&mut f));

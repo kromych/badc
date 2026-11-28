@@ -41,7 +41,6 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
         start_pc: 0,
         inst_range: phi..phi + 1,
         terminator: Terminator::GotoIndirect { target: phi },
-        exit_acc: phi,
     });
     for &(b, _) in &sites {
         func.blocks[b as usize].terminator = Terminator::Jmp(dispatch);
@@ -66,7 +65,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 

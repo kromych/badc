@@ -1752,7 +1752,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..n,
                 terminator: Terminator::Return(ret),
-                exit_acc: ret,
             }],
             insts,
             ..Default::default()
@@ -2502,7 +2501,6 @@ mod tests {
                     start_pc: lo as usize,
                     inst_range: lo..hi,
                     terminator,
-                    exit_acc: NO_VALUE,
                 })
                 .collect(),
             insts,

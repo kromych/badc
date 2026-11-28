@@ -691,7 +691,6 @@ fn node_rows(out: &mut Regions<'_>, func: &FunctionSsa, node_of: &[ValueId]) {
             }
         }
         block.terminator.for_each_operand(|v| read(v, b));
-        read(block.exit_acc, b);
     }
     for (v, &b) in out.block_of.iter().enumerate() {
         if b == BlockId::MAX {
@@ -750,7 +749,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 

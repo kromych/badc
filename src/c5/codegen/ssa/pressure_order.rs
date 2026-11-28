@@ -409,7 +409,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..len,
                 terminator: Terminator::Return(NO_VALUE),
-                exit_acc: NO_VALUE,
             }],
             ..Default::default()
         };

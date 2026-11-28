@@ -33,9 +33,6 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], callee_tags: &BTreeMap<usize, i64>,
             {
                 let block = &mut func.blocks[b];
                 block.terminator = Terminator::Return(call);
-                if block.exit_acc == v {
-                    block.exit_acc = call;
-                }
             }
         }
     }

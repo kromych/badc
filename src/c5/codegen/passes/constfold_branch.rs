@@ -816,7 +816,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         };
         fresh(
             vec![
@@ -907,7 +906,6 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             }],
         );
         run_one(&mut f);
@@ -926,7 +924,6 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             }],
         );
         run_one(&mut f);
@@ -945,7 +942,6 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             }],
         );
         run_one(&mut f);
@@ -964,7 +960,6 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             }],
         );
         run_one(&mut f);
@@ -988,7 +983,6 @@ mod tests {
                     start_pc: 0,
                     inst_range: 0..1,
                     terminator: Terminator::Jmp(1),
-                    exit_acc: 0,
                 },
                 Block {
                     start_pc: 0,
@@ -998,7 +992,6 @@ mod tests {
                         target: 2,
                         fall_through: 3,
                     },
-                    exit_acc: 1,
                 },
             ],
         );
@@ -1030,25 +1023,21 @@ mod tests {
                         target: 1,
                         fall_through: 2,
                     },
-                    exit_acc: 0,
                 }, // b0
                 Block {
                     start_pc: 0,
                     inst_range: 2..3,
                     terminator: Terminator::Return(2),
-                    exit_acc: 2,
                 }, // b1
                 Block {
                     start_pc: 0,
                     inst_range: 1..2,
                     terminator: Terminator::Return(1),
-                    exit_acc: 1,
                 }, // b2
                 Block {
                     start_pc: 0,
                     inst_range: 3..3,
                     terminator: Terminator::Jmp(1),
-                    exit_acc: NO_VALUE as ValueId,
                 }, // b3 -> b1
             ],
         );
@@ -1088,7 +1077,6 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 2,
             }],
         );
         run_one(&mut f);
@@ -1107,7 +1095,6 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             }],
         );
         let before = f.blocks[0].terminator;
@@ -1130,7 +1117,6 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             }],
         );
         run_one(&mut f);
@@ -1143,19 +1129,16 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..2,
                 terminator: term,
-                exit_acc: 1,
             },
             Block {
                 start_pc: 0,
                 inst_range: 2..2,
                 terminator: Terminator::Return(NO_VALUE as ValueId),
-                exit_acc: NO_VALUE as ValueId,
             },
             Block {
                 start_pc: 0,
                 inst_range: 2..2,
                 terminator: Terminator::Return(NO_VALUE as ValueId),
-                exit_acc: NO_VALUE as ValueId,
             },
         ]
     }

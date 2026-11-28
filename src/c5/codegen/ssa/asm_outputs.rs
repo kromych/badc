@@ -197,7 +197,6 @@ pub(crate) fn run(func: &mut FunctionSsa) {
         next += 1;
         rw.ids[next - 1]
     };
-    let mut gone: BTreeSet<ValueId> = BTreeSet::new();
     for e in &edits {
         let loads: Vec<ValueId> = e.outs.iter().filter(|o| o.rw).map(|_| take()).collect();
         let site = take();
@@ -221,17 +220,10 @@ pub(crate) fn run(func: &mut FunctionSsa) {
         for o in &e.outs {
             let addr = rw.remap[o.addr as usize];
             func.insts[addr as usize] = Inst::Imm(0);
-            gone.insert(addr);
         }
         let at = rw.remap[e.at as usize];
         let last = e.outs.len() - 1;
         func.insts[at as usize] = store(&e.outs[last], values[last]);
-        gone.insert(at);
-    }
-    for b in &mut func.blocks {
-        if gone.contains(&b.exit_acc) {
-            b.exit_acc = NO_VALUE;
-        }
     }
 }
 
@@ -267,7 +259,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 
@@ -332,7 +323,6 @@ mod tests {
             ],
             vec![block(0..3, Terminator::Return(2))],
         );
-        f.blocks[0].exit_acc = 1;
         run(&mut f);
         assert!(matches!(f.insts[0], Inst::Imm(0)), "{:?}", f.insts);
         let (asm, args) = asm_at(&f, 1);
@@ -357,7 +347,6 @@ mod tests {
             }
         ));
         assert_eq!(f.blocks[0].inst_range, 0..4);
-        assert_eq!(f.blocks[0].exit_acc, NO_VALUE);
     }
 
     /// A `+r` output reads the slot ahead of the statement, at the

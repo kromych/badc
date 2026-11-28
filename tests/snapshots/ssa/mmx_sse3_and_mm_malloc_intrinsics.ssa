@@ -1,6 +1,6 @@
 ; --- SSA dump (ok=true) ent_pc=403 ---
 ; name=mmx
-fn ent_pc=403 n_params=0 variadic=false locals=1
+fn ent_pc=403 n_params=0 variadic=false locals=0
   spill_count=0 gpr_used=[] fp_used=[]
   block 0  start_pc=0
     v0   AllocaInit(0)                                    -> -
@@ -509,7 +509,7 @@ fn ent_pc=403 n_params=0 variadic=false locals=1
     v503 BinopI { op=ne, lhs=v502, rhs_imm=-3978709506094217016 } -> x0
     v504 Imm(1)                                           -> -
     v505 Imm(0)                                           -> -
-    terminator Bnz { cond=v503, target=b3, fall=b1 }   (exit_acc=v503)
+    terminator Bnz { cond=v503, target=b3, fall=b1 }
   block 1  start_pc=0
     v551 Imm(100)                                         -> -
     v552 Imm(100)                                         -> -
@@ -611,7 +611,7 @@ fn ent_pc=403 n_params=0 variadic=false locals=1
     v648 Imm(0)                                           -> -
     v649 Imm(0)                                           -> -
     v650 Imm(0)                                           -> -
-    terminator Bnz { cond=v645, target=b3, fall=b2 }   (exit_acc=v645)
+    terminator Bnz { cond=v645, target=b3, fall=b2 }
   block 2  start_pc=0
     v651 Imm(200)                                         -> -
     v652 Imm(-56)                                         -> -
@@ -712,14 +712,14 @@ fn ent_pc=403 n_params=0 variadic=false locals=1
     v747 Imm(0)                                           -> -
     v748 Imm(0)                                           -> -
     v749 Imm(0)                                           -> -
-    terminator Bz { cond=v746, target=b4, fall=b3 }   (exit_acc=v746)
+    terminator Bz { cond=v746, target=b4, fall=b3 }
   block 3  start_pc=0
     v750 Imm(10)                                          -> x0
     v751 LifetimeEnd(0)                                   -> -
     v752 LifetimeEnd(0)                                   -> -
     v753 LifetimeEnd(0)                                   -> -
     v754 LifetimeEnd(0)                                   -> -
-    terminator Return(v750)   (exit_acc=v750)
+    terminator Return(v750)
   block 4  start_pc=0
     v755 Imm(5)                                           -> -
     v756 Imm(5)                                           -> -
@@ -778,7 +778,7 @@ fn ent_pc=403 n_params=0 variadic=false locals=1
     v809 BinopI { op=ne, lhs=v808, rhs_imm=0 }            -> -
     v810 Imm(1)                                           -> -
     v811 Imm(0)                                           -> -
-    terminator Bnz { cond=v808, target=b8, fall=b5 }   (exit_acc=v809)
+    terminator Bnz { cond=v808, target=b8, fall=b5 }
   block 5  start_pc=0
     v812 Imm(-32000)                                      -> -
     v813 Imm(-32000)                                      -> -
@@ -841,7 +841,7 @@ fn ent_pc=403 n_params=0 variadic=false locals=1
     v870 Imm(0)                                           -> -
     v871 Imm(1)                                           -> -
     v872 Imm(0)                                           -> -
-    terminator Bnz { cond=v866, target=b8, fall=b6 }   (exit_acc=v866)
+    terminator Bnz { cond=v866, target=b8, fall=b6 }
   block 6  start_pc=0
     v873 Imm(-1)                                          -> -
     v874 Imm(-1)                                          -> -
@@ -903,7 +903,7 @@ fn ent_pc=403 n_params=0 variadic=false locals=1
     v930 Imm(0)                                           -> -
     v931 Imm(0)                                           -> -
     v932 Imm(0)                                           -> -
-    terminator Bnz { cond=v927, target=b8, fall=b7 }   (exit_acc=v927)
+    terminator Bnz { cond=v927, target=b8, fall=b7 }
   block 7  start_pc=0
     v933 Imm(-100)                                        -> -
     v934 Imm(-100)                                        -> -
@@ -1003,14 +1003,14 @@ fn ent_pc=403 n_params=0 variadic=false locals=1
     v1028 Imm(0)                                           -> -
     v1029 Imm(0)                                           -> -
     v1030 Imm(0)                                           -> -
-    terminator Bz { cond=v1027, target=b9, fall=b8 }   (exit_acc=v1027)
+    terminator Bz { cond=v1027, target=b9, fall=b8 }
   block 8  start_pc=0
     v1031 Imm(11)                                          -> x0
     v1032 LifetimeEnd(0)                                   -> -
     v1033 LifetimeEnd(0)                                   -> -
     v1034 LifetimeEnd(0)                                   -> -
     v1035 LifetimeEnd(0)                                   -> -
-    terminator Return(v1031)   (exit_acc=v1031)
+    terminator Return(v1031)
   block 9  start_pc=0
     v1036 Imm(0)                                           -> -
     v1037 ImmData(8)                                       -> -
@@ -1032,7 +1032,7 @@ fn ent_pc=403 n_params=0 variadic=false locals=1
     v1053 VecExtract { vec=v1049, off=0, kind=I64, bytes=8 } -> x0
     v1054 BinopI { op=ne, lhs=v1053, rhs_imm=227633266705 } -> x0
     v1055 Imm(0)                                           -> -
-    terminator Bnz { cond=v1054, target=b11, fall=b10 }   (exit_acc=v1054)
+    terminator Bnz { cond=v1054, target=b11, fall=b10 }
   block 10  start_pc=0
     v1056 Imm(-32768)                                      -> -
     v1057 Imm(-32768)                                      -> -
@@ -1092,14 +1092,14 @@ fn ent_pc=403 n_params=0 variadic=false locals=1
     v1111 Imm(0)                                           -> -
     v1112 Imm(0)                                           -> -
     v1113 Imm(0)                                           -> -
-    terminator Bz { cond=v1110, target=b12, fall=b11 }   (exit_acc=v1110)
+    terminator Bz { cond=v1110, target=b12, fall=b11 }
   block 11  start_pc=0
     v1114 Imm(12)                                          -> x0
     v1115 LifetimeEnd(0)                                   -> -
     v1116 LifetimeEnd(0)                                   -> -
     v1117 LifetimeEnd(0)                                   -> -
     v1118 LifetimeEnd(0)                                   -> -
-    terminator Return(v1114)   (exit_acc=v1114)
+    terminator Return(v1114)
   block 12  start_pc=0
     v1119 Imm(-2)                                          -> -
     v1120 Imm(-2)                                          -> -
@@ -1157,7 +1157,7 @@ fn ent_pc=403 n_params=0 variadic=false locals=1
     v1172 VecExtract { vec=v1168, off=0, kind=I64, bytes=8 } -> x0
     v1173 BinopI { op=ne, lhs=v1172, rhs_imm=-1 }          -> x0
     v1174 Imm(0)                                           -> -
-    terminator Bnz { cond=v1173, target=b14, fall=b13 }   (exit_acc=v1173)
+    terminator Bnz { cond=v1173, target=b14, fall=b13 }
   block 13  start_pc=0
     v1175 Imm(300)                                         -> -
     v1176 Imm(300)                                         -> -
@@ -1217,14 +1217,14 @@ fn ent_pc=403 n_params=0 variadic=false locals=1
     v1230 Imm(0)                                           -> -
     v1231 Imm(0)                                           -> -
     v1232 Imm(0)                                           -> -
-    terminator Bz { cond=v1229, target=b15, fall=b14 }   (exit_acc=v1229)
+    terminator Bz { cond=v1229, target=b15, fall=b14 }
   block 14  start_pc=0
     v1233 Imm(13)                                          -> x0
     v1234 LifetimeEnd(0)                                   -> -
     v1235 LifetimeEnd(0)                                   -> -
     v1236 LifetimeEnd(0)                                   -> -
     v1237 LifetimeEnd(0)                                   -> -
-    terminator Return(v1233)   (exit_acc=v1233)
+    terminator Return(v1233)
   block 15  start_pc=0
     v1238 Imm(1)                                           -> -
     v1239 Imm(1)                                           -> -
@@ -1259,700 +1259,718 @@ fn ent_pc=403 n_params=0 variadic=false locals=1
     v1268 Imm(0)                                           -> -
     v1269 Imm(15)                                          -> -
     v1270 Imm(15)                                          -> -
-    v1271 LocalAddr(-1)                                    -> -
+    v1271 Imm(0)                                           -> -
     v1272 Imm(1)                                           -> -
     v1273 Imm(32768)                                       -> -
-    v1274 Imm(0)                                           -> -
-    v1275 Imm(2)                                           -> -
-    v1276 Imm(1)                                           -> -
+    v1274 Undef                                            -> -
+    v1275 Imm(0)                                           -> -
+    v1276 Imm(32768)                                       -> -
     v1277 Imm(32768)                                       -> -
-    v1278 BinopI { op=add, lhs=v1271, rhs_imm=2 }          -> -
-    v1279 Imm(0)                                           -> -
-    v1280 Imm(4)                                           -> -
-    v1281 Imm(1)                                           -> -
-    v1282 Imm(32768)                                       -> -
-    v1283 BinopI { op=add, lhs=v1271, rhs_imm=4 }          -> -
-    v1284 Imm(-9223231297218904064)                        -> x0
-    v1285 Imm(6)                                           -> -
-    v1286 Imm(1)                                           -> -
-    v1287 Imm(32768)                                       -> -
-    v1288 BinopI { op=add, lhs=v1271, rhs_imm=6 }          -> -
-    v1289 StoreLocal { off=-1, value=v1284, kind=I64 }     -> -
-    v1290 Imm(0)                                           -> -
-    v1291 LifetimeEnd(0)                                   -> -
-    v1292 LifetimeEnd(0)                                   -> -
+    v1278 Imm(0)                                           -> -
+    v1279 Imm(2)                                           -> -
+    v1280 Imm(1)                                           -> -
+    v1281 Imm(32768)                                       -> -
+    v1282 Imm(0)                                           -> -
+    v1283 Imm(0)                                           -> -
+    v1284 Imm(32768)                                       -> -
+    v1285 Imm(32768)                                       -> -
+    v1286 Imm(2147483648)                                  -> -
+    v1287 Imm(2147516416)                                  -> -
+    v1288 Imm(0)                                           -> -
+    v1289 Imm(4)                                           -> -
+    v1290 Imm(1)                                           -> -
+    v1291 Imm(32768)                                       -> -
+    v1292 Imm(0)                                           -> -
     v1293 Imm(0)                                           -> -
-    v1294 LoadLocal { off=-1, kind=F64 }                   -> d0
-    v1295 Imm(0)                                           -> -
-    v1296 LifetimeEnd(-1)                                  -> -
-    v1297 LifetimeEnd(0)                                   -> -
+    v1294 Imm(2147516416)                                  -> -
+    v1295 Imm(32768)                                       -> -
+    v1296 Imm(140737488355328)                             -> -
+    v1297 Imm(140739635871744)                             -> -
     v1298 Imm(0)                                           -> -
-    v1299 LifetimeEnd(0)                                   -> -
-    v1300 Imm(0)                                           -> -
-    v1301 Imm(0)                                           -> -
-    v1302 VecExtract { vec=v1294, off=0, kind=I64, bytes=8 } -> x0
+    v1299 Imm(6)                                           -> -
+    v1300 Imm(1)                                           -> -
+    v1301 Imm(32768)                                       -> -
+    v1302 Imm(0)                                           -> -
     v1303 Imm(0)                                           -> -
-    v1304 LifetimeEnd(0)                                   -> -
-    v1305 LifetimeEnd(0)                                   -> -
-    v1306 Imm(0)                                           -> -
-    v1307 Undef                                            -> -
-    v1308 BinopI { op=ne, lhs=v1302, rhs_imm=-9223231297218904064 } -> x0
-    v1309 Imm(1)                                           -> -
+    v1304 Imm(140739635871744)                             -> -
+    v1305 Imm(32768)                                       -> -
+    v1306 Imm(-9223372036854775808)                        -> -
+    v1307 Imm(-9223231297218904064)                        -> -
+    v1308 Imm(0)                                           -> -
+    v1309 Imm(0)                                           -> -
     v1310 Imm(0)                                           -> -
-    terminator Bnz { cond=v1308, target=b18, fall=b16 }   (exit_acc=v1308)
-  block 16  start_pc=0
-    v1311 Imm(1)                                           -> -
-    v1312 Imm(1)                                           -> -
-    v1313 Imm(0)                                           -> -
+    v1311 Imm(0)                                           -> -
+    v1312 LifetimeEnd(0)                                   -> -
+    v1313 LifetimeEnd(0)                                   -> -
     v1314 Imm(0)                                           -> -
-    v1315 Imm(0)                                           -> -
-    v1316 Imm(2)                                           -> -
-    v1317 Imm(0)                                           -> -
-    v1318 Imm(0)                                           -> -
-    v1319 Imm(4)                                           -> -
-    v1320 Imm(0)                                           -> -
+    v1315 Copy { value=v1307, fp=false }                   -> -
+    v1316 Imm(0)                                           -> -
+    v1317 LifetimeEnd(0)                                   -> -
+    v1318 LifetimeEnd(0)                                   -> -
+    v1319 Imm(0)                                           -> -
+    v1320 LifetimeEnd(0)                                   -> -
     v1321 Imm(0)                                           -> -
-    v1322 Imm(6)                                           -> -
+    v1322 Undef                                            -> -
     v1323 Imm(0)                                           -> -
-    v1324 Imm(0)                                           -> -
-    v1325 Imm(0)                                           -> -
-    v1326 Imm(16)                                          -> -
-    v1327 Imm(0)                                           -> -
+    v1324 LifetimeEnd(0)                                   -> -
+    v1325 LifetimeEnd(0)                                   -> -
+    v1326 Imm(0)                                           -> -
+    v1327 Undef                                            -> -
     v1328 Imm(0)                                           -> -
-    v1329 Imm(16)                                          -> -
+    v1329 Imm(1)                                           -> -
     v1330 Imm(0)                                           -> -
-    v1331 Imm(16)                                          -> -
-    v1332 Imm(0)                                           -> -
+    v1331 Imm(1)                                           -> -
+    v1332 Imm(1)                                           -> -
     v1333 Imm(0)                                           -> -
     v1334 Imm(0)                                           -> -
     v1335 Imm(0)                                           -> -
-    v1336 Imm(0)                                           -> -
+    v1336 Imm(2)                                           -> -
     v1337 Imm(0)                                           -> -
     v1338 Imm(0)                                           -> -
-    v1339 Undef                                            -> -
-    v1340 Imm(1)                                           -> -
+    v1339 Imm(4)                                           -> -
+    v1340 Imm(0)                                           -> -
     v1341 Imm(0)                                           -> -
-    v1342 LocalAddr(-1)                                    -> -
-    v1343 StoreLocal { off=-1, value=v1341, kind=I64 }     -> -
-    v1344 LocalAddr(-1)                                    -> -
+    v1342 Imm(6)                                           -> -
+    v1343 Imm(0)                                           -> -
+    v1344 Imm(0)                                           -> -
     v1345 Imm(0)                                           -> -
-    v1346 LifetimeEnd(0)                                   -> -
-    v1347 LifetimeEnd(0)                                   -> -
+    v1346 Imm(16)                                          -> -
+    v1347 Imm(0)                                           -> -
     v1348 Imm(0)                                           -> -
-    v1349 Imm(0)                                           -> -
+    v1349 Imm(16)                                          -> -
     v1350 Imm(0)                                           -> -
-    v1351 LifetimeEnd(0)                                   -> -
-    v1352 LifetimeEnd(-1)                                  -> -
+    v1351 Imm(16)                                          -> -
+    v1352 Imm(0)                                           -> -
     v1353 Imm(0)                                           -> -
-    v1354 LifetimeEnd(0)                                   -> -
+    v1354 Imm(0)                                           -> -
     v1355 Imm(0)                                           -> -
     v1356 Imm(0)                                           -> -
     v1357 Imm(0)                                           -> -
     v1358 Imm(0)                                           -> -
-    v1359 LifetimeEnd(0)                                   -> -
-    v1360 LifetimeEnd(0)                                   -> -
+    v1359 Undef                                            -> -
+    v1360 Imm(1)                                           -> -
     v1361 Imm(0)                                           -> -
-    v1362 Undef                                            -> -
+    v1362 Imm(0)                                           -> -
     v1363 Imm(0)                                           -> -
-    v1364 Imm(0)                                           -> - [cmp32]
+    v1364 Imm(0)                                           -> -
     v1365 Imm(0)                                           -> -
     v1366 Imm(0)                                           -> -
     v1367 Imm(0)                                           -> -
-    v1368 Imm(1)                                           -> -
-    v1369 Imm(0)                                           -> -
-    terminator Jmp(b17)   (exit_acc=v1357)
-  block 17  start_pc=0
-    v1370 Imm(-32768)                                      -> -
-    v1371 Imm(-32768)                                      -> -
+    v1368 LifetimeEnd(0)                                   -> -
+    v1369 LifetimeEnd(0)                                   -> -
+    v1370 Imm(0)                                           -> -
+    v1371 Copy { value=v1361, fp=false }                   -> -
     v1372 Imm(0)                                           -> -
-    v1373 Imm(0)                                           -> -
-    v1374 Imm(0)                                           -> -
-    v1375 Imm(2)                                           -> -
-    v1376 Imm(0)                                           -> -
+    v1373 LifetimeEnd(0)                                   -> -
+    v1374 LifetimeEnd(0)                                   -> -
+    v1375 Imm(0)                                           -> -
+    v1376 LifetimeEnd(0)                                   -> -
     v1377 Imm(0)                                           -> -
-    v1378 Imm(4)                                           -> -
+    v1378 Undef                                            -> -
     v1379 Imm(0)                                           -> -
-    v1380 Imm(0)                                           -> -
-    v1381 Imm(6)                                           -> -
+    v1380 LifetimeEnd(0)                                   -> -
+    v1381 LifetimeEnd(0)                                   -> -
     v1382 Imm(0)                                           -> -
-    v1383 Imm(0)                                           -> -
+    v1383 Undef                                            -> -
     v1384 Imm(0)                                           -> -
-    v1385 Imm(20)                                          -> -
+    v1385 Imm(0)                                           -> -
     v1386 Imm(0)                                           -> -
     v1387 Imm(0)                                           -> -
-    v1388 Imm(20)                                          -> -
-    v1389 Imm(0)                                           -> -
-    v1390 Imm(20)                                          -> -
-    v1391 Imm(0)                                           -> -
-    v1392 Imm(0)                                           -> -
+    v1388 Imm(0)                                           -> -
+    v1389 Imm(1)                                           -> -
+    v1390 Imm(0)                                           -> -
+    v1391 Imm(-32768)                                      -> -
+    v1392 Imm(-32768)                                      -> -
     v1393 Imm(0)                                           -> -
     v1394 Imm(0)                                           -> -
     v1395 Imm(0)                                           -> -
-    v1396 Imm(0)                                           -> -
+    v1396 Imm(2)                                           -> -
     v1397 Imm(0)                                           -> -
-    v1398 Undef                                            -> -
-    v1399 Imm(0)                                           -> -
-    v1400 Imm(1)                                           -> -
-    v1401 Imm(15)                                          -> -
-    v1402 Imm(0)                                           -> -
-    v1403 Imm(15)                                          -> -
-    v1404 Imm(15)                                          -> -
+    v1398 Imm(0)                                           -> -
+    v1399 Imm(4)                                           -> -
+    v1400 Imm(0)                                           -> -
+    v1401 Imm(0)                                           -> -
+    v1402 Imm(6)                                           -> -
+    v1403 Imm(0)                                           -> -
+    v1404 Imm(0)                                           -> -
     v1405 Imm(0)                                           -> -
-    v1406 Imm(-32768)                                      -> -
-    v1407 Imm(-1)                                          -> -
-    v1408 Undef                                            -> -
-    v1409 Imm(0)                                           -> -
-    v1410 Imm(65535)                                       -> -
-    v1411 Imm(65535)                                       -> -
+    v1406 Imm(20)                                          -> -
+    v1407 Imm(0)                                           -> -
+    v1408 Imm(0)                                           -> -
+    v1409 Imm(20)                                          -> -
+    v1410 Imm(0)                                           -> -
+    v1411 Imm(20)                                          -> -
     v1412 Imm(0)                                           -> -
-    v1413 Imm(2)                                           -> -
-    v1414 Imm(-32768)                                      -> -
-    v1415 Imm(-1)                                          -> -
+    v1413 Imm(0)                                           -> -
+    v1414 Imm(0)                                           -> -
+    v1415 Imm(0)                                           -> -
     v1416 Imm(0)                                           -> -
     v1417 Imm(0)                                           -> -
-    v1418 Imm(65535)                                       -> -
-    v1419 Imm(65535)                                       -> -
-    v1420 Imm(4294901760)                                  -> -
-    v1421 Imm(4294967295)                                  -> -
-    v1422 Imm(0)                                           -> -
-    v1423 Imm(4)                                           -> -
-    v1424 Imm(-32768)                                      -> -
-    v1425 Imm(-1)                                          -> -
+    v1418 Imm(0)                                           -> -
+    v1419 Undef                                            -> -
+    v1420 Imm(0)                                           -> -
+    v1421 Imm(1)                                           -> -
+    v1422 Imm(15)                                          -> -
+    v1423 Imm(0)                                           -> -
+    v1424 Imm(15)                                          -> -
+    v1425 Imm(15)                                          -> -
     v1426 Imm(0)                                           -> -
-    v1427 Imm(0)                                           -> -
-    v1428 Imm(4294967295)                                  -> -
-    v1429 Imm(65535)                                       -> -
-    v1430 Imm(281470681743360)                             -> -
-    v1431 Imm(281474976710655)                             -> -
-    v1432 Imm(0)                                           -> -
-    v1433 Imm(6)                                           -> -
-    v1434 Imm(-32768)                                      -> -
-    v1435 Imm(-1)                                          -> -
-    v1436 Imm(0)                                           -> -
+    v1427 Imm(-32768)                                      -> -
+    v1428 Imm(-1)                                          -> -
+    v1429 Undef                                            -> -
+    v1430 Imm(0)                                           -> -
+    v1431 Imm(65535)                                       -> -
+    v1432 Imm(65535)                                       -> -
+    v1433 Imm(0)                                           -> -
+    v1434 Imm(2)                                           -> -
+    v1435 Imm(-32768)                                      -> -
+    v1436 Imm(-1)                                          -> -
     v1437 Imm(0)                                           -> -
-    v1438 Imm(281474976710655)                             -> -
+    v1438 Imm(0)                                           -> -
     v1439 Imm(65535)                                       -> -
-    v1440 Imm(-281474976710656)                            -> -
-    v1441 Imm(-1)                                          -> -
-    v1442 Imm(0)                                           -> -
-    v1443 LifetimeEnd(0)                                   -> -
-    v1444 LifetimeEnd(0)                                   -> -
-    v1445 Imm(0)                                           -> -
-    v1446 Imm(0)                                           -> -
+    v1440 Imm(65535)                                       -> -
+    v1441 Imm(4294901760)                                  -> -
+    v1442 Imm(4294967295)                                  -> -
+    v1443 Imm(0)                                           -> -
+    v1444 Imm(4)                                           -> -
+    v1445 Imm(-32768)                                      -> -
+    v1446 Imm(-1)                                          -> -
     v1447 Imm(0)                                           -> -
-    v1448 LifetimeEnd(0)                                   -> -
-    v1449 Imm(0)                                           -> -
-    v1450 LifetimeEnd(0)                                   -> -
-    v1451 Imm(0)                                           -> -
-    v1452 Imm(0)                                           -> -
+    v1448 Imm(0)                                           -> -
+    v1449 Imm(4294967295)                                  -> -
+    v1450 Imm(65535)                                       -> -
+    v1451 Imm(281470681743360)                             -> -
+    v1452 Imm(281474976710655)                             -> -
     v1453 Imm(0)                                           -> -
-    v1454 LifetimeEnd(0)                                   -> -
-    v1455 LifetimeEnd(0)                                   -> -
-    v1456 Imm(0)                                           -> -
-    v1457 Undef                                            -> -
+    v1454 Imm(6)                                           -> -
+    v1455 Imm(-32768)                                      -> -
+    v1456 Imm(-1)                                          -> -
+    v1457 Imm(0)                                           -> -
     v1458 Imm(0)                                           -> -
-    v1459 Imm(0)                                           -> -
-    v1460 Imm(0)                                           -> -
-    v1461 Imm(0)                                           -> -
-    v1462 Imm(0)                                           -> -
+    v1459 Imm(281474976710655)                             -> -
+    v1460 Imm(65535)                                       -> -
+    v1461 Imm(-281474976710656)                            -> -
+    v1462 Imm(-1)                                          -> -
     v1463 Imm(0)                                           -> -
-    v1464 Imm(-1)                                          -> -
-    v1465 Imm(-1)                                          -> -
+    v1464 LifetimeEnd(0)                                   -> -
+    v1465 LifetimeEnd(0)                                   -> -
     v1466 Imm(0)                                           -> -
     v1467 Imm(0)                                           -> -
     v1468 Imm(0)                                           -> -
-    v1469 Imm(4)                                           -> -
+    v1469 LifetimeEnd(0)                                   -> -
     v1470 Imm(0)                                           -> -
-    v1471 Imm(0)                                           -> -
+    v1471 LifetimeEnd(0)                                   -> -
     v1472 Imm(0)                                           -> -
-    v1473 Imm(28)                                          -> -
+    v1473 Undef                                            -> -
     v1474 Imm(0)                                           -> -
-    v1475 Imm(0)                                           -> -
-    v1476 Imm(28)                                          -> -
+    v1475 LifetimeEnd(0)                                   -> -
+    v1476 LifetimeEnd(0)                                   -> -
     v1477 Imm(0)                                           -> -
-    v1478 Imm(28)                                          -> -
+    v1478 Undef                                            -> -
     v1479 Imm(0)                                           -> -
     v1480 Imm(0)                                           -> -
     v1481 Imm(0)                                           -> -
     v1482 Imm(0)                                           -> -
     v1483 Imm(0)                                           -> -
     v1484 Imm(0)                                           -> -
-    v1485 Imm(0)                                           -> -
-    v1486 Undef                                            -> -
+    v1485 Imm(-1)                                          -> -
+    v1486 Imm(-1)                                          -> -
     v1487 Imm(0)                                           -> -
     v1488 Imm(0)                                           -> -
-    v1489 Imm(28)                                          -> -
-    v1490 Imm(28)                                          -> -
-    v1491 LocalAddr(-1)                                    -> -
-    v1492 Imm(4294967295)                                  -> -
-    v1493 Imm(15)                                          -> -
-    v1494 Imm(64424509455)                                 -> x0
-    v1495 Imm(4)                                           -> -
-    v1496 Imm(4294967295)                                  -> -
-    v1497 Imm(15)                                          -> -
-    v1498 BinopI { op=add, lhs=v1271, rhs_imm=4 }          -> -
-    v1499 StoreLocal { off=-1, value=v1494, kind=I64 }     -> -
+    v1489 Imm(0)                                           -> -
+    v1490 Imm(4)                                           -> -
+    v1491 Imm(0)                                           -> -
+    v1492 Imm(0)                                           -> -
+    v1493 Imm(0)                                           -> -
+    v1494 Imm(28)                                          -> -
+    v1495 Imm(0)                                           -> -
+    v1496 Imm(0)                                           -> -
+    v1497 Imm(28)                                          -> -
+    v1498 Imm(0)                                           -> -
+    v1499 Imm(28)                                          -> -
     v1500 Imm(0)                                           -> -
-    v1501 LifetimeEnd(0)                                   -> -
-    v1502 LifetimeEnd(0)                                   -> -
+    v1501 Imm(0)                                           -> -
+    v1502 Imm(0)                                           -> -
     v1503 Imm(0)                                           -> -
-    v1504 LoadLocal { off=-1, kind=F64 }                   -> d0
+    v1504 Imm(0)                                           -> -
     v1505 Imm(0)                                           -> -
-    v1506 LifetimeEnd(-1)                                  -> -
-    v1507 LifetimeEnd(0)                                   -> -
+    v1506 Imm(0)                                           -> -
+    v1507 Undef                                            -> -
     v1508 Imm(0)                                           -> -
-    v1509 LifetimeEnd(0)                                   -> -
-    v1510 Imm(0)                                           -> -
-    v1511 Imm(0)                                           -> -
-    v1512 VecExtract { vec=v1504, off=0, kind=I64, bytes=8 } -> x0
-    v1513 Imm(0)                                           -> -
-    v1514 LifetimeEnd(0)                                   -> -
-    v1515 LifetimeEnd(0)                                   -> -
+    v1509 Imm(0)                                           -> -
+    v1510 Imm(28)                                          -> -
+    v1511 Imm(28)                                          -> -
+    v1512 Imm(0)                                           -> -
+    v1513 Imm(4294967295)                                  -> -
+    v1514 Imm(15)                                          -> -
+    v1515 Undef                                            -> -
     v1516 Imm(0)                                           -> -
-    v1517 Undef                                            -> -
-    v1518 BinopI { op=ne, lhs=v1512, rhs_imm=64424509455 } -> x0
+    v1517 Imm(15)                                          -> -
+    v1518 Imm(15)                                          -> -
     v1519 Imm(0)                                           -> -
-    v1520 Imm(0)                                           -> -
-    v1521 Imm(0)                                           -> -
-    terminator Bz { cond=v1518, target=b19, fall=b18 }   (exit_acc=v1518)
-  block 18  start_pc=0
-    v1522 Imm(14)                                          -> x0
-    v1523 LifetimeEnd(0)                                   -> -
-    v1524 LifetimeEnd(0)                                   -> -
-    v1525 LifetimeEnd(0)                                   -> -
-    v1526 LifetimeEnd(0)                                   -> -
-    terminator Return(v1522)   (exit_acc=v1522)
-  block 19  start_pc=0
-    v1527 Imm(1)                                           -> -
-    v1528 Imm(0)                                           -> -
+    v1520 Imm(4)                                           -> -
+    v1521 Imm(4294967295)                                  -> -
+    v1522 Imm(15)                                          -> -
+    v1523 Imm(0)                                           -> -
+    v1524 Imm(0)                                           -> -
+    v1525 Imm(15)                                          -> -
+    v1526 Imm(15)                                          -> -
+    v1527 Imm(64424509440)                                 -> -
+    v1528 Imm(64424509455)                                 -> -
     v1529 Imm(0)                                           -> -
     v1530 Imm(0)                                           -> -
-    v1531 Imm(63)                                          -> -
+    v1531 Imm(0)                                           -> -
     v1532 Imm(0)                                           -> -
-    v1533 Imm(0)                                           -> -
-    v1534 Imm(0)                                           -> -
+    v1533 LifetimeEnd(0)                                   -> -
+    v1534 LifetimeEnd(0)                                   -> -
     v1535 Imm(0)                                           -> -
-    v1536 Imm(0)                                           -> -
+    v1536 Copy { value=v1528, fp=false }                   -> -
     v1537 Imm(0)                                           -> -
-    v1538 Imm(0)                                           -> -
-    v1539 Imm(0)                                           -> -
-    v1540 Undef                                            -> -
-    v1541 Imm(0)                                           -> -
+    v1538 LifetimeEnd(0)                                   -> -
+    v1539 LifetimeEnd(0)                                   -> -
+    v1540 Imm(0)                                           -> -
+    v1541 LifetimeEnd(0)                                   -> -
     v1542 Imm(0)                                           -> -
     v1543 Undef                                            -> -
-    v1544 Imm(-9223372036854775808)                        -> -
-    v1545 Imm(0)                                           -> -
-    v1546 Imm(0)                                           -> -
+    v1544 Imm(0)                                           -> -
+    v1545 LifetimeEnd(0)                                   -> -
+    v1546 LifetimeEnd(0)                                   -> -
     v1547 Imm(0)                                           -> -
-    v1548 Imm(0)                                           -> -
+    v1548 Undef                                            -> -
     v1549 Imm(0)                                           -> -
-    v1550 LifetimeEnd(0)                                   -> -
-    v1551 LifetimeEnd(0)                                   -> -
+    v1550 Imm(0)                                           -> -
+    v1551 Imm(0)                                           -> -
     v1552 Imm(0)                                           -> -
-    v1553 Copy { value=v1544, fp=false }                   -> -
+    v1553 Imm(1)                                           -> -
     v1554 Imm(0)                                           -> -
-    v1555 LifetimeEnd(0)                                   -> -
-    v1556 LifetimeEnd(0)                                   -> -
-    v1557 Imm(0)                                           -> -
-    v1558 Undef                                            -> -
+    v1555 Imm(0)                                           -> -
+    v1556 Imm(0)                                           -> -
+    v1557 Imm(63)                                          -> -
+    v1558 Imm(0)                                           -> -
     v1559 Imm(0)                                           -> -
-    v1560 Imm(1)                                           -> -
+    v1560 Imm(0)                                           -> -
     v1561 Imm(0)                                           -> -
-    v1562 Imm(1)                                           -> -
+    v1562 Imm(0)                                           -> -
     v1563 Imm(0)                                           -> -
     v1564 Imm(0)                                           -> -
     v1565 Imm(0)                                           -> -
-    v1566 Imm(64)                                          -> -
+    v1566 Undef                                            -> -
     v1567 Imm(0)                                           -> -
     v1568 Imm(0)                                           -> -
-    v1569 Imm(0)                                           -> -
-    v1570 Imm(0)                                           -> -
+    v1569 Undef                                            -> -
+    v1570 Imm(-9223372036854775808)                        -> -
     v1571 Imm(0)                                           -> -
     v1572 Imm(0)                                           -> -
     v1573 Imm(0)                                           -> -
     v1574 Imm(0)                                           -> -
-    v1575 Undef                                            -> -
-    v1576 Imm(1)                                           -> -
-    v1577 Imm(0)                                           -> -
+    v1575 Imm(0)                                           -> -
+    v1576 LifetimeEnd(0)                                   -> -
+    v1577 LifetimeEnd(0)                                   -> -
     v1578 Imm(0)                                           -> -
-    v1579 Imm(0)                                           -> -
+    v1579 Copy { value=v1570, fp=false }                   -> -
     v1580 Imm(0)                                           -> -
-    v1581 Imm(0)                                           -> -
-    v1582 Imm(0)                                           -> -
+    v1581 LifetimeEnd(0)                                   -> -
+    v1582 LifetimeEnd(0)                                   -> -
     v1583 Imm(0)                                           -> -
-    v1584 LifetimeEnd(0)                                   -> -
-    v1585 LifetimeEnd(0)                                   -> -
-    v1586 Imm(0)                                           -> -
-    v1587 Copy { value=v1577, fp=false }                   -> -
-    v1588 Imm(0)                                           -> -
-    v1589 LifetimeEnd(0)                                   -> -
-    v1590 LifetimeEnd(0)                                   -> -
+    v1584 Undef                                            -> -
+    v1585 Imm(0)                                           -> -
+    v1586 Imm(1)                                           -> -
+    v1587 Imm(0)                                           -> -
+    v1588 Imm(1)                                           -> -
+    v1589 Imm(0)                                           -> -
+    v1590 Imm(0)                                           -> -
     v1591 Imm(0)                                           -> -
-    v1592 Undef                                            -> -
+    v1592 Imm(64)                                          -> -
     v1593 Imm(0)                                           -> -
     v1594 Imm(0)                                           -> -
     v1595 Imm(0)                                           -> -
     v1596 Imm(0)                                           -> -
     v1597 Imm(0)                                           -> -
-    v1598 Imm(1)                                           -> -
+    v1598 Imm(0)                                           -> -
     v1599 Imm(0)                                           -> -
-    v1600 Imm(-1)                                          -> -
-    v1601 Imm(0)                                           -> -
-    v1602 Imm(0)                                           -> -
+    v1600 Imm(0)                                           -> -
+    v1601 Undef                                            -> -
+    v1602 Imm(1)                                           -> -
     v1603 Imm(0)                                           -> -
-    v1604 Imm(4)                                           -> -
+    v1604 Imm(0)                                           -> -
     v1605 Imm(0)                                           -> -
     v1606 Imm(0)                                           -> -
     v1607 Imm(0)                                           -> -
     v1608 Imm(0)                                           -> -
     v1609 Imm(0)                                           -> -
-    v1610 Imm(0)                                           -> -
-    v1611 Imm(0)                                           -> -
+    v1610 LifetimeEnd(0)                                   -> -
+    v1611 LifetimeEnd(0)                                   -> -
     v1612 Imm(0)                                           -> -
-    v1613 Undef                                            -> -
+    v1613 Copy { value=v1603, fp=false }                   -> -
     v1614 Imm(0)                                           -> -
-    v1615 Imm(0)                                           -> -
-    v1616 Undef                                            -> -
-    v1617 Imm(1152921504606846975)                         -> -
-    v1618 Imm(0)                                           -> -
+    v1615 LifetimeEnd(0)                                   -> -
+    v1616 LifetimeEnd(0)                                   -> -
+    v1617 Imm(0)                                           -> -
+    v1618 Undef                                            -> -
     v1619 Imm(0)                                           -> -
     v1620 Imm(0)                                           -> -
     v1621 Imm(0)                                           -> -
     v1622 Imm(0)                                           -> -
-    v1623 LifetimeEnd(0)                                   -> -
-    v1624 LifetimeEnd(0)                                   -> -
+    v1623 Imm(0)                                           -> -
+    v1624 Imm(1)                                           -> -
     v1625 Imm(0)                                           -> -
-    v1626 Copy { value=v1617, fp=false }                   -> -
+    v1626 Imm(-1)                                          -> -
     v1627 Imm(0)                                           -> -
-    v1628 LifetimeEnd(0)                                   -> -
-    v1629 LifetimeEnd(0)                                   -> -
-    v1630 Imm(0)                                           -> -
-    v1631 Undef                                            -> -
+    v1628 Imm(0)                                           -> -
+    v1629 Imm(0)                                           -> -
+    v1630 Imm(4)                                           -> -
+    v1631 Imm(0)                                           -> -
     v1632 Imm(0)                                           -> -
     v1633 Imm(0)                                           -> -
     v1634 Imm(0)                                           -> -
     v1635 Imm(0)                                           -> -
     v1636 Imm(0)                                           -> -
     v1637 Imm(0)                                           -> -
-    v1638 Imm(-8)                                          -> -
-    v1639 Imm(-8)                                          -> -
+    v1638 Imm(0)                                           -> -
+    v1639 Undef                                            -> -
     v1640 Imm(0)                                           -> -
     v1641 Imm(0)                                           -> -
-    v1642 Imm(0)                                           -> -
-    v1643 Imm(4)                                           -> -
+    v1642 Undef                                            -> -
+    v1643 Imm(1152921504606846975)                         -> -
     v1644 Imm(0)                                           -> -
     v1645 Imm(0)                                           -> -
     v1646 Imm(0)                                           -> -
-    v1647 Imm(1)                                           -> -
+    v1647 Imm(0)                                           -> -
     v1648 Imm(0)                                           -> -
-    v1649 Imm(0)                                           -> -
-    v1650 Imm(0)                                           -> -
+    v1649 LifetimeEnd(0)                                   -> -
+    v1650 LifetimeEnd(0)                                   -> -
     v1651 Imm(0)                                           -> -
-    v1652 Imm(0)                                           -> -
+    v1652 Copy { value=v1643, fp=false }                   -> -
     v1653 Imm(0)                                           -> -
-    v1654 Imm(0)                                           -> -
-    v1655 Imm(0)                                           -> -
-    v1656 Undef                                            -> -
-    v1657 Imm(0)                                           -> -
+    v1654 LifetimeEnd(0)                                   -> -
+    v1655 LifetimeEnd(0)                                   -> -
+    v1656 Imm(0)                                           -> -
+    v1657 Undef                                            -> -
     v1658 Imm(0)                                           -> -
-    v1659 Imm(-1085102592571150096)                        -> -
+    v1659 Imm(0)                                           -> -
     v1660 Imm(0)                                           -> -
     v1661 Imm(0)                                           -> -
     v1662 Imm(0)                                           -> -
     v1663 Imm(0)                                           -> -
-    v1664 Undef                                            -> -
-    v1665 VecConst { imm=-1085102592571150096, kind=I64, bytes=8 } -> -
+    v1664 Imm(-8)                                          -> -
+    v1665 Imm(-8)                                          -> -
     v1666 Imm(0)                                           -> -
-    v1667 LifetimeEnd(0)                                   -> -
-    v1668 Imm(-71777214294589696)                          -> -
-    v1669 Imm(0)                                           -> -
+    v1667 Imm(0)                                           -> -
+    v1668 Imm(0)                                           -> -
+    v1669 Imm(4)                                           -> -
     v1670 Imm(0)                                           -> -
     v1671 Imm(0)                                           -> -
     v1672 Imm(0)                                           -> -
-    v1673 Imm(0)                                           -> -
-    v1674 LifetimeEnd(0)                                   -> -
+    v1673 Imm(1)                                           -> -
+    v1674 Imm(0)                                           -> -
     v1675 Imm(0)                                           -> -
     v1676 Imm(0)                                           -> -
     v1677 Imm(0)                                           -> -
     v1678 Imm(0)                                           -> -
-    v1679 Undef                                            -> -
-    v1680 Imm(-1152657617789587456)                        -> -
+    v1679 Imm(0)                                           -> -
+    v1680 Imm(0)                                           -> -
     v1681 Imm(0)                                           -> -
-    v1682 Imm(0)                                           -> -
-    v1683 Undef                                            -> -
+    v1682 Undef                                            -> -
+    v1683 Imm(0)                                           -> -
     v1684 Imm(0)                                           -> -
-    v1685 Imm(1)                                           -> -
+    v1685 Imm(-1085102592571150096)                        -> -
     v1686 Imm(0)                                           -> -
     v1687 Imm(0)                                           -> -
     v1688 Imm(0)                                           -> -
     v1689 Imm(0)                                           -> -
-    v1690 Imm(0)                                           -> -
-    v1691 Imm(0)                                           -> -
+    v1690 Undef                                            -> -
+    v1691 VecConst { imm=-1085102592571150096, kind=I64, bytes=8 } -> -
     v1692 Imm(0)                                           -> -
-    v1693 Imm(0)                                           -> -
-    v1694 Imm(0)                                           -> -
+    v1693 LifetimeEnd(0)                                   -> -
+    v1694 Imm(-71777214294589696)                          -> -
     v1695 Imm(0)                                           -> -
     v1696 Imm(0)                                           -> -
-    v1697 Imm(4042322160)                                  -> -
-    v1698 Imm(-4042322161)                                 -> -
-    v1699 Undef                                            -> -
-    v1700 Imm(0)                                           -> -
-    v1701 Imm(252645135)                                   -> -
-    v1702 Imm(252645135)                                   -> -
+    v1697 Imm(0)                                           -> -
+    v1698 Imm(0)                                           -> -
+    v1699 Imm(0)                                           -> -
+    v1700 LifetimeEnd(0)                                   -> -
+    v1701 Imm(0)                                           -> -
+    v1702 Imm(0)                                           -> -
     v1703 Imm(0)                                           -> -
-    v1704 Imm(4)                                           -> -
-    v1705 Imm(0)                                           -> -
-    v1706 Imm(4042322160)                                  -> -
-    v1707 Imm(-4042322161)                                 -> -
+    v1704 Imm(0)                                           -> -
+    v1705 Undef                                            -> -
+    v1706 Imm(-1152657617789587456)                        -> -
+    v1707 Imm(0)                                           -> -
     v1708 Imm(0)                                           -> -
-    v1709 Imm(0)                                           -> -
-    v1710 Imm(252645135)                                   -> -
-    v1711 Imm(252645135)                                   -> -
-    v1712 Imm(1085102592318504960)                         -> -
-    v1713 Imm(1085102592571150095)                         -> -
+    v1709 Undef                                            -> -
+    v1710 Imm(0)                                           -> -
+    v1711 Imm(1)                                           -> -
+    v1712 Imm(0)                                           -> -
+    v1713 Imm(0)                                           -> -
     v1714 Imm(0)                                           -> -
     v1715 Imm(0)                                           -> -
     v1716 Imm(0)                                           -> -
     v1717 Imm(0)                                           -> -
-    v1718 Undef                                            -> -
-    v1719 Imm(1080880403494997760)                         -> -
+    v1718 Imm(0)                                           -> -
+    v1719 Imm(0)                                           -> -
     v1720 Imm(0)                                           -> -
-    v1721 LifetimeEnd(0)                                   -> -
-    v1722 LifetimeEnd(0)                                   -> -
-    v1723 Imm(0)                                           -> -
-    v1724 Imm(0)                                           -> -
-    v1725 Imm(0)                                           -> -
-    v1726 LifetimeEnd(0)                                   -> -
-    v1727 LifetimeEnd(0)                                   -> -
-    v1728 Imm(0)                                           -> -
-    v1729 Undef                                            -> -
-    v1730 Imm(0)                                           -> -
+    v1721 Imm(0)                                           -> -
+    v1722 Imm(0)                                           -> -
+    v1723 Imm(4042322160)                                  -> -
+    v1724 Imm(-4042322161)                                 -> -
+    v1725 Undef                                            -> -
+    v1726 Imm(0)                                           -> -
+    v1727 Imm(252645135)                                   -> -
+    v1728 Imm(252645135)                                   -> -
+    v1729 Imm(0)                                           -> -
+    v1730 Imm(4)                                           -> -
     v1731 Imm(0)                                           -> -
-    v1732 Imm(0)                                           -> -
-    v1733 Imm(0)                                           -> -
+    v1732 Imm(4042322160)                                  -> -
+    v1733 Imm(-4042322161)                                 -> -
     v1734 Imm(0)                                           -> -
-    v1735 Imm(1)                                           -> -
-    v1736 Imm(0)                                           -> -
-    v1737 Imm(0)                                           -> -
-    v1738 Imm(0)                                           -> -
-    v1739 Imm(0)                                           -> -
+    v1735 Imm(0)                                           -> -
+    v1736 Imm(252645135)                                   -> -
+    v1737 Imm(252645135)                                   -> -
+    v1738 Imm(1085102592318504960)                         -> -
+    v1739 Imm(1085102592571150095)                         -> -
     v1740 Imm(0)                                           -> -
-    v1741 Undef                                            -> -
-    v1742 Imm(-4222189076152336)                           -> -
+    v1741 Imm(0)                                           -> -
+    v1742 Imm(0)                                           -> -
     v1743 Imm(0)                                           -> -
-    v1744 Imm(0)                                           -> -
-    v1745 Undef                                            -> -
+    v1744 Undef                                            -> -
+    v1745 Imm(1080880403494997760)                         -> -
     v1746 Imm(0)                                           -> -
-    v1747 Imm(0)                                           -> -
-    v1748 Imm(0)                                           -> -
+    v1747 LifetimeEnd(0)                                   -> -
+    v1748 LifetimeEnd(0)                                   -> -
     v1749 Imm(0)                                           -> -
     v1750 Imm(0)                                           -> -
     v1751 Imm(0)                                           -> -
-    v1752 Imm(0)                                           -> -
-    v1753 Imm(0)                                           -> -
+    v1752 LifetimeEnd(0)                                   -> -
+    v1753 LifetimeEnd(0)                                   -> -
     v1754 Imm(0)                                           -> -
-    v1755 Imm(0)                                           -> -
-    v1756 Undef                                            -> -
-    v1757 Imm(1148435428713435120)                         -> -
+    v1755 Undef                                            -> -
+    v1756 Imm(0)                                           -> -
+    v1757 Imm(0)                                           -> -
     v1758 Imm(0)                                           -> -
     v1759 Imm(0)                                           -> -
-    v1760 Undef                                            -> -
-    v1761 Imm(0)                                           -> -
+    v1760 Imm(0)                                           -> -
+    v1761 Imm(1)                                           -> -
     v1762 Imm(0)                                           -> -
     v1763 Imm(0)                                           -> -
     v1764 Imm(0)                                           -> -
     v1765 Imm(0)                                           -> -
-    v1766 ImmData(24)                                      -> -
-    v1767 Load { addr=v1766, disp=0, kind=F64 pc_rel }     -> d0
-    v1768 Imm(0)                                           -> -
+    v1766 Imm(0)                                           -> -
+    v1767 Undef                                            -> -
+    v1768 Imm(-4222189076152336)                           -> -
     v1769 Imm(0)                                           -> -
     v1770 Imm(0)                                           -> -
-    v1771 ImmData(32)                                      -> -
-    v1772 Load { addr=v1771, disp=0, kind=F64 pc_rel }     -> d2
+    v1771 Undef                                            -> -
+    v1772 Imm(0)                                           -> -
     v1773 Imm(0)                                           -> -
     v1774 Imm(0)                                           -> -
     v1775 Imm(0)                                           -> -
     v1776 Imm(0)                                           -> -
     v1777 Imm(0)                                           -> -
-    v1778 SimdVal { op=__builtin_ia32_pcmpeqw, imm=None, args=[v1767, v1772] } -> d0
+    v1778 Imm(0)                                           -> -
     v1779 Imm(0)                                           -> -
     v1780 Imm(0)                                           -> -
     v1781 Imm(0)                                           -> -
-    v1782 VecExtract { vec=v1778, off=0, kind=I64, bytes=8 } -> x0
-    v1783 BinopI { op=ne, lhs=v1782, rhs_imm=281470681808895 } -> x0
-    v1784 Imm(1)                                           -> -
+    v1782 Undef                                            -> -
+    v1783 Imm(1148435428713435120)                         -> -
+    v1784 Imm(0)                                           -> -
     v1785 Imm(0)                                           -> -
-    terminator Bnz { cond=v1783, target=b22, fall=b20 }   (exit_acc=v1783)
-  block 20  start_pc=0
+    v1786 Undef                                            -> -
+    v1787 Imm(0)                                           -> -
+    v1788 Imm(0)                                           -> -
+    v1789 Imm(0)                                           -> -
+    v1790 Imm(0)                                           -> -
+    v1791 Imm(0)                                           -> -
+    v1792 ImmData(24)                                      -> -
+    v1793 Load { addr=v1792, disp=0, kind=F64 pc_rel }     -> d0
+    v1794 Imm(0)                                           -> -
+    v1795 Imm(0)                                           -> -
     v1796 Imm(0)                                           -> -
-    v1797 ImmData(40)                                      -> -
-    v1798 Load { addr=v1797, disp=0, kind=F64 pc_rel }     -> d0
+    v1797 ImmData(32)                                      -> -
+    v1798 Load { addr=v1797, disp=0, kind=F64 pc_rel }     -> d2
     v1799 Imm(0)                                           -> -
     v1800 Imm(0)                                           -> -
     v1801 Imm(0)                                           -> -
-    v1802 ImmData(48)                                      -> -
-    v1803 Load { addr=v1802, disp=0, kind=F64 pc_rel }     -> d2
-    v1804 Imm(0)                                           -> -
+    v1802 Imm(0)                                           -> -
+    v1803 Imm(0)                                           -> -
+    v1804 SimdVal { op=__builtin_ia32_pcmpeqw, imm=None, args=[v1793, v1798] } -> d0
     v1805 Imm(0)                                           -> -
     v1806 Imm(0)                                           -> -
     v1807 Imm(0)                                           -> -
-    v1808 Imm(0)                                           -> -
-    v1809 SimdVal { op=__builtin_ia32_pcmpgtd, imm=None, args=[v1798, v1803] } -> d0
-    v1810 Imm(0)                                           -> -
+    v1808 VecExtract { vec=v1804, off=0, kind=I64, bytes=8 } -> x0
+    v1809 BinopI { op=ne, lhs=v1808, rhs_imm=281470681808895 } -> x0
+    v1810 Imm(1)                                           -> -
     v1811 Imm(0)                                           -> -
-    v1812 Imm(0)                                           -> -
-    v1813 VecExtract { vec=v1809, off=0, kind=I64, bytes=8 } -> x0
-    v1814 BinopI { op=ne, lhs=v1813, rhs_imm=4294967295 }  -> x0
-    v1815 BinopI { op=ne, lhs=v1814, rhs_imm=0 }           -> - [cmp32]
-    v1816 Imm(0)                                           -> -
-    v1817 Imm(0)                                           -> -
-    v1818 Imm(0)                                           -> -
-    v1819 Imm(0)                                           -> -
-    terminator Bnz { cond=v1814, target=b22, fall=b21 }   (exit_acc=v1814)
-  block 21  start_pc=0
-    v1820 Imm(-1)                                          -> -
-    v1821 Imm(-1)                                          -> -
-    v1822 Imm(0)                                           -> -
-    v1823 Undef                                            -> -
-    v1824 Undef                                            -> -
-    v1825 Imm(0)                                           -> -
-    v1826 Imm(0)                                           -> -
-    v1827 Imm(1)                                           -> -
-    v1828 Imm(0)                                           -> -
-    v1829 Undef                                            -> -
+    terminator Bnz { cond=v1809, target=b18, fall=b16 }
+  block 16  start_pc=0
+    v1827 Imm(0)                                           -> -
+    v1828 ImmData(40)                                      -> -
+    v1829 Load { addr=v1828, disp=0, kind=F64 pc_rel }     -> d0
     v1830 Imm(0)                                           -> -
     v1831 Imm(0)                                           -> -
-    v1832 Imm(2)                                           -> -
-    v1833 Imm(0)                                           -> -
-    v1834 Undef                                            -> -
+    v1832 Imm(0)                                           -> -
+    v1833 ImmData(48)                                      -> -
+    v1834 Load { addr=v1833, disp=0, kind=F64 pc_rel }     -> d2
     v1835 Imm(0)                                           -> -
     v1836 Imm(0)                                           -> -
-    v1837 Imm(3)                                           -> -
+    v1837 Imm(0)                                           -> -
     v1838 Imm(0)                                           -> -
-    v1839 Undef                                            -> -
-    v1840 Imm(0)                                           -> -
+    v1839 Imm(0)                                           -> -
+    v1840 SimdVal { op=__builtin_ia32_pcmpgtd, imm=None, args=[v1829, v1834] } -> d0
     v1841 Imm(0)                                           -> -
-    v1842 Imm(4)                                           -> -
+    v1842 Imm(0)                                           -> -
     v1843 Imm(0)                                           -> -
-    v1844 Undef                                            -> -
-    v1845 Imm(0)                                           -> -
-    v1846 Imm(0)                                           -> -
-    v1847 Imm(5)                                           -> -
+    v1844 VecExtract { vec=v1840, off=0, kind=I64, bytes=8 } -> x0
+    v1845 BinopI { op=ne, lhs=v1844, rhs_imm=4294967295 }  -> x0
+    v1846 BinopI { op=ne, lhs=v1845, rhs_imm=0 }           -> - [cmp32]
+    v1847 Imm(0)                                           -> -
     v1848 Imm(0)                                           -> -
-    v1849 Undef                                            -> -
+    v1849 Imm(0)                                           -> -
     v1850 Imm(0)                                           -> -
-    v1851 Imm(0)                                           -> -
-    v1852 Imm(6)                                           -> -
+    terminator Bnz { cond=v1845, target=b18, fall=b17 }
+  block 17  start_pc=0
+    v1851 Imm(-1)                                          -> -
+    v1852 Imm(-1)                                          -> -
     v1853 Imm(0)                                           -> -
     v1854 Undef                                            -> -
-    v1855 Imm(0)                                           -> -
+    v1855 Undef                                            -> -
     v1856 Imm(0)                                           -> -
-    v1857 Imm(7)                                           -> -
-    v1858 Imm(0)                                           -> -
-    v1859 VecConst { imm=-1, kind=I8, bytes=8 }            -> d0
-    v1860 Imm(0)                                           -> -
+    v1857 Imm(0)                                           -> -
+    v1858 Imm(1)                                           -> -
+    v1859 Imm(0)                                           -> -
+    v1860 Undef                                            -> -
     v1861 Imm(0)                                           -> -
     v1862 Imm(0)                                           -> -
-    v1863 Imm(0)                                           -> -
+    v1863 Imm(2)                                           -> -
     v1864 Imm(0)                                           -> -
     v1865 Undef                                            -> -
-    v1866 VecConst { imm=0, kind=I64, bytes=8 }            -> d2
+    v1866 Imm(0)                                           -> -
     v1867 Imm(0)                                           -> -
-    v1868 Imm(0)                                           -> -
+    v1868 Imm(3)                                           -> -
     v1869 Imm(0)                                           -> -
-    v1870 Imm(0)                                           -> -
+    v1870 Undef                                            -> -
     v1871 Imm(0)                                           -> -
-    v1872 SimdVal { op=__builtin_ia32_pcmpgtb, imm=None, args=[v1859, v1866] } -> d0
-    v1873 Imm(0)                                           -> -
+    v1872 Imm(0)                                           -> -
+    v1873 Imm(4)                                           -> -
     v1874 Imm(0)                                           -> -
-    v1875 Imm(0)                                           -> -
-    v1876 VecExtract { vec=v1872, off=0, kind=I64, bytes=8 } -> x0
-    v1877 BinopI { op=ne, lhs=v1876, rhs_imm=0 }           -> -
-    v1878 Imm(0)                                           -> -
+    v1875 Undef                                            -> -
+    v1876 Imm(0)                                           -> -
+    v1877 Imm(0)                                           -> -
+    v1878 Imm(5)                                           -> -
     v1879 Imm(0)                                           -> -
-    v1880 Imm(0)                                           -> -
-    terminator Bz { cond=v1876, target=b23, fall=b22 }   (exit_acc=v1877)
-  block 22  start_pc=0
-    v1881 Imm(17)                                          -> x0
-    v1882 LifetimeEnd(0)                                   -> -
-    v1883 LifetimeEnd(0)                                   -> -
-    v1884 LifetimeEnd(0)                                   -> -
-    v1885 LifetimeEnd(0)                                   -> -
-    terminator Return(v1881)   (exit_acc=v1881)
-  block 23  start_pc=0
-    v1886 Imm(-1)                                          -> -
+    v1880 Undef                                            -> -
+    v1881 Imm(0)                                           -> -
+    v1882 Imm(0)                                           -> -
+    v1883 Imm(6)                                           -> -
+    v1884 Imm(0)                                           -> -
+    v1885 Undef                                            -> -
+    v1886 Imm(0)                                           -> -
     v1887 Imm(0)                                           -> -
-    v1888 Imm(0)                                           -> -
+    v1888 Imm(7)                                           -> -
     v1889 Imm(0)                                           -> -
-    v1890 Imm(2)                                           -> -
+    v1890 VecConst { imm=-1, kind=I8, bytes=8 }            -> d0
     v1891 Imm(0)                                           -> -
     v1892 Imm(0)                                           -> -
     v1893 Imm(0)                                           -> -
-    v1894 Undef                                            -> -
-    v1895 Undef                                            -> -
-    v1896 Imm(1)                                           -> -
-    v1897 Imm(0)                                           -> -
+    v1894 Imm(0)                                           -> -
+    v1895 Imm(0)                                           -> -
+    v1896 Undef                                            -> -
+    v1897 VecConst { imm=0, kind=I64, bytes=8 }            -> d2
     v1898 Imm(0)                                           -> -
     v1899 Imm(0)                                           -> -
-    v1900 Undef                                            -> -
+    v1900 Imm(0)                                           -> -
     v1901 Imm(0)                                           -> -
     v1902 Imm(0)                                           -> -
-    v1903 Imm(0)                                           -> -
-    v1904 ImmData(56)                                      -> -
-    v1905 Load { addr=v1904, disp=0, kind=F64 pc_rel }     -> d0
+    v1903 SimdVal { op=__builtin_ia32_pcmpgtb, imm=None, args=[v1890, v1897] } -> d0
+    v1904 Imm(0)                                           -> -
+    v1905 Imm(0)                                           -> -
     v1906 Imm(0)                                           -> -
-    v1907 Imm(0)                                           -> -
-    v1908 Imm(1)                                           -> -
-    v1909 Imm(1)                                           -> -
+    v1907 VecExtract { vec=v1903, off=0, kind=I64, bytes=8 } -> x0
+    v1908 BinopI { op=ne, lhs=v1907, rhs_imm=0 }           -> -
+    v1909 Imm(0)                                           -> -
     v1910 Imm(0)                                           -> -
-    v1911 Undef                                            -> -
-    v1912 Undef                                            -> -
-    v1913 Imm(0)                                           -> -
-    v1914 Imm(0)                                           -> -
-    v1915 Imm(2)                                           -> -
-    v1916 Imm(0)                                           -> -
-    v1917 Undef                                            -> -
+    v1911 Imm(0)                                           -> -
+    terminator Bz { cond=v1907, target=b19, fall=b18 }
+  block 18  start_pc=0
+    v1912 Imm(17)                                          -> x0
+    v1913 LifetimeEnd(0)                                   -> -
+    v1914 LifetimeEnd(0)                                   -> -
+    v1915 LifetimeEnd(0)                                   -> -
+    v1916 LifetimeEnd(0)                                   -> -
+    terminator Return(v1912)
+  block 19  start_pc=0
+    v1917 Imm(-1)                                          -> -
     v1918 Imm(0)                                           -> -
     v1919 Imm(0)                                           -> -
-    v1920 Imm(4)                                           -> -
-    v1921 Imm(0)                                           -> -
-    v1922 Undef                                            -> -
+    v1920 Imm(0)                                           -> -
+    v1921 Imm(2)                                           -> -
+    v1922 Imm(0)                                           -> -
     v1923 Imm(0)                                           -> -
     v1924 Imm(0)                                           -> -
-    v1925 Imm(6)                                           -> -
-    v1926 Imm(0)                                           -> -
-    v1927 VecConst { imm=1, kind=I16, bytes=8 }            -> -
+    v1925 Undef                                            -> -
+    v1926 Undef                                            -> -
+    v1927 Imm(1)                                           -> -
     v1928 Imm(0)                                           -> -
     v1929 Imm(0)                                           -> -
     v1930 Imm(0)                                           -> -
-    v1931 Imm(0)                                           -> -
+    v1931 Undef                                            -> -
     v1932 Imm(0)                                           -> -
-    v1933 VecBinop { op=Add, lane=I16, bytes=8, lhs=v1905, rhs=v915 } -> d0
+    v1933 Imm(0)                                           -> -
     v1934 Imm(0)                                           -> -
-    v1935 Imm(0)                                           -> -
-    v1936 Imm(0)                                           -> -
+    v1935 ImmData(56)                                      -> -
+    v1936 Load { addr=v1935, disp=0, kind=F64 pc_rel }     -> d0
     v1937 Imm(0)                                           -> -
-    v1938 VecExtract { vec=v1933, off=0, kind=I64, bytes=8 } -> x0
-    v1939 BinopI { op=ne, lhs=v1938, rhs_imm=1407392063619074 } -> x0
-    v1940 Imm(0)                                           -> -
+    v1938 Imm(0)                                           -> -
+    v1939 Imm(1)                                           -> -
+    v1940 Imm(1)                                           -> -
     v1941 Imm(0)                                           -> -
-    v1942 Imm(0)                                           -> -
-    terminator Bz { cond=v1939, target=b25, fall=b24 }   (exit_acc=v1939)
-  block 24  start_pc=0
-    v1943 Imm(18)                                          -> x0
-    v1944 LifetimeEnd(0)                                   -> -
-    v1945 LifetimeEnd(0)                                   -> -
-    v1946 LifetimeEnd(0)                                   -> -
-    v1947 LifetimeEnd(0)                                   -> -
-    terminator Return(v1943)   (exit_acc=v1943)
-  block 25  start_pc=0
-    v2001 InlineAsm { template="emms", ops=0, args=[] }    -> -
-    v2002 Imm(0)                                           -> x0
-    v2003 LifetimeEnd(0)                                   -> -
-    v2004 LifetimeEnd(0)                                   -> -
-    v2005 LifetimeEnd(0)                                   -> -
-    v2006 LifetimeEnd(0)                                   -> -
-    terminator Return(v2002)   (exit_acc=v2002)
+    v1942 Undef                                            -> -
+    v1943 Undef                                            -> -
+    v1944 Imm(0)                                           -> -
+    v1945 Imm(0)                                           -> -
+    v1946 Imm(2)                                           -> -
+    v1947 Imm(0)                                           -> -
+    v1948 Undef                                            -> -
+    v1949 Imm(0)                                           -> -
+    v1950 Imm(0)                                           -> -
+    v1951 Imm(4)                                           -> -
+    v1952 Imm(0)                                           -> -
+    v1953 Undef                                            -> -
+    v1954 Imm(0)                                           -> -
+    v1955 Imm(0)                                           -> -
+    v1956 Imm(6)                                           -> -
+    v1957 Imm(0)                                           -> -
+    v1958 VecConst { imm=1, kind=I16, bytes=8 }            -> -
+    v1959 Imm(0)                                           -> -
+    v1960 Imm(0)                                           -> -
+    v1961 Imm(0)                                           -> -
+    v1962 Imm(0)                                           -> -
+    v1963 Imm(0)                                           -> -
+    v1964 VecBinop { op=Add, lane=I16, bytes=8, lhs=v1936, rhs=v915 } -> d0
+    v1965 Imm(0)                                           -> -
+    v1966 Imm(0)                                           -> -
+    v1967 Imm(0)                                           -> -
+    v1968 Imm(0)                                           -> -
+    v1969 VecExtract { vec=v1964, off=0, kind=I64, bytes=8 } -> x0
+    v1970 BinopI { op=ne, lhs=v1969, rhs_imm=1407392063619074 } -> x0
+    v1971 Imm(0)                                           -> -
+    v1972 Imm(0)                                           -> -
+    v1973 Imm(0)                                           -> -
+    terminator Bz { cond=v1970, target=b21, fall=b20 }
+  block 20  start_pc=0
+    v1974 Imm(18)                                          -> x0
+    v1975 LifetimeEnd(0)                                   -> -
+    v1976 LifetimeEnd(0)                                   -> -
+    v1977 LifetimeEnd(0)                                   -> -
+    v1978 LifetimeEnd(0)                                   -> -
+    terminator Return(v1974)
+  block 21  start_pc=0
+    v2032 InlineAsm { template="emms", ops=0, args=[] }    -> -
+    v2033 Imm(0)                                           -> x0
+    v2034 LifetimeEnd(0)                                   -> -
+    v2035 LifetimeEnd(0)                                   -> -
+    v2036 LifetimeEnd(0)                                   -> -
+    v2037 LifetimeEnd(0)                                   -> -
+    terminator Return(v2033)
 ; --- SSA dump (ok=true) ent_pc=404 ---
 ; name=sse3
 fn ent_pc=404 n_params=0 variadic=false locals=3
@@ -2053,7 +2071,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v92  Binop { op=fne, lhs=v89, rhs=v91 }               -> x0
     v93  Imm(1)                                           -> -
     v94  Imm(0)                                           -> -
-    terminator Bnz { cond=v92, target=b4, fall=b1 }   (exit_acc=v92)
+    terminator Bnz { cond=v92, target=b4, fall=b1 }
   block 1  start_pc=0
     v95  Imm(0)                                           -> -
     v96  Imm(4)                                           -> -
@@ -2069,7 +2087,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v106 Imm(0)                                           -> -
     v107 Imm(1)                                           -> -
     v108 Imm(0)                                           -> -
-    terminator Bnz { cond=v102, target=b4, fall=b2 }   (exit_acc=v102)
+    terminator Bnz { cond=v102, target=b4, fall=b2 }
   block 2  start_pc=0
     v109 Imm(0)                                           -> -
     v110 Imm(8)                                           -> -
@@ -2084,7 +2102,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v119 Imm(0)                                           -> -
     v120 Imm(0)                                           -> -
     v121 Imm(0)                                           -> -
-    terminator Bnz { cond=v116, target=b4, fall=b3 }   (exit_acc=v116)
+    terminator Bnz { cond=v116, target=b4, fall=b3 }
   block 3  start_pc=0
     v122 Imm(0)                                           -> -
     v123 Imm(12)                                          -> -
@@ -2097,7 +2115,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v130 Imm(0)                                           -> -
     v131 Imm(0)                                           -> -
     v132 Imm(0)                                           -> -
-    terminator Bz { cond=v129, target=b5, fall=b4 }   (exit_acc=v129)
+    terminator Bz { cond=v129, target=b5, fall=b4 }
   block 4  start_pc=0
     v133 Imm(21)                                          -> x0
     v134 LifetimeEnd(0)                                   -> -
@@ -2110,7 +2128,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v141 LifetimeEnd(0)                                   -> -
     v142 LifetimeEnd(0)                                   -> -
     v143 LifetimeEnd(0)                                   -> -
-    terminator Return(v133)   (exit_acc=v133)
+    terminator Return(v133)
   block 5  start_pc=0
     v144 Imm(0)                                           -> -
     v145 Imm(0)                                           -> -
@@ -2194,7 +2212,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v223 Binop { op=fne, lhs=v220, rhs=v222 }             -> x0
     v224 Imm(1)                                           -> -
     v225 Imm(0)                                           -> -
-    terminator Bnz { cond=v223, target=b9, fall=b6 }   (exit_acc=v223)
+    terminator Bnz { cond=v223, target=b9, fall=b6 }
   block 6  start_pc=0
     v226 Imm(0)                                           -> -
     v227 Imm(4)                                           -> -
@@ -2210,7 +2228,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v237 Imm(0)                                           -> -
     v238 Imm(1)                                           -> -
     v239 Imm(0)                                           -> -
-    terminator Bnz { cond=v233, target=b9, fall=b7 }   (exit_acc=v233)
+    terminator Bnz { cond=v233, target=b9, fall=b7 }
   block 7  start_pc=0
     v240 Imm(0)                                           -> -
     v241 Imm(8)                                           -> -
@@ -2225,7 +2243,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v250 Imm(0)                                           -> -
     v251 Imm(0)                                           -> -
     v252 Imm(0)                                           -> -
-    terminator Bnz { cond=v247, target=b9, fall=b8 }   (exit_acc=v247)
+    terminator Bnz { cond=v247, target=b9, fall=b8 }
   block 8  start_pc=0
     v253 Imm(0)                                           -> -
     v254 Imm(12)                                          -> -
@@ -2238,7 +2256,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v261 Imm(0)                                           -> -
     v262 Imm(0)                                           -> -
     v263 Imm(0)                                           -> -
-    terminator Bz { cond=v260, target=b10, fall=b9 }   (exit_acc=v260)
+    terminator Bz { cond=v260, target=b10, fall=b9 }
   block 9  start_pc=0
     v264 Imm(22)                                          -> x0
     v265 LifetimeEnd(0)                                   -> -
@@ -2251,7 +2269,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v272 LifetimeEnd(0)                                   -> -
     v273 LifetimeEnd(0)                                   -> -
     v274 LifetimeEnd(0)                                   -> -
-    terminator Return(v264)   (exit_acc=v264)
+    terminator Return(v264)
   block 10  start_pc=0
     v275 Imm(0)                                           -> -
     v276 Imm(0)                                           -> -
@@ -2334,7 +2352,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v353 Binop { op=fne, lhs=v351, rhs=v352 }             -> x0
     v354 Imm(1)                                           -> -
     v355 Imm(0)                                           -> -
-    terminator Bnz { cond=v353, target=b14, fall=b11 }   (exit_acc=v353)
+    terminator Bnz { cond=v353, target=b14, fall=b11 }
   block 11  start_pc=0
     v356 Imm(0)                                           -> -
     v357 Imm(4)                                           -> -
@@ -2349,7 +2367,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v366 Imm(0)                                           -> -
     v367 Imm(1)                                           -> -
     v368 Imm(0)                                           -> -
-    terminator Bnz { cond=v362, target=b14, fall=b12 }   (exit_acc=v362)
+    terminator Bnz { cond=v362, target=b14, fall=b12 }
   block 12  start_pc=0
     v369 Imm(0)                                           -> -
     v370 Imm(8)                                           -> -
@@ -2363,7 +2381,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v378 Imm(0)                                           -> -
     v379 Imm(0)                                           -> -
     v380 Imm(0)                                           -> -
-    terminator Bnz { cond=v375, target=b14, fall=b13 }   (exit_acc=v375)
+    terminator Bnz { cond=v375, target=b14, fall=b13 }
   block 13  start_pc=0
     v381 Imm(0)                                           -> -
     v382 Imm(12)                                          -> -
@@ -2375,7 +2393,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v388 Imm(0)                                           -> -
     v389 Imm(0)                                           -> -
     v390 Imm(0)                                           -> -
-    terminator Bz { cond=v387, target=b15, fall=b14 }   (exit_acc=v387)
+    terminator Bz { cond=v387, target=b15, fall=b14 }
   block 14  start_pc=0
     v391 Imm(23)                                          -> x0
     v392 LifetimeEnd(0)                                   -> -
@@ -2388,7 +2406,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v399 LifetimeEnd(0)                                   -> -
     v400 LifetimeEnd(0)                                   -> -
     v401 LifetimeEnd(0)                                   -> -
-    terminator Return(v391)   (exit_acc=v391)
+    terminator Return(v391)
   block 15  start_pc=0
     v402 Imm(0)                                           -> -
     v403 Imm(0)                                           -> -
@@ -2497,7 +2515,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v506 Binop { op=fne, lhs=v503, rhs=v505 }             -> x0
     v507 Imm(1)                                           -> -
     v508 Imm(0)                                           -> -
-    terminator Bnz { cond=v506, target=b19, fall=b16 }   (exit_acc=v506)
+    terminator Bnz { cond=v506, target=b19, fall=b16 }
   block 16  start_pc=0
     v509 Imm(0)                                           -> -
     v510 Imm(12)                                          -> -
@@ -2513,7 +2531,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v520 Imm(0)                                           -> -
     v521 Imm(1)                                           -> -
     v522 Imm(0)                                           -> -
-    terminator Bnz { cond=v516, target=b19, fall=b17 }   (exit_acc=v516)
+    terminator Bnz { cond=v516, target=b19, fall=b17 }
   block 17  start_pc=0
     v523 Imm(0)                                           -> -
     v524 Imm(4)                                           -> -
@@ -2528,7 +2546,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v533 Imm(0)                                           -> -
     v534 Imm(0)                                           -> -
     v535 Imm(0)                                           -> -
-    terminator Bnz { cond=v530, target=b19, fall=b18 }   (exit_acc=v530)
+    terminator Bnz { cond=v530, target=b19, fall=b18 }
   block 18  start_pc=0
     v536 Imm(0)                                           -> -
     v537 Imm(8)                                           -> -
@@ -2541,7 +2559,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v544 Imm(0)                                           -> -
     v545 Imm(0)                                           -> -
     v546 Imm(0)                                           -> -
-    terminator Bz { cond=v543, target=b20, fall=b19 }   (exit_acc=v543)
+    terminator Bz { cond=v543, target=b20, fall=b19 }
   block 19  start_pc=0
     v547 Imm(24)                                          -> x0
     v548 LifetimeEnd(0)                                   -> -
@@ -2554,7 +2572,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v555 LifetimeEnd(0)                                   -> -
     v556 LifetimeEnd(0)                                   -> -
     v557 LifetimeEnd(0)                                   -> -
-    terminator Return(v547)   (exit_acc=v547)
+    terminator Return(v547)
   block 20  start_pc=0
     v558 Imm(0)                                           -> -
     v559 ImmData(112)                                     -> x0
@@ -2616,7 +2634,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v615 Imm(4607182418800017408)                         -> -
     v616 Binop { op=fne, lhs=v614, rhs=v615 }             -> x0
     v617 Imm(0)                                           -> -
-    terminator Bnz { cond=v616, target=b22, fall=b21 }   (exit_acc=v616)
+    terminator Bnz { cond=v616, target=b22, fall=b21 }
   block 21  start_pc=0
     v618 Imm(0)                                           -> -
     v619 Imm(8)                                           -> -
@@ -2628,7 +2646,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v625 Imm(0)                                           -> -
     v626 Imm(0)                                           -> -
     v627 Imm(0)                                           -> -
-    terminator Bz { cond=v624, target=b23, fall=b22 }   (exit_acc=v624)
+    terminator Bz { cond=v624, target=b23, fall=b22 }
   block 22  start_pc=0
     v628 Imm(25)                                          -> x0
     v629 LifetimeEnd(0)                                   -> -
@@ -2641,7 +2659,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v636 LifetimeEnd(0)                                   -> -
     v637 LifetimeEnd(0)                                   -> -
     v638 LifetimeEnd(0)                                   -> -
-    terminator Return(v628)   (exit_acc=v628)
+    terminator Return(v628)
   block 23  start_pc=0
     v639 Imm(0)                                           -> -
     v640 Imm(0)                                           -> -
@@ -2758,7 +2776,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v751 Binop { op=fne, lhs=v748, rhs=v750 }             -> x0
     v752 Imm(1)                                           -> -
     v753 Imm(0)                                           -> -
-    terminator Bnz { cond=v751, target=b27, fall=b24 }   (exit_acc=v751)
+    terminator Bnz { cond=v751, target=b27, fall=b24 }
   block 24  start_pc=0
     v754 Imm(0)                                           -> -
     v755 Imm(8)                                           -> -
@@ -2774,7 +2792,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v765 Imm(0)                                           -> -
     v766 Imm(1)                                           -> -
     v767 Imm(0)                                           -> -
-    terminator Bnz { cond=v761, target=b27, fall=b25 }   (exit_acc=v761)
+    terminator Bnz { cond=v761, target=b27, fall=b25 }
   block 25  start_pc=0
     v768 Imm(0)                                           -> -
     v769 Imm(0)                                           -> -
@@ -2788,7 +2806,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v777 Imm(0)                                           -> -
     v778 Imm(0)                                           -> -
     v779 Imm(0)                                           -> -
-    terminator Bnz { cond=v774, target=b27, fall=b26 }   (exit_acc=v774)
+    terminator Bnz { cond=v774, target=b27, fall=b26 }
   block 26  start_pc=0
     v780 Imm(0)                                           -> -
     v781 Imm(8)                                           -> -
@@ -2801,7 +2819,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v788 Imm(0)                                           -> -
     v789 Imm(0)                                           -> -
     v790 Imm(0)                                           -> -
-    terminator Bz { cond=v787, target=b28, fall=b27 }   (exit_acc=v787)
+    terminator Bz { cond=v787, target=b28, fall=b27 }
   block 27  start_pc=0
     v791 Imm(26)                                          -> x0
     v792 LifetimeEnd(0)                                   -> -
@@ -2814,7 +2832,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v799 LifetimeEnd(0)                                   -> -
     v800 LifetimeEnd(0)                                   -> -
     v801 LifetimeEnd(0)                                   -> -
-    terminator Return(v791)   (exit_acc=v791)
+    terminator Return(v791)
   block 28  start_pc=0
     v802 Imm(4618722892845154304)                         -> d0
     v803 Imm(0)                                           -> -
@@ -2878,7 +2896,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v861 Binop { op=fne, lhs=v859, rhs=v802 }             -> x0
     v862 Imm(1)                                           -> -
     v863 Imm(0)                                           -> -
-    terminator Bnz { cond=v861, target=b32, fall=b29 }   (exit_acc=v861)
+    terminator Bnz { cond=v861, target=b32, fall=b29 }
   block 29  start_pc=0
     v864 Imm(0)                                           -> -
     v865 Imm(8)                                           -> -
@@ -2893,7 +2911,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v874 Imm(0)                                           -> -
     v875 Imm(1)                                           -> -
     v876 Imm(0)                                           -> -
-    terminator Bnz { cond=v870, target=b32, fall=b30 }   (exit_acc=v870)
+    terminator Bnz { cond=v870, target=b32, fall=b30 }
   block 30  start_pc=0
     v877 Imm(0)                                           -> -
     v878 Imm(0)                                           -> -
@@ -2907,7 +2925,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v886 Imm(0)                                           -> -
     v887 Imm(0)                                           -> -
     v888 Imm(0)                                           -> -
-    terminator Bnz { cond=v883, target=b32, fall=b31 }   (exit_acc=v883)
+    terminator Bnz { cond=v883, target=b32, fall=b31 }
   block 31  start_pc=0
     v889 Imm(0)                                           -> -
     v890 Imm(8)                                           -> -
@@ -2920,7 +2938,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v897 Imm(0)                                           -> -
     v898 Imm(0)                                           -> -
     v899 Imm(0)                                           -> -
-    terminator Bz { cond=v896, target=b33, fall=b32 }   (exit_acc=v896)
+    terminator Bz { cond=v896, target=b33, fall=b32 }
   block 32  start_pc=0
     v900 Imm(27)                                          -> x0
     v901 LifetimeEnd(0)                                   -> -
@@ -2933,11 +2951,11 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v908 LifetimeEnd(0)                                   -> -
     v909 LifetimeEnd(0)                                   -> -
     v910 LifetimeEnd(0)                                   -> -
-    terminator Return(v900)   (exit_acc=v900)
+    terminator Return(v900)
   block 33  start_pc=0
     v911 Imm(0)                                           -> x0
     v912 Imm(0)                                           -> -
-    terminator Jmp(b35)   (exit_acc=v911)
+    terminator Jmp(b35)
   block 34  start_pc=0
     v916 LocalAddr(-3)                                    -> x1
     v917 Extend { value=v913, kind=I32 }                  -> -
@@ -2947,12 +2965,12 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v921 Extend { value=v913, kind=I32 }                  -> -
     v922 BinopI { op=add, lhs=v913, rhs_imm=1 }           -> x0
     v923 Extend { value=v922, kind=I32, nsw }             -> -
-    terminator Jmp(b35)   (exit_acc=v922)
+    terminator Jmp(b35)
   block 35  start_pc=0
     v913 Phi { incoming=[b33:v911, b34:v922], kind=I64 }  -> x0
     v914 Extend { value=v913, kind=I32 }                  -> -
     v915 BinopI { op=lt, lhs=v913, rhs_imm=17 }           -> x1 [cmp32]
-    terminator Bz { cond=v915, target=b36, fall=b34 }   (exit_acc=v915)
+    terminator Bz { cond=v915, target=b36, fall=b34 }
   block 36  start_pc=0
     v924 LocalAddr(-3)                                    -> -
     v925 BinopI { op=add, lhs=v924, rhs_imm=1 }           -> -
@@ -2970,7 +2988,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v937 Extend { value=v936, kind=I32 }                  -> -
     v938 Extend { value=v936, kind=I32 }                  -> -
     v939 BinopI { op=ne, lhs=v936, rhs_imm=67305985 }     -> x0 [cmp32]
-    terminator Bz { cond=v939, target=b38, fall=b37 }   (exit_acc=v939)
+    terminator Bz { cond=v939, target=b38, fall=b37 }
   block 37  start_pc=0
     v940 Imm(28)                                          -> x0
     v941 LifetimeEnd(0)                                   -> -
@@ -2983,7 +3001,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v948 LifetimeEnd(0)                                   -> -
     v949 LifetimeEnd(0)                                   -> -
     v950 LifetimeEnd(0)                                   -> -
-    terminator Return(v940)   (exit_acc=v940)
+    terminator Return(v940)
   block 38  start_pc=0
     v973 LocalAddr(-1)                                    -> -
     v974 InlineAsm { template="stmxcsr %0", ops=1, args=[v973] } -> -
@@ -3021,7 +3039,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v1006 Extend { value=v999, kind=I32 }                  -> -
     v1007 BinopI { op=eq, lhs=v999, rhs_imm=0 }            -> - [cmp32]
     v1008 Imm(0)                                           -> -
-    terminator Bnz { cond=v997, target=b40, fall=b39 }   (low word)   (exit_acc=v1007)
+    terminator Bnz { cond=v997, target=b40, fall=b39 }   (low word)
   block 39  start_pc=0
     v1009 LocalAddr(-1)                                    -> -
     v1010 InlineAsm { template="stmxcsr %0", ops=1, args=[v1009] } -> -
@@ -3033,7 +3051,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v1016 Imm(0)                                           -> -
     v1017 Imm(0)                                           -> -
     v1018 Imm(0)                                           -> -
-    terminator Bz { cond=v1015, target=b41, fall=b40 }   (exit_acc=v1015)
+    terminator Bz { cond=v1015, target=b41, fall=b40 }
   block 40  start_pc=0
     v951 Imm(29)                                          -> x0
     v952 LifetimeEnd(0)                                   -> -
@@ -3046,7 +3064,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v959 LifetimeEnd(0)                                   -> -
     v960 LifetimeEnd(0)                                   -> -
     v961 LifetimeEnd(0)                                   -> -
-    terminator Return(v951)   (exit_acc=v951)
+    terminator Return(v951)
   block 41  start_pc=0
     v962 Imm(0)                                           -> x0
     v963 LifetimeEnd(0)                                   -> -
@@ -3059,7 +3077,7 @@ fn ent_pc=404 n_params=0 variadic=false locals=3
     v970 LifetimeEnd(0)                                   -> -
     v971 LifetimeEnd(0)                                   -> -
     v972 LifetimeEnd(0)                                   -> -
-    terminator Return(v962)   (exit_acc=v962)
+    terminator Return(v962)
 ; --- SSA dump (ok=true) ent_pc=405 ---
 ; name=wait_on
 fn ent_pc=405 n_params=1 variadic=false locals=0
@@ -3097,7 +3115,7 @@ fn ent_pc=407 n_params=0 variadic=false locals=1
     v7   Extend { value=v6, kind=I32 }                    -> x0
     v8   Imm(0)                                           -> -
     v9   Imm(0)                                           -> -
-    terminator Bnz { cond=v7, target=b19, fall=b1 }   (exit_acc=v7)
+    terminator Bnz { cond=v7, target=b19, fall=b1 }
   block 1  start_pc=0
     v10  Call { target_pc=404, args=[], fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v11  Extend { value=v10, kind=I32 }                   -> x0
@@ -3106,14 +3124,14 @@ fn ent_pc=407 n_params=0 variadic=false locals=1
     v14  Imm(0)                                           -> -
     v15  Imm(0)                                           -> -
     v16  Imm(0)                                           -> -
-    terminator Bz { cond=v11, target=b4, fall=b2 }   (exit_acc=v11)
+    terminator Bz { cond=v11, target=b4, fall=b2 }
   block 2  start_pc=0
     terminator Jmp(b3)
   block 3  start_pc=0
     v17  Phi { incoming=[b19:v7, b2:v11], kind=I64 }      -> x0
     v18  Extend { value=v17, kind=I32 }                   -> -
     v19  Extend { value=v17, kind=I32 }                   -> -
-    terminator Return(v17)   (exit_acc=v17)
+    terminator Return(v17)
   block 4  start_pc=0
     v20  Imm(100)                                         -> -
     v21  Imm(64)                                          -> -
@@ -3123,34 +3141,34 @@ fn ent_pc=407 n_params=0 variadic=false locals=1
     v25  Imm(0)                                           -> -
     v26  LocalAddr(-1)                                    -> -
     v27  CallExt { binding_idx=17, args=[v26, v21, v20], fp_arg_mask=0x0 } -> x0
-    terminator Bz { cond=v27, target=b8, fall=b5 }   (exit_acc=v27)
+    terminator Bz { cond=v27, target=b8, fall=b5 }
   block 5  start_pc=0
     v69  Imm(0)                                           -> -
-    terminator Jmp(b6)   (exit_acc=v69)
+    terminator Jmp(b6)
   block 6  start_pc=0
     v30  Imm(41)                                          -> x0
-    terminator Jmp(b7)   (exit_acc=v30)
+    terminator Jmp(b7)
   block 7  start_pc=0
     v93  Phi { incoming=[b6:v30, b15:v54, b18:v64], kind=I64 } -> x0
     v94  Extend { value=v93, kind=I32 }                   -> -
     v95  Imm(0)                                           -> -
     v96  Imm(0)                                           -> -
     v97  Extend { value=v93, kind=I32 }                   -> -
-    terminator Return(v93)   (exit_acc=v93)
+    terminator Return(v93)
   block 8  start_pc=0
     v70  LoadLocal { off=-1, kind=I64 }                   -> x1
     v71  Imm(0)                                           -> -
     v72  LifetimeEnd(-1)                                  -> -
     v73  Imm(0)                                           -> -
     v74  BinopI { op=eq, lhs=v70, rhs_imm=0 }             -> -
-    terminator Bz { cond=v70, target=b6, fall=b9 }   (exit_acc=v74)
+    terminator Bz { cond=v70, target=b6, fall=b9 }
   block 9  start_pc=0
     v28  BinopI { op=and, lhs=v70, rhs_imm=63 }           -> x0
     v29  Imm(0)                                           -> -
-    terminator Bz { cond=v28, target=b10, fall=b6 }   (exit_acc=v28)
+    terminator Bz { cond=v28, target=b10, fall=b6 }
   block 10  start_pc=0
     v31  Imm(0)                                           -> x0
-    terminator Jmp(b12)   (exit_acc=v31)
+    terminator Jmp(b12)
   block 11  start_pc=0
     v35  Extend { value=v32, kind=I32 }                   -> -
     v36  Binop { op=add, lhs=v70, rhs=v32 }               -> -
@@ -3159,12 +3177,12 @@ fn ent_pc=407 n_params=0 variadic=false locals=1
     v39  Extend { value=v32, kind=I32 }                   -> -
     v40  BinopI { op=add, lhs=v32, rhs_imm=1 }            -> x0
     v41  Extend { value=v40, kind=I32, nsw }              -> -
-    terminator Jmp(b12)   (exit_acc=v40)
+    terminator Jmp(b12)
   block 12  start_pc=0
     v32  Phi { incoming=[b10:v31, b11:v40], kind=I64 }    -> x0
     v33  Extend { value=v32, kind=I32 }                   -> -
     v34  BinopI { op=lt, lhs=v32, rhs_imm=100 }           -> x2 [cmp32]
-    terminator Bz { cond=v34, target=b13, fall=b11 }   (exit_acc=v34)
+    terminator Bz { cond=v34, target=b13, fall=b11 }
   block 13  start_pc=0
     v42  CallExt { binding_idx=16, args=[v70], fp_arg_mask=0x0 } -> x0
     v43  Imm(16)                                          -> -
@@ -3176,24 +3194,24 @@ fn ent_pc=407 n_params=0 variadic=false locals=1
     v49  Imm(0)                                           -> -
     v50  LocalAddr(-1)                                    -> -
     v51  CallExt { binding_idx=17, args=[v50, v48, v43], fp_arg_mask=0x0 } -> x0
-    terminator Bz { cond=v51, target=b16, fall=b14 }   (exit_acc=v51)
+    terminator Bz { cond=v51, target=b16, fall=b14 }
   block 14  start_pc=0
     v77  Imm(0)                                           -> -
-    terminator Jmp(b15)   (exit_acc=v77)
+    terminator Jmp(b15)
   block 15  start_pc=0
     v54  Imm(42)                                          -> x0
-    terminator Jmp(b7)   (exit_acc=v54)
+    terminator Jmp(b7)
   block 16  start_pc=0
     v78  LoadLocal { off=-1, kind=I64 }                   -> x0
     v79  Imm(0)                                           -> -
     v80  LifetimeEnd(-1)                                  -> -
     v81  Imm(0)                                           -> -
     v82  BinopI { op=eq, lhs=v78, rhs_imm=0 }             -> -
-    terminator Bz { cond=v78, target=b15, fall=b17 }   (exit_acc=v82)
+    terminator Bz { cond=v78, target=b15, fall=b17 }
   block 17  start_pc=0
     v52  BinopI { op=and, lhs=v78, rhs_imm=7 }            -> x1
     v53  Imm(0)                                           -> -
-    terminator Bz { cond=v52, target=b18, fall=b15 }   (exit_acc=v52)
+    terminator Bz { cond=v52, target=b18, fall=b15 }
   block 18  start_pc=0
     v55  CallExt { binding_idx=16, args=[v78], fp_arg_mask=0x0 } -> x0
     v56  Imm(16)                                          -> -
@@ -3205,7 +3223,7 @@ fn ent_pc=407 n_params=0 variadic=false locals=1
     v62  Imm(0)                                           -> -
     v63  Imm(0)                                           -> -
     v64  Imm(0)                                           -> x0
-    terminator Jmp(b7)   (exit_acc=v64)
+    terminator Jmp(b7)
   block 19  start_pc=0
     terminator Jmp(b3)
 ; --- SSA dump (ok=true) ent_pc=0 ---
@@ -3229,17 +3247,17 @@ fn ent_pc=2 n_params=1 variadic=false locals=0
     v2   Imm(0)                                           -> -
     v3   Imm(0)                                           -> -
     v4   ImmData(0)                                       -> x3
-    terminator Jmp(b2)   (exit_acc=v4)
+    terminator Jmp(b2)
   block 1  start_pc=0
     v8   BinopI { op=add, lhs=v5, rhs_imm=-8 }            -> x3
     v9   Load { addr=v8, disp=0, kind=I64 }               -> x0
     v10  CallIndirect { target=v9, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
-    terminator Jmp(b2)   (exit_acc=v10)
+    terminator Jmp(b2)
   block 2  start_pc=0
     v5   Phi { incoming=[b0:v4, b1:v8], kind=I64 }        -> x3
     v6   ImmData(0)                                       -> x0
     v7   Binop { op=ne, lhs=v5, rhs=v6 }                  -> x0
-    terminator Bz { cond=v7, target=b3, fall=b1 }   (exit_acc=v7)
+    terminator Bz { cond=v7, target=b3, fall=b1 }
   block 3  start_pc=0
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=4 ---
@@ -3251,7 +3269,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v1   ImmData(0)                                       -> x0
     v2   ImmData(0)                                       -> x1
     v3   Binop { op=ne, lhs=v1, rhs=v2 }                  -> x0
-    terminator Bz { cond=v3, target=b2, fall=b1 }   (exit_acc=v3)
+    terminator Bz { cond=v3, target=b2, fall=b1 }
   block 1  start_pc=0
     v4   ImmCode(ent_pc=2)                                -> -
     v5   Imm(0)                                           -> -
@@ -3262,7 +3280,7 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v8   Imm(0)                                           -> -
     v9   ImmData(0)                                       -> x3
     v10  Imm(0)                                           -> -
-    terminator Jmp(b4)   (exit_acc=v9)
+    terminator Jmp(b4)
   block 3  start_pc=0
     v15  Imm(0)                                           -> -
     v16  Load { addr=v11, disp=0, kind=I64 }              -> x0
@@ -3270,13 +3288,13 @@ fn ent_pc=4 n_params=0 variadic=false locals=0
     v18  Imm(0)                                           -> -
     v19  BinopI { op=add, lhs=v11, rhs_imm=8 }            -> x3
     v20  Imm(0)                                           -> -
-    terminator Jmp(b4)   (exit_acc=v19)
+    terminator Jmp(b4)
   block 4  start_pc=0
     v11  Phi { incoming=[b2:v9, b3:v19], kind=I64 }       -> x3
     v12  Imm(0)                                           -> -
     v13  ImmData(0)                                       -> x0
     v14  Binop { op=ne, lhs=v11, rhs=v13 }                -> x0
-    terminator Bz { cond=v14, target=b5, fall=b3 }   (exit_acc=v14)
+    terminator Bz { cond=v14, target=b5, fall=b3 }
   block 5  start_pc=0
     terminator Return
 ; --- SSA dump (ok=true) ent_pc=5 ---
@@ -3310,7 +3328,7 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     v23  ImmData(0)                                       -> x0
     v24  ImmData(0)                                       -> x1
     v25  Binop { op=ne, lhs=v23, rhs=v24 }                -> x0
-    terminator Bz { cond=v25, target=b2, fall=b1 }   (exit_acc=v25)
+    terminator Bz { cond=v25, target=b2, fall=b1 }
   block 1  start_pc=0
     v32  ImmCode(ent_pc=2)                                -> -
     v33  Imm(0)                                           -> -
@@ -3318,17 +3336,17 @@ fn ent_pc=5 n_params=2 variadic=false locals=0
     terminator Jmp(b2)
   block 2  start_pc=0
     v35  ImmData(0)                                       -> x3
-    terminator Jmp(b4)   (exit_acc=v35)
+    terminator Jmp(b4)
   block 3  start_pc=0
     v39  Load { addr=v36, disp=0, kind=I64 }              -> x0
     v40  CallIndirect { target=v39, args=[], callee_variadic=false, fixed_args=0, fp_return=false, fp_arg_mask=0x0 } -> x0
     v41  BinopI { op=add, lhs=v36, rhs_imm=8 }            -> x3
-    terminator Jmp(b4)   (exit_acc=v41)
+    terminator Jmp(b4)
   block 4  start_pc=0
     v36  Phi { incoming=[b2:v35, b3:v41], kind=I64 }      -> x3
     v37  ImmData(0)                                       -> x0
     v38  Binop { op=ne, lhs=v36, rhs=v37 }                -> x0
-    terminator Bz { cond=v38, target=b5, fall=b3 }   (exit_acc=v38)
+    terminator Bz { cond=v38, target=b5, fall=b3 }
   block 5  start_pc=0
     v26  Imm(0)                                           -> -
     v27  Imm(0)                                           -> -

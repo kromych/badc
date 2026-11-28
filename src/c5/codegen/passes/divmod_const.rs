@@ -334,9 +334,6 @@ fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
         inst.for_each_operand_mut(|v| *v = resolve(&redirect, *v));
     }
     for block in func.blocks.iter_mut() {
-        if block.exit_acc != NO_VALUE {
-            block.exit_acc = resolve(&redirect, block.exit_acc);
-        }
         block
             .terminator
             .for_each_operand_mut(|v| *v = resolve(&redirect, *v));

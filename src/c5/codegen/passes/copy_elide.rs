@@ -115,9 +115,6 @@ fn run_one(f: &mut FunctionSsa) {
                 u.push(usize::MAX);
             }
         });
-        if let Some(u) = users.get_mut(blk.exit_acc as usize) {
-            u.push(usize::MAX);
-        }
     }
 
     let mut redirects: Vec<(usize, ValueId, i64)> = Vec::new();
@@ -256,9 +253,6 @@ fn run_one(f: &mut FunctionSsa) {
                 *l = true;
             }
         });
-        if let Some(l) = live.get_mut(blk.exit_acc as usize) {
-            *l = true;
-        }
     }
     for (i, inst) in f.insts.iter_mut().enumerate() {
         if let Inst::LocalAddr(off) = inst
@@ -756,7 +750,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..n,
                 terminator: Terminator::Return(crate::c5::ir::NO_VALUE),
-                exit_acc: crate::c5::ir::NO_VALUE,
             }],
             insts,
             ..Default::default()

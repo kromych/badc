@@ -485,7 +485,6 @@ pub(crate) fn split_across_calls(func: &mut FunctionSsa, target: Target) {
             } else {
                 let block = &mut func.blocks[u.block as usize];
                 block.terminator.for_each_operand_mut(redirect);
-                redirect(&mut block.exit_acc);
             }
         }
     }
@@ -519,7 +518,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 
@@ -995,19 +993,17 @@ mod tests {
     }
 
     /// `k; call; return k`: the return reads a definition after the
-    /// call, the block's last instruction, and `exit_acc` follows.
+    /// call, the block's last instruction.
     #[test]
     fn a_returned_value_past_a_call_reads_a_definition_after_it() {
         let mut f = func_with(
             vec![Inst::Imm(7), call_of(vec![])],
             vec![block(0..2, Terminator::Return(0))],
         );
-        f.blocks[0].exit_acc = 0;
         split_across_calls(&mut f, Target::LinuxAarch64);
         assert_eq!(imms(&f, 7), vec![0, 2]);
         assert_eq!(f.blocks[0].inst_range, 0..3);
         assert!(matches!(f.blocks[0].terminator, Terminator::Return(2)));
-        assert_eq!(f.blocks[0].exit_acc, 2);
     }
 
     /// `p = &tab[1]`, an `ImmData` plus a folded 8, read past a call: the

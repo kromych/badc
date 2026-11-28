@@ -370,7 +370,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..n,
                 terminator: Terminator::Return(ret),
-                exit_acc: ret,
             }],
             ..Default::default()
         }

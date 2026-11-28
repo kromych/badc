@@ -17,7 +17,7 @@
 //! operands `r_i`. Copy 0 binds each phi to `init_i`; copy k binds it
 //! to copy k-1's remapped `r_i`. A final header-only clone binds the
 //! phis to the exit-iteration values so every header-defined value
-//! visible past the loop (including the header's `exit_acc`) resolves.
+//! visible past the loop resolves.
 //! All later block-id references rewrite through
 //! `remap_blocks::remap_block_ids`.
 //!
@@ -851,7 +851,6 @@ impl Expansion {
                 block
                     .terminator
                     .for_each_operand(|v| ok &= demand(bi, v, None, &mut work));
-                ok &= demand(bi, block.exit_acc, None, &mut work);
                 if !ok {
                     return None;
                 }
@@ -1224,7 +1223,6 @@ fn emit_region(
             start_pc,
             inst_range: start..new_insts.len() as u32,
             terminator,
-            exit_acc: plan.clone_at(func.blocks[b as usize].exit_acc, k, clone_ids, cur),
         });
         start = new_insts.len() as u32;
         if !last {
@@ -1293,7 +1291,6 @@ fn emit_outside(
         start_pc: old.start_pc,
         inst_range: start..new_insts.len() as u32,
         terminator,
-        exit_acc: resolve(old.exit_acc, ob, rebuilt, cur),
     });
 }
 
@@ -1332,7 +1329,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 
@@ -1871,7 +1867,7 @@ mod tests {
         // 42 + (0 + 1 + 2) reaches the join over the header's edge.
         assert!(
             matches!(f.insts[header_side as usize], Inst::Imm(45)),
-            "header-edge operand folds to the exit accumulator, got {:?}",
+            "the header-edge operand folds, got {:?}",
             f.insts[header_side as usize]
         );
     }

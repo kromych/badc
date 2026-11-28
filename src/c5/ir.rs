@@ -2452,12 +2452,6 @@ pub(crate) struct Block {
     /// order.
     pub inst_range: core::ops::Range<u32>,
     pub terminator: Terminator,
-    /// Accumulator value at the end of the block (before the
-    /// terminator's branch). For a `Return` block this is the
-    /// returned value. `NO_VALUE` if the accumulator wasn't
-    /// written in this block (rare; e.g. a block consisting of
-    /// just an unconditional branch to a synthetic target).
-    pub exit_acc: ValueId,
 }
 
 /// A `__try` region: an exception raised in a block of the region, or of a

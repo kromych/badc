@@ -188,7 +188,7 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::c5::ir::{Block, NO_VALUE};
+    use crate::c5::ir::Block;
     use alloc::vec;
 
     fn fresh(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
@@ -206,7 +206,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 

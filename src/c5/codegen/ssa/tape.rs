@@ -121,7 +121,6 @@ fn renumber(k: &mut Keyed<'_>, remap: &[ValueId]) {
         inst.for_each_operand_mut(map);
     }
     for block in k.blocks.iter_mut() {
-        map(&mut block.exit_acc);
         block.terminator.for_each_operand_mut(map);
     }
     rekey(k, remap);
@@ -251,8 +250,8 @@ fn sort(ins: &mut Vec<Insertion>, blocks: &[Block], n_old: usize) -> Vec<usize> 
 }
 
 /// Place `ins` into the tape and move everything keyed by value id with
-/// it: the parallel tables, every block range, every operand, terminator
-/// and `exit_acc`, and the relocation tables. Insertions at one place
+/// it: the parallel tables, every block range, every operand and
+/// terminator, and the relocation tables. Insertions at one place
 /// land in slice order, and `Rewrite::ids` follows the slice. An
 /// inserted value takes the source position of the instruction it goes
 /// ahead of or after, or of the one after an empty block.
@@ -611,7 +610,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 
@@ -835,8 +833,8 @@ mod tests {
 
     /// A member that sits elsewhere on the tape moves behind the head,
     /// and everything keyed by value id follows: operands, terminators,
-    /// `exit_acc`, the parallel tables, the relocation table and the
-    /// range of the block in between.
+    /// the parallel tables, the relocation table and the range of the block
+    /// in between.
     #[test]
     fn concat_moves_a_distant_range_behind_the_head() {
         let mut f = func_with(
@@ -860,7 +858,6 @@ mod tests {
                 ),
             ],
         );
-        f.blocks[2].exit_acc = 4;
         let at = |line| crate::c5::ir::InstSrc {
             line,
             ..Default::default()
@@ -882,7 +879,6 @@ mod tests {
             f.blocks[2].terminator,
             Terminator::Bz { cond: 2, .. }
         ));
-        assert_eq!(f.blocks[2].exit_acc, 2);
         assert_eq!(
             f.inst_src,
             alloc::vec![at(10), at(13), at(14), at(11), at(12)]

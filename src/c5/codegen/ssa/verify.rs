@@ -76,7 +76,6 @@ pub(crate) fn check(f: &FunctionSsa) -> Result<(), String> {
             f.insts[pc as usize].for_each_operand(&mut out_of_range);
         }
         blk.terminator.for_each_operand(&mut out_of_range);
-        out_of_range(blk.exit_acc);
         if let Some(v) = bad {
             return Err(format!("block {b} reads v{v} of a {n}-instruction tape"));
         }
@@ -167,9 +166,6 @@ pub(crate) fn check(f: &FunctionSsa) -> Result<(), String> {
                 };
             }
         });
-        if first.is_none() && blk.exit_acc != NO_VALUE {
-            first = unavailable(blk.exit_acc, b, None);
-        }
         if let Some(e) = first {
             return Err(format!("block {b} ends reading {e}"));
         }
@@ -379,7 +375,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 
@@ -490,7 +485,6 @@ mod tests {
             alloc::vec![Inst::Imm(4)],
             alloc::vec![block(0..1, Terminator::Return(NO_VALUE))],
         );
-        assert_eq!(f.blocks[0].exit_acc, NO_VALUE);
         assert_eq!(check(&f), Ok(()));
     }
 

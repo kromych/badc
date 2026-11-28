@@ -728,7 +728,6 @@ fn fold_copies(func: &mut FunctionSsa, cd: &ConstData<'_>) -> bool {
         .for_each(|i| i.for_each_operand(&mut mark));
     for b in &func.blocks {
         b.terminator.for_each_operand(&mut mark);
-        mark(b.exit_acc);
     }
     let mut copies: Vec<(ValueId, i64)> = Vec::new();
     for i in func.blocks.iter().flat_map(|b| b.inst_range.clone()) {

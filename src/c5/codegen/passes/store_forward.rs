@@ -1009,9 +1009,6 @@ fn run_one(func: &mut FunctionSsa, objects: &[(i64, i64)]) {
         inst.for_each_operand_mut(|op| *op = resolve(&redirect, *op));
     }
     for block in func.blocks.iter_mut() {
-        if block.exit_acc != NO_VALUE {
-            block.exit_acc = resolve(&redirect, block.exit_acc);
-        }
         block
             .terminator
             .for_each_operand_mut(|v| *v = resolve(&redirect, *v));
@@ -1222,12 +1219,7 @@ pub(crate) fn drop_overwritten_stores(func: &mut FunctionSsa, slots: bool) {
     if func.has_seh() {
         return;
     }
-    let mut uses = crate::c5::codegen::ssa::reg_alloc::compute_use_counts(func);
-    for b in &func.blocks {
-        if let Some(u) = uses.get_mut(b.exit_acc as usize) {
-            *u += 1;
-        }
-    }
+    let uses = crate::c5::codegen::ssa::reg_alloc::compute_use_counts(func);
     let reads = |inst: &Inst| {
         matches!(
             inst,
@@ -1589,7 +1581,7 @@ mod tests {
     };
     use alloc::vec::Vec;
 
-    fn fresh(insts: Vec<Inst>, term: Terminator, exit_acc: u32) -> FunctionSsa {
+    fn fresh(insts: Vec<Inst>, term: Terminator) -> FunctionSsa {
         let n = insts.len();
         FunctionSsa {
             seh_scopes: Vec::new(),
@@ -1656,7 +1648,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..n as u32,
                 terminator: term,
-                exit_acc,
             }],
             extern_call_refs: Vec::new(),
             extern_imm_code_refs: Vec::new(),
@@ -1693,7 +1684,6 @@ mod tests {
                     },
                 ],
                 Terminator::Return(3),
-                3,
             );
             run_one(&mut f, &[]);
             let ret = if forwarded { 1 } else { 3 };
@@ -1739,7 +1729,6 @@ mod tests {
                     wide(-2),
                 ],
                 Terminator::Return(3),
-                3,
             );
             run_one(&mut f, &[]);
             let ret = if forwarded { 1 } else { 3 };
@@ -1800,7 +1789,6 @@ mod tests {
                     local(-4, 8, LoadKind::I64),
                 ],
                 Terminator::Return(4),
-                4,
             );
             run_one(&mut f, &[]);
             let ret = if forwarded { 0 } else { 4 };
@@ -1841,7 +1829,6 @@ mod tests {
                 load,
             ],
             Terminator::Return(4),
-            4,
         );
         run_one(&mut f, &[]);
         assert!(
@@ -1884,7 +1871,6 @@ mod tests {
                 },
             ],
             Terminator::Return(3),
-            3,
         );
         run_one(&mut f, &[]);
         assert!(
@@ -1926,7 +1912,6 @@ mod tests {
                 },
             ],
             Terminator::Return(3),
-            3,
         );
         run_one(&mut f, &[]);
         assert!(
@@ -1983,7 +1968,6 @@ mod tests {
             let mut f = fresh(
                 alloc::vec![param(0), param(1), store_at(1, store), load_at(load)],
                 Terminator::Return(3),
-                3,
             );
             run_one(&mut f, &[]);
             assert!(
@@ -2008,7 +1992,6 @@ mod tests {
                 load_at(LoadKind::U32)
             ],
             Terminator::Return(3),
-            3,
         );
         run_one(&mut f, &[]);
         assert!(
@@ -2031,7 +2014,6 @@ mod tests {
                 load_at(LoadKind::I16)
             ],
             Terminator::Return(3),
-            3,
         );
         run_one(&mut f, &[]);
         assert!(
@@ -2069,7 +2051,6 @@ mod tests {
                 },
             ],
             Terminator::Return(6),
-            6,
         );
         run_one(&mut f, &[]);
         assert!(
@@ -2124,7 +2105,7 @@ mod tests {
             ];
             insts.extend(between);
             insts.push(store(at, 3, last));
-            let mut f = fresh(insts, Terminator::Return(ret), NO_VALUE);
+            let mut f = fresh(insts, Terminator::Return(ret));
             super::drop_overwritten_stores(&mut f, false);
             matches!(f.insts[4], Inst::Store { .. })
         };
@@ -2182,7 +2163,7 @@ mod tests {
         let first_goes = |first: Inst, last: Inst| {
             let mut insts = params();
             insts.extend([first, last]);
-            let mut f = fresh(insts, Terminator::Return(NO_VALUE), NO_VALUE);
+            let mut f = fresh(insts, Terminator::Return(NO_VALUE));
             super::drop_overwritten_stores(&mut f, false);
             matches!(f.insts[2], Inst::Imm(0))
         };
@@ -2224,7 +2205,6 @@ mod tests {
                     },
                 ],
                 Terminator::Return(3),
-                3,
             );
             run_one(&mut f, &[]);
             f
@@ -2280,7 +2260,6 @@ mod tests {
                 },
             ],
             Terminator::Return(5),
-            5,
         );
         run_one(&mut f, &[]);
         assert!(
@@ -2376,7 +2355,6 @@ mod tests {
                     },
                 ],
                 Terminator::Return(12),
-                12,
             );
             run_one(&mut f, &[]);
             f.insts[12].clone()
@@ -2422,7 +2400,6 @@ mod tests {
                 },
             ],
             Terminator::Return(4),
-            4,
         );
         run_one(&mut f, &[]);
         assert!(
@@ -2477,7 +2454,6 @@ mod tests {
                 },
             ],
             Terminator::Return(4),
-            4,
         );
         run_one(&mut f, &[]);
         assert!(
@@ -2519,7 +2495,6 @@ mod tests {
                 },
             ],
             Terminator::Return(3),
-            3,
         );
         run_one(&mut f, &[]);
         assert!(
@@ -2575,7 +2550,6 @@ mod tests {
                 },
             ],
             Terminator::Return(5),
-            5,
         );
         run_one(&mut f, &[]);
         assert!(
@@ -2610,7 +2584,6 @@ mod tests {
                 },
             ],
             Terminator::Return(2),
-            2,
         );
         run_one(&mut f, &[]);
         assert!(
@@ -2654,7 +2627,6 @@ mod tests {
                     },
                 ],
                 Terminator::Return(2),
-                2,
             );
             run_one(&mut f, &[]);
             let redirected = matches!(f.blocks[0].terminator, Terminator::Return(0));
@@ -2711,7 +2683,7 @@ mod tests {
                 rhs: load,
             });
             let n = insts.len() as ValueId - 1;
-            let mut f = fresh(insts, Terminator::Return(n), n);
+            let mut f = fresh(insts, Terminator::Return(n));
             run_one(&mut f, &[]);
             let forwarded = matches!(f.insts[n as usize], Inst::Binop { rhs: 0, .. });
             assert_eq!(forwarded, forwards, "live arithmetic in between: {live}");
@@ -2793,7 +2765,6 @@ mod tests {
                     },
                 ],
                 Terminator::Return(4),
-                4,
             );
             run_one(&mut f, &[]);
             assert_eq!(format!("{:?}", f.insts[4]), format!("{want:?}"));
@@ -2826,7 +2797,6 @@ mod tests {
                 load.clone(),
             ],
             Terminator::Return(3),
-            3,
         );
         run_one(&mut f, &[]);
         assert_eq!(format!("{:?}", f.insts[3]), format!("{load:?}"));
@@ -2873,7 +2843,6 @@ mod tests {
                 },
             ],
             Terminator::Return(3),
-            3,
         );
         run_one(&mut f, &[]);
         assert!(
@@ -2919,7 +2888,6 @@ mod tests {
                 },
             ],
             Terminator::Return(4),
-            4,
         );
         run_one(&mut f, &[]);
         assert!(
@@ -2954,7 +2922,6 @@ mod tests {
                 },
             ],
             Terminator::Return(2),
-            2,
         );
         run_one(&mut f, &[]);
         assert!(
@@ -3001,7 +2968,6 @@ mod tests {
                 },
             ],
             Terminator::Return(4),
-            4,
         );
         run_one(&mut f, &[]);
         assert!(
@@ -3036,7 +3002,6 @@ mod tests {
                 },
             ],
             Terminator::Return(2),
-            2,
         );
         run_one(&mut f, &[]);
         assert!(
@@ -3092,7 +3057,6 @@ mod tests {
                 },
             ],
             Terminator::Return(3),
-            3,
         );
         run_one(&mut f, &[]);
         assert!(
@@ -3138,7 +3102,6 @@ mod tests {
                 },
             ],
             Terminator::Return(4),
-            4,
         );
         run_one(&mut f, &[]);
         // v3 redirects to v2, so the add reads v2 twice.
@@ -3187,7 +3150,7 @@ mod tests {
         insts.extend(between);
         let last = insts.len() as u32;
         insts.push(load_indexed(0, 1, 1, kind));
-        let mut f = fresh(insts, Terminator::Return(last), last);
+        let mut f = fresh(insts, Terminator::Return(last));
         run_one(&mut f, &[]);
         let Terminator::Return(v) = f.blocks[0].terminator else {
             unreachable!()
@@ -3408,13 +3371,12 @@ mod tests {
                 },
             ],
             Terminator::Return(4),
-            4,
         );
         run_one(&mut f, &[]);
         assert!(matches!(f.blocks[0].terminator, Terminator::Return(4)));
     }
 
-    use crate::c5::ir::{BinOp, NO_VALUE, ValueId};
+    use crate::c5::ir::{BinOp, ValueId};
 
     fn load_of(addr: ValueId) -> Inst {
         Inst::Load {
@@ -3431,12 +3393,11 @@ mod tests {
     /// second, which returns `ret`.
     fn two_blocks(insts: Vec<Inst>, split: u32, ret: ValueId) -> FunctionSsa {
         let n = insts.len() as u32;
-        let mut f = fresh(insts, Terminator::Return(ret), ret);
+        let mut f = fresh(insts, Terminator::Return(ret));
         let block = |r: core::ops::Range<u32>, terminator| crate::c5::ir::Block {
             start_pc: 0,
             inst_range: r,
             terminator,
-            exit_acc: NO_VALUE,
         };
         f.blocks = alloc::vec![
             block(0..split, Terminator::Jmp(1)),
@@ -3475,7 +3436,7 @@ mod tests {
     fn a_store_of_the_value_the_location_holds_goes() {
         let gone = |insts: Vec<Inst>, store: usize| {
             let n = insts.len() as ValueId;
-            let mut f = fresh(insts, Terminator::Return(n - 1), n - 1);
+            let mut f = fresh(insts, Terminator::Return(n - 1));
             run_one(&mut f, &[]);
             matches!(f.insts[store], Inst::Imm(_))
         };
@@ -3529,12 +3490,11 @@ mod tests {
             },
         ]);
         let n = insts.len() as u32;
-        let mut f = fresh(insts, Terminator::Return(n - 1), n - 1);
+        let mut f = fresh(insts, Terminator::Return(n - 1));
         let block = |r: core::ops::Range<u32>, terminator| crate::c5::ir::Block {
             start_pc: 0,
             inst_range: r,
             terminator,
-            exit_acc: NO_VALUE,
         };
         f.blocks = alloc::vec![
             block(
@@ -3651,7 +3611,6 @@ mod tests {
                     store(-3, 2, restored),
                 ],
                 Terminator::Return(2),
-                4,
             );
             run_one(&mut f, &[]);
             assert!(
@@ -3699,7 +3658,6 @@ mod tests {
                     },
                 ],
                 Terminator::Return(2),
-                2,
             );
             run_one(&mut f, &[]);
             let ret = match f.blocks[0].terminator {
@@ -3755,7 +3713,6 @@ mod tests {
                     load,
                 ],
                 Terminator::Return(3),
-                3,
             );
             run_one(&mut f, &[]);
             assert!(

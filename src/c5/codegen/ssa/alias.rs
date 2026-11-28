@@ -572,7 +572,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..n,
                 terminator: Terminator::Return(0),
-                exit_acc: crate::c5::ir::NO_VALUE,
             }],
             ..Default::default()
         }

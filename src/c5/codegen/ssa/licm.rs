@@ -1217,7 +1217,7 @@ fn apply_loads(func: &mut FunctionSsa, hoists: &[LoadHoist]) -> (Undo, Vec<Value
     (undo, copies)
 }
 
-/// Point every operand, terminator and `exit_acc` that names a value
+/// Point every operand and terminator that names a value
 /// with a `redirect` entry at that entry.
 fn redirect_uses(func: &mut FunctionSsa, redirect: &[ValueId]) {
     let redirect_of = |op: &mut ValueId| {
@@ -1230,9 +1230,6 @@ fn redirect_uses(func: &mut FunctionSsa, redirect: &[ValueId]) {
         inst.for_each_operand_mut(redirect_of);
     }
     for block in func.blocks.iter_mut() {
-        if block.exit_acc != NO_VALUE {
-            redirect_of(&mut block.exit_acc);
-        }
         block.terminator.for_each_operand_mut(redirect_of);
     }
 }
@@ -1488,7 +1485,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 

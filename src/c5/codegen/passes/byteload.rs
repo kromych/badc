@@ -835,7 +835,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..n as u32,
                 terminator: term,
-                exit_acc: NO_VALUE,
             }],
             extern_call_refs: Vec::new(),
             extern_imm_code_refs: Vec::new(),

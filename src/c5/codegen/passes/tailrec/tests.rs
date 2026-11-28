@@ -18,7 +18,6 @@ fn block(range: core::ops::Range<u32>, terminator: Terminator) -> Block {
         start_pc: 0,
         inst_range: range,
         terminator,
-        exit_acc: NO_VALUE,
     }
 }
 

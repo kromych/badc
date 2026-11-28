@@ -37,7 +37,6 @@ impl Readers {
         }
         for (b, block) in func.blocks.iter().enumerate() {
             let end = Reader::End(b as BlockId);
-            readers.add(block.exit_acc, end);
             block.terminator.for_each_operand(|v| readers.add(v, end));
         }
         readers
@@ -173,7 +172,7 @@ fn plan_one(
         }
         if let Reader::End(b) = user {
             let block = &func.blocks[b as usize];
-            let mut reads_it = block.exit_acc == r.value;
+            let mut reads_it = false;
             block
                 .terminator
                 .for_each_operand(|v| reads_it |= v == r.value);
@@ -379,7 +378,6 @@ pub(crate) fn apply(
                 Read::End(b, s) => {
                     let new = id_of(k, s);
                     let block = &mut func.blocks[b as usize];
-                    rename(&mut block.exit_acc, new);
                     block.terminator.for_each_operand_mut(|v| rename(v, new));
                     readers.add(new, Reader::End(b));
                 }
@@ -450,7 +448,6 @@ pub(crate) fn settle(func: &mut FunctionSsa, pending: Pending) {
         inst.for_each_operand_mut(map);
     }
     for block in func.blocks.iter_mut() {
-        map(&mut block.exit_acc);
         block.terminator.for_each_operand_mut(map);
     }
     for table in [&mut func.f32_values, &mut func.cmp32, &mut func.div32] {

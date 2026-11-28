@@ -15,8 +15,8 @@ use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
 use super::super::ir::{
-    AsmBlock, AsmConstraint, AsmSeg, BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind,
-    Terminator, ValueId,
+    AsmBlock, AsmConstraint, AsmSeg, BinOp, FunctionSsa, Inst, LoadKind, StoreKind, Terminator,
+    ValueId,
 };
 use super::tape::{At, Insertion, insert};
 
@@ -321,9 +321,6 @@ pub(crate) fn split_wide_lanes(func: &mut FunctionSsa) {
     }
     for b in func.blocks.iter_mut() {
         b.terminator.for_each_operand_mut(to);
-        if b.exit_acc != NO_VALUE {
-            to(&mut b.exit_acc);
-        }
     }
 }
 
@@ -390,9 +387,6 @@ pub(crate) fn form_splats(func: &mut FunctionSsa, max: u8) {
         .for_each(|inst| inst.for_each_operand(&mut count));
     for b in &func.blocks {
         b.terminator.for_each_operand(&mut count);
-        if b.exit_acc != NO_VALUE {
-            count(b.exit_acc);
-        }
     }
     for i in 0..func.insts.len() {
         let Inst::VecInsert {
@@ -464,9 +458,6 @@ pub(crate) fn form_parts(func: &mut FunctionSsa) {
         .for_each(|inst| inst.for_each_operand(&mut count));
     for b in &func.blocks {
         b.terminator.for_each_operand(&mut count);
-        if b.exit_acc != NO_VALUE {
-            count(b.exit_acc);
-        }
     }
     // The source vector, its width and the shift of the lane `value` reads,
     // for a lane extract of `width` bytes at `off` in the inserted vector.
@@ -1377,7 +1368,6 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
         rw.ids[next - 1]
     };
     // A block accumulator naming a rewritten instruction loses that value.
-    let mut gone: BTreeSet<ValueId> = BTreeSet::new();
     let bytes = (w.cells * 8) as u8;
     for e in &edits {
         match e {
@@ -1405,12 +1395,10 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
                     kind: *kind,
                     bytes,
                 };
-                gone.insert(n);
             }
             Edit::Addr { at } => {
                 let n = rw.remap[*at as usize];
                 func.insts[n as usize] = Inst::Imm(0);
-                gone.insert(n);
             }
             Edit::Load { at, off } => {
                 func.insts[rw.remap[*at as usize] as usize] = slot_load(*off, w)
@@ -1436,13 +1424,11 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
                         pc_rel: false,
                     },
                 };
-                gone.insert(n);
             }
             Edit::Zero { at, off } => {
                 let zero = take();
                 let n = rw.remap[*at as usize];
                 func.insts[n as usize] = slot_store(*off, zero, w);
-                gone.insert(n);
             }
             Edit::Asm { at, inputs } => {
                 let loads: Vec<ValueId> = inputs.iter().map(|_| take()).collect();
@@ -1454,11 +1440,6 @@ fn rewrite(func: &mut FunctionSsa, slots: &BTreeSet<i64>, w: Whole) {
                     }
                 }
             }
-        }
-    }
-    for b in &mut func.blocks {
-        if gone.contains(&b.exit_acc) {
-            b.exit_acc = NO_VALUE;
         }
     }
 }

@@ -12,7 +12,7 @@
 use alloc::vec::Vec;
 
 use crate::c5::codegen::ssa::reg_alloc::compute_use_counts;
-use crate::c5::ir::{BinOp, FunctionSsa, Inst, NO_VALUE, ValueId};
+use crate::c5::ir::{BinOp, FunctionSsa, Inst, ValueId};
 
 /// Drop the dead stores of `func`; the local slots they wrote.
 pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
@@ -36,9 +36,6 @@ pub(crate) fn run(func: &mut FunctionSsa) -> Vec<i64> {
             }
         };
         b.terminator.for_each_operand(&mut end);
-        if b.exit_acc != NO_VALUE {
-            end(b.exit_acc);
-        }
     }
     let addressed = (func.insts.iter().enumerate()).any(|(v, inst)| {
         matches!(inst, Inst::LocalAddr(_)) && uses[v] > 0 && !writes_only(func, &users, &ends, v, 4)

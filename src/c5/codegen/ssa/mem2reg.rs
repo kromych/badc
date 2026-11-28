@@ -895,8 +895,8 @@ fn slot_live_in_sets(
 /// on top of the phi value).
 ///
 /// The rewrite rebuilds `func.insts`, `func.inst_src`, every
-/// `Block::inst_range`, every operand, every terminator, and every
-/// `Block::exit_acc` via a single `value_remap[old_id] = new_id`
+/// `Block::inst_range`, every operand, and every terminator via a
+/// single `value_remap[old_id] = new_id`
 /// pass so existing `ValueId` references remain consistent. The
 /// phis added at a block's head occupy the first slots of its new
 /// `inst_range`; their order is the iteration order of the per-slot
@@ -1129,9 +1129,6 @@ fn rebuild_tape(
         inst.for_each_operand_mut(remap);
     }
     for block in func.blocks.iter_mut() {
-        if block.exit_acc != NO_VALUE && (block.exit_acc as usize) < value_remap.len() {
-            block.exit_acc = value_remap[block.exit_acc as usize];
-        }
         block.terminator.for_each_operand_mut(remap);
     }
     // The relocation tables key on the value id of the instruction that
@@ -1623,9 +1620,6 @@ fn copy_words(func: &mut FunctionSsa) {
     }
     for block in &func.blocks {
         block.terminator.for_each_operand(|v| uses[v as usize] += 1);
-        if block.exit_acc != NO_VALUE {
-            uses[block.exit_acc as usize] += 1;
-        }
     }
     let volatile: BTreeSet<i64> = func
         .insts
@@ -2099,9 +2093,6 @@ fn fold_direct_slot_accesses(func: &mut FunctionSsa) {
     }
     for block in &func.blocks {
         block.terminator.for_each_operand(&mut escape);
-        if block.exit_acc != NO_VALUE {
-            escape(block.exit_acc);
-        }
     }
     let mut folded: Vec<(usize, Inst, i64)> = Vec::new();
     for v in 0..func.insts.len() {
@@ -2754,15 +2745,6 @@ fn promote(func: &mut FunctionSsa) -> Vec<i64> {
         inst.for_each_operand_mut(|op| *op = resolve(&redirect, *op));
     }
     for block in func.blocks.iter_mut() {
-        if block.exit_acc != NO_VALUE {
-            let acc = marked_value.get(&block.exit_acc).copied();
-            block.exit_acc = match acc {
-                Some(v) if matches!(func.insts[block.exit_acc as usize], Inst::FpCast { .. }) => {
-                    resolve(&redirect, v)
-                }
-                _ => resolve(&redirect, block.exit_acc),
-            };
-        }
         block
             .terminator
             .for_each_operand_mut(|v| *v = resolve(&redirect, *v));
@@ -2809,7 +2791,6 @@ mod tests {
             start_pc: 0,
             inst_range: 0..0,
             terminator: term,
-            exit_acc: NO_VALUE,
         }
     }
 
@@ -3090,7 +3071,6 @@ mod tests {
             start_pc: 0,
             inst_range: 0..5,
             terminator: Terminator::Return(4),
-            exit_acc: 4,
         }];
         let mut f = func_with(insts, blocks);
         let _ = run(&mut f);
@@ -3108,10 +3088,6 @@ mod tests {
             Terminator::Return(v) => assert_eq!(v, 4),
             ref other => panic!("terminator should still return v4, got {other:?}"),
         }
-        assert_eq!(
-            f.blocks[0].exit_acc, 4,
-            "exit_acc must still point at the return value"
-        );
         // The Imm RHS of the first StoreLocal is still in the IR
         // (the emit's is_dead_pure check drops it because the
         // neutralized store no longer references it); confirm the
@@ -3227,7 +3203,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         };
         let blocks = alloc::vec![
             block(
@@ -3483,13 +3458,11 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..2,
                 terminator: Terminator::Jmp(1),
-                exit_acc: 1,
             },
             Block {
                 start_pc: 0,
                 inst_range: 2..3,
                 terminator: Terminator::Return(2),
-                exit_acc: 2,
             },
         ];
         let mut f = func_with(insts, blocks);
@@ -3499,7 +3472,6 @@ mod tests {
         assert!(matches!(f.insts[2], Inst::Imm(0)));
         // The return now reads the stored value (id 0), not the load.
         assert!(matches!(f.blocks[1].terminator, Terminator::Return(0)));
-        assert_eq!(f.blocks[1].exit_acc, 0);
     }
 
     /// A slot written as a double in block 0 and read in block 1, where
@@ -3532,13 +3504,11 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..2,
                 terminator: Terminator::Jmp(1),
-                exit_acc: 1,
             },
             Block {
                 start_pc: 0,
                 inst_range: 2..end,
                 terminator: Terminator::Return(ret),
-                exit_acc: ret,
             },
         ];
         func_with(insts, blocks)
@@ -3600,7 +3570,6 @@ mod tests {
             f.insts
         );
         assert!(matches!(f.blocks[1].terminator, Terminator::Return(5)));
-        assert_eq!(f.blocks[0].exit_acc, 0, "the block names the stored double");
     }
 
     /// A slot written only as a double and read as an integer stays in the
@@ -3689,7 +3658,6 @@ mod tests {
             start_pc: 0,
             inst_range: 0..6,
             terminator: Terminator::Return(5),
-            exit_acc: 5,
         }];
         let mut f = func_with(insts, blocks);
         run(&mut f);
@@ -3758,7 +3726,6 @@ mod tests {
             start_pc: 0,
             inst_range: 0..5,
             terminator: Terminator::Return(4),
-            exit_acc: 4,
         }];
         let mut f = func_with(insts, blocks);
         run(&mut f);
@@ -3794,13 +3761,11 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..2,
                 terminator: Terminator::Jmp(1),
-                exit_acc: 1,
             },
             Block {
                 start_pc: 0,
                 inst_range: 2..3,
                 terminator: Terminator::Return(2),
-                exit_acc: 2,
             },
         ];
         let mut f = func_with(insts, blocks);
@@ -3879,19 +3844,16 @@ mod tests {
                     target: 2,
                     fall_through: 1,
                 },
-                exit_acc: 2,
             },
             Block {
                 start_pc: 0,
                 inst_range: 3..5,
                 terminator: Terminator::Jmp(2),
-                exit_acc: 4,
             },
             Block {
                 start_pc: 0,
                 inst_range: 5..6,
                 terminator: Terminator::Return(5),
-                exit_acc: 5,
             },
         ];
         let mut f = func_with(insts, blocks);
@@ -3931,7 +3893,6 @@ mod tests {
             start_pc: 0,
             inst_range: 0..4,
             terminator: Terminator::Return(3),
-            exit_acc: 3,
         }];
         let (insts, blocks) = with_read_addresses(insts, blocks);
         let mut f = func_with(insts, blocks);
@@ -3973,7 +3934,6 @@ mod tests {
             start_pc: 0,
             inst_range: 0..4,
             terminator: Terminator::Return(3),
-            exit_acc: 3,
         }];
         let mut f = func_with(insts, blocks);
         let promoted = run(&mut f);
@@ -4015,7 +3975,6 @@ mod tests {
             start_pc: 0,
             inst_range: 0..4,
             terminator: Terminator::Return(3),
-            exit_acc: 3,
         }];
         let mut f = func_with(insts, blocks);
         assert!(run(&mut f).is_empty());
@@ -4049,7 +4008,6 @@ mod tests {
             start_pc: 0,
             inst_range: 0..3,
             terminator: Terminator::Return(2),
-            exit_acc: 2,
         }];
         let mut f = func_with(insts, blocks);
         run(&mut f);
@@ -4094,7 +4052,6 @@ mod tests {
             start_pc: 0,
             inst_range: 0..3,
             terminator: Terminator::Return(2),
-            exit_acc: 2,
         }];
         let mut f = func_with(insts, blocks);
         run(&mut f);
@@ -4158,13 +4115,11 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..3,
                 terminator: Terminator::Jmp(1),
-                exit_acc: 2,
             },
             Block {
                 start_pc: 0,
                 inst_range: 3..6,
                 terminator: Terminator::Return(5),
-                exit_acc: 5,
             },
         ];
         let mut f = func_with(insts, blocks);
@@ -4207,7 +4162,6 @@ mod tests {
             start_pc: 0,
             inst_range: 0..3,
             terminator: Terminator::Return(2),
-            exit_acc: 2,
         }];
         let mut f = func_with(insts, blocks);
         run(&mut f);
@@ -4261,25 +4215,21 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             },
             Block {
                 start_pc: 0,
                 inst_range: 1..3,
                 terminator: Terminator::Jmp(3),
-                exit_acc: NO_VALUE,
             },
             Block {
                 start_pc: 0,
                 inst_range: 3..5,
                 terminator: Terminator::Jmp(3),
-                exit_acc: NO_VALUE,
             },
             Block {
                 start_pc: 0,
                 inst_range: 5..6,
                 terminator: Terminator::Return(5),
-                exit_acc: 5,
             },
         ];
         let f = func_with(insts, blocks);
@@ -4339,25 +4289,21 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             },
             Block {
                 start_pc: 0,
                 inst_range: 1..3,
                 terminator: Terminator::Jmp(3),
-                exit_acc: 1,
             },
             Block {
                 start_pc: 0,
                 inst_range: 3..5,
                 terminator: Terminator::Jmp(3),
-                exit_acc: 3,
             },
             Block {
                 start_pc: 0,
                 inst_range: 5..6,
                 terminator: Terminator::Return(5),
-                exit_acc: 5,
             },
         ];
         let mut f = func_with(insts, blocks);
@@ -4418,7 +4364,6 @@ mod tests {
             Terminator::Return(v) => assert_eq!(v, 6),
             ref other => panic!("expected Return at block 3, got {other:?}"),
         }
-        assert_eq!(f.blocks[3].exit_acc, 6);
     }
 
     /// `insert_phis` renumbers every value when it prepends phis. The
@@ -4468,25 +4413,21 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             },
             Block {
                 start_pc: 0,
                 inst_range: 1..3,
                 terminator: Terminator::Jmp(3),
-                exit_acc: 1,
             },
             Block {
                 start_pc: 0,
                 inst_range: 3..5,
                 terminator: Terminator::Jmp(3),
-                exit_acc: 3,
             },
             Block {
                 start_pc: 0,
                 inst_range: 5..7,
                 terminator: Terminator::Return(6),
-                exit_acc: 6,
             },
         ];
         let mut f = func_with(insts, blocks);
@@ -4569,25 +4510,21 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             },
             Block {
                 start_pc: 0,
                 inst_range: 1..3,
                 terminator: Terminator::Jmp(3),
-                exit_acc: 1,
             },
             Block {
                 start_pc: 0,
                 inst_range: 3..5,
                 terminator: Terminator::Jmp(3),
-                exit_acc: 3,
             },
             Block {
                 start_pc: 0,
                 inst_range: 5..6,
                 terminator: Terminator::Return(5),
-                exit_acc: 5,
             },
         ];
         let mut f = func_with(insts, blocks);
@@ -4656,10 +4593,6 @@ mod tests {
             ),
             ref other => panic!("expected Return at block 3, got {other:?}"),
         }
-        assert_eq!(
-            f.blocks[3].exit_acc, phi_id_u32,
-            "exit_acc should follow the redirect to the phi"
-        );
     }
 
     /// `int f(int c){ int x; if(c) x=7; return x; }` with `x` at `slot`,
@@ -4692,19 +4625,16 @@ mod tests {
                     target: 2,
                     fall_through: 1,
                 },
-                exit_acc: 0,
             },
             Block {
                 start_pc: 0,
                 inst_range: 1..3,
                 terminator: Terminator::Jmp(2),
-                exit_acc: NO_VALUE,
             },
             Block {
                 start_pc: 0,
                 inst_range: 3..4,
                 terminator: Terminator::Return(3),
-                exit_acc: 3,
             },
         ];
         func_with(insts, blocks)
@@ -4806,7 +4736,6 @@ mod tests {
             start_pc: 0,
             inst_range: 0..3,
             terminator: Terminator::Return(2),
-            exit_acc: NO_VALUE,
         }];
         let mut f = func_with(insts, blocks);
         assert_eq!(run(&mut f), alloc::vec![-1]);
@@ -4916,7 +4845,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..2,
                 terminator: Terminator::Jmp(1),
-                exit_acc: 1,
             },
             Block {
                 start_pc: 0,
@@ -4926,19 +4854,16 @@ mod tests {
                     target: 3,
                     fall_through: 2,
                 },
-                exit_acc: 2,
             },
             Block {
                 start_pc: 0,
                 inst_range: 3..7,
                 terminator: Terminator::Jmp(1),
-                exit_acc: 6,
             },
             Block {
                 start_pc: 0,
                 inst_range: 7..8,
                 terminator: Terminator::Return(7),
-                exit_acc: 7,
             },
         ];
         let mut f = func_with(insts, blocks);
@@ -4985,7 +4910,6 @@ mod tests {
             start_pc: 0,
             inst_range: 0..1,
             terminator: Terminator::Return(0),
-            exit_acc: NO_VALUE,
         });
         for b in 2..N {
             blocks.push(empty_block(Terminator::Jmp((b - 1) as BlockId)));
@@ -5044,7 +4968,6 @@ mod tests {
             start_pc: 0,
             inst_range: 0..6,
             terminator: Terminator::Return(5),
-            exit_acc: 5,
         }];
         let (insts, blocks) = with_read_addresses(insts, blocks);
         let mut f = func_with(insts, blocks);
@@ -5105,7 +5028,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..2,
                 terminator: Terminator::Jmp(1),
-                exit_acc: NO_VALUE,
             },
             Block {
                 start_pc: 0,
@@ -5115,13 +5037,11 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 2,
             },
             Block {
                 start_pc: 0,
                 inst_range: 4..4,
                 terminator: Terminator::Return(2),
-                exit_acc: 2,
             },
         ];
         let (insts, blocks) = with_read_addresses(insts, blocks);
@@ -5208,25 +5128,21 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             },
             Block {
                 start_pc: 0,
                 inst_range: 1..3,
                 terminator: Terminator::Jmp(3),
-                exit_acc: 1,
             },
             Block {
                 start_pc: 0,
                 inst_range: 3..5,
                 terminator: Terminator::Jmp(3),
-                exit_acc: 3,
             },
             Block {
                 start_pc: 0,
                 inst_range: 5..9,
                 terminator: Terminator::Return(8),
-                exit_acc: 8,
             },
         ];
         let (insts, blocks) = with_read_addresses(insts, blocks);
@@ -5355,7 +5271,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 
@@ -5526,7 +5441,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..2,
                 terminator: Terminator::Jmp(1),
-                exit_acc: NO_VALUE,
             },
             Block {
                 start_pc: 0,
@@ -5536,13 +5450,11 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: NO_VALUE,
             },
             Block {
                 start_pc: 0,
                 inst_range: 6..6,
                 terminator: Terminator::Return(5),
-                exit_acc: NO_VALUE,
             },
         ];
         let mut f = func_with(insts, blocks);

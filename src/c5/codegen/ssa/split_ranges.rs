@@ -399,11 +399,6 @@ fn apply_heads(func: &mut FunctionSsa, heads: &[Head]) -> Undo {
                 *op = copy[*op as usize];
             }
         };
-        if block.exit_acc != NO_VALUE {
-            let mut acc = block.exit_acc;
-            redirect(&mut acc);
-            block.exit_acc = acc;
-        }
         block.terminator.for_each_operand_mut(redirect);
     }
     undo
@@ -557,7 +552,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 

@@ -26,9 +26,6 @@ Disassembly of section .text:
                	int3
 
 <mmx>:
-               	pushq	%rbp
-               	movq	%rsp, %rbp
-               	subq	$0x10, %rsp
                	movl	$0x64, %r11d
                	vmovd	%r11d, %xmm0
                	vpbroadcastb	%xmm0, %xmm0
@@ -52,7 +49,6 @@ Disassembly of section .text:
                	cmpq	$-0x1, %rax
                	je	<addr>
                	movl	$0xa, %eax
-               	leave
                	retq
                	movl	$0x5, %r11d
                	vmovd	%r11d, %xmm1
@@ -99,7 +95,6 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0xb, %eax
-               	leave
                	retq
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm2
@@ -118,7 +113,6 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0xc, %eax
-               	leave
                	retq
                	movl	$0xfffe, %r11d          # imm = 0xFFFE
                	vmovd	%r11d, %xmm0
@@ -142,25 +136,6 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0xd, %eax
-               	leave
-               	retq
-               	movabsq	$-0x7fff7fff7fff8000, %rax # imm = 0x8000800080008000
-               	movq	%rax, -0x8(%rbp)
-               	movsd	-0x8(%rbp), %xmm0
-               	vmovq	%xmm0, %rax
-               	movabsq	$-0x7fff7fff7fff8000, %r11 # imm = 0x8000800080008000
-               	cmpq	%r11, %rax
-               	jne	<addr>
-               	movq	$0x0, -0x8(%rbp)
-               	movabsq	$0xf0000000f, %rax      # imm = 0xF0000000F
-               	movq	%rax, -0x8(%rbp)
-               	movsd	-0x8(%rbp), %xmm0
-               	vmovq	%xmm0, %rax
-               	movabsq	$0xf0000000f, %r11      # imm = 0xF0000000F
-               	cmpq	%r11, %rax
-               	je	<addr>
-               	movl	$0xe, %eax
-               	leave
                	retq
                	movsd	<rip>, %xmm0
                	movsd	<rip>, %xmm2
@@ -185,7 +160,6 @@ Disassembly of section .text:
                	testq	%rax, %rax
                	je	<addr>
                	movl	$0x11, %eax
-               	leave
                	retq
                	movsd	<rip>, %xmm0
                	vpaddw	%xmm1, %xmm0, %xmm0
@@ -194,11 +168,9 @@ Disassembly of section .text:
                	cmpq	%r11, %rax
                	je	<addr>
                	movl	$0x12, %eax
-               	leave
                	retq
                	emms
                	xorl	%eax, %eax
-               	leave
                	retq
 
 <sse3>:

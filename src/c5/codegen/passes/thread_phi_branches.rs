@@ -550,7 +550,7 @@ fn escaping_phis(
                 repair::Reader::End(b) if in_chain(b) => false,
                 repair::Reader::End(b) => {
                     let block = &func.blocks[b as usize];
-                    let mut reads = block.exit_acc == v;
+                    let mut reads = false;
                     block.terminator.for_each_operand(|w| reads |= w == v);
                     reads
                 }
@@ -659,7 +659,7 @@ fn dying_line(
                 let reads = match reader {
                     repair::Reader::End(b) => {
                         let block = &func.blocks[b as usize];
-                        let mut reads = block.exit_acc == v;
+                        let mut reads = false;
                         block.terminator.for_each_operand(|w| reads |= w == v);
                         lives(b) && reads
                     }
@@ -709,7 +709,6 @@ fn forward(func: &mut FunctionSsa, readers: &mut repair::Readers, to: &[(ValueId
             repair::Reader::Inst(i) => func.insts[i as usize].for_each_operand_mut(map),
             repair::Reader::End(b) => {
                 let block = &mut func.blocks[b as usize];
-                map(&mut block.exit_acc);
                 block.terminator.for_each_operand_mut(map);
             }
         }
@@ -801,7 +800,7 @@ fn thread(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::c5::ir::{Block, NO_VALUE};
+    use crate::c5::ir::Block;
     use alloc::vec;
 
     fn fresh(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
@@ -819,7 +818,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 

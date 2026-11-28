@@ -14,12 +14,10 @@ Disassembly of section .text:
                	brk	#0x1
 
 <pick_mem>:
-               	sxtw	x1, w1
                	cbz	w2, <addr>
                	mov	x0, #0x9                // =9
                	ret
-               	add	x0, x0, x1, lsl #3
-               	ldr	x0, [x0]
+               	ldr	x0, [x0, w1, sxtw #3]
                	b	<addr>
 
 <pick_ptr>:
@@ -50,8 +48,7 @@ Disassembly of section .text:
                	mul	x2, x0, x4
                	sxtw	x2, w2
                	tbnz	w0, #0x0, <addr>
-               	add	x2, x6, x0, lsl #3
-               	ldr	x2, [x2]
+               	ldr	x2, [x6, x0, lsl #3]
                	b	<addr>
                	mov	x0, x3
                	ret

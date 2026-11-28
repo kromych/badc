@@ -399,8 +399,7 @@ fn compute_high_observed_through(
     // A terminator reads its operand at full width, except a zero test
     // that reads the low word (`low_word_tests`) and a return whose
     // declared type is narrower than the return register, which carries
-    // the result in its low word alone. `Block::exit_acc` names a value
-    // and reads none.
+    // the result in its low word alone.
     let ret_low_word = func.ret_low_word;
     for (b, block) in func.blocks.iter().enumerate() {
         if func.low_word_tests.get(b).copied().unwrap_or(false)
@@ -1023,9 +1022,6 @@ fn apply_redirects(func: &mut FunctionSsa, redirect: &[Option<ValueId>]) {
         inst.for_each_operand_mut(|op| *op = resolve(redirect, *op));
     }
     for block in func.blocks.iter_mut() {
-        if block.exit_acc != NO_VALUE {
-            block.exit_acc = resolve(redirect, block.exit_acc);
-        }
         block
             .terminator
             .for_each_operand_mut(|v| *v = resolve(redirect, *v));
@@ -1438,7 +1434,6 @@ mod tests {
                     start_pc: 0,
                     inst_range: 0..3,
                     terminator: Terminator::Return(2),
-                    exit_acc: 2,
                 }],
             );
             run_one(&mut f);
@@ -1479,7 +1474,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..3,
                 terminator: Terminator::Return(2),
-                exit_acc: 2,
             }],
         );
         run_one(&mut f);
@@ -1517,7 +1511,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..3,
                 terminator: Terminator::Return(2),
-                exit_acc: 2,
             }],
         );
         run_one(&mut f);
@@ -1555,7 +1548,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..3,
                 terminator: Terminator::Return(2),
-                exit_acc: 2,
             }],
         );
         run_one(&mut f);
@@ -1591,7 +1583,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..3,
                 terminator: Terminator::Return(2),
-                exit_acc: 2,
             }],
         );
         run_one(&mut f);
@@ -1624,7 +1615,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..3,
                 terminator: Terminator::Return(2),
-                exit_acc: 2,
             }],
         );
         run_one(&mut f);
@@ -1655,7 +1645,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..3,
                 terminator: Terminator::Return(2),
-                exit_acc: 2,
             }],
         );
         run_one(&mut f);
@@ -1670,7 +1659,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..1,
                 terminator: Terminator::Return(0),
-                exit_acc: 0,
             }],
         );
         run_one(&mut f);
@@ -1717,7 +1705,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..5,
                 terminator: Terminator::Return(NO_VALUE),
-                exit_acc: NO_VALUE,
             }],
         )
     }
@@ -1758,7 +1745,6 @@ mod tests {
             start_pc: 0,
             inst_range: 0..n,
             terminator: Terminator::Return(NO_VALUE),
-            exit_acc: NO_VALUE,
         };
         fresh(insts, vec![block])
     }
@@ -1863,7 +1849,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..n,
                 terminator: Terminator::Return(NO_VALUE),
-                exit_acc: NO_VALUE,
             }],
         )
     }
@@ -2052,28 +2037,12 @@ mod tests {
         );
     }
 
-    /// `Block::exit_acc` names the extend without reading it, so the
-    /// extend is dropped as it is without the naming.
-    #[test]
-    fn block_exit_value_reads_no_high_bits() {
-        let mut f = extend_over_add_feeding_store(StoreKind::I32);
-        f.blocks[0].exit_acc = 3;
-        run_one(&mut f);
-        assert!(
-            matches!(f.insts[4], Inst::Store { value: 2, .. }),
-            "{:?}",
-            f.insts[4]
-        );
-        assert_eq!(f.blocks[0].exit_acc, 2);
-    }
-
     /// A terminator operand is read at full width: the returned extend
     /// stays, for its narrow consumer too.
     #[test]
     fn returned_extend_is_kept() {
         let mut f = extend_over_add_feeding_store(StoreKind::I32);
         f.blocks[0].terminator = Terminator::Return(3);
-        f.blocks[0].exit_acc = 3;
         run_one(&mut f);
         assert!(
             matches!(f.insts[4], Inst::Store { value: 3, .. }),
@@ -2143,19 +2112,16 @@ mod tests {
                         target: 2,
                         fall_through: 1,
                     },
-                    exit_acc: 2,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 3..5,
                     terminator: Terminator::Return(4),
-                    exit_acc: 4,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 5..7,
                     terminator: Terminator::Return(6),
-                    exit_acc: 6,
                 },
             ],
         )
@@ -2228,19 +2194,16 @@ mod tests {
                         target: 2,
                         fall_through: 1,
                     },
-                    exit_acc: 1,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 2..4,
                     terminator: Terminator::Return(3),
-                    exit_acc: 3,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 4..6,
                     terminator: Terminator::Return(5),
-                    exit_acc: 5,
                 },
             ],
         );
@@ -2301,19 +2264,16 @@ mod tests {
                         target: 2,
                         fall_through: 1,
                     },
-                    exit_acc: 2,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 3..5,
                     terminator: Terminator::Return(4),
-                    exit_acc: 4,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 5..5,
                     terminator: Terminator::Return(2),
-                    exit_acc: 2,
                 },
             ],
         );
@@ -2365,7 +2325,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: start..insts.len() as u32,
                 terminator: *terminator,
-                exit_acc: NO_VALUE,
             });
         }
         let f = fresh(insts, blocks);
@@ -2445,7 +2404,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..1,
                 terminator: Terminator::Return(0),
-                exit_acc: 0,
             }],
         );
         callee.ent_pc = 7;
@@ -2486,7 +2444,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..4,
                 terminator: Terminator::Return(3),
-                exit_acc: 3,
             }],
         );
         caller.ent_pc = 9;
@@ -2575,7 +2532,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..4,
                 terminator: Terminator::Return(3),
-                exit_acc: 3,
             }],
         );
         caller.ent_pc = 9;
@@ -2625,7 +2581,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..5,
                 terminator: Terminator::Return(4),
-                exit_acc: 4,
             }],
         );
         run_one(&mut f);
@@ -2665,7 +2620,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..4,
                 terminator: Terminator::Return(3),
-                exit_acc: 3,
             }],
         );
         assert!(
@@ -2701,7 +2655,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..4,
                 terminator: Terminator::Return(3),
-                exit_acc: 3,
             }],
         )
     }
@@ -2721,7 +2674,6 @@ mod tests {
                 "{inner:?} inside {outer:?} reproduces the inner bits; the \
                  outer extend must drop",
             );
-            assert_eq!(f.blocks[0].exit_acc, 2);
         }
     }
 
@@ -2760,7 +2712,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 
@@ -2916,7 +2867,6 @@ mod tests {
             start_pc: 0,
             inst_range,
             terminator,
-            exit_acc: NO_VALUE,
         };
         let mut f = fresh(
             insts,

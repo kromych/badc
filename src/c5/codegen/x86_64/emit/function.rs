@@ -505,7 +505,6 @@ fn repeated_blocks(func: &FunctionSsa) -> Vec<bool> {
 /// accesses read, as their base; an instruction that emits nothing reads
 /// nothing.
 fn frame_bases_only(func: &FunctionSsa, alloc: &Allocation) -> Vec<bool> {
-    use super::super::ir::NO_VALUE;
     let n = func.insts.len();
     let mut only = alloc::vec![false; n];
     let mut read = alloc::vec![false; n];
@@ -561,9 +560,6 @@ fn frame_bases_only(func: &FunctionSsa, alloc: &Allocation) -> Vec<bool> {
     }
     for block in &func.blocks {
         block.terminator.for_each_operand(&mut other);
-        if block.exit_acc != NO_VALUE {
-            other(block.exit_acc);
-        }
     }
     only.iter().zip(&read).map(|(&o, &r)| o && r).collect()
 }

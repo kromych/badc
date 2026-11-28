@@ -4142,7 +4142,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..insts.len() as u32,
                 terminator: Terminator::Return(ret),
-                exit_acc: ret,
             }],
             insts: insts.clone(),
             ..Default::default()

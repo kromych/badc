@@ -256,8 +256,7 @@ fn is_effectful(inst: &Inst) -> bool {
     )
 }
 
-/// Mark every value referenced as an instruction operand, a terminator
-/// operand, or a block's exit accumulator.
+/// Mark every value an instruction or a terminator reads.
 fn use_mask(func: &FunctionSsa) -> Vec<bool> {
     let n = func.insts.len();
     let mut used = vec![false; n];
@@ -278,7 +277,6 @@ fn use_mask(func: &FunctionSsa) -> Vec<bool> {
             }
             _ => {}
         }
-        mark(blk.exit_acc);
     }
     used
 }
@@ -757,14 +755,13 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
             start_pc: func.blocks[0].start_pc,
             inst_range: start..new_insts.len() as u32,
             terminator: Terminator::Jmp(header),
-            exit_acc: NO_VALUE,
         });
 
         // Blocks 1..n_old: interior, base, and tail blocks keep their ids.
         for b in 1..n_blocks {
             let start = new_insts.len() as u32;
             let blk = func.blocks[b].clone();
-            let (terminator, exit_acc);
+            let terminator;
             if let Some(t) = tail_of[b] {
                 for pc in blk.inst_range.clone() {
                     if plan.tail[t].drop.contains(&pc) {
@@ -810,7 +807,6 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
                     };
                 }
                 terminator = Terminator::Jmp(header);
-                exit_acc = NO_VALUE;
             } else if let (Some(op), Some(_bi)) = (acc_op, base_of[b]) {
                 for pc in blk.inst_range.clone() {
                     emit_old!(pc);
@@ -829,7 +825,6 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
                     None => sum,
                 };
                 terminator = Terminator::Return(ret);
-                exit_acc = ret;
             } else {
                 for pc in blk.inst_range.clone() {
                     emit_old!(pc);
@@ -837,13 +832,11 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
                 let mut t = blk.terminator;
                 remap_terminator(&mut t, &remap);
                 terminator = t;
-                exit_acc = map_v(blk.exit_acc, &remap);
             }
             new_blocks.push(Block {
                 start_pc: blk.start_pc,
                 inst_range: start..new_insts.len() as u32,
                 terminator,
-                exit_acc,
             });
         }
 
@@ -874,12 +867,10 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
         }
         let mut term = func.blocks[0].terminator;
         remap_terminator(&mut term, &remap);
-        let exit_acc = map_v(func.blocks[0].exit_acc, &remap);
         new_blocks.push(Block {
             start_pc: func.blocks[0].start_pc,
             inst_range: start..new_insts.len() as u32,
             terminator: term,
-            exit_acc,
         });
 
         // Every body use of a parameter resolves to its header phi.

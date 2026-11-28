@@ -1898,7 +1898,7 @@ fn callee_facts(callee: &FunctionSsa) -> CalleeFacts {
 }
 
 /// Per-value mask of the values an in-block instruction or a terminator
-/// reads; a block's exit accumulator is not a read.
+/// reads.
 fn operand_read_mask(func: &FunctionSsa) -> Vec<bool> {
     let mut read = vec![false; func.insts.len()];
     let mut mark = |v: ValueId| {
@@ -1982,9 +1982,6 @@ fn value_use_mask(func: &FunctionSsa) -> Vec<bool> {
             Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(cond, &mut used),
             _ => {}
         }
-        if blk.exit_acc != NO_VALUE {
-            mark(blk.exit_acc, &mut used);
-        }
     }
     used
 }
@@ -2015,7 +2012,6 @@ fn live_inst_mask(func: &FunctionSsa) -> Vec<bool> {
         // exhaustive operand listing rather than a hand-kept match.
         let mut term = blk.terminator;
         term.for_each_operand_mut(|v| bump(&mut uses, *v));
-        bump(&mut uses, blk.exit_acc);
     }
     let mut live = in_block;
     let dead = |live: &[bool], uses: &[u32], i: usize| {
@@ -3192,7 +3188,6 @@ fn splice_sites(caller: &mut FunctionSsa, sites: &[Site<'_>], whole_vector: u32,
                 start_pc,
                 inst_range: part_start..out.len(),
                 terminator: Terminator::Jmp(p.callee_base),
-                exit_acc: NO_VALUE,
             });
             part_start = out.len();
             start_pc = 0;
@@ -3251,7 +3246,6 @@ fn splice_sites(caller: &mut FunctionSsa, sites: &[Site<'_>], whole_vector: u32,
             start_pc,
             inst_range: part_start..out.len(),
             terminator,
-            exit_acc: map_v(block.exit_acc, &remap),
         });
     }
 
@@ -3459,7 +3453,6 @@ fn splice_sites(caller: &mut FunctionSsa, sites: &[Site<'_>], whole_vector: u32,
                 start_pc: 0,
                 inst_range: block_start..out.len(),
                 terminator,
-                exit_acc: map_v(cblock.exit_acc, &p.callee_remap),
             });
         }
         // Multi-return join: a phi merges each return's value into the call
@@ -3490,7 +3483,6 @@ fn splice_sites(caller: &mut FunctionSsa, sites: &[Site<'_>], whole_vector: u32,
                 start_pc: 0,
                 inst_range: phi_id..out.len(),
                 terminator: Terminator::Jmp(p.postfix_id),
-                exit_acc: phi_id,
             });
         }
     }
@@ -4285,12 +4277,10 @@ fn inline_caller(
             };
             let mut term = block.terminator;
             remap_terminator(&mut term, &remap);
-            let exit_acc = map_v(block.exit_acc, &remap);
             new_blocks.push(Block {
                 start_pc: block.start_pc,
                 inst_range: start..end,
                 terminator: term,
-                exit_acc,
             });
         }
 
@@ -5116,7 +5106,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..insts.len() as u32,
                 terminator: Terminator::Return(2),
-                exit_acc: 2,
             }],
             insts,
             ..Default::default()
@@ -5155,13 +5144,11 @@ mod tests {
                     start_pc: 0,
                     inst_range: 0..3,
                     terminator: Terminator::Jmp(1),
-                    exit_acc: NO_VALUE,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 3..4,
                     terminator: Terminator::Return(3),
-                    exit_acc: 3,
                 },
             ],
             insts,
@@ -5189,7 +5176,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..n,
                 terminator: Terminator::Return(n - 1),
-                exit_acc: n - 1,
             }],
             insts,
             ..Default::default()
@@ -5230,7 +5216,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..1,
                 terminator: Terminator::Return(NO_VALUE),
-                exit_acc: NO_VALUE,
             }],
             insts: alloc::vec![Inst::Imm(7)],
             ..Default::default()
@@ -5243,7 +5228,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..2,
                 terminator: Terminator::Return(1),
-                exit_acc: 1,
             }],
             insts: alloc::vec![call_to(100), next],
             ..Default::default()
@@ -5373,13 +5357,11 @@ mod tests {
                     start_pc: 0,
                     inst_range: 0..4,
                     terminator: Terminator::Jmp(1),
-                    exit_acc: NO_VALUE,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 4..5,
                     terminator: Terminator::Return(4),
-                    exit_acc: 4,
                 },
             ],
             insts,
@@ -5416,7 +5398,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..2,
                 terminator: Terminator::Return(1),
-                exit_acc: 1,
             }],
             ..Default::default()
         };
@@ -5446,7 +5427,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..1,
                 terminator: Terminator::Return(0),
-                exit_acc: 0,
             }],
             ..Default::default()
         }
@@ -5535,7 +5515,6 @@ mod tests {
         let n = caller.insts.len() as u32;
         caller.blocks[0].inst_range = 0..n;
         caller.blocks[0].terminator = Terminator::Return(n - 1);
-        caller.blocks[0].exit_acc = n - 1;
         let mut mandatory = asm_callee(200, 4);
         mandatory.is_inline = true;
         mandatory.is_always_inline = true;
@@ -5644,7 +5623,6 @@ mod tests {
         caller.f32_values = alloc::vec![false; total as usize];
         caller.blocks[0].inst_range = 0..total;
         caller.blocks[0].terminator = Terminator::Return(total - 1);
-        caller.blocks[0].exit_acc = total - 1;
         assert!(emitted_inst_count(&caller) > CALLER_INST_BUDGET);
         let mut funcs = alloc::vec![caller, calling_callee(500, 4, 600), leaf(600)];
         run(&mut funcs, 32, abi, &BTreeMap::new());
@@ -5663,7 +5641,6 @@ mod tests {
         caller.f32_values.push(false);
         caller.blocks[0].inst_range = 0..3;
         caller.blocks[0].terminator = Terminator::Return(2);
-        caller.blocks[0].exit_acc = 2;
         // An own frame 11 times which holds both splices, so the absolute
         // bound alone decides.
         let factor = 1 + StackGrowth::DEFAULT.growth / 100;
@@ -5794,7 +5771,6 @@ mod tests {
                     start_pc: 0,
                     inst_range: 0..1,
                     terminator: Terminator::Return(0),
-                    exit_acc: 0,
                 }],
                 ..Default::default()
             };
@@ -5843,7 +5819,6 @@ mod tests {
         let end = caller.insts.len() as u32;
         caller.blocks[0].inst_range = 0..end;
         caller.blocks[0].terminator = Terminator::Return(end - 1);
-        caller.blocks[0].exit_acc = end - 1;
         let mut sw = asm_callee_with_template(999, 1, b"mov %%rsp, (%0)");
         sw.is_noinline = true; // keep it out of the candidate set
         let mut funcs = alloc::vec![caller, asm_callee(100, 4), sw];
@@ -5929,7 +5904,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..2,
                 terminator: Terminator::Return(1),
-                exit_acc: 1,
             }],
             ..Default::default()
         };
@@ -5999,7 +5973,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..n,
                 terminator: Terminator::Return(result),
-                exit_acc: result,
             }],
             insts,
             ..Default::default()
@@ -6094,7 +6067,6 @@ mod tests {
                         start_pc: 0,
                         inst_range: 0..1,
                         terminator: Terminator::Return(0),
-                        exit_acc: 0,
                     }],
                     ..Default::default()
                 },
@@ -6135,7 +6107,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..2,
                 terminator: Terminator::Return(1),
-                exit_acc: 1,
             }],
             ..Default::default()
         };
@@ -6170,7 +6141,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..2,
                 terminator: Terminator::Return(1),
-                exit_acc: 1,
             }],
             ..Default::default()
         };
@@ -6189,11 +6159,24 @@ mod tests {
     #[test]
     fn block_branches_count_against_the_body_cap() {
         let abi = Target::LinuxX64.abi();
-        // `n` blocks of one live value each, chained to a single Return.
+        // `n` blocks of one live value each, chained to a single Return:
+        // a power of the parameter, read by the next block's.
         let chain = |n: usize| {
-            let insts: Vec<Inst> = (0..n).map(|i| Inst::Imm(i as i64)).collect();
+            let step = |i: usize| match i {
+                0 => Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                _ => Inst::Binop {
+                    op: crate::c5::ir::BinOp::Mul,
+                    lhs: i as u32 - 1,
+                    rhs: 0,
+                },
+            };
+            let insts: Vec<Inst> = (0..n).map(step).collect();
             FunctionSsa {
                 ent_pc: 5,
+                n_params: 1,
                 inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n],
                 f32_values: alloc::vec![false; n],
                 blocks: (0..n as u32)
@@ -6205,7 +6188,6 @@ mod tests {
                         } else {
                             Terminator::Jmp(i + 1)
                         },
-                        exit_acc: i,
                     })
                     .collect(),
                 insts,
@@ -6240,7 +6222,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..2,
                 terminator: Terminator::Return(1),
-                exit_acc: 1,
             }],
             ..Default::default()
         };
@@ -6284,13 +6265,11 @@ mod tests {
                     target: 1,
                     fall_through: 1,
                 },
-                exit_acc: 2,
             },
             Block {
                 start_pc: 0,
                 inst_range: split..n + 1,
                 terminator: Terminator::Return(n),
-                exit_acc: n,
             },
         ];
         let mut call = call_to(5);
@@ -6306,7 +6285,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..2,
                 terminator: Terminator::Return(1),
-                exit_acc: 1,
             }],
             extern_call_refs: alloc::vec![(1, 9)],
             ..Default::default()
@@ -6334,7 +6312,6 @@ mod tests {
             term.for_each_operand_mut(|v| {
                 assert!(*v < arena, "terminator names value {v} past {arena}");
             });
-            assert!(blk.exit_acc == NO_VALUE || blk.exit_acc < arena);
             assert!(blk.inst_range.end <= arena);
         }
     }
@@ -6363,19 +6340,16 @@ mod tests {
                         target: 1,
                         fall_through: 2,
                     },
-                    exit_acc: 0,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 1..2,
                     terminator: Terminator::Return(1),
-                    exit_acc: 1,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 2..3,
                     terminator: Terminator::Return(2),
-                    exit_acc: 2,
                 },
             ],
             ..Default::default()
@@ -6413,7 +6387,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..1,
                 terminator: Terminator::Return(NO_VALUE),
-                exit_acc: NO_VALUE,
             }],
             ..Default::default()
         };
@@ -6486,7 +6459,6 @@ mod tests {
                     start_pc: 0,
                     inst_range: 0..insts.len() as u32,
                     terminator: Terminator::Return(ret),
-                    exit_acc: ret,
                 }],
                 insts,
                 ..Default::default()
@@ -6506,7 +6478,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..insts.len() as u32,
                 terminator: Terminator::Return(ret),
-                exit_acc: ret,
             }],
             insts,
             ..Default::default()
@@ -6640,7 +6611,6 @@ mod tests {
                     start_pc: 0,
                     inst_range: 0..n,
                     terminator: Terminator::Return(n - 1),
-                    exit_acc: n - 1,
                 }],
                 insts,
                 ..Default::default()
@@ -6696,7 +6666,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..3,
                 terminator: Terminator::Return(2),
-                exit_acc: 2,
             }],
             ..Default::default()
         };
@@ -6746,7 +6715,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..4,
                 terminator: Terminator::Return(3),
-                exit_acc: 3,
             }],
             ..Default::default()
         };
@@ -6790,7 +6758,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..5,
                 terminator: Terminator::Return(4),
-                exit_acc: 4,
             }],
             ..Default::default()
         };
@@ -6845,7 +6812,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..2,
                 terminator: Terminator::Return(1),
-                exit_acc: 1,
             }],
             ..Default::default()
         };
@@ -6877,7 +6843,6 @@ mod tests {
                     start_pc: 0,
                     inst_range: 0..1,
                     terminator,
-                    exit_acc: NO_VALUE,
                 }],
                 ..Default::default()
             };
@@ -6939,7 +6904,6 @@ mod tests {
                     start_pc: 5,
                     inst_range: 0..1,
                     terminator: Terminator::Return(NO_VALUE),
-                    exit_acc: NO_VALUE,
                 }],
             )
         };
@@ -6987,7 +6951,6 @@ mod tests {
                 start_pc: 5,
                 inst_range: 0..0,
                 terminator: Terminator::Return(NO_VALUE),
-                exit_acc: NO_VALUE,
             }],
             ..Default::default()
         };
@@ -7036,7 +6999,6 @@ mod tests {
                     start_pc: 5,
                     inst_range: 0..1,
                     terminator: crate::c5::ir::Terminator::Return(0),
-                    exit_acc: 0,
                 }],
                 ..Default::default()
             };
@@ -7111,7 +7073,6 @@ mod tests {
                     start_pc: 0,
                     inst_range: 0..n,
                     terminator: Terminator::Return(3),
-                    exit_acc: 3,
                 }],
                 insts,
                 ..Default::default()
@@ -7281,7 +7242,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..4,
                 terminator: Terminator::Return(3),
-                exit_acc: 3,
             }],
             insts,
             ..Default::default()
@@ -7326,7 +7286,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..5,
                 terminator: Terminator::Return(4),
-                exit_acc: 4,
             }],
             insts: caller_insts,
             ..Default::default()
@@ -7383,7 +7342,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..1,
                 terminator: Terminator::Return(0),
-                exit_acc: 0,
             }],
             insts,
             ..Default::default()
@@ -7402,7 +7360,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..n,
                 terminator: Terminator::Return(NO_VALUE),
-                exit_acc: NO_VALUE,
             }],
             insts,
             ..Default::default()
@@ -7550,7 +7507,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..3,
                 terminator: Terminator::Return(2),
-                exit_acc: 2,
             }],
             insts,
             ..Default::default()
@@ -7566,7 +7522,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..1,
                 terminator: Terminator::Return(0),
-                exit_acc: 0,
             }],
             insts: alloc::vec![Inst::Imm(7)],
             ..Default::default()

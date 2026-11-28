@@ -269,7 +269,6 @@ mod tests {
             start_pc: 0,
             inst_range: 0..2,
             terminator: Terminator::Return(1),
-            exit_acc: 1,
         }];
         let func = func_with(insts, blocks);
         let mut classes = PhiClasses::build(&func, &value_interference(&func));
@@ -303,25 +302,21 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             },
             Block {
                 start_pc: 0,
                 inst_range: 1..2,
                 terminator: Terminator::Jmp(3),
-                exit_acc: 1,
             },
             Block {
                 start_pc: 0,
                 inst_range: 2..3,
                 terminator: Terminator::Jmp(3),
-                exit_acc: 2,
             },
             Block {
                 start_pc: 0,
                 inst_range: 3..4,
                 terminator: Terminator::Return(3),
-                exit_acc: 3,
             },
         ];
         let func = func_with(insts, blocks);
@@ -359,25 +354,21 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             },
             Block {
                 start_pc: 0,
                 inst_range: 1..2,
                 terminator: Terminator::Jmp(3),
-                exit_acc: 1,
             },
             Block {
                 start_pc: 0,
                 inst_range: 2..3,
                 terminator: Terminator::Jmp(3),
-                exit_acc: 2,
             },
             Block {
                 start_pc: 0,
                 inst_range: 3..4,
                 terminator: Terminator::Return(3),
-                exit_acc: 3,
             },
         ];
         let func = func_with(insts, blocks);
@@ -427,7 +418,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..1,
                 terminator: Terminator::Jmp(1),
-                exit_acc: 0,
             },
             Block {
                 start_pc: 0,
@@ -437,13 +427,11 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 3,
             },
             Block {
                 start_pc: 0,
                 inst_range: 4..4,
                 terminator: Terminator::Return(1),
-                exit_acc: 1,
             },
         ];
         let func = func_with(insts, blocks);
@@ -498,7 +486,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..1,
                 terminator: Terminator::Jmp(1),
-                exit_acc: 0,
             },
             Block {
                 start_pc: 0,
@@ -508,7 +495,6 @@ mod tests {
                     target: 2,
                     fall_through: 1,
                 },
-                exit_acc: 2,
             },
             Block {
                 start_pc: 0,
@@ -518,13 +504,11 @@ mod tests {
                     target: 3,
                     fall_through: 2,
                 },
-                exit_acc: 4,
             },
             Block {
                 start_pc: 0,
                 inst_range: 5..5,
                 terminator: Terminator::Return(3),
-                exit_acc: 3,
             },
         ];
         let func = func_with(insts, blocks);

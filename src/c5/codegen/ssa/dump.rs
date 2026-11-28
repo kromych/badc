@@ -94,9 +94,6 @@ pub(crate) fn dump_ssa(func: &FunctionSsa, alloc: Option<&Allocation>) -> String
         if func.low_word_tests.get(b_idx).copied().unwrap_or(false) {
             out.push_str("   (low word)");
         }
-        if block.exit_acc != NO_VALUE {
-            out.push_str(&format!("   (exit_acc=v{})", block.exit_acc));
-        }
         out.push('\n');
     }
     out
@@ -691,7 +688,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..insts.len() as u32,
                 terminator: Terminator::Return(0),
-                exit_acc: 0,
             }],
             insts,
             ..Default::default()

@@ -240,9 +240,6 @@ fn multi_block_slots(func: &FunctionSsa, addrs: &BTreeMap<ValueId, (i64, i64)>) 
             | Terminator::JumpTable { idx: v, .. } => refs.push(*v),
             _ => {}
         }
-        if block.exit_acc != NO_VALUE {
-            refs.push(block.exit_acc);
-        }
         for v in refs {
             if let Some(&(s, _)) = addrs.get(&v) {
                 match slot_block.get(&s) {
@@ -407,11 +404,6 @@ fn promote_once(func: &mut FunctionSsa, strict_align: bool) -> bool {
             }
             _ => {}
         }
-        if block.exit_acc != NO_VALUE
-            && let Some(&(s, _)) = la_slot.get(&block.exit_acc)
-        {
-            mark_disq(&mut slots, s);
-        }
 
         for (slot, u) in &slots {
             if u.disqualified
@@ -535,7 +527,7 @@ fn resolve(redirect: &[Option<ValueId>], mut v: ValueId) -> ValueId {
     v
 }
 
-/// Rewrite every operand, terminator and `exit_acc` through `redirect`.
+/// Rewrite every operand and terminator through `redirect`.
 /// Reports whether any reference actually moved.
 fn apply_redirect(func: &mut FunctionSsa, redirect: &[Option<ValueId>]) -> bool {
     let mut moved = false;
@@ -548,9 +540,6 @@ fn apply_redirect(func: &mut FunctionSsa, redirect: &[Option<ValueId>]) -> bool 
         inst.for_each_operand_mut(&mut fix);
     }
     for block in func.blocks.iter_mut() {
-        if block.exit_acc != NO_VALUE {
-            fix(&mut block.exit_acc);
-        }
         block.terminator.for_each_operand_mut(&mut fix);
     }
     moved
@@ -733,11 +722,6 @@ fn escaped_slots(func: &FunctionSsa, addrs: &BTreeMap<ValueId, (i64, i64)>) -> B
                 }
             }
             _ => {}
-        }
-        if block.exit_acc != NO_VALUE
-            && let Some(&(s, _)) = addrs.get(&block.exit_acc)
-        {
-            escaped.insert(s);
         }
     }
     escaped

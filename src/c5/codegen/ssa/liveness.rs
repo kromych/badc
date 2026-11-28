@@ -19,7 +19,7 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use super::super::ir::{BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId};
+use super::super::ir::{BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, ValueId};
 
 /// Sentinel for a value outside the live-set universe.
 const NO_RANK: u32 = u32::MAX;
@@ -79,7 +79,7 @@ pub(crate) const AT_END: u32 = u32::MAX;
 pub(crate) type ValueUses = alloc::collections::BTreeMap<ValueId, Vec<(BlockId, u32)>>;
 
 /// The uses of each value in `of` ([`ValueUses`]), and the block holding
-/// each instruction. `Block::exit_acc` reads none.
+/// each instruction.
 pub(crate) fn uses_of(
     func: &FunctionSsa,
     of: &alloc::collections::BTreeSet<ValueId>,
@@ -553,7 +553,6 @@ impl BlockLiveness {
     }
 
     /// The value a block reads at its exit: the terminator's operand.
-    /// `Block::exit_acc` names a value and reads none.
     fn for_each_exit_use(blk: &super::super::ir::Block, mark: impl FnMut(ValueId)) {
         blk.terminator.for_each_operand(mark);
     }
@@ -665,18 +664,7 @@ impl Liveness {
                     last_use_pos[v as usize] = term_pos;
                 }
             };
-            match &blk.terminator {
-                Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => term_use(*cond),
-                Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
-                    term_use(*target)
-                }
-                Terminator::Return(v) => term_use(*v),
-                Terminator::Jmp(_)
-                | Terminator::TailExt(_)
-                | Terminator::FallThrough(_)
-                | Terminator::AsmGoto { .. }
-                | Terminator::Unreachable => {}
-            }
+            blk.terminator.for_each_operand(&mut term_use);
         }
 
         let blocks = BlockLiveness::compute_reading(func, &reads);
@@ -796,14 +784,7 @@ impl Liveness {
                 return true;
             }
         }
-        match &blk.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => *cond == x,
-            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
-                *target == x
-            }
-            Terminator::Return(v) => *v == x,
-            _ => false,
-        }
+        blk.terminator.operand() == Some(x)
     }
 
     /// Whether `v` is live at the program point immediately after the
@@ -1604,7 +1585,6 @@ mod tests {
             start_pc: 0,
             inst_range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 
@@ -1687,7 +1667,7 @@ mod tests {
             let blocks: Vec<Block> = (0..nblocks)
                 .map(|b| {
                     let term = match next(3) {
-                        0 => Terminator::Return(NO_VALUE),
+                        0 => Terminator::Return(None),
                         1 => Terminator::Jmp(next(nblocks as u32)),
                         _ => Terminator::Bz {
                             cond: 0,
@@ -1744,7 +1724,7 @@ mod tests {
             blocks.push(blk(at..at + 1, Terminator::Jmp(b + 1)));
         }
         let end = insts.len() as u32;
-        blocks.push(blk(end..end, Terminator::Return(end - 1)));
+        blocks.push(blk(end..end, Terminator::Return(Some(end - 1))));
         let func = func_with(insts, blocks);
         let dense = BlockLiveness::compute(&func);
         assert!(
@@ -1798,7 +1778,7 @@ mod tests {
             blk(0..1, Terminator::Jmp(1)),
             blk(1..1, Terminator::Jmp(2)),
             blk(1..1, Terminator::Jmp(3)),
-            blk(1..1, Terminator::Return(0)),
+            blk(1..1, Terminator::Return(Some(0))),
         ];
         let func = func_with(insts, blocks);
         let live = Liveness::compute(&func);
@@ -1811,41 +1791,6 @@ mod tests {
         }
         assert!(!b.live_out(3, 0), "v0 dies at the return");
         assert!(!b.live_in(0, 0), "v0's own block does not carry it in");
-    }
-
-    /// `Block::exit_acc` names a value and reads none: a value it alone
-    /// names is not carried into the block and does not span the block's
-    /// call. The same value as the terminator's operand is and does.
-    #[test]
-    fn block_exit_value_is_no_use() {
-        // b0: v0 = Imm -> b1; b1: v1 = CallExt; then Jmp b2 or Return v0.
-        let call = Inst::CallExt {
-            binding_idx: 0,
-            args: Vec::new(),
-            fp_arg_mask: crate::c5::ir::FpMask::EMPTY,
-            low_word_args: 0,
-            arg_widths: crate::c5::ir::ArgWidths::default(),
-            fp_return: false,
-            arg_aggs: Vec::new(),
-            ret_agg: None,
-            ret_slot_local: 0,
-        };
-        for (term, read) in [(Terminator::Jmp(2), false), (Terminator::Return(0), true)] {
-            let mut blocks = alloc::vec![
-                blk(0..1, Terminator::Jmp(1)),
-                blk(1..2, term),
-                blk(2..2, Terminator::Return(NO_VALUE)),
-            ];
-            blocks[1].exit_acc = 0;
-            let func = func_with(alloc::vec![Inst::Imm(0), call.clone()], blocks);
-            let live = Liveness::compute(&func);
-            assert_eq!(live.block_liveness().live_in(1, 0), read, "{term:?}");
-            assert_eq!(
-                live.values_live_across_calls(&func, false)[0],
-                read,
-                "{term:?}"
-            );
-        }
     }
 
     /// Every value of a wide definition block read again at the far end
@@ -1872,7 +1817,7 @@ mod tests {
         }
         blocks.push(blk(
             W..insts.len() as u32,
-            Terminator::Return(insts.len() as u32 - 1),
+            Terminator::Return(Some(insts.len() as u32 - 1)),
         ));
         let func = func_with(insts, blocks);
         let live = Liveness::compute(&func);
@@ -1915,7 +1860,7 @@ mod tests {
             ),
             blk(1..2, Terminator::Jmp(3)),
             blk(2..3, Terminator::Jmp(3)),
-            blk(3..4, Terminator::Return(3)),
+            blk(3..4, Terminator::Return(Some(3))),
         ];
         let func = func_with(insts, blocks);
         let bl = Liveness::compute(&func);
@@ -1972,10 +1917,10 @@ mod tests {
         let blocks = if split {
             alloc::vec![
                 blk(0..3, Terminator::Jmp(1)),
-                blk(3..4, Terminator::Return(2)),
+                blk(3..4, Terminator::Return(Some(2))),
             ]
         } else {
-            alloc::vec![blk(0..4, Terminator::Return(2))]
+            alloc::vec![blk(0..4, Terminator::Return(Some(2)))]
         };
         let sum = Inst::Binop {
             op: BinOp::Add,
@@ -2033,8 +1978,8 @@ mod tests {
             alloc::vec![local(2), local(3), sum(0, 0), sum(0, 1)],
             alloc::vec![
                 blk(0..2, branch),
-                blk(2..3, Terminator::Return(NO_VALUE)),
-                blk(3..4, Terminator::Return(3)),
+                blk(2..3, Terminator::Return(None)),
+                blk(3..4, Terminator::Return(Some(3))),
             ],
         );
         let counts = super::super::reg_alloc::compute_use_counts(&func);
@@ -2091,8 +2036,7 @@ mod tests {
         let blocks = alloc::vec![Block {
             start_pc: 0,
             inst_range: 0..4,
-            terminator: Terminator::Return(3),
-            exit_acc: 3,
+            terminator: Terminator::Return(Some(3)),
         }];
         let func = func_with(insts, blocks);
         let live = Liveness::compute(&func);
@@ -2128,8 +2072,7 @@ mod tests {
         let blocks = alloc::vec![Block {
             start_pc: 0,
             inst_range: 0..3,
-            terminator: Terminator::Return(2),
-            exit_acc: 2,
+            terminator: Terminator::Return(Some(2)),
         }];
         let func = func_with(insts, blocks);
         let live = Liveness::compute(&func);
@@ -2165,8 +2108,7 @@ mod tests {
         let blocks = alloc::vec![Block {
             start_pc: 0,
             inst_range: 0..3,
-            terminator: Terminator::Return(2),
-            exit_acc: 2,
+            terminator: Terminator::Return(Some(2)),
         }];
         let func = func_with(insts, blocks);
         let live = Liveness::compute(&func);
@@ -2220,7 +2162,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..1,
                 terminator: Terminator::Jmp(1),
-                exit_acc: 0,
             },
             Block {
                 start_pc: 0,
@@ -2230,25 +2171,21 @@ mod tests {
                     target: 4,
                     fall_through: 3,
                 },
-                exit_acc: 3,
             },
             Block {
                 start_pc: 0,
                 inst_range: 4..5,
                 terminator: Terminator::Jmp(1),
-                exit_acc: 4,
             },
             Block {
                 start_pc: 0,
                 inst_range: 5..6,
                 terminator: Terminator::Jmp(2),
-                exit_acc: 5,
             },
             Block {
                 start_pc: 0,
                 inst_range: 6..6,
-                terminator: Terminator::Return(1),
-                exit_acc: 1,
+                terminator: Terminator::Return(Some(1)),
             },
         ];
         let func = func_with(insts, blocks);
@@ -2320,7 +2257,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..2,
                 terminator: Terminator::Jmp(1),
-                exit_acc: 1,
             },
             Block {
                 start_pc: 0,
@@ -2330,13 +2266,11 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 4,
             },
             Block {
                 start_pc: 0,
                 inst_range: 5..5,
-                terminator: Terminator::Return(2),
-                exit_acc: 2,
+                terminator: Terminator::Return(Some(2)),
             },
         ];
         let func = func_with(insts, blocks);
@@ -2369,8 +2303,7 @@ mod tests {
         let blocks = alloc::vec![Block {
             start_pc: 0,
             inst_range: 0..3,
-            terminator: Terminator::Return(2),
-            exit_acc: 2,
+            terminator: Terminator::Return(Some(2)),
         }];
         let func = func_with(insts, blocks);
         let live = Liveness::compute(&func);

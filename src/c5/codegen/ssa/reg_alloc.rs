@@ -34,8 +34,6 @@
 //! is responsible for the actual code emission (load / store /
 //! reg-to-reg move / call-site marshalling).
 
-#![allow(dead_code)]
-
 use alloc::collections::{BTreeMap, BinaryHeap};
 use alloc::vec;
 use alloc::vec::Vec;
@@ -85,6 +83,7 @@ impl Place {
     }
 
     /// Spill-slot index when the place is `Spill`, else `None`.
+    #[cfg(test)]
     pub(crate) fn spill_slot(self) -> Option<u32> {
         if let Place::Spill(s) = self {
             Some(s)
@@ -192,14 +191,9 @@ pub(crate) struct Allocation {
     /// register for a copy, which takes its temporaries among the free ones;
     /// a bound x86-64 asm statement's scratch candidates.
     pub implicit_live: Vec<u32>,
-    /// Per-value coalescing hint: the physical register the
-    /// allocator should prefer when one is set and free at the
-    /// pick site. The pick-reg path honors the hint only when it
-    /// satisfies the live-across-call constraint; unsatisfied
-    /// hints are ignored, so a hint never compromises correctness.
-    /// `None` for any value with no preference. Populated by the
-    /// coalescing pre-passes (copy / phi congruence / call-arg /
-    /// return) layered on in subsequent iterations.
+    /// The register each value would rather take, as the coalescing
+    /// pre-passes left it; the coloring reads its own copy.
+    #[cfg(test)]
     pub hints: Vec<Option<u8>>,
     /// Per-value single-precision marker copied from
     /// [`FunctionSsa::f32_values`]. `true` when the value's FP register
@@ -215,7 +209,9 @@ pub(crate) struct Allocation {
     /// out-of-range entries default to observed, keeping the extension.
     pub high_observed: Vec<bool>,
     /// Per value: a clear high word by range; unknown values are not clear.
-    pub high_clear: Vec<bool>,
+    /// Filled when first asked for ([`Allocation::high_clear`]): one aarch64
+    /// lowering reads it, and only of the allocation that is emitted.
+    pub high_clear: core::cell::OnceCell<Vec<bool>>,
     /// Per-value comparison operand width (see
     /// `passes::narrow`). True marks an integer comparison the emit
     /// issues in the 32-bit register form. Empty or out-of-range
@@ -397,8 +393,12 @@ impl Allocation {
         !self.high_observed.get(v as usize).copied().unwrap_or(true)
     }
 
-    pub(crate) fn high_clear(&self, v: ValueId) -> bool {
-        self.high_clear.get(v as usize).copied().unwrap_or(false)
+    /// Whether `v`, a value of the `func` this allocates, has a clear high
+    /// word by range.
+    pub(crate) fn high_clear(&self, func: &FunctionSsa, v: ValueId) -> bool {
+        use crate::c5::codegen::passes::drop_redundant_extend::compute_high_clear;
+        let table = self.high_clear.get_or_init(|| compute_high_clear(func));
+        table.get(v as usize).copied().unwrap_or(false)
     }
 
     /// True when no instruction and no terminator reads `v`. Unknown
@@ -473,7 +473,6 @@ pub(crate) fn flags_survive(inst: &Inst, is_x86: bool) -> bool {
         | Inst::Call { .. }
         | Inst::CallIndirect { .. }
         | Inst::CallExt { .. }
-        | Inst::TailExt(_)
         | Inst::Mzero { .. }
         | Inst::Mcpy { .. }
         | Inst::AtomicRmw { .. }
@@ -609,7 +608,7 @@ pub(crate) fn fp_constants(func: &FunctionSsa, target: Target, reads: &[bool]) -
     let fp_return = func.ret_is_fp && func.ret_agg.is_none();
     for block in &func.blocks {
         match block.terminator {
-            Terminator::Return(v) if v != NO_VALUE => note(v, fp_return),
+            Terminator::Return(Some(v)) => note(v, fp_return),
             ref t => t.for_each_operand(|v| note(v, false)),
         }
     }
@@ -2138,10 +2137,11 @@ fn allocate_keeping(
             fp_mem_operand: alloc::collections::BTreeSet::new(),
             fp_const,
             implicit_live: Vec::new(),
+            #[cfg(test)]
             hints,
             f32_values: Vec::new(),
             high_observed: Vec::new(),
-            high_clear: Vec::new(),
+            high_clear: Vec::new().into(),
             cmp32: Vec::new(),
             div32: Vec::new(),
             count_nonzero: Vec::new(),
@@ -2636,7 +2636,6 @@ fn allocate_keeping(
             | Inst::Call { .. }
             | Inst::CallIndirect { .. }
             | Inst::CallExt { .. }
-            | Inst::TailExt(_)
             | Inst::Mzero { .. }
             | Inst::Mcpy { .. }
             | Inst::AtomicRmw { .. }
@@ -3177,12 +3176,13 @@ fn allocate_keeping(
         fp_mem_operand,
         fp_const,
         implicit_live,
+        #[cfg(test)]
         hints,
         f32_values: func.f32_values.clone(),
         high_observed: crate::c5::codegen::passes::drop_redundant_extend::compute_high_observed(
             func,
         ),
-        high_clear: crate::c5::codegen::passes::drop_redundant_extend::compute_high_clear(func),
+        high_clear: core::cell::OnceCell::new(),
         cmp32: func.cmp32.clone(),
         div32: func.div32.clone(),
         count_nonzero: if target.is_x86_64() {
@@ -3677,6 +3677,14 @@ fn asm_preserve_masks(func: &FunctionSsa, target: Target, region_base: Option<u8
     )
 }
 
+/// What [`check_allocation`] reads of the saves: whether two values share
+/// a register, and the saves around each call.
+#[cfg(feature = "codegen_test")]
+type SavesRead<'a> = (
+    &'a dyn Fn(ValueId, ValueId) -> bool,
+    &'a [(ValueId, Vec<CallSave>)],
+);
+
 /// [`check_allocation`], under the `codegen_test` feature and only when
 /// `BADC_VERIFY_ALLOC` is set, so it never runs in a production or
 /// normal test build.
@@ -3688,10 +3696,7 @@ fn verify_allocation(
     liveness: &super::liveness::Liveness,
     fp_const: &[bool],
     use_counts: &[u32],
-    saves: (
-        &dyn Fn(ValueId, ValueId) -> bool,
-        &[(ValueId, Vec<CallSave>)],
-    ),
+    saves: SavesRead<'_>,
 ) {
     if std::env::var("BADC_VERIFY_ALLOC").is_ok() || ALLOCATION_CHECK.with(|c| c.get()) {
         check_allocation(
@@ -3744,10 +3749,7 @@ fn check_allocation(
     liveness: &super::liveness::Liveness,
     fp_const: &[bool],
     use_counts: &[u32],
-    (shares, call_saves): (
-        &dyn Fn(ValueId, ValueId) -> bool,
-        &[(ValueId, Vec<CallSave>)],
-    ),
+    (shares, call_saves): SavesRead<'_>,
 ) {
     let first = core::cell::RefCell::new(None::<alloc::string::String>);
     let report = |msg: alloc::string::String| {
@@ -3758,6 +3760,10 @@ fn check_allocation(
         first.borrow_mut().get_or_insert(msg);
     };
     let covered = |v: usize| liveness.in_cfg(v as ValueId);
+    // An instruction the emit skips writes no register.
+    let skipped = |v: usize| {
+        super::emit_common::is_dead_pure_counts(func, &func.insts[v], v as ValueId, use_counts)
+    };
 
     // Block coverage: a value no block's `inst_range` covers must have no
     // reader inside one.
@@ -3926,22 +3932,11 @@ fn check_allocation(
             });
         }
         for block in &func.blocks {
-            match &block.terminator {
-                Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
-                    if (*cond as usize) < used.len() {
-                        used[*cond as usize] = true;
-                    }
+            block.terminator.for_each_operand(|op| {
+                if (op as usize) < used.len() {
+                    used[op as usize] = true;
                 }
-                Terminator::Return(v) if (*v as usize) < used.len() => {
-                    used[*v as usize] = true;
-                }
-                Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
-                    if (*target as usize) < used.len() =>
-                {
-                    used[*target as usize] = true;
-                }
-                _ => {}
-            }
+            });
         }
         let plan = param_incoming_plan(func, target);
         // (value index, home, incoming register) for each used integer
@@ -3972,7 +3967,8 @@ fn check_allocation(
             if batched && run.contains(&vid) {
                 continue;
             }
-            for v in (0..vid).filter(|&v| covered(v) && produces_value(&func.insts[v])) {
+            let writes = |v: &usize| covered(*v) && produces_value(&func.insts[*v]) && !skipped(*v);
+            for v in (0..vid).filter(writes) {
                 let home = places.get(v).copied().unwrap_or(Place::None);
                 if matches!(home, Place::IntReg(r) if r == incoming) {
                     report(alloc::format!(
@@ -4009,7 +4005,7 @@ fn check_allocation(
                 };
                 let implicit =
                     target.is_x86_64() && !fp && x86_implicit_writes(inst) >> reg & 1 != 0;
-                if (held && produces_value(inst)) || implicit {
+                if ((held && produces_value(inst)) || implicit) && !skipped(u as usize) {
                     report(alloc::format!(
                         "ret-part-clobber: v{u} writes the result register RetPart v{v} reads"
                     ));
@@ -4137,7 +4133,7 @@ thread_local! {
 
 /// Run `f` with every allocation on this thread checked, as under
 /// `BADC_VERIFY_ALLOC`: a violation panics.
-#[cfg(feature = "codegen_test")]
+#[cfg(all(test, feature = "codegen_test"))]
 pub(crate) fn with_allocation_check<R>(f: impl FnOnce() -> R) -> R {
     let prior = ALLOCATION_CHECK.with(|c| c.replace(true));
     struct Restore(bool);
@@ -4801,14 +4797,7 @@ fn use_weights(
                 w[root] = w[root].saturating_add(wb);
             }
         };
-        match block.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => bump_term(cond),
-            Terminator::Return(v) => bump_term(v),
-            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
-                bump_term(target)
-            }
-            _ => {}
-        }
+        block.terminator.for_each_operand(&mut bump_term);
     }
     w
 }
@@ -4845,14 +4834,7 @@ fn level_use_weights(
                 for_each_operand(&func.insts[i as usize], &mut bump);
             }
         }
-        match block.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => bump(cond),
-            Terminator::Return(v) => bump(v),
-            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
-                bump(target)
-            }
-            _ => {}
-        }
+        block.terminator.for_each_operand(&mut bump);
     }
     w
 }
@@ -5066,18 +5048,6 @@ pub(crate) fn operand_reads(func: &FunctionSsa) -> Vec<u32> {
     }
     for block in &func.blocks {
         block.terminator.for_each_operand(&mut bump);
-    }
-    counts
-}
-
-/// [`operand_reads`] with each block's exit accumulator read too: the
-/// counts a pass asks whether a value has a reader besides one.
-pub(crate) fn value_reads(func: &FunctionSsa) -> Vec<u32> {
-    let mut counts = operand_reads(func);
-    for block in &func.blocks {
-        if let Some(c) = counts.get_mut(block.exit_acc as usize) {
-            *c += 1;
-        }
     }
     counts
 }
@@ -5489,7 +5459,6 @@ fn result_kind(inst: &Inst) -> ResultKind {
                 ResultKind::Int
             }
         }
-        TailExt(_) => ResultKind::None,
         Mcpy { .. } => ResultKind::Int,
         Mzero { .. } => ResultKind::None,
         // C11 7.17.7: the prior value (RMW) / boolean success (CAS) is
@@ -5663,7 +5632,6 @@ fn place_crowded(
             for_each_operand(&func.insts[idx as usize], |op| cover(op, idx));
         }
         blk.terminator.for_each_operand(|op| cover(op, end));
-        cover(blk.exit_acc, end);
         liveness
             .block_liveness()
             .for_each_live_out(b as crate::c5::ir::BlockId, |v| cover(v, end));
@@ -6294,10 +6262,10 @@ fn populate_return_hints(
     }
 
     for block in &func.blocks {
-        let Terminator::Return(v) = block.terminator else {
+        let Terminator::Return(Some(v)) = block.terminator else {
             continue;
         };
-        if v == NO_VALUE || (v as usize) >= func.insts.len() {
+        if (v as usize) >= func.insts.len() {
             continue;
         }
         // Single-block branch: require the value's def to live in this
@@ -6457,30 +6425,7 @@ fn compute_param_incoming_forbid(
     let mut forbid = alloc::vec![0u64; func.insts.len()];
     // Only protect parameters that are read: an unused `ParamRef` is not
     // materialized, so its incoming register need not survive.
-    let mut used = alloc::vec![false; func.insts.len()];
-    for inst in &func.insts {
-        for_each_operand(inst, |op| {
-            if (op as usize) < used.len() {
-                used[op as usize] = true;
-            }
-        });
-    }
-    for block in &func.blocks {
-        match &block.terminator {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => {
-                if (*cond as usize) < used.len() {
-                    used[*cond as usize] = true;
-                }
-            }
-            Terminator::Return(v) if (*v as usize) < used.len() => used[*v as usize] = true,
-            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. }
-                if (*target as usize) < used.len() =>
-            {
-                used[*target as usize] = true;
-            }
-            _ => {}
-        }
-    }
+    let used: Vec<bool> = operand_reads(func).iter().map(|&n| n > 0).collect();
     // A `RetPart` reads its call's result register, which stays live from
     // the call to the part: a value defined between them stays off it.
     let tls_call = tls_addr_is_call(target, func);
@@ -7218,6 +7163,80 @@ mod tests {
             .map(|s| s.as_str())
             .unwrap_or_default();
         assert!(text.starts_with("ICE: allocation check: `f`:"), "{text}");
+    }
+
+    /// A definition the emit skips writes no register: homed in the
+    /// incoming register of a parameter read placed after it, it clobbers
+    /// nothing, where the same definition with a reader does. A dead
+    /// member of a class holds the class's register this way.
+    #[cfg(feature = "codegen_test")]
+    #[test]
+    fn the_allocation_check_counts_no_write_for_a_skipped_definition() {
+        let target = Target::LinuxX64;
+        let param = |idx| Inst::ParamRef {
+            idx,
+            kind: LoadKind::I64,
+        };
+        let add = |lhs, rhs| Inst::Binop {
+            op: BinOp::Add,
+            lhs,
+            rhs,
+        };
+        // v1 is the definition. v2 is read, which ends the entry read run,
+        // so v3 is placed at its own position.
+        let build = |read: bool| {
+            let mut insts = vec![param(0), Inst::Imm(5), Inst::Imm(9), param(1)];
+            insts.extend([add(0, 3), add(4, 2)]);
+            if read {
+                insts.push(add(5, 1));
+            }
+            let n = insts.len();
+            FunctionSsa {
+                name: "f".into(),
+                n_params: 2,
+                inst_src: vec![crate::c5::ir::InstSrc::default(); n],
+                f32_values: vec![false; n],
+                blocks: vec![crate::c5::ir::Block {
+                    start_pc: 0,
+                    inst_range: 0..n as u32,
+                    terminator: Terminator::Return(Some(n as u32 - 1)),
+                }],
+                insts,
+                ..Default::default()
+            }
+        };
+        let verdict = |read: bool| {
+            let func = build(read);
+            let alloc =
+                with_pool_size_override(1, 1, || super::allocate(&func, target, FixedRegs::NONE));
+            let (_, incoming) = incoming_reg(&param_incoming_plan(&func, target), &func.insts[3])
+                .expect("an incoming register");
+            let mut places = alloc.places.clone();
+            places[1] = Place::IntReg(incoming);
+            let reads = operands_read(&func, &alloc.use_counts);
+            let fp_const = fp_constants(&func, target, &reads);
+            let liveness = super::super::liveness::Liveness::compute_reading(&func, reads);
+            let banks = RegBanks::new(target, FixedRegs::NONE);
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                check_allocation(
+                    &func,
+                    &places,
+                    (target, &banks),
+                    &liveness,
+                    &fp_const,
+                    &alloc.use_counts,
+                    (&|_, _| false, &alloc.call_saves),
+                )
+            }))
+            .map_err(|m| {
+                m.downcast_ref::<alloc::string::String>()
+                    .cloned()
+                    .unwrap_or_default()
+            })
+        };
+        let text = verdict(true).expect_err("a read definition in the incoming register passes");
+        assert!(text.contains("param-shuffle-clobber: v1"), "{text}");
+        assert_eq!(verdict(false), Ok(()));
     }
 
     /// A callee-saved register an inline-asm block writes rides the
@@ -7988,8 +8007,7 @@ int main(void) { return 0; }
             blocks: vec![Block {
                 start_pc: 0,
                 inst_range: 0..6,
-                terminator: Terminator::Return(5),
-                exit_acc: 5,
+                terminator: Terminator::Return(Some(5)),
             }],
             ..Default::default()
         };
@@ -8047,8 +8065,7 @@ int main(void) { return 0; }
             blocks: vec![Block {
                 start_pc: 0,
                 inst_range: 0..n as u32,
-                terminator: Terminator::Return(4),
-                exit_acc: 4,
+                terminator: Terminator::Return(Some(4)),
             }],
             ..Default::default()
         };
@@ -8091,8 +8108,7 @@ int main(void) { return 0; }
             blocks: vec![Block {
                 start_pc: 0,
                 inst_range: 0..n,
-                terminator: Terminator::Return(acc),
-                exit_acc: acc,
+                terminator: Terminator::Return(Some(acc)),
             }],
             ..Default::default()
         };
@@ -8879,7 +8895,6 @@ int main(void) { return 0; }
                 start_pc: 0,
                 inst_range: 0..1,
                 terminator: Terminator::Jmp(1),
-                exit_acc: 0,
             },
             Block {
                 start_pc: 0,
@@ -8889,19 +8904,16 @@ int main(void) { return 0; }
                     target: 3,
                     fall_through: 2,
                 },
-                exit_acc: 1,
             },
             Block {
                 start_pc: 0,
                 inst_range: 2..4,
                 terminator: Terminator::Jmp(1),
-                exit_acc: 3,
             },
             Block {
                 start_pc: 0,
                 inst_range: 4..4,
-                terminator: Terminator::Return(1),
-                exit_acc: 1,
+                terminator: Terminator::Return(Some(1)),
             },
         ];
         let func = FunctionSsa {
@@ -9076,8 +9088,7 @@ int main(void) { return 0; }
             blocks: alloc::vec![crate::c5::ir::Block {
                 start_pc: 0,
                 inst_range: 0..n as u32,
-                terminator: Terminator::Return(NO_VALUE),
-                exit_acc: NO_VALUE,
+                terminator: Terminator::Return(None),
             }],
             ..FunctionSsa::default()
         }
@@ -9245,19 +9256,16 @@ int main(void) { return 0; }
                         target: 1,
                         fall_through: 2,
                     },
-                    exit_acc: cond,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: n..n,
-                    terminator: Terminator::Return(NO_VALUE),
-                    exit_acc: NO_VALUE,
+                    terminator: Terminator::Return(None),
                 },
                 Block {
                     start_pc: 0,
                     inst_range: n..n,
-                    terminator: Terminator::Return(NO_VALUE),
-                    exit_acc: NO_VALUE,
+                    terminator: Terminator::Return(None),
                 },
             ],
         )
@@ -9337,7 +9345,6 @@ int main(void) { return 0; }
                 start_pc: 0,
                 inst_range: 0..1,
                 terminator: Terminator::Jmp(1),
-                exit_acc: 0,
             },
             Block {
                 start_pc: 0,
@@ -9347,13 +9354,11 @@ int main(void) { return 0; }
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 5,
             },
             Block {
                 start_pc: 0,
                 inst_range: 6..6,
-                terminator: Terminator::Return(3),
-                exit_acc: 3,
+                terminator: Terminator::Return(Some(3)),
             },
         ];
         let f = func_with(insts, blocks);
@@ -9439,8 +9444,7 @@ int main(void) { return 0; }
             vec![Block {
                 start_pc: 0,
                 inst_range: 0..n,
-                terminator: Terminator::Return(ret),
-                exit_acc: NO_VALUE,
+                terminator: Terminator::Return(Some(ret)),
             }],
         )
     }
@@ -10211,7 +10215,7 @@ int main(void) { return 0; }
                         );
                     }
                 }
-                let Terminator::Return(r) = f.blocks[0].terminator else {
+                let Terminator::Return(Some(r)) = f.blocks[0].terminator else {
                     panic!("{target:?} {name}")
                 };
                 let Inst::AggParts { parts: ret, .. } = &f.insts[r as usize] else {

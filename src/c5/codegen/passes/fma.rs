@@ -152,7 +152,7 @@ fn match_fma(
 /// `fast` is `-ffp-contract=fast`.
 pub(crate) fn run(funcs: &mut [FunctionSsa], fast: bool) {
     for func in funcs.iter_mut() {
-        let counts = crate::c5::codegen::ssa::reg_alloc::value_reads(func);
+        let counts = crate::c5::codegen::ssa::reg_alloc::operand_reads(func);
         let n = func.insts.len();
         let mut rewrites: Vec<(usize, Inst, ValueId)> = Vec::new();
         for idx in 0..n {

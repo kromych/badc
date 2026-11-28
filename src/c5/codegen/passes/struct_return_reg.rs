@@ -43,7 +43,7 @@
 //! left with no unforwarded read has its writes dropped; the outer fixed
 //! point then drains the copy chain one link per round.
 
-use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId};
+use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, ValueId};
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
@@ -232,17 +232,7 @@ fn multi_block_slots(func: &FunctionSsa, addrs: &BTreeMap<ValueId, (i64, i64)>) 
                 inst.for_each_operand(|v| refs.push(v));
             }
         }
-        match &block.terminator {
-            Terminator::Return(v)
-            | Terminator::Bz { cond: v, .. }
-            | Terminator::Bnz { cond: v, .. }
-            | Terminator::GotoIndirect { target: v }
-            | Terminator::JumpTable { idx: v, .. } => refs.push(*v),
-            _ => {}
-        }
-        if block.exit_acc != NO_VALUE {
-            refs.push(block.exit_acc);
-        }
+        refs.extend(block.terminator.operand());
         for v in refs {
             if let Some(&(s, _)) = addrs.get(&v) {
                 match slot_block.get(&s) {
@@ -395,21 +385,7 @@ fn promote_once(func: &mut FunctionSsa, strict_align: bool) -> bool {
             }
         }
         // A slot address used by the block terminator escapes it.
-        match &block.terminator {
-            Terminator::Return(v)
-            | Terminator::Bz { cond: v, .. }
-            | Terminator::Bnz { cond: v, .. }
-            | Terminator::GotoIndirect { target: v }
-            | Terminator::JumpTable { idx: v, .. } => {
-                if let Some(&(s, _)) = la_slot.get(v) {
-                    mark_disq(&mut slots, s);
-                }
-            }
-            _ => {}
-        }
-        if block.exit_acc != NO_VALUE
-            && let Some(&(s, _)) = la_slot.get(&block.exit_acc)
-        {
+        if let Some(&(s, _)) = block.terminator.operand().and_then(|v| la_slot.get(&v)) {
             mark_disq(&mut slots, s);
         }
 
@@ -535,7 +511,7 @@ fn resolve(redirect: &[Option<ValueId>], mut v: ValueId) -> ValueId {
     v
 }
 
-/// Rewrite every operand, terminator and `exit_acc` through `redirect`.
+/// Rewrite every operand and terminator through `redirect`.
 /// Reports whether any reference actually moved.
 fn apply_redirect(func: &mut FunctionSsa, redirect: &[Option<ValueId>]) -> bool {
     let mut moved = false;
@@ -548,9 +524,6 @@ fn apply_redirect(func: &mut FunctionSsa, redirect: &[Option<ValueId>]) -> bool 
         inst.for_each_operand_mut(&mut fix);
     }
     for block in func.blocks.iter_mut() {
-        if block.exit_acc != NO_VALUE {
-            fix(&mut block.exit_acc);
-        }
         block.terminator.for_each_operand_mut(&mut fix);
     }
     moved
@@ -722,21 +695,7 @@ fn escaped_slots(func: &FunctionSsa, addrs: &BTreeMap<ValueId, (i64, i64)>) -> B
                 }),
             }
         }
-        match &block.terminator {
-            Terminator::Return(v)
-            | Terminator::Bz { cond: v, .. }
-            | Terminator::Bnz { cond: v, .. }
-            | Terminator::GotoIndirect { target: v }
-            | Terminator::JumpTable { idx: v, .. } => {
-                if let Some(&(s, _)) = addrs.get(v) {
-                    escaped.insert(s);
-                }
-            }
-            _ => {}
-        }
-        if block.exit_acc != NO_VALUE
-            && let Some(&(s, _)) = addrs.get(&block.exit_acc)
-        {
+        if let Some(&(s, _)) = block.terminator.operand().and_then(|v| addrs.get(&v)) {
             escaped.insert(s);
         }
     }

@@ -23,7 +23,6 @@ mod asm_scratch_tests {
             clobber_regs,
             clobber_fp_regs: 0,
             clobber_memory: true,
-            volatile: true,
         };
         FunctionSsa {
             insts: alloc::vec![
@@ -55,7 +54,6 @@ mod asm_scratch_tests {
                 | (1 << 9),
             clobber_fp_regs: 0,
             clobber_memory: true,
-            volatile: true,
         };
         let fixed = crate::c5::codegen::FixedRegs::NONE;
         let free = asm_save_masks_and_stage(&asm, &[], fixed, (0, 0)).unwrap();
@@ -139,7 +137,6 @@ mod asm_scratch_tests {
                 clobber_regs,
                 clobber_fp_regs: 0,
                 clobber_memory: false,
-                volatile: true,
             };
             let parts: alloc::vec::Vec<u8> = (0..n as u8)
                 .filter(|&i| asm.operands[i as usize].is_output)
@@ -305,7 +302,6 @@ mod asm_scratch_tests {
             clobber_regs: 0,
             clobber_fp_regs: 0,
             clobber_memory: false,
-            volatile: true,
         };
         let args = alloc::vec![0, 1, 2, 3];
         let mut insts: alloc::vec::Vec<Inst> = (0..4).map(Inst::Imm).collect();

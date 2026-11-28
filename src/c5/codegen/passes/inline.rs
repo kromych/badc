@@ -788,7 +788,7 @@ fn out_ptr_return(c: &FunctionSsa) -> Option<OutPtrReturn> {
         return None;
     }
     let block = &c.blocks[0];
-    let Terminator::Return(rv) = block.terminator else {
+    let Terminator::Return(Some(rv)) = block.terminator else {
         return None;
     };
     if !matches!(
@@ -1075,10 +1075,7 @@ fn candidacy(
             // postfix merge for it. The multi-block splice preserves it
             // as-is (it has no successor and no block-id operands).
             Terminator::Unreachable => {}
-            Terminator::Jmp(_)
-            | Terminator::FallThrough(_)
-            | Terminator::Bz { .. }
-            | Terminator::Bnz { .. } => {}
+            Terminator::Jmp(_) | Terminator::Bz { .. } | Terminator::Bnz { .. } => {}
         }
     }
     // A call to a function that never returns ends the path it is on.
@@ -1189,7 +1186,7 @@ fn candidacy(
             && func
                 .blocks
                 .iter()
-                .any(|b| matches!(b.terminator, Terminator::Return(v) if v == NO_VALUE))
+                .any(|b| matches!(b.terminator, Terminator::Return(None)))
         {
             say(format_args!("aggregate return without a value"));
             return false;
@@ -1901,7 +1898,7 @@ fn callee_facts(callee: &FunctionSsa) -> CalleeFacts {
 }
 
 /// Per-value mask of the values an in-block instruction or a terminator
-/// reads; a block's exit accumulator is not a read.
+/// reads.
 fn operand_read_mask(func: &FunctionSsa) -> Vec<bool> {
     let mut read = vec![false; func.insts.len()];
     let mut mark = |v: ValueId| {
@@ -1925,7 +1922,7 @@ fn result_read_without_value(reads: &[bool], call_pc: u32, callee: &FunctionSsa)
         && callee
             .blocks
             .iter()
-            .any(|b| matches!(b.terminator, Terminator::Return(NO_VALUE)))
+            .any(|b| matches!(b.terminator, Terminator::Return(None)))
 }
 
 /// Cells `callee`'s live instructions name, less its bound aggregate
@@ -1980,14 +1977,7 @@ fn value_use_mask(func: &FunctionSsa) -> Vec<bool> {
         inst.for_each_operand(|v| mark(v, &mut used));
     }
     for blk in &func.blocks {
-        match blk.terminator {
-            Terminator::Return(v) => mark(v, &mut used),
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(cond, &mut used),
-            _ => {}
-        }
-        if blk.exit_acc != NO_VALUE {
-            mark(blk.exit_acc, &mut used);
-        }
+        blk.terminator.for_each_operand(|v| mark(v, &mut used));
     }
     used
 }
@@ -2018,7 +2008,6 @@ fn live_inst_mask(func: &FunctionSsa) -> Vec<bool> {
         // exhaustive operand listing rather than a hand-kept match.
         let mut term = blk.terminator;
         term.for_each_operand_mut(|v| bump(&mut uses, *v));
-        bump(&mut uses, blk.exit_acc);
     }
     let mut live = in_block;
     let dead = |live: &[bool], uses: &[u32], i: usize| {
@@ -2151,6 +2140,11 @@ pub(super) fn map_v(v: ValueId, remap: &[ValueId]) -> ValueId {
     }
 }
 
+/// [`map_v`] of what a block returns: `NO_VALUE` for a return of none.
+fn map_ret(v: Option<ValueId>, remap: &[ValueId]) -> ValueId {
+    v.map_or(NO_VALUE, |v| map_v(v, remap))
+}
+
 /// Map every value operand in `inst` through `remap`, in place. Routes
 /// through the exhaustive walker: a variant missed here would silently
 /// carry a foreign `ValueId` into the target function.
@@ -2269,9 +2263,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         | Inst::RetPart { .. }
         | Inst::AsmOut { .. }
         | Inst::AggParts { .. } => false,
-        Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. } | Inst::TailExt(_) => {
-            true
-        }
+        Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. } => true,
         // Extended asm writes through its output operands' destination
         // addresses; a `"memory"` clobber widens that to anything, and
         // stack-pointer asm is outside the model entirely.
@@ -2440,7 +2432,6 @@ fn merge_agg_descs(
 pub(super) fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
     match term {
         Terminator::Jmp(_)
-        | Terminator::FallThrough(_)
         | Terminator::TailExt(_)
         | Terminator::AsmGoto { .. }
         | Terminator::Unreachable => {}
@@ -2454,7 +2445,7 @@ pub(super) fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
             *idx = map_v(*idx, remap);
         }
         Terminator::Return(v) => {
-            *v = map_v(*v, remap);
+            *v = v.map(|v| map_v(v, remap));
         }
     }
 }
@@ -2478,7 +2469,7 @@ fn fp_join_kind(func: &FunctionSsa) -> Option<LoadKind> {
     };
     func.blocks
         .iter()
-        .all(|b| !matches!(b.terminator, Terminator::Return(v) if v == NO_VALUE || !holds(v)))
+        .all(|b| !matches!(b.terminator, Terminator::Return(v) if !v.is_some_and(holds)))
         .then_some(kind)
 }
 
@@ -2492,8 +2483,7 @@ fn fp_join_kind(func: &FunctionSsa) -> Option<LoadKind> {
 ///   including the call; terminator becomes `Jmp(callee_entry)`.
 /// * a synthetic postfix block at `splice_block_idx + 1`: carries
 ///   the original block's trailing insts plus the original
-///   terminator (with `FallThrough` lowered to `Jmp` since the
-///   layout no longer guarantees fall-through).
+///   terminator.
 /// * caller blocks `splice_block_idx + 1..` (original indices)
 ///   shift up by 1.
 /// * callee blocks appended at the end, terminator block-ids offset
@@ -2599,7 +2589,7 @@ fn returned_marked_slots(callee: &FunctionSsa) -> BTreeSet<i64> {
         .blocks
         .iter()
         .filter_map(|b| match b.terminator {
-            Terminator::Return(v) if v != NO_VALUE => Some(v),
+            Terminator::Return(v) => v,
             _ => None,
         })
         .collect();
@@ -2749,8 +2739,8 @@ impl<'a> SitePlan<'a> {
         let n_returns = (callee.blocks.iter())
             .filter(|b| matches!(b.terminator, Terminator::Return(_)))
             .count();
-        let non_void_return = (callee.blocks.iter())
-            .any(|b| matches!(b.terminator, Terminator::Return(v) if v != NO_VALUE));
+        let non_void_return =
+            (callee.blocks.iter()).any(|b| matches!(b.terminator, Terminator::Return(Some(_))));
         let region_base = site.region_base;
         // Frame-kept parameter cells -- the cell's address is taken, an access
         // is volatile, or an access whose value the body consumes -- relocate
@@ -2852,7 +2842,7 @@ impl<'a> SitePlan<'a> {
         if self.ret_pieces.is_none() && !self.use_join {
             for cblock in &callee.blocks {
                 if let Terminator::Return(v) = cblock.terminator {
-                    let result = map_v(v, &self.callee_remap);
+                    let result = map_ret(v, &self.callee_remap);
                     moved |=
                         core::mem::replace(&mut remap[self.call_pc as usize], result) != result;
                 }
@@ -2942,7 +2932,7 @@ impl<'a> SitePlan<'a> {
         } else {
             for cblock in &callee.blocks {
                 if let Terminator::Return(v) = cblock.terminator {
-                    remap[self.call_pc as usize] = map_v(v, &self.callee_remap);
+                    remap[self.call_pc as usize] = map_ret(v, &self.callee_remap);
                 }
             }
         }
@@ -2963,7 +2953,7 @@ impl<'a> SitePlan<'a> {
         let mut src = NO_VALUE;
         for cblock in &self.callee.blocks {
             if let Terminator::Return(v) = cblock.terminator {
-                src = map_v(v, &self.callee_remap);
+                src = map_ret(v, &self.callee_remap);
             }
         }
         src
@@ -3032,7 +3022,6 @@ fn splice_sites(caller: &mut FunctionSsa, sites: &[Site<'_>], whole_vector: u32,
     let map_term = |term: Terminator, remap: &[ValueId]| -> Terminator {
         match term {
             Terminator::Jmp(b) => Terminator::Jmp(entry_of(b)),
-            Terminator::FallThrough(b) => Terminator::FallThrough(entry_of(b)),
             Terminator::Bz {
                 cond,
                 target,
@@ -3051,7 +3040,7 @@ fn splice_sites(caller: &mut FunctionSsa, sites: &[Site<'_>], whole_vector: u32,
                 target: entry_of(target),
                 fall_through: entry_of(fall_through),
             },
-            Terminator::Return(v) => Terminator::Return(map_v(v, remap)),
+            Terminator::Return(v) => Terminator::Return(v.map(|v| map_v(v, remap))),
             Terminator::TailExt(x) => Terminator::TailExt(x),
             Terminator::Unreachable => Terminator::Unreachable,
             Terminator::GotoIndirect { target } => Terminator::GotoIndirect {
@@ -3200,7 +3189,6 @@ fn splice_sites(caller: &mut FunctionSsa, sites: &[Site<'_>], whole_vector: u32,
                 start_pc,
                 inst_range: part_start..out.len(),
                 terminator: Terminator::Jmp(p.callee_base),
-                exit_acc: NO_VALUE,
             });
             part_start = out.len();
             start_pc = 0;
@@ -3254,15 +3242,11 @@ fn splice_sites(caller: &mut FunctionSsa, sites: &[Site<'_>], whole_vector: u32,
         for q in pc..block.inst_range.end {
             emit_caller_inst(q, &mut out, &mut original);
         }
-        let terminator = match block.terminator {
-            Terminator::FallThrough(t) if sites_in[b] > 0 => Terminator::Jmp(entry_of(t)),
-            other => map_term(other, &remap),
-        };
+        let terminator = map_term(block.terminator, &remap);
         new_blocks.push(Block {
             start_pc,
             inst_range: part_start..out.len(),
             terminator,
-            exit_acc: map_v(block.exit_acc, &remap),
         });
     }
 
@@ -3411,7 +3395,7 @@ fn splice_sites(caller: &mut FunctionSsa, sites: &[Site<'_>], whole_vector: u32,
                 p.callee_remap[ce_pc as usize] = id;
             }
             let terminator = match cblock.terminator {
-                Terminator::Jmp(b) | Terminator::FallThrough(b) => Terminator::Jmp(shift(b)),
+                Terminator::Jmp(b) => Terminator::Jmp(shift(b)),
                 Terminator::Bz {
                     cond,
                     target,
@@ -3431,7 +3415,7 @@ fn splice_sites(caller: &mut FunctionSsa, sites: &[Site<'_>], whole_vector: u32,
                     fall_through: shift(fall_through),
                 },
                 Terminator::Return(v) => {
-                    let rv = map_v(v, &p.callee_remap);
+                    let rv = map_ret(v, &p.callee_remap);
                     if p.use_join {
                         phi_incoming.push((shift(ci as u32), rv));
                         Terminator::Jmp(p.join_id)
@@ -3470,7 +3454,6 @@ fn splice_sites(caller: &mut FunctionSsa, sites: &[Site<'_>], whole_vector: u32,
                 start_pc: 0,
                 inst_range: block_start..out.len(),
                 terminator,
-                exit_acc: map_v(cblock.exit_acc, &p.callee_remap),
             });
         }
         // Multi-return join: a phi merges each return's value into the call
@@ -3501,7 +3484,6 @@ fn splice_sites(caller: &mut FunctionSsa, sites: &[Site<'_>], whole_vector: u32,
                 start_pc: 0,
                 inst_range: phi_id..out.len(),
                 terminator: Terminator::Jmp(p.postfix_id),
-                exit_acc: phi_id,
             });
         }
     }
@@ -3817,7 +3799,7 @@ fn flat_result_slot(c: &FunctionSsa) -> Option<i64> {
     if c.ret_agg.is_none() {
         return out_ptr_return(c).map(|o| o.slot);
     }
-    let Terminator::Return(rv) = c.blocks[0].terminator else {
+    let Terminator::Return(Some(rv)) = c.blocks[0].terminator else {
         return None;
     };
     match c.insts.get(rv as usize) {
@@ -4050,7 +4032,7 @@ fn inline_caller(
                     // to the caller's return slot `ret_slot`.
                     let callee_result_slot: Option<i64> = if callee.ret_agg.is_some() {
                         match callee_block.terminator {
-                            Terminator::Return(rv) => match callee.insts.get(rv as usize) {
+                            Terminator::Return(Some(rv)) => match callee.insts.get(rv as usize) {
                                 Some(Inst::LocalAddr(s)) => Some(*s),
                                 _ => None,
                             },
@@ -4226,7 +4208,7 @@ fn inline_caller(
                     remap[old_pc as usize] = if callee_result_slot.is_some() {
                         NO_VALUE
                     } else {
-                        map_v(ret_v, &callee_remap)
+                        map_ret(ret_v, &callee_remap)
                     };
                 } else {
                     let new_id = new_insts.len() as u32;
@@ -4296,12 +4278,10 @@ fn inline_caller(
             };
             let mut term = block.terminator;
             remap_terminator(&mut term, &remap);
-            let exit_acc = map_v(block.exit_acc, &remap);
             new_blocks.push(Block {
                 start_pc: block.start_pc,
                 inst_range: start..end,
                 terminator: term,
-                exit_acc,
             });
         }
 
@@ -4863,7 +4843,7 @@ pub(crate) fn inline_self(
             .filter(|&(b, v)| {
                 live[v as usize]
                     && matches!(f.insts[v as usize], Inst::Call { target_pc, .. } if target_pc == f.ent_pc)
-                    && !matches!(b.terminator, crate::c5::ir::Terminator::Return(r) if r == v)
+                    && !matches!(b.terminator, crate::c5::ir::Terminator::Return(Some(r)) if r == v)
             })
             .count()
     };
@@ -5108,7 +5088,6 @@ mod tests {
                     clobber_regs: 0,
                     clobber_fp_regs: 0,
                     clobber_memory: false,
-                    volatile: false,
                 }),
                 args: alloc::vec![0],
             },
@@ -5127,8 +5106,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..insts.len() as u32,
-                terminator: Terminator::Return(2),
-                exit_acc: 2,
+                terminator: Terminator::Return(Some(2)),
             }],
             insts,
             ..Default::default()
@@ -5167,13 +5145,11 @@ mod tests {
                     start_pc: 0,
                     inst_range: 0..3,
                     terminator: Terminator::Jmp(1),
-                    exit_acc: NO_VALUE,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 3..4,
-                    terminator: Terminator::Return(3),
-                    exit_acc: 3,
+                    terminator: Terminator::Return(Some(3)),
                 },
             ],
             insts,
@@ -5200,8 +5176,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..n,
-                terminator: Terminator::Return(n - 1),
-                exit_acc: n - 1,
+                terminator: Terminator::Return(Some(n - 1)),
             }],
             insts,
             ..Default::default()
@@ -5241,8 +5216,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..1,
-                terminator: Terminator::Return(NO_VALUE),
-                exit_acc: NO_VALUE,
+                terminator: Terminator::Return(None),
             }],
             insts: alloc::vec![Inst::Imm(7)],
             ..Default::default()
@@ -5254,8 +5228,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..2,
-                terminator: Terminator::Return(1),
-                exit_acc: 1,
+                terminator: Terminator::Return(Some(1)),
             }],
             insts: alloc::vec![call_to(100), next],
             ..Default::default()
@@ -5385,13 +5358,11 @@ mod tests {
                     start_pc: 0,
                     inst_range: 0..4,
                     terminator: Terminator::Jmp(1),
-                    exit_acc: NO_VALUE,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 4..5,
-                    terminator: Terminator::Return(4),
-                    exit_acc: 4,
+                    terminator: Terminator::Return(Some(4)),
                 },
             ],
             insts,
@@ -5427,8 +5398,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..2,
-                terminator: Terminator::Return(1),
-                exit_acc: 1,
+                terminator: Terminator::Return(Some(1)),
             }],
             ..Default::default()
         };
@@ -5457,8 +5427,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..1,
-                terminator: Terminator::Return(0),
-                exit_acc: 0,
+                terminator: Terminator::Return(Some(0)),
             }],
             ..Default::default()
         }
@@ -5546,8 +5515,7 @@ mod tests {
         caller.f32_values.push(false);
         let n = caller.insts.len() as u32;
         caller.blocks[0].inst_range = 0..n;
-        caller.blocks[0].terminator = Terminator::Return(n - 1);
-        caller.blocks[0].exit_acc = n - 1;
+        caller.blocks[0].terminator = Terminator::Return(Some(n - 1));
         let mut mandatory = asm_callee(200, 4);
         mandatory.is_inline = true;
         mandatory.is_always_inline = true;
@@ -5655,8 +5623,7 @@ mod tests {
         caller.inst_src = alloc::vec![crate::c5::ir::InstSrc::default(); total as usize];
         caller.f32_values = alloc::vec![false; total as usize];
         caller.blocks[0].inst_range = 0..total;
-        caller.blocks[0].terminator = Terminator::Return(total - 1);
-        caller.blocks[0].exit_acc = total - 1;
+        caller.blocks[0].terminator = Terminator::Return(Some(total - 1));
         assert!(emitted_inst_count(&caller) > CALLER_INST_BUDGET);
         let mut funcs = alloc::vec![caller, calling_callee(500, 4, 600), leaf(600)];
         run(&mut funcs, 32, abi, &BTreeMap::new());
@@ -5674,8 +5641,7 @@ mod tests {
         caller.inst_src.push(crate::c5::ir::InstSrc::default());
         caller.f32_values.push(false);
         caller.blocks[0].inst_range = 0..3;
-        caller.blocks[0].terminator = Terminator::Return(2);
-        caller.blocks[0].exit_acc = 2;
+        caller.blocks[0].terminator = Terminator::Return(Some(2));
         // An own frame 11 times which holds both splices, so the absolute
         // bound alone decides.
         let factor = 1 + StackGrowth::DEFAULT.growth / 100;
@@ -5805,8 +5771,7 @@ mod tests {
                 blocks: alloc::vec![Block {
                     start_pc: 0,
                     inst_range: 0..1,
-                    terminator: Terminator::Return(0),
-                    exit_acc: 0,
+                    terminator: Terminator::Return(Some(0)),
                 }],
                 ..Default::default()
             };
@@ -5854,8 +5819,7 @@ mod tests {
         caller.f32_values.push(false);
         let end = caller.insts.len() as u32;
         caller.blocks[0].inst_range = 0..end;
-        caller.blocks[0].terminator = Terminator::Return(end - 1);
-        caller.blocks[0].exit_acc = end - 1;
+        caller.blocks[0].terminator = Terminator::Return(Some(end - 1));
         let mut sw = asm_callee_with_template(999, 1, b"mov %%rsp, (%0)");
         sw.is_noinline = true; // keep it out of the candidate set
         let mut funcs = alloc::vec![caller, asm_callee(100, 4), sw];
@@ -5874,7 +5838,6 @@ mod tests {
             clobber_regs: 0,
             clobber_fp_regs: 0,
             clobber_memory: false,
-            volatile: false,
         };
         for t in [
             b"mov %%rsp, 24(%%rdx)".as_slice(),
@@ -5941,8 +5904,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..2,
-                terminator: Terminator::Return(1),
-                exit_acc: 1,
+                terminator: Terminator::Return(Some(1)),
             }],
             ..Default::default()
         };
@@ -6011,8 +5973,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..n,
-                terminator: Terminator::Return(result),
-                exit_acc: result,
+                terminator: Terminator::Return(Some(result)),
             }],
             insts,
             ..Default::default()
@@ -6106,8 +6067,7 @@ mod tests {
                     blocks: alloc::vec![Block {
                         start_pc: 0,
                         inst_range: 0..1,
-                        terminator: Terminator::Return(0),
-                        exit_acc: 0,
+                        terminator: Terminator::Return(Some(0)),
                     }],
                     ..Default::default()
                 },
@@ -6147,8 +6107,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..2,
-                terminator: Terminator::Return(1),
-                exit_acc: 1,
+                terminator: Terminator::Return(Some(1)),
             }],
             ..Default::default()
         };
@@ -6182,8 +6141,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..2,
-                terminator: Terminator::Return(1),
-                exit_acc: 1,
+                terminator: Terminator::Return(Some(1)),
             }],
             ..Default::default()
         };
@@ -6202,11 +6160,24 @@ mod tests {
     #[test]
     fn block_branches_count_against_the_body_cap() {
         let abi = Target::LinuxX64.abi();
-        // `n` blocks of one live value each, chained to a single Return.
+        // `n` blocks of one live value each, chained to a single Return:
+        // a power of the parameter, read by the next block's.
         let chain = |n: usize| {
-            let insts: Vec<Inst> = (0..n).map(|i| Inst::Imm(i as i64)).collect();
+            let step = |i: usize| match i {
+                0 => Inst::ParamRef {
+                    idx: 0,
+                    kind: LoadKind::I64,
+                },
+                _ => Inst::Binop {
+                    op: crate::c5::ir::BinOp::Mul,
+                    lhs: i as u32 - 1,
+                    rhs: 0,
+                },
+            };
+            let insts: Vec<Inst> = (0..n).map(step).collect();
             FunctionSsa {
                 ent_pc: 5,
+                n_params: 1,
                 inst_src: alloc::vec![crate::c5::ir::InstSrc::default(); n],
                 f32_values: alloc::vec![false; n],
                 blocks: (0..n as u32)
@@ -6214,11 +6185,10 @@ mod tests {
                         start_pc: 0,
                         inst_range: i..i + 1,
                         terminator: if i as usize + 1 == n {
-                            Terminator::Return(i)
+                            Terminator::Return(Some(i))
                         } else {
                             Terminator::Jmp(i + 1)
                         },
-                        exit_acc: i,
                     })
                     .collect(),
                 insts,
@@ -6252,8 +6222,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..2,
-                terminator: Terminator::Return(1),
-                exit_acc: 1,
+                terminator: Terminator::Return(Some(1)),
             }],
             ..Default::default()
         };
@@ -6297,13 +6266,11 @@ mod tests {
                     target: 1,
                     fall_through: 1,
                 },
-                exit_acc: 2,
             },
             Block {
                 start_pc: 0,
                 inst_range: split..n + 1,
-                terminator: Terminator::Return(n),
-                exit_acc: n,
+                terminator: Terminator::Return(Some(n)),
             },
         ];
         let mut call = call_to(5);
@@ -6318,8 +6285,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..2,
-                terminator: Terminator::Return(1),
-                exit_acc: 1,
+                terminator: Terminator::Return(Some(1)),
             }],
             extern_call_refs: alloc::vec![(1, 9)],
             ..Default::default()
@@ -6347,7 +6313,6 @@ mod tests {
             term.for_each_operand_mut(|v| {
                 assert!(*v < arena, "terminator names value {v} past {arena}");
             });
-            assert!(blk.exit_acc == NO_VALUE || blk.exit_acc < arena);
             assert!(blk.inst_range.end <= arena);
         }
     }
@@ -6376,19 +6341,16 @@ mod tests {
                         target: 1,
                         fall_through: 2,
                     },
-                    exit_acc: 0,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 1..2,
-                    terminator: Terminator::Return(1),
-                    exit_acc: 1,
+                    terminator: Terminator::Return(Some(1)),
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 2..3,
-                    terminator: Terminator::Return(2),
-                    exit_acc: 2,
+                    terminator: Terminator::Return(Some(2)),
                 },
             ],
             ..Default::default()
@@ -6425,8 +6387,7 @@ mod tests {
             blocks: vec![Block {
                 start_pc: 0,
                 inst_range: 0..1,
-                terminator: Terminator::Return(NO_VALUE),
-                exit_acc: NO_VALUE,
+                terminator: Terminator::Return(None),
             }],
             ..Default::default()
         };
@@ -6498,8 +6459,7 @@ mod tests {
                 blocks: alloc::vec![Block {
                     start_pc: 0,
                     inst_range: 0..insts.len() as u32,
-                    terminator: Terminator::Return(ret),
-                    exit_acc: ret,
+                    terminator: Terminator::Return(Some(ret)),
                 }],
                 insts,
                 ..Default::default()
@@ -6518,8 +6478,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..insts.len() as u32,
-                terminator: Terminator::Return(ret),
-                exit_acc: ret,
+                terminator: Terminator::Return(Some(ret)),
             }],
             insts,
             ..Default::default()
@@ -6611,7 +6570,6 @@ mod tests {
             clobber_regs: 0,
             clobber_fp_regs: 0,
             clobber_memory: false,
-            volatile: false,
         };
         // Spill (params only): v0 ParamRef, v1 StoreLocal; then v2
         // LocalAddr(slot); v3 asm writes the output through v2; v4 reads
@@ -6653,8 +6611,7 @@ mod tests {
                 blocks: alloc::vec![Block {
                     start_pc: 0,
                     inst_range: 0..n,
-                    terminator: Terminator::Return(n - 1),
-                    exit_acc: n - 1,
+                    terminator: Terminator::Return(Some(n - 1)),
                 }],
                 insts,
                 ..Default::default()
@@ -6699,7 +6656,6 @@ mod tests {
                         clobber_regs: 0,
                         clobber_fp_regs: 0,
                         clobber_memory: true,
-                        volatile: true,
                     }),
                     args: alloc::vec![0],
                 },
@@ -6710,8 +6666,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..3,
-                terminator: Terminator::Return(2),
-                exit_acc: 2,
+                terminator: Terminator::Return(Some(2)),
             }],
             ..Default::default()
         };
@@ -6760,8 +6715,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..4,
-                terminator: Terminator::Return(3),
-                exit_acc: 3,
+                terminator: Terminator::Return(Some(3)),
             }],
             ..Default::default()
         };
@@ -6804,8 +6758,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..5,
-                terminator: Terminator::Return(4),
-                exit_acc: 4,
+                terminator: Terminator::Return(Some(4)),
             }],
             ..Default::default()
         };
@@ -6844,7 +6797,6 @@ mod tests {
             clobber_regs: 0,
             clobber_fp_regs: 0,
             clobber_memory: false,
-            volatile: false,
         };
         let f = FunctionSsa {
             is_naked: true,
@@ -6860,8 +6812,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..2,
-                terminator: Terminator::Return(1),
-                exit_acc: 1,
+                terminator: Terminator::Return(Some(1)),
             }],
             ..Default::default()
         };
@@ -6893,7 +6844,6 @@ mod tests {
                     start_pc: 0,
                     inst_range: 0..1,
                     terminator,
-                    exit_acc: NO_VALUE,
                 }],
                 ..Default::default()
             };
@@ -6901,7 +6851,7 @@ mod tests {
         let candidate = |f: &FunctionSsa, reason: &mut alloc::string::String| {
             is_inline_candidate(f, 32, abi, Some(reason))
         };
-        let returns = Terminator::Return(NO_VALUE);
+        let returns = Terminator::Return(None);
         assert!(
             candidate(&leaf(returns, false, false), &mut reason),
             "{reason}"
@@ -6954,8 +6904,7 @@ mod tests {
                 vec![Block {
                     start_pc: 5,
                     inst_range: 0..1,
-                    terminator: Terminator::Return(NO_VALUE),
-                    exit_acc: NO_VALUE,
+                    terminator: Terminator::Return(None),
                 }],
             )
         };
@@ -7002,8 +6951,7 @@ mod tests {
             blocks: vec![Block {
                 start_pc: 5,
                 inst_range: 0..0,
-                terminator: Terminator::Return(NO_VALUE),
-                exit_acc: NO_VALUE,
+                terminator: Terminator::Return(None),
             }],
             ..Default::default()
         };
@@ -7051,8 +6999,7 @@ mod tests {
                 blocks: vec![crate::c5::ir::Block {
                     start_pc: 5,
                     inst_range: 0..1,
-                    terminator: crate::c5::ir::Terminator::Return(0),
-                    exit_acc: 0,
+                    terminator: crate::c5::ir::Terminator::Return(Some(0)),
                 }],
                 ..Default::default()
             };
@@ -7126,8 +7073,7 @@ mod tests {
                 blocks: alloc::vec![Block {
                     start_pc: 0,
                     inst_range: 0..n,
-                    terminator: Terminator::Return(3),
-                    exit_acc: 3,
+                    terminator: Terminator::Return(Some(3)),
                 }],
                 insts,
                 ..Default::default()
@@ -7296,8 +7242,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..4,
-                terminator: Terminator::Return(3),
-                exit_acc: 3,
+                terminator: Terminator::Return(Some(3)),
             }],
             insts,
             ..Default::default()
@@ -7341,8 +7286,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..5,
-                terminator: Terminator::Return(4),
-                exit_acc: 4,
+                terminator: Terminator::Return(Some(4)),
             }],
             insts: caller_insts,
             ..Default::default()
@@ -7398,8 +7342,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..1,
-                terminator: Terminator::Return(0),
-                exit_acc: 0,
+                terminator: Terminator::Return(Some(0)),
             }],
             insts,
             ..Default::default()
@@ -7417,8 +7360,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..n,
-                terminator: Terminator::Return(NO_VALUE),
-                exit_acc: NO_VALUE,
+                terminator: Terminator::Return(None),
             }],
             insts,
             ..Default::default()
@@ -7565,8 +7507,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..3,
-                terminator: Terminator::Return(2),
-                exit_acc: 2,
+                terminator: Terminator::Return(Some(2)),
             }],
             insts,
             ..Default::default()
@@ -7581,8 +7522,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..1,
-                terminator: Terminator::Return(0),
-                exit_acc: 0,
+                terminator: Terminator::Return(Some(0)),
             }],
             insts: alloc::vec![Inst::Imm(7)],
             ..Default::default()

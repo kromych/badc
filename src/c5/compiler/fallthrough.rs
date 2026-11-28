@@ -4,7 +4,7 @@
 //! take a comment as the annotation, and the preprocessor drops comments,
 //! so only level 5 is implemented.
 
-use super::super::ast::{BlockItem, Expr, ExprId, Stmt, StmtId};
+use super::super::ast::{Expr, ExprId, Stmt, StmtId};
 use super::super::diag::Code;
 use super::Compiler;
 
@@ -49,13 +49,7 @@ impl Compiler {
     ) {
         match self.ast.stmt(id) {
             Stmt::Compound(items) => {
-                let stmts: alloc::vec::Vec<StmtId> = items
-                    .iter()
-                    .filter_map(|i| match i {
-                        BlockItem::Stmt(s) => Some(*s),
-                        BlockItem::Decl(_) => None,
-                    })
-                    .collect();
+                let stmts: alloc::vec::Vec<StmtId> = items.clone();
                 let reached = match body {
                     true => (stmts.iter()).position(|&s| self.is_label_site(s)),
                     false => Some(0),
@@ -137,7 +131,7 @@ impl Compiler {
                     )
                 };
                 match items.iter().rev().find_map(|i| match i {
-                    BlockItem::Stmt(s) if !synthetic(*s) => Some(*s),
+                    s if !synthetic(*s) => Some(*s),
                     _ => None,
                 }) {
                     Some(s) => self.last_src(s),
@@ -157,12 +151,11 @@ impl Compiler {
             // What follows a statement that leaves is reached only through
             // a label: the scope's end and its cleanups are not.
             Stmt::Compound(items) => items.iter().fold(Exit::Falls, |exit, item| match item {
-                BlockItem::Stmt(s)
-                    if exit == Exit::Falls
-                        || matches!(
-                            self.ast.stmt(*s),
-                            Stmt::Case { .. } | Stmt::Default { .. } | Stmt::Labeled { .. }
-                        ) =>
+                s if exit == Exit::Falls
+                    || matches!(
+                        self.ast.stmt(*s),
+                        Stmt::Case { .. } | Stmt::Default { .. } | Stmt::Labeled { .. }
+                    ) =>
                 {
                     self.exit_of(*s)
                 }
@@ -233,9 +226,7 @@ impl Compiler {
             Stmt::Compound(items) => {
                 let mut reach = reach;
                 for item in items {
-                    let BlockItem::Stmt(s) = item else {
-                        continue;
-                    };
+                    let s = item;
                     let here = reach || self.is_label(*s);
                     if self.reaches_break(*s, here) {
                         return true;
@@ -267,10 +258,7 @@ impl Compiler {
     fn has_default(&self, id: StmtId) -> bool {
         match self.ast.stmt(id) {
             Stmt::Default { .. } => true,
-            Stmt::Compound(items) => items.iter().any(|i| match i {
-                BlockItem::Stmt(s) => self.has_default(*s),
-                BlockItem::Decl(_) => false,
-            }),
+            Stmt::Compound(items) => items.iter().any(|s| self.has_default(*s)),
             Stmt::If { then_s, else_s, .. } => {
                 self.has_default(*then_s) || else_s.is_some_and(|e| self.has_default(e))
             }

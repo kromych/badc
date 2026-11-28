@@ -186,10 +186,10 @@ enum ConstExit {
 }
 
 /// The constant exit a `Return` of `r` names, if it names one.
-fn const_exit(func: &FunctionSsa, r: ValueId) -> Option<ConstExit> {
-    if r == NO_VALUE {
+fn const_exit(func: &FunctionSsa, r: Option<ValueId>) -> Option<ConstExit> {
+    let Some(r) = r else {
         return Some(ConstExit::NoValue);
-    }
+    };
     match func.insts.get(r as usize) {
         Some(Inst::Imm(k)) => Some(ConstExit::Imm(*k)),
         _ => None,
@@ -250,15 +250,13 @@ fn is_effectful(inst: &Inst) -> bool {
             | Inst::AtomicStore { .. }
             | Inst::Intrinsic { .. }
             | Inst::InlineAsm { .. }
-            | Inst::TailExt(_)
             | Inst::Load { volatile: true, .. }
             | Inst::LoadLocal { volatile: true, .. }
             | Inst::SegLoad { volatile: true, .. }
     )
 }
 
-/// Mark every value referenced as an instruction operand, a terminator
-/// operand, or a block's exit accumulator.
+/// Mark every value an instruction or a terminator reads.
 fn use_mask(func: &FunctionSsa) -> Vec<bool> {
     let n = func.insts.len();
     let mut used = vec![false; n];
@@ -271,15 +269,7 @@ fn use_mask(func: &FunctionSsa) -> Vec<bool> {
         for_each_operand(inst, &mut mark);
     }
     for blk in &func.blocks {
-        match blk.terminator {
-            Terminator::Return(v) => mark(v),
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => mark(cond),
-            Terminator::GotoIndirect { target } | Terminator::JumpTable { idx: target, .. } => {
-                mark(target)
-            }
-            _ => {}
-        }
-        mark(blk.exit_acc);
+        blk.terminator.for_each_operand(&mut mark);
     }
     used
 }
@@ -294,7 +284,7 @@ fn targets_entry(func: &FunctionSsa) -> bool {
     }
     for blk in &func.blocks {
         let hit = match blk.terminator {
-            Terminator::Jmp(t) | Terminator::FallThrough(t) => t == 0,
+            Terminator::Jmp(t) => t == 0,
             Terminator::Bz {
                 target,
                 fall_through,
@@ -402,14 +392,14 @@ fn classify(func: &FunctionSsa, b: BlockId) -> Class {
     // A pure tail call whose value is returned is left to the emit-time
     // `jmp` conversion; mixing it with the loop forms would need the
     // accumulator to carry the recursion result.
-    if r == call_pc {
+    if r == Some(call_pc) {
         return Class::Bail;
     }
     let cone = call_cone(func, blk.inst_range.clone(), call_pc);
     // Constant tail: the return names no value or a literal, and the call
     // result is dead (its cone reaches nothing that the return reads).
     if let Some(exit) = const_exit(func, r)
-        && !cone.contains(&r)
+        && !r.is_some_and(|r| cone.contains(&r))
     {
         return Class::TailConst(
             TailBlock {
@@ -426,6 +416,10 @@ fn classify(func: &FunctionSsa, b: BlockId) -> Class {
     // least as wide stacked under the return's (the sum's own `nsw`
     // re-narrowing, an `int` promotion's) keep the bits it keeps, so the
     // stack narrows as the outermost does.
+    // A return of no value took the constant form above.
+    let Some(r) = r else {
+        return Class::Bail;
+    };
     let (combine, narrow) = match narrowing(func, r) {
         Some((mut v, outer)) => {
             while let Some((inner, n)) = narrowing(func, v)
@@ -602,9 +596,7 @@ fn analyze(func: &FunctionSsa) -> Option<Plan> {
                 let Terminator::Return(r) = func.blocks[b as usize].terminator else {
                     continue;
                 };
-                if r == NO_VALUE {
-                    return None;
-                }
+                let r = r?;
                 if let Some(n) = narrow
                     && !n.keeps(super::value_range::arg_range(&func.insts, r))
                 {
@@ -758,14 +750,13 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
             start_pc: func.blocks[0].start_pc,
             inst_range: start..new_insts.len() as u32,
             terminator: Terminator::Jmp(header),
-            exit_acc: NO_VALUE,
         });
 
         // Blocks 1..n_old: interior, base, and tail blocks keep their ids.
         for b in 1..n_blocks {
             let start = new_insts.len() as u32;
             let blk = func.blocks[b].clone();
-            let (terminator, exit_acc);
+            let terminator;
             if let Some(t) = tail_of[b] {
                 for pc in blk.inst_range.clone() {
                     if plan.tail[t].drop.contains(&pc) {
@@ -811,12 +802,11 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
                     };
                 }
                 terminator = Terminator::Jmp(header);
-                exit_acc = NO_VALUE;
             } else if let (Some(op), Some(_bi)) = (acc_op, base_of[b]) {
                 for pc in blk.inst_range.clone() {
                     emit_old!(pc);
                 }
-                let Terminator::Return(r) = blk.terminator else {
+                let Terminator::Return(Some(r)) = blk.terminator else {
                     unreachable!("base block classified with a Return terminator");
                 };
                 let x = map_v(r, &remap);
@@ -829,8 +819,7 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
                     Some(n) => emit_new!(n.inst(sum)),
                     None => sum,
                 };
-                terminator = Terminator::Return(ret);
-                exit_acc = ret;
+                terminator = Terminator::Return(Some(ret));
             } else {
                 for pc in blk.inst_range.clone() {
                     emit_old!(pc);
@@ -838,13 +827,11 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
                 let mut t = blk.terminator;
                 remap_terminator(&mut t, &remap);
                 terminator = t;
-                exit_acc = map_v(blk.exit_acc, &remap);
             }
             new_blocks.push(Block {
                 start_pc: blk.start_pc,
                 inst_range: start..new_insts.len() as u32,
                 terminator,
-                exit_acc,
             });
         }
 
@@ -875,12 +862,10 @@ fn rewrite(func: &mut FunctionSsa, plan: &Plan) {
         }
         let mut term = func.blocks[0].terminator;
         remap_terminator(&mut term, &remap);
-        let exit_acc = map_v(func.blocks[0].exit_acc, &remap);
         new_blocks.push(Block {
             start_pc: func.blocks[0].start_pc,
             inst_range: start..new_insts.len() as u32,
             terminator: term,
-            exit_acc,
         });
 
         // Every body use of a parameter resolves to its header phi.

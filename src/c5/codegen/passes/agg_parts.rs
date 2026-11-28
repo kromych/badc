@@ -62,8 +62,7 @@ use crate::c5::codegen::abi_classify::{RegClass, RegPart, ScalarKind, register_p
 use crate::c5::codegen::ssa::tape::{self, At, Insertion};
 use crate::c5::codegen::{ArgPlacement, Target, offset_align};
 use crate::c5::ir::{
-    AggDesc, BinOp, BlockId, FpMask, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator,
-    ValueId,
+    AggDesc, BinOp, BlockId, FpMask, FunctionSsa, Inst, LoadKind, StoreKind, Terminator, ValueId,
 };
 
 pub(crate) fn run(funcs: &mut [FunctionSsa], target: Target) {
@@ -476,12 +475,9 @@ fn run_one(func: &mut FunctionSsa, target: Target) {
                 }
             }
             for (b, block) in func.blocks.iter().enumerate() {
-                let Terminator::Return(v) = block.terminator else {
+                let Terminator::Return(Some(v)) = block.terminator else {
                     continue;
                 };
-                if v == NO_VALUE {
-                    continue;
-                }
                 let at = if block.inst_range.is_empty() {
                     At::Empty(b as BlockId)
                 } else {
@@ -511,7 +507,7 @@ fn run_one(func: &mut FunctionSsa, target: Target) {
     let rewrite = tape::insert(func, &ins);
     for (b, bundle) in bundles {
         let id = rewrite.ids[(bundle - base) as usize];
-        func.blocks[b].terminator = Terminator::Return(id);
+        func.blocks[b].terminator = Terminator::Return(Some(id));
     }
     for i in taken {
         func.param_local_slots[i] = 0;
@@ -858,7 +854,7 @@ mod tests {
                 .find(|&v| matches!(f.insts[v as usize], Inst::Load { .. }))
                 .expect("a load");
             assert!(parts.iter().all(|&v| v < first_body_load), "{t}");
-            let Terminator::Return(r) = f.blocks[0].terminator else {
+            let Terminator::Return(Some(r)) = f.blocks[0].terminator else {
                 panic!("{t}")
             };
             let Inst::AggParts { parts, fp_mask, .. } = &f.insts[r as usize] else {
@@ -917,7 +913,7 @@ mod tests {
                         if value as usize == part && kind == store)),
                 "{target:?} {name}: the part is not stored whole: {t}"
             );
-            let Terminator::Return(r) = f.blocks.last().expect("a block").terminator else {
+            let Terminator::Return(Some(r)) = f.blocks.last().expect("a block").terminator else {
                 panic!("{target:?} {name}: {t}")
             };
             let Inst::AggParts { parts, fp_mask, .. } = &f.insts[r as usize] else {
@@ -993,7 +989,7 @@ mod tests {
                 [(0, StoreKind::I32), (4, StoreKind::I32)],
                 "{target:?}: {t}"
             );
-            let Terminator::Return(r) = f.blocks[0].terminator else {
+            let Terminator::Return(Some(r)) = f.blocks[0].terminator else {
                 panic!("{t}")
             };
             let Inst::AggParts { parts, .. } = &f.insts[r as usize] else {
@@ -1122,7 +1118,7 @@ mod tests {
             );
             assert_eq!(f.param_local_slots[0], slot, "{target:?}: {t}");
             let returns = f.blocks.iter().filter(|b| {
-                matches!(b.terminator, Terminator::Return(v)
+                matches!(b.terminator, Terminator::Return(Some(v))
                     if matches!(f.insts.get(v as usize), Some(Inst::AggParts { .. })))
             });
             assert_eq!(returns.count(), 1, "{target:?}: {t}");
@@ -1164,7 +1160,7 @@ mod tests {
                 )
             });
             assert!(whole, "{target:?}: {t}");
-            let Terminator::Return(r) = f.blocks[0].terminator else {
+            let Terminator::Return(Some(r)) = f.blocks[0].terminator else {
                 panic!("{t}")
             };
             assert!(
@@ -1180,7 +1176,7 @@ mod tests {
         let mut f = walked(FLOATS, "id", Target::LinuxAarch64);
         run(core::slice::from_mut(&mut f), Target::LinuxAarch64);
         let t = text(&f);
-        let Terminator::Return(r) = f.blocks[0].terminator else {
+        let Terminator::Return(Some(r)) = f.blocks[0].terminator else {
             panic!("{t}")
         };
         let Inst::AggParts { parts, fp_mask, .. } = &f.insts[r as usize] else {
@@ -1202,7 +1198,7 @@ mod tests {
                 })
                 .collect();
             assert_eq!(parts, [LoadKind::F64, LoadKind::F64], "{target:?}: {t}");
-            let Terminator::Return(r) = f.blocks[0].terminator else {
+            let Terminator::Return(Some(r)) = f.blocks[0].terminator else {
                 panic!("{t}")
             };
             let Inst::AggParts { fp_mask, .. } = &f.insts[r as usize] else {

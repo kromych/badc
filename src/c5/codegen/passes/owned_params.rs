@@ -190,7 +190,6 @@ fn rewrite(func: &mut FunctionSsa, p: &OwnedParam, copy: ValueId, addr: ValueId)
         inst.for_each_operand_mut(to_addr);
     }
     for block in func.blocks.iter_mut() {
-        to_addr(&mut block.exit_acc);
         block.terminator.for_each_operand_mut(to_addr);
     }
 }

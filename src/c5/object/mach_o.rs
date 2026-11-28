@@ -1822,7 +1822,7 @@ impl UnwindTables {
             if frame != LoweredFrame::Fde {
                 continue;
             }
-            let Some(u) = build.a64_unwind.iter().find(|u| u.begin as usize == offset) else {
+            let Some(u) = build.a64_unwind_at(offset) else {
                 return Err(MachOWriter::internal(format!(
                     "Mach-O writer: the function at {offset:#x} recorded no frame"
                 )));

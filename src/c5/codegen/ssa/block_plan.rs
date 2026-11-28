@@ -161,7 +161,7 @@ impl BlockPlan {
             return (!self.falls_into(b, arm)).then_some(arm);
         }
         let t = match func.blocks[b].terminator {
-            Terminator::Jmp(t) | Terminator::FallThrough(t) => t,
+            Terminator::Jmp(t) => t,
             Terminator::Bz {
                 target,
                 fall_through,
@@ -519,7 +519,7 @@ fn emits_nothing(inst: &Inst, v: ValueId, alloc: &Allocation) -> bool {
 
 fn forwards_to(func: &FunctionSsa, alloc: &Allocation, b: BlockId) -> Option<BlockId> {
     let block = &func.blocks[b as usize];
-    let (Terminator::Jmp(t) | Terminator::FallThrough(t)) = block.terminator else {
+    let Terminator::Jmp(t) = block.terminator else {
         return None;
     };
     let silent = block
@@ -655,7 +655,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 
@@ -687,10 +686,11 @@ mod tests {
             fp_mem_operand: alloc::collections::BTreeSet::new(),
             fp_const: alloc::vec![false; n],
             implicit_live: alloc::vec::Vec::new(),
+            #[cfg(test)]
             hints: alloc::vec![None; n],
             f32_values: alloc::vec![false; n],
             high_observed: Vec::new(),
-            high_clear: Vec::new(),
+            high_clear: Vec::new().into(),
             wide: alloc::vec![crate::c5::codegen::ssa::reg_alloc::VecWidth::Scalar; n],
             asm_preserve: (u32::MAX, u32::MAX),
             call_saves: Vec::new(),
@@ -722,7 +722,7 @@ mod tests {
                 block(0..1, Terminator::Jmp(1)),
                 block(1..1, Terminator::Jmp(2)),
                 block(1..2, Terminator::Jmp(3)),
-                block(2..2, Terminator::Return(1)),
+                block(2..2, Terminator::Return(Some(1))),
             ],
         );
         (f, alloc_with(alloc::vec![Place::IntReg(3), phi_place]))
@@ -775,7 +775,7 @@ mod tests {
             alloc::vec![
                 block(0..1, Terminator::Jmp(1)),
                 block(1..1, Terminator::Jmp(2)),
-                block(1..2, Terminator::Return(1)),
+                block(1..2, Terminator::Return(Some(1))),
             ],
         );
         let a = alloc_with(alloc::vec![Place::IntReg(0), Place::FpReg(0)]);
@@ -802,7 +802,7 @@ mod tests {
                 alloc::vec![
                     block(0..1, Terminator::Jmp(1)),
                     block(1..2, Terminator::Jmp(2)),
-                    block(2..2, Terminator::Return(0)),
+                    block(2..2, Terminator::Return(Some(0))),
                 ],
             );
             let mut a = alloc_with(alloc::vec![Place::IntReg(0), Place::IntReg(1)]);
@@ -849,7 +849,7 @@ mod tests {
     fn addressed() -> FunctionSsa {
         let mut blocks = alloc::vec![block(0..1, Terminator::Jmp(1))];
         blocks.extend((1..6).map(|_| block(1..1, Terminator::Jmp(6))));
-        blocks.push(block(1..1, Terminator::Return(0)));
+        blocks.push(block(1..1, Terminator::Return(Some(0))));
         func_with(alloc::vec![Inst::Imm(1)], blocks)
     }
 
@@ -919,8 +919,8 @@ mod tests {
                     ),
                     block(1..1, Terminator::Jmp(t1)),
                     block(1..1, Terminator::Jmp(t2)),
-                    block(1..2, Terminator::Return(1)),
-                    block(2..3, Terminator::Return(2)),
+                    block(1..2, Terminator::Return(Some(1))),
+                    block(2..3, Terminator::Return(Some(2))),
                 ],
             );
             let a = alloc_with(alloc::vec![Place::IntReg(0); 3]);
@@ -969,7 +969,7 @@ mod tests {
                         fall_through: 3,
                     }
                 ),
-                block(end..end, Terminator::Return(0)),
+                block(end..end, Terminator::Return(Some(0))),
             ],
         );
         let a = alloc_with((0..end).map(|v| Place::IntReg(v as u8)).collect());
@@ -998,11 +998,11 @@ mod tests {
     /// three values share one register, so no edge moves anything.
     fn dispatch(d_last: bool) -> (FunctionSsa, Allocation) {
         let (d, label, ret) = if d_last { (3, 1, 2) } else { (1, 2, 3) };
-        let mut blocks = alloc::vec![block(0..0, Terminator::Return(NO_VALUE)); 4];
+        let mut blocks = alloc::vec![block(0..0, Terminator::Return(None)); 4];
         blocks[0] = block(0..1, Terminator::Jmp(d));
         blocks[label as usize] = block(1..2, Terminator::Jmp(d));
         blocks[d as usize] = block(2..3, Terminator::GotoIndirect { target: 2 });
-        blocks[ret as usize] = block(3..3, Terminator::Return(NO_VALUE));
+        blocks[ret as usize] = block(3..3, Terminator::Return(None));
         let mut f = func_with(
             alloc::vec![
                 Inst::Imm(10),
@@ -1041,7 +1041,7 @@ mod tests {
         f.insts.push(phi(&[(1, 2)], LoadKind::I64));
         f.inst_src.push(crate::c5::ir::InstSrc::default());
         f.f32_values.push(false);
-        f.blocks[3] = block(at..at + 1, Terminator::Return(at));
+        f.blocks[3] = block(at..at + 1, Terminator::Return(Some(at)));
         let a = alloc_with(a.places.iter().copied().chain([Place::IntReg(9)]).collect());
         assert!(repeats(&BlockPlan::build(&f, &a, true, None)).is_empty());
     }
@@ -1106,7 +1106,7 @@ mod tests {
         f.insts.push(phi(&[(2, 0)], LoadKind::I64));
         f.inst_src.push(crate::c5::ir::InstSrc::default());
         f.f32_values.push(false);
-        f.blocks[3] = block(at..at + 1, Terminator::Return(at));
+        f.blocks[3] = block(at..at + 1, Terminator::Return(Some(at)));
         a = alloc_with(a.places.iter().copied().chain([Place::IntReg(9)]).collect());
         assert!(repeats(&BlockPlan::build(&f, &a, true, None)).is_empty());
     }
@@ -1115,7 +1115,7 @@ mod tests {
     fn a_test_no_other_edge_reaches_keeps_the_jump() {
         // The same blocks without the back edge: block 1 returns.
         let (mut f, a) = rotated(alloc::vec![compare()]);
-        f.blocks[1].terminator = Terminator::Return(0);
+        f.blocks[1].terminator = Terminator::Return(Some(0));
         assert!(repeats(&BlockPlan::build(&f, &a, true, None)).is_empty());
     }
 
@@ -1147,7 +1147,7 @@ mod tests {
                         fall_through: 3,
                     }
                 ),
-                block(end..end, Terminator::Return(2)),
+                block(end..end, Terminator::Return(Some(2))),
             ],
         );
         (f, alloc_with(alloc::vec![Place::IntReg(0); end as usize]))
@@ -1269,7 +1269,7 @@ mod tests {
                 ],
                 alloc::vec![
                     block(0..1, Terminator::Jmp(2)),
-                    block(1..2, Terminator::Return(1)),
+                    block(1..2, Terminator::Return(Some(1))),
                     block(
                         2..5,
                         Terminator::Bnz {
@@ -1294,14 +1294,14 @@ mod tests {
             Inst::Imm(0),
             alloc::vec![op_imm(BinOp::Mul, 2, 4), op_imm(BinOp::Lt, 3, 64)],
         );
-        f.blocks[3].terminator = Terminator::Return(3);
+        f.blocks[3].terminator = Terminator::Return(Some(3));
         a.use_counts[3] = 2;
         let plan = BlockPlan::build(&f, &a, true, None);
         assert_eq!(plan.decided_at(0), Some(1));
         assert!(plan.is_test_only(4) && !plan.is_test_only(3));
         // The same value read by the test alone goes with it.
         a.use_counts[3] = 1;
-        f.blocks[3].terminator = Terminator::Return(2);
+        f.blocks[3].terminator = Terminator::Return(Some(2));
         assert!(BlockPlan::build(&f, &a, true, None).is_test_only(3));
     }
 
@@ -1321,7 +1321,7 @@ mod tests {
                 op_imm(BinOp::Lt, 5, 16),
             ],
         );
-        f.blocks[3].terminator = Terminator::Return(6);
+        f.blocks[3].terminator = Terminator::Return(Some(6));
         a.use_counts[4] = 0;
         a.sxtw_source[5] = 2;
         a.sxtw_k[5] = 32;
@@ -1363,8 +1363,8 @@ mod tests {
                             fall_through: 3,
                         }
                     ),
-                    block(3..3, Terminator::Return(0)),
-                    block(3..3, Terminator::Return(1)),
+                    block(3..3, Terminator::Return(Some(0))),
+                    block(3..3, Terminator::Return(Some(1))),
                 ],
             );
             (f, alloc_with(alloc::vec![Place::IntReg(0); 3]))
@@ -1395,7 +1395,8 @@ mod tests {
         // Layout b0, b3', b1, b2: the block after the jump is neither arm.
         let (mut f, a) = rotated(alloc::vec![compare()]);
         let end = f.insts.len() as u32;
-        f.blocks.insert(1, block(end..end, Terminator::Return(1)));
+        f.blocks
+            .insert(1, block(end..end, Terminator::Return(Some(1))));
         for b in f.blocks.iter_mut() {
             b.terminator = match b.terminator {
                 Terminator::Jmp(t) => Terminator::Jmp(t + 1),
@@ -1437,7 +1438,7 @@ mod tests {
                         fall_through: 2,
                     }
                 ),
-                block(1..1, Terminator::Return(0)),
+                block(1..1, Terminator::Return(Some(0))),
                 block(
                     1..2,
                     Terminator::Bnz {
@@ -1447,7 +1448,7 @@ mod tests {
                     }
                 ),
                 block(2..3, Terminator::Jmp(2)),
-                block(3..3, Terminator::Return(2)),
+                block(3..3, Terminator::Return(Some(2))),
             ],
         );
         let a = alloc_with(alloc::vec![Place::IntReg(0); 3]);
@@ -1495,10 +1496,10 @@ mod tests {
                         fall_through: 5,
                     }
                 ),
-                block(2..2, Terminator::Return(0)),
+                block(2..2, Terminator::Return(Some(0))),
                 block(2..3, Terminator::Jmp(1)),
-                block(3..3, Terminator::Return(2)),
-                block(3..3, Terminator::Return(1)),
+                block(3..3, Terminator::Return(Some(2))),
+                block(3..3, Terminator::Return(Some(1))),
             ],
         );
         let a = alloc_with(alloc::vec![Place::IntReg(0); 3]);

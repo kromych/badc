@@ -131,7 +131,7 @@ pub(crate) fn successors(
     jump_tables: &[Vec<BlockId>],
 ) -> Vec<BlockId> {
     match term {
-        Terminator::Jmp(b) | Terminator::FallThrough(b) => alloc::vec![*b],
+        Terminator::Jmp(b) => alloc::vec![*b],
         Terminator::Bz {
             target,
             fall_through,
@@ -895,8 +895,8 @@ fn slot_live_in_sets(
 /// on top of the phi value).
 ///
 /// The rewrite rebuilds `func.insts`, `func.inst_src`, every
-/// `Block::inst_range`, every operand, every terminator, and every
-/// `Block::exit_acc` via a single `value_remap[old_id] = new_id`
+/// `Block::inst_range`, every operand, and every terminator via a
+/// single `value_remap[old_id] = new_id`
 /// pass so existing `ValueId` references remain consistent. The
 /// phis added at a block's head occupy the first slots of its new
 /// `inst_range`; their order is the iteration order of the per-slot
@@ -1129,9 +1129,6 @@ fn rebuild_tape(
         inst.for_each_operand_mut(remap);
     }
     for block in func.blocks.iter_mut() {
-        if block.exit_acc != NO_VALUE && (block.exit_acc as usize) < value_remap.len() {
-            block.exit_acc = value_remap[block.exit_acc as usize];
-        }
         block.terminator.for_each_operand_mut(remap);
     }
     // The relocation tables key on the value id of the instruction that
@@ -1623,9 +1620,6 @@ fn copy_words(func: &mut FunctionSsa) {
     }
     for block in &func.blocks {
         block.terminator.for_each_operand(|v| uses[v as usize] += 1);
-        if block.exit_acc != NO_VALUE {
-            uses[block.exit_acc as usize] += 1;
-        }
     }
     let volatile: BTreeSet<i64> = func
         .insts
@@ -2099,9 +2093,6 @@ fn fold_direct_slot_accesses(func: &mut FunctionSsa) {
     }
     for block in &func.blocks {
         block.terminator.for_each_operand(&mut escape);
-        if block.exit_acc != NO_VALUE {
-            escape(block.exit_acc);
-        }
     }
     let mut folded: Vec<(usize, Inst, i64)> = Vec::new();
     for v in 0..func.insts.len() {
@@ -2754,15 +2745,6 @@ fn promote(func: &mut FunctionSsa) -> Vec<i64> {
         inst.for_each_operand_mut(|op| *op = resolve(&redirect, *op));
     }
     for block in func.blocks.iter_mut() {
-        if block.exit_acc != NO_VALUE {
-            let acc = marked_value.get(&block.exit_acc).copied();
-            block.exit_acc = match acc {
-                Some(v) if matches!(func.insts[block.exit_acc as usize], Inst::FpCast { .. }) => {
-                    resolve(&redirect, v)
-                }
-                _ => resolve(&redirect, block.exit_acc),
-            };
-        }
         block
             .terminator
             .for_each_operand_mut(|v| *v = resolve(&redirect, *v));
@@ -2809,7 +2791,6 @@ mod tests {
             start_pc: 0,
             inst_range: 0..0,
             terminator: term,
-            exit_acc: NO_VALUE,
         }
     }
 
@@ -2959,7 +2940,7 @@ mod tests {
                 target: 1,
                 fall_through: 3,
             }),
-            empty_block(Terminator::Return(NO_VALUE)),
+            empty_block(Terminator::Return(None)),
             empty_block(Terminator::Jmp(1)),
         ];
         let f = func_with(Vec::new(), blocks);
@@ -3018,7 +2999,7 @@ mod tests {
                 nsw: false,
             },
         ];
-        let blocks = alloc::vec![empty_block(Terminator::Return(NO_VALUE))];
+        let blocks = alloc::vec![empty_block(Terminator::Return(None))];
         let (insts, blocks) = with_read_addresses(insts, blocks);
         let f = func_with(insts, blocks);
         let p = address_free_slots(&f);
@@ -3051,7 +3032,7 @@ mod tests {
                 volatile: true,
             },
         ];
-        let blocks = alloc::vec![empty_block(Terminator::Return(2))];
+        let blocks = alloc::vec![empty_block(Terminator::Return(Some(2)))];
         let f = func_with(insts, blocks);
         assert!(
             !address_free_slots(&f).contains(&-1),
@@ -3089,8 +3070,7 @@ mod tests {
         let blocks = alloc::vec![Block {
             start_pc: 0,
             inst_range: 0..5,
-            terminator: Terminator::Return(4),
-            exit_acc: 4,
+            terminator: Terminator::Return(Some(4)),
         }];
         let mut f = func_with(insts, blocks);
         let _ = run(&mut f);
@@ -3105,13 +3085,9 @@ mod tests {
         }
         // The Return's value still points at Imm(99).
         match f.blocks[0].terminator {
-            Terminator::Return(v) => assert_eq!(v, 4),
+            Terminator::Return(Some(v)) => assert_eq!(v, 4),
             ref other => panic!("terminator should still return v4, got {other:?}"),
         }
-        assert_eq!(
-            f.blocks[0].exit_acc, 4,
-            "exit_acc must still point at the return value"
-        );
         // The Imm RHS of the first StoreLocal is still in the IR
         // (the emit's is_dead_pure check drops it because the
         // neutralized store no longer references it); confirm the
@@ -3147,7 +3123,7 @@ mod tests {
             }),
             empty_block(Terminator::Jmp(3)),
             empty_block(Terminator::Jmp(3)),
-            empty_block(Terminator::Return(NO_VALUE)),
+            empty_block(Terminator::Return(None)),
         ];
         let f = func_with(Vec::new(), blocks);
         let idom = dominators(&f);
@@ -3171,7 +3147,7 @@ mod tests {
                 fall_through: 2,
             }),
             empty_block(Terminator::Jmp(1)),
-            empty_block(Terminator::Return(NO_VALUE)),
+            empty_block(Terminator::Return(None)),
         ];
         let f = func_with(Vec::new(), blocks);
         let idom = dominators(&f);
@@ -3227,7 +3203,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         };
         let blocks = alloc::vec![
             block(
@@ -3240,7 +3215,7 @@ mod tests {
             ),
             block(1..4, Terminator::Jmp(3)),
             block(4..7, Terminator::Jmp(3)),
-            block(7..9, Terminator::Return(8)),
+            block(7..9, Terminator::Return(Some(8))),
         ];
         let mut f = func_with(insts, blocks);
         run(&mut f);
@@ -3250,7 +3225,7 @@ mod tests {
             }
             f.insts.get(v as usize).cloned()
         };
-        let Terminator::Return(r) = f.blocks[3].terminator else {
+        let Terminator::Return(Some(r)) = f.blocks[3].terminator else {
             panic!("{:?}", f.blocks[3].terminator)
         };
         let Some(Inst::Phi { incoming, .. }) = value(r) else {
@@ -3312,7 +3287,7 @@ mod tests {
             ),
             block(2..5, Terminator::Jmp(3)),
             block(5..5, jump),
-            block(5..7, Terminator::Return(6)),
+            block(5..7, Terminator::Return(Some(6))),
         ];
         func_with(insts, blocks)
     }
@@ -3330,7 +3305,7 @@ mod tests {
             }
             f.insts.get(v as usize).cloned()
         };
-        let Terminator::Return(r) = f.blocks[3].terminator else {
+        let Terminator::Return(Some(r)) = f.blocks[3].terminator else {
             panic!("{:?}", f.blocks[3].terminator)
         };
         let Some(Inst::Phi { incoming, .. }) = value(r) else {
@@ -3441,7 +3416,7 @@ mod tests {
             ),
             block(2..6, Terminator::Jmp(3)),
             block(6..7, Terminator::Jmp(3)),
-            block(7..9, Terminator::Return(8)),
+            block(7..9, Terminator::Return(Some(8))),
         ];
         let mut f = func_with(insts, blocks);
         f.locals = 2;
@@ -3483,13 +3458,11 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..2,
                 terminator: Terminator::Jmp(1),
-                exit_acc: 1,
             },
             Block {
                 start_pc: 0,
                 inst_range: 2..3,
-                terminator: Terminator::Return(2),
-                exit_acc: 2,
+                terminator: Terminator::Return(Some(2)),
             },
         ];
         let mut f = func_with(insts, blocks);
@@ -3498,8 +3471,10 @@ mod tests {
         assert!(matches!(f.insts[1], Inst::Imm(0)));
         assert!(matches!(f.insts[2], Inst::Imm(0)));
         // The return now reads the stored value (id 0), not the load.
-        assert!(matches!(f.blocks[1].terminator, Terminator::Return(0)));
-        assert_eq!(f.blocks[1].exit_acc, 0);
+        assert!(matches!(
+            f.blocks[1].terminator,
+            Terminator::Return(Some(0))
+        ));
     }
 
     /// A slot written as a double in block 0 and read in block 1, where
@@ -3532,13 +3507,11 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..2,
                 terminator: Terminator::Jmp(1),
-                exit_acc: 1,
             },
             Block {
                 start_pc: 0,
                 inst_range: 2..end,
-                terminator: Terminator::Return(ret),
-                exit_acc: ret,
+                terminator: Terminator::Return(Some(ret)),
             },
         ];
         func_with(insts, blocks)
@@ -3599,8 +3572,10 @@ mod tests {
             "{:?}",
             f.insts
         );
-        assert!(matches!(f.blocks[1].terminator, Terminator::Return(5)));
-        assert_eq!(f.blocks[0].exit_acc, 0, "the block names the stored double");
+        assert!(matches!(
+            f.blocks[1].terminator,
+            Terminator::Return(Some(5))
+        ));
     }
 
     /// A slot written only as a double and read as an integer stays in the
@@ -3620,7 +3595,10 @@ mod tests {
             "{:?}",
             f.insts
         );
-        assert!(matches!(f.blocks[1].terminator, Terminator::Return(2)));
+        assert!(matches!(
+            f.blocks[1].terminator,
+            Terminator::Return(Some(2))
+        ));
     }
 
     /// A double's store read as the stored value cannot become the bits, so
@@ -3688,8 +3666,7 @@ mod tests {
         let blocks = alloc::vec![Block {
             start_pc: 0,
             inst_range: 0..6,
-            terminator: Terminator::Return(5),
-            exit_acc: 5,
+            terminator: Terminator::Return(Some(5)),
         }];
         let mut f = func_with(insts, blocks);
         run(&mut f);
@@ -3705,7 +3682,7 @@ mod tests {
             f.insts
         );
         assert!(
-            matches!(f.blocks[0].terminator, Terminator::Return(2)),
+            matches!(f.blocks[0].terminator, Terminator::Return(Some(2))),
             "{:?}",
             f.insts
         );
@@ -3757,13 +3734,12 @@ mod tests {
         let blocks = alloc::vec![Block {
             start_pc: 0,
             inst_range: 0..5,
-            terminator: Terminator::Return(4),
-            exit_acc: 4,
+            terminator: Terminator::Return(Some(4)),
         }];
         let mut f = func_with(insts, blocks);
         run(&mut f);
         assert!(
-            matches!(f.blocks[0].terminator, Terminator::Return(0)),
+            matches!(f.blocks[0].terminator, Terminator::Return(Some(0))),
             "{:?}",
             f.insts
         );
@@ -3794,13 +3770,11 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..2,
                 terminator: Terminator::Jmp(1),
-                exit_acc: 1,
             },
             Block {
                 start_pc: 0,
                 inst_range: 2..3,
-                terminator: Terminator::Return(2),
-                exit_acc: 2,
+                terminator: Terminator::Return(Some(2)),
             },
         ];
         let mut f = func_with(insts, blocks);
@@ -3819,7 +3793,7 @@ mod tests {
             let mut f = constant_slot(store, load, true);
             run(&mut f);
             assert!(
-                matches!(f.blocks[1].terminator, Terminator::Return(0)),
+                matches!(f.blocks[1].terminator, Terminator::Return(Some(0))),
                 "{store:?}: {:?}",
                 f.insts
             );
@@ -3879,19 +3853,16 @@ mod tests {
                     target: 2,
                     fall_through: 1,
                 },
-                exit_acc: 2,
             },
             Block {
                 start_pc: 0,
                 inst_range: 3..5,
                 terminator: Terminator::Jmp(2),
-                exit_acc: 4,
             },
             Block {
                 start_pc: 0,
                 inst_range: 5..6,
-                terminator: Terminator::Return(5),
-                exit_acc: 5,
+                terminator: Terminator::Return(Some(5)),
             },
         ];
         let mut f = func_with(insts, blocks);
@@ -3930,8 +3901,7 @@ mod tests {
         let blocks = alloc::vec![Block {
             start_pc: 0,
             inst_range: 0..4,
-            terminator: Terminator::Return(3),
-            exit_acc: 3,
+            terminator: Terminator::Return(Some(3)),
         }];
         let (insts, blocks) = with_read_addresses(insts, blocks);
         let mut f = func_with(insts, blocks);
@@ -3940,7 +3910,10 @@ mod tests {
             matches!(f.insts[1], Inst::StoreLocal { disp: 0, .. }),
             "address-taken slot's store must remain"
         );
-        assert!(matches!(f.blocks[0].terminator, Terminator::Return(3)));
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::Return(Some(3))
+        ));
     }
 
     #[test]
@@ -3972,8 +3945,7 @@ mod tests {
         let blocks = alloc::vec![Block {
             start_pc: 0,
             inst_range: 0..4,
-            terminator: Terminator::Return(3),
-            exit_acc: 3,
+            terminator: Terminator::Return(Some(3)),
         }];
         let mut f = func_with(insts, blocks);
         let promoted = run(&mut f);
@@ -3986,7 +3958,10 @@ mod tests {
             matches!(f.insts[2], Inst::AllocaInit(-8)),
             "AllocaInit marker must survive the rewrite"
         );
-        assert!(matches!(f.blocks[0].terminator, Terminator::Return(0)));
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::Return(Some(0))
+        ));
     }
 
     /// `AllocaInit(off)` reserves slot `off` for the alloca bookkeeping, so
@@ -4014,13 +3989,15 @@ mod tests {
         let blocks = alloc::vec![Block {
             start_pc: 0,
             inst_range: 0..4,
-            terminator: Terminator::Return(3),
-            exit_acc: 3,
+            terminator: Terminator::Return(Some(3)),
         }];
         let mut f = func_with(insts, blocks);
         assert!(run(&mut f).is_empty());
         assert!(matches!(f.insts[3], Inst::LoadLocal { off: -8, .. }));
-        assert!(matches!(f.blocks[0].terminator, Terminator::Return(3)));
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::Return(Some(3))
+        ));
     }
 
     #[test]
@@ -4048,8 +4025,7 @@ mod tests {
         let blocks = alloc::vec![Block {
             start_pc: 0,
             inst_range: 0..3,
-            terminator: Terminator::Return(2),
-            exit_acc: 2,
+            terminator: Terminator::Return(Some(2)),
         }];
         let mut f = func_with(insts, blocks);
         run(&mut f);
@@ -4093,8 +4069,7 @@ mod tests {
         let blocks = alloc::vec![Block {
             start_pc: 0,
             inst_range: 0..3,
-            terminator: Terminator::Return(2),
-            exit_acc: 2,
+            terminator: Terminator::Return(Some(2)),
         }];
         let mut f = func_with(insts, blocks);
         run(&mut f);
@@ -4158,13 +4133,11 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..3,
                 terminator: Terminator::Jmp(1),
-                exit_acc: 2,
             },
             Block {
                 start_pc: 0,
                 inst_range: 3..6,
-                terminator: Terminator::Return(5),
-                exit_acc: 5,
+                terminator: Terminator::Return(Some(5)),
             },
         ];
         let mut f = func_with(insts, blocks);
@@ -4175,7 +4148,10 @@ mod tests {
         );
         // The I32 constant load folds straight to its Imm (fits I32),
         // so the return reads the constant, not a frame load.
-        assert!(matches!(f.blocks[1].terminator, Terminator::Return(3)));
+        assert!(matches!(
+            f.blocks[1].terminator,
+            Terminator::Return(Some(3))
+        ));
         assert!(matches!(f.insts[4], Inst::Imm(0)), "I32 store neutralized");
         assert!(matches!(f.insts[1], Inst::Imm(0)), "I64 store neutralized");
     }
@@ -4206,8 +4182,7 @@ mod tests {
         let blocks = alloc::vec![Block {
             start_pc: 0,
             inst_range: 0..3,
-            terminator: Terminator::Return(2),
-            exit_acc: 2,
+            terminator: Terminator::Return(Some(2)),
         }];
         let mut f = func_with(insts, blocks);
         run(&mut f);
@@ -4216,7 +4191,7 @@ mod tests {
             "narrow store must remain"
         );
         assert!(
-            matches!(f.blocks[0].terminator, Terminator::Return(2)),
+            matches!(f.blocks[0].terminator, Terminator::Return(Some(2))),
             "wide load must remain in memory"
         );
     }
@@ -4261,25 +4236,21 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             },
             Block {
                 start_pc: 0,
                 inst_range: 1..3,
                 terminator: Terminator::Jmp(3),
-                exit_acc: NO_VALUE,
             },
             Block {
                 start_pc: 0,
                 inst_range: 3..5,
                 terminator: Terminator::Jmp(3),
-                exit_acc: NO_VALUE,
             },
             Block {
                 start_pc: 0,
                 inst_range: 5..6,
-                terminator: Terminator::Return(5),
-                exit_acc: 5,
+                terminator: Terminator::Return(Some(5)),
             },
         ];
         let f = func_with(insts, blocks);
@@ -4339,25 +4310,21 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             },
             Block {
                 start_pc: 0,
                 inst_range: 1..3,
                 terminator: Terminator::Jmp(3),
-                exit_acc: 1,
             },
             Block {
                 start_pc: 0,
                 inst_range: 3..5,
                 terminator: Terminator::Jmp(3),
-                exit_acc: 3,
             },
             Block {
                 start_pc: 0,
                 inst_range: 5..6,
-                terminator: Terminator::Return(5),
-                exit_acc: 5,
+                terminator: Terminator::Return(Some(5)),
             },
         ];
         let mut f = func_with(insts, blocks);
@@ -4415,10 +4382,9 @@ mod tests {
         // value_remap shifts it to 6 (the same shift the LoadLocal
         // took).
         match f.blocks[3].terminator {
-            Terminator::Return(v) => assert_eq!(v, 6),
+            Terminator::Return(Some(v)) => assert_eq!(v, 6),
             ref other => panic!("expected Return at block 3, got {other:?}"),
         }
-        assert_eq!(f.blocks[3].exit_acc, 6);
     }
 
     /// `insert_phis` renumbers every value when it prepends phis. The
@@ -4468,25 +4434,21 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             },
             Block {
                 start_pc: 0,
                 inst_range: 1..3,
                 terminator: Terminator::Jmp(3),
-                exit_acc: 1,
             },
             Block {
                 start_pc: 0,
                 inst_range: 3..5,
                 terminator: Terminator::Jmp(3),
-                exit_acc: 3,
             },
             Block {
                 start_pc: 0,
                 inst_range: 5..7,
-                terminator: Terminator::Return(6),
-                exit_acc: 6,
+                terminator: Terminator::Return(Some(6)),
             },
         ];
         let mut f = func_with(insts, blocks);
@@ -4569,25 +4531,21 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             },
             Block {
                 start_pc: 0,
                 inst_range: 1..3,
                 terminator: Terminator::Jmp(3),
-                exit_acc: 1,
             },
             Block {
                 start_pc: 0,
                 inst_range: 3..5,
                 terminator: Terminator::Jmp(3),
-                exit_acc: 3,
             },
             Block {
                 start_pc: 0,
                 inst_range: 5..6,
-                terminator: Terminator::Return(5),
-                exit_acc: 5,
+                terminator: Terminator::Return(Some(5)),
             },
         ];
         let mut f = func_with(insts, blocks);
@@ -4650,16 +4608,12 @@ mod tests {
         // LoadLocal (id 6).
         let phi_id_u32 = phi_id as u32;
         match f.blocks[3].terminator {
-            Terminator::Return(v) => assert_eq!(
+            Terminator::Return(Some(v)) => assert_eq!(
                 v, phi_id_u32,
                 "Return's operand should be redirected from the LoadLocal to the phi"
             ),
             ref other => panic!("expected Return at block 3, got {other:?}"),
         }
-        assert_eq!(
-            f.blocks[3].exit_acc, phi_id_u32,
-            "exit_acc should follow the redirect to the phi"
-        );
     }
 
     /// `int f(int c){ int x; if(c) x=7; return x; }` with `x` at `slot`,
@@ -4692,19 +4646,16 @@ mod tests {
                     target: 2,
                     fall_through: 1,
                 },
-                exit_acc: 0,
             },
             Block {
                 start_pc: 0,
                 inst_range: 1..3,
                 terminator: Terminator::Jmp(2),
-                exit_acc: NO_VALUE,
             },
             Block {
                 start_pc: 0,
                 inst_range: 3..4,
-                terminator: Terminator::Return(3),
-                exit_acc: 3,
+                terminator: Terminator::Return(Some(3)),
             },
         ];
         func_with(insts, blocks)
@@ -4718,7 +4669,7 @@ mod tests {
         let mut f = stored_on_one_arm(-1);
         let promoted = with_phi_promote_override(true, || run(&mut f));
         assert_eq!(promoted, alloc::vec![-1]);
-        let Terminator::Return(r) = f.blocks[2].terminator else {
+        let Terminator::Return(Some(r)) = f.blocks[2].terminator else {
             panic!("block 2 returns");
         };
         let Inst::Phi { incoming, .. } = &f.insts[r as usize] else {
@@ -4805,13 +4756,15 @@ mod tests {
         let blocks = alloc::vec![Block {
             start_pc: 0,
             inst_range: 0..3,
-            terminator: Terminator::Return(2),
-            exit_acc: NO_VALUE,
+            terminator: Terminator::Return(Some(2)),
         }];
         let mut f = func_with(insts, blocks);
         assert_eq!(run(&mut f), alloc::vec![-1]);
         assert!(matches!(f.insts[0], Inst::Undef));
-        assert!(matches!(f.blocks[0].terminator, Terminator::Return(0)));
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::Return(Some(0))
+        ));
         zero_read_undefs(&mut f);
         assert!(matches!(f.insts[0], Inst::Imm(0)));
     }
@@ -4841,7 +4794,7 @@ mod tests {
             }),
             empty_block(Terminator::Jmp(3)),
             empty_block(Terminator::Jmp(3)),
-            empty_block(Terminator::Return(NO_VALUE)),
+            empty_block(Terminator::Return(None)),
         ];
         let f = func_with(Vec::new(), blocks);
         let preds = predecessors(&f);
@@ -4916,7 +4869,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..2,
                 terminator: Terminator::Jmp(1),
-                exit_acc: 1,
             },
             Block {
                 start_pc: 0,
@@ -4926,19 +4878,16 @@ mod tests {
                     target: 3,
                     fall_through: 2,
                 },
-                exit_acc: 2,
             },
             Block {
                 start_pc: 0,
                 inst_range: 3..7,
                 terminator: Terminator::Jmp(1),
-                exit_acc: 6,
             },
             Block {
                 start_pc: 0,
                 inst_range: 7..8,
-                terminator: Terminator::Return(7),
-                exit_acc: 7,
+                terminator: Terminator::Return(Some(7)),
             },
         ];
         let mut f = func_with(insts, blocks);
@@ -4952,7 +4901,7 @@ mod tests {
         // pre-fix forward-walk of Frame::Restore, the operand
         // landed at one of the body's `Inst::Imm` intermediates
         // (imm(7) or imm(9)), never an `Inst::Phi`.
-        let Terminator::Return(ret_v) = f.blocks.last().unwrap().terminator else {
+        let Terminator::Return(Some(ret_v)) = f.blocks.last().unwrap().terminator else {
             panic!("expected Return terminator on the last block");
         };
         assert!(
@@ -4984,8 +4933,7 @@ mod tests {
         blocks.push(Block {
             start_pc: 0,
             inst_range: 0..1,
-            terminator: Terminator::Return(0),
-            exit_acc: NO_VALUE,
+            terminator: Terminator::Return(Some(0)),
         });
         for b in 2..N {
             blocks.push(empty_block(Terminator::Jmp((b - 1) as BlockId)));
@@ -5043,8 +4991,7 @@ mod tests {
         let blocks = alloc::vec![Block {
             start_pc: 0,
             inst_range: 0..6,
-            terminator: Terminator::Return(5),
-            exit_acc: 5,
+            terminator: Terminator::Return(Some(5)),
         }];
         let (insts, blocks) = with_read_addresses(insts, blocks);
         let mut f = func_with(insts, blocks);
@@ -5105,7 +5052,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..2,
                 terminator: Terminator::Jmp(1),
-                exit_acc: NO_VALUE,
             },
             Block {
                 start_pc: 0,
@@ -5115,13 +5061,11 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 2,
             },
             Block {
                 start_pc: 0,
                 inst_range: 4..4,
-                terminator: Terminator::Return(2),
-                exit_acc: 2,
+                terminator: Terminator::Return(Some(2)),
             },
         ];
         let (insts, blocks) = with_read_addresses(insts, blocks);
@@ -5147,7 +5091,10 @@ mod tests {
             f.blocks[1].terminator,
             Terminator::Bnz { cond: 2, .. }
         ));
-        assert!(matches!(f.blocks[2].terminator, Terminator::Return(2)));
+        assert!(matches!(
+            f.blocks[2].terminator,
+            Terminator::Return(Some(2))
+        ));
     }
 
     #[test]
@@ -5208,25 +5155,21 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             },
             Block {
                 start_pc: 0,
                 inst_range: 1..3,
                 terminator: Terminator::Jmp(3),
-                exit_acc: 1,
             },
             Block {
                 start_pc: 0,
                 inst_range: 3..5,
                 terminator: Terminator::Jmp(3),
-                exit_acc: 3,
             },
             Block {
                 start_pc: 0,
                 inst_range: 5..9,
-                terminator: Terminator::Return(8),
-                exit_acc: 8,
+                terminator: Terminator::Return(Some(8)),
             },
         ];
         let (insts, blocks) = with_read_addresses(insts, blocks);
@@ -5282,7 +5225,10 @@ mod tests {
             "the join load reads the phi, the load past the LocalAddr reads memory: {:?}",
             f.insts[9]
         );
-        assert!(matches!(f.blocks[3].terminator, Terminator::Return(9)));
+        assert!(matches!(
+            f.blocks[3].terminator,
+            Terminator::Return(Some(9))
+        ));
     }
 
     /// A diamond and a block looping on itself: each arm and the entry are
@@ -5307,7 +5253,7 @@ mod tests {
                 entry,
                 empty_block(Terminator::Jmp(3)),
                 empty_block(Terminator::Jmp(3)),
-                empty_block(Terminator::Return(NO_VALUE)),
+                empty_block(Terminator::Return(None)),
                 empty_block(Terminator::Jmp(4)),
             ],
         );
@@ -5340,7 +5286,7 @@ mod tests {
                     fall_through: 2,
                 }),
                 empty_block(Terminator::Jmp(1)),
-                empty_block(Terminator::Return(NO_VALUE)),
+                empty_block(Terminator::Return(None)),
             ],
         );
         let freqs = super::super::reg_alloc::block_frequencies(&f);
@@ -5355,7 +5301,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 
@@ -5409,7 +5354,7 @@ mod tests {
         let mut blocks = alloc::vec![
             block(0..3, site(2, 3)),
             block(3..7, site(6, 3)),
-            block(7..8, Terminator::Return(7)),
+            block(7..8, Terminator::Return(Some(7))),
         ];
         if factored {
             insts.push(Inst::Phi {
@@ -5526,7 +5471,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..2,
                 terminator: Terminator::Jmp(1),
-                exit_acc: NO_VALUE,
             },
             Block {
                 start_pc: 0,
@@ -5536,13 +5480,11 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: NO_VALUE,
             },
             Block {
                 start_pc: 0,
                 inst_range: 6..6,
-                terminator: Terminator::Return(5),
-                exit_acc: NO_VALUE,
+                terminator: Terminator::Return(Some(5)),
             },
         ];
         let mut f = func_with(insts, blocks);

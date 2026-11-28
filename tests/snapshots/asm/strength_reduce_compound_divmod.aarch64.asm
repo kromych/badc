@@ -408,7 +408,7 @@ Disassembly of section .text:
                	cmp	w1, w2
                	cset	x5, hs
                	mov	w3, w1
-               	cmp	x3, x2
+               	cmp	w3, w2
                	cset	x6, hs
                	add	x6, x6, x6, lsl #31
                	sub	x3, x3, x6
@@ -438,7 +438,7 @@ Disassembly of section .text:
                	cmp	w2, w1
                	cset	x5, hs
                	mov	w3, w2
-               	cmp	x3, x1
+               	cmp	w3, w1
                	cset	x6, hs
                	mul	x6, x6, x1
                	sub	x3, x3, x6
@@ -468,7 +468,7 @@ Disassembly of section .text:
                	cmp	w1, w2
                	cset	x5, hs
                	mov	w3, w1
-               	cmp	x3, x2
+               	cmp	w3, w2
                	cset	x6, hs
                	mul	x6, x6, x2
                	sub	x3, x3, x6

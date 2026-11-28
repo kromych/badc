@@ -13,8 +13,7 @@ fn ran(insts: Vec<Inst>) -> Vec<Inst> {
         blocks: vec![Block {
             start_pc: 0,
             inst_range: 0..n,
-            terminator: Terminator::Return(n - 1),
-            exit_acc: crate::c5::ir::NO_VALUE,
+            terminator: Terminator::Return(Some(n - 1)),
         }],
         ..Default::default()
     }];

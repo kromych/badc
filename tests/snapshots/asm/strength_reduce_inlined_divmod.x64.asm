@@ -556,7 +556,7 @@ Disassembly of section .text:
                	movl	%r9d, 0x98(%rsp)
                	movq	(%r11,%rcx,8), %rsi
                	movl	%esi, %r8d
-               	cmpq	%r10, %r8
+               	cmpl	%r10d, %r8d
                	setae	%dil
                	movzbq	%dil, %rdi
                	movl	0x98(%rsp), %eax
@@ -590,7 +590,7 @@ Disassembly of section .text:
                	movl	%r9d, 0xa0(%rsp)
                	movq	(%r11,%rcx,8), %rsi
                	movl	%esi, %r8d
-               	cmpq	%r10, %r8
+               	cmpl	%r10d, %r8d
                	setae	%dil
                	movzbq	%dil, %rdi
                	movl	0xa0(%rsp), %eax
@@ -624,7 +624,7 @@ Disassembly of section .text:
                	movl	%r9d, 0xa8(%rsp)
                	movq	(%r11,%rcx,8), %rsi
                	movl	%esi, %r8d
-               	cmpq	%r10, %r8
+               	cmpl	%r10d, %r8d
                	setae	%dil
                	movzbq	%dil, %rdi
                	movl	0xa8(%rsp), %eax
@@ -657,7 +657,7 @@ Disassembly of section .text:
                	movl	$0xfffffffd, 0xb0(%rsp) # imm = 0xFFFFFFFD
                	movq	(%r10,%rcx,8), %rsi
                	movl	%esi, %r8d
-               	cmpq	%r9, %r8
+               	cmpl	%r9d, %r8d
                	setae	%dil
                	movzbq	%dil, %rdi
                	movl	0xb0(%rsp), %r11d
@@ -687,7 +687,7 @@ Disassembly of section .text:
                	movl	$0xffffffff, 0xb8(%rsp) # imm = 0xFFFFFFFF
                	movq	(%r10,%rcx,8), %rsi
                	movl	%esi, %r8d
-               	cmpq	%r9, %r8
+               	cmpl	%r9d, %r8d
                	setae	%dil
                	movzbq	%dil, %rdi
                	movl	0xb8(%rsp), %r11d
@@ -2109,7 +2109,7 @@ Disassembly of section .text:
                	movl	$0xfffffffd, 0x60(%rsp) # imm = 0xFFFFFFFD
                	movq	(%r10,%rcx,8), %rsi
                	movl	%esi, %r8d
-               	cmpq	%r9, %r8
+               	cmpl	%r9d, %r8d
                	setae	%dil
                	movzbq	%dil, %rdi
                	movl	0x60(%rsp), %r11d
@@ -2344,7 +2344,7 @@ Disassembly of section .text:
                	movq	%r8, 0x98(%rsp)
                	movq	(%r10,%rcx,8), %rax
                	movl	%eax, %esi
-               	cmpq	%r9, %rsi
+               	cmpl	%r9d, %esi
                	setae	%dil
                	movzbq	%dil, %rdi
                	movq	0x98(%rsp), %r11

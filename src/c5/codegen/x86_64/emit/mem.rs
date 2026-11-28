@@ -325,9 +325,9 @@ fn emit_store_kind_mem(
     }
     match kind {
         StoreKind::I64 => emit_mov_mem_r(code, base, disp, src),
-        StoreKind::I32 => super::encode::emit_mov_mem32_r(code, base, disp, src),
+        StoreKind::I32 => super::encode::emit_mov_mem_r32(code, base, disp, src),
         StoreKind::I16 => super::encode::emit_mov_mem16_r(code, base, disp, src),
-        StoreKind::I8 => super::encode::emit_mov_mem8_r(code, base, disp, src),
+        StoreKind::I8 => super::encode::emit_mov_mem_r8(code, base, disp, src),
         StoreKind::F32
         | StoreKind::F64
         | StoreKind::F80
@@ -1691,9 +1691,9 @@ impl SiteRegs {
 pub(super) fn emit_store_unit(code: &mut CodeBuf, width: u32, base: Reg, disp: i32, src: Reg) {
     match width {
         8 => emit_mov_mem_r(code, base, disp, src),
-        4 => super::encode::emit_mov_mem32_r(code, base, disp, src),
+        4 => super::encode::emit_mov_mem_r32(code, base, disp, src),
         2 => super::encode::emit_mov_mem16_r(code, base, disp, src),
-        _ => super::encode::emit_mov_mem8_r(code, base, disp, src),
+        _ => super::encode::emit_mov_mem_r8(code, base, disp, src),
     }
 }
 

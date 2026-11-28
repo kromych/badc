@@ -468,7 +468,7 @@ Disassembly of section .text:
                	stur	w1, [x29, #-0x28]
                	ldr	x2, [x5, x0, lsl #3]
                	mov	w3, w2
-               	cmp	x3, x1
+               	cmp	w3, w1
                	cset	x4, hs
                	ldur	w6, [x29, #-0x28]
                	udiv	w6, w2, w6
@@ -495,7 +495,7 @@ Disassembly of section .text:
                	stur	w2, [x29, #-0x20]
                	ldr	x1, [x6, x0, lsl #3]
                	mov	w3, w1
-               	cmp	x3, x5
+               	cmp	w3, w5
                	cset	x4, hs
                	ldur	w7, [x29, #-0x20]
                	udiv	w7, w1, w7
@@ -522,7 +522,7 @@ Disassembly of section .text:
                	stur	w2, [x29, #-0x18]
                	ldr	x1, [x6, x0, lsl #3]
                	mov	w3, w1
-               	cmp	x3, x5
+               	cmp	w3, w5
                	cset	x4, hs
                	ldur	w7, [x29, #-0x18]
                	udiv	w7, w1, w7
@@ -550,7 +550,7 @@ Disassembly of section .text:
                	stur	w1, [x29, #-0x10]
                	ldr	x1, [x5, x0, lsl #3]
                	mov	w3, w1
-               	cmp	x3, x2
+               	cmp	w3, w2
                	cset	x4, hs
                	ldur	w6, [x29, #-0x10]
                	udiv	w6, w1, w6
@@ -578,7 +578,7 @@ Disassembly of section .text:
                	stur	w1, [x29, #-0x8]
                	ldr	x1, [x5, x0, lsl #3]
                	mov	w3, w1
-               	cmp	x3, x2
+               	cmp	w3, w2
                	cset	x4, hs
                	ldur	w6, [x29, #-0x8]
                	udiv	w6, w1, w6
@@ -2011,7 +2011,7 @@ Disassembly of section .text:
                	stur	w1, [x29, #-0x40]
                	ldr	x1, [x5, x0, lsl #3]
                	mov	w3, w1
-               	cmp	x3, x2
+               	cmp	w3, w2
                	cset	x4, hs
                	ldur	w6, [x29, #-0x40]
                	udiv	w6, w1, w6
@@ -2203,7 +2203,7 @@ Disassembly of section .text:
                	stur	x2, [x29, #-0x8]
                	ldr	x1, [x5, x0, lsl #3]
                	mov	w1, w1
-               	cmp	x1, x4
+               	cmp	w1, w4
                	cset	x3, hs
                	ldur	x6, [x29, #-0x8]
                	sdiv	x6, x1, x6

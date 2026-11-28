@@ -55,9 +55,13 @@ only SDK-libc target. `./scripts/validate_local_boxes.py` runs:
     and `--dry-run` prints the schedule without running it.
   * the compile-throughput check over the QuickJS corpus the demos just
     fetched: `-O0` cost over `-O` cost, and the slowest unit over the
-    median one. Both are ratios taken within the run, so the lane's own
-    speed cancels and one set of ceilings covers every box; CI's perf job
-    runs the same check.
+    next slowest one at `-O0` and at `-O`; and over a generated unit,
+    the cost of 2N one-line functions over N, compiled with `-g` and
+    linked, and of 2N functions holding an `asm` statement over N, which
+    a per-function search or copy of a per-unit list moves and the
+    corpus does not. All are ratios taken within
+    the run, so the lane's own speed cancels and one set of ceilings
+    covers every box; CI's perf job runs the same check.
   * the snapshot-drift check on every Linux lane: regenerate
     `tests/snapshots/` and fail on drift, as CI's `snapshots clean` job does.
     It needs `llvm-objdump` -- the committed snapshots were disassembled with
@@ -65,8 +69,10 @@ only SDK-libc target. `./scripts/validate_local_boxes.py` runs:
     absent rather than downgrading the check. The macOS host regenerates after
     every commit through the post-commit hook, so it carries no lane step.
     Skip with `--no-snapshots`.
-  * the kernel step: `demos/linux/verify.py --linker badc` over the pinned
-    `defconfig` release, on each Linux lane -- compile, link and boot. The
+  * the kernel step: `demos/linux/verify.py --linker badc --verify-ssa` over
+    the pinned `defconfig` release, on each Linux lane -- compile, link and
+    boot, every unit compiled under the SSA checks, so a pass that leaves
+    malformed SSA fails its unit by name. The
     boots are the ones CI runs, four plus a displacement probe per distinct
     displacement. x86_64 cannot pin one, and its unpinned probe draws
     displacement 0 on one boot in 479; such a probe is repeated, up to three

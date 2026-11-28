@@ -20,7 +20,6 @@ const PRED_STAGES: [u8; 3] = [PRED_STAGE, PRED_OPERAND, PRED_HOLD];
 struct Operands<'a> {
     alloc: &'a Allocation,
     frame: Frame,
-    scratch: &'a ScratchPool,
 }
 
 impl Operands<'_> {
@@ -144,11 +143,7 @@ pub(super) fn emit_row(
     if args.len() < row.form.arity() {
         return fail(alloc::format!("{}: operands missing", row.name));
     }
-    let o = Operands {
-        alloc,
-        frame,
-        scratch,
-    };
+    let o = Operands { alloc, frame };
     let size = row.int_width.trailing_zeros() as u8;
     let pattern = Opnd::SvePattern(imm.unwrap_or(31));
     let encoded = encoded_operand(func, op, args);
@@ -949,11 +944,7 @@ pub(super) fn emit_governed_access(
     if args.len() < 2 + usize::from(store) {
         return fail("SVE access: operands missing");
     }
-    let o = Operands {
-        alloc,
-        frame,
-        scratch,
-    };
+    let o = Operands { alloc, frame };
     let size = lane.trailing_zeros() as u8;
     let suffix = ["b", "h", "w", "d"][usize::from(size)];
     let base = o.x(code, args[1], scratch.secondary)?;

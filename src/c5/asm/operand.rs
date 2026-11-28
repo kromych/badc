@@ -649,12 +649,9 @@ pub(crate) fn asm_operand_form(func: &FunctionSsa, arg: u32) -> alloc::string::S
             Some(Inst::Fneg(_) | Inst::Fma { .. } | Inst::FpCast { .. }) => {
                 "a floating-point result"
             }
-            Some(
-                Inst::Call { .. }
-                | Inst::CallExt { .. }
-                | Inst::CallIndirect { .. }
-                | Inst::TailExt(_),
-            ) => "a call result",
+            Some(Inst::Call { .. } | Inst::CallExt { .. } | Inst::CallIndirect { .. }) => {
+                "a call result"
+            }
             Some(Inst::Intrinsic { .. }) => "an intrinsic result",
             Some(
                 Inst::Simd { .. }
@@ -716,8 +713,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..n,
-                terminator: Terminator::Return(n - 1),
-                exit_acc: n - 1,
+                terminator: Terminator::Return(Some(n - 1)),
             }],
             insts,
             ..Default::default()
@@ -781,7 +777,6 @@ mod tests {
                 clobber_regs: 0,
                 clobber_fp_regs: 0,
                 clobber_memory: false,
-                volatile: true,
             }),
             args: alloc::vec![arg],
         }
@@ -1040,7 +1035,6 @@ mod tests {
                 clobber_regs: 0,
                 clobber_fp_regs: 0,
                 clobber_memory: false,
-                volatile: true,
             }),
             args: alloc::vec![0, 1, 2, 3, 4, 3],
         };

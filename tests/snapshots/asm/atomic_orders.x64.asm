@@ -5494,13 +5494,12 @@ Disassembly of section .text:
                	cmoveq	%rax, %rsi
                	testq	%rcx, %rcx
                	je	<addr>
-               	leaq	<rip>, %rax # <addr>
-               	movl	(%rax), %eax
+               	leaq	<rip>, %rcx # <addr>
+               	movl	(%rcx), %eax
                	cmpl	$0x4, %eax
                	je	<addr>
                	movl	$0xb2, %eax
                	jmp	<addr>
-               	leaq	<rip>, %rcx # <addr>
                	movl	%esi, %eax
                	lock
                	cmpxchgl	%edi, (%rcx)

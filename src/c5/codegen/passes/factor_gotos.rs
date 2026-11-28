@@ -41,7 +41,6 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
         start_pc: 0,
         inst_range: phi..phi + 1,
         terminator: Terminator::GotoIndirect { target: phi },
-        exit_acc: phi,
     });
     for &(b, _) in &sites {
         func.blocks[b as usize].terminator = Terminator::Jmp(dispatch);
@@ -58,7 +57,7 @@ pub(crate) fn run_one(func: &mut FunctionSsa) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::c5::ir::{LabelDataReloc, NO_VALUE};
+    use crate::c5::ir::LabelDataReloc;
     use alloc::vec;
 
     fn block(range: core::ops::Range<u32>, terminator: Terminator) -> Block {
@@ -66,7 +65,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 
@@ -88,7 +86,7 @@ mod tests {
                 block(0..3, Terminator::GotoIndirect { target: 2 }),
                 block(3..4, Terminator::GotoIndirect { target: 3 }),
                 block(4..5, Terminator::GotoIndirect { target: 4 }),
-                block(5..5, Terminator::Return(NO_VALUE)),
+                block(5..5, Terminator::Return(None)),
             ],
             ..FunctionSsa::default()
         };

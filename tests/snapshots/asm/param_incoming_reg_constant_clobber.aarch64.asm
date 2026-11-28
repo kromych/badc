@@ -44,8 +44,7 @@ Disassembly of section .text:
                	cmp	w0, #0x5
                	b.le	<addr>
                	adrp	x0, <page>
-               	add	x0, x0, <lo12>
-               	ldrh	w0, [x0]
+               	ldrh	w0, [x0, #0x30]
                	ret
 
 <func_17>:

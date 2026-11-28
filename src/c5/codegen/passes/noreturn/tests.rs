@@ -24,7 +24,6 @@ fn block(range: core::ops::Range<u32>, terminator: Terminator) -> Block {
         start_pc: 0,
         inst_range: range,
         terminator,
-        exit_acc: NO_VALUE,
     }
 }
 
@@ -52,7 +51,7 @@ fn returns_call_plus_one(ent_pc: usize, target: usize) -> FunctionSsa {
                 rhs_imm: 1,
             },
         ],
-        vec![block(0..2, Terminator::Return(1))],
+        vec![block(0..2, Terminator::Return(Some(1)))],
     )
 }
 
@@ -208,7 +207,7 @@ fn a_merge_past_the_sealed_call_keeps_its_other_incomes() {
         ),
         block(1..3, Terminator::Jmp(3)),
         block(3..4, Terminator::Jmp(3)),
-        block(4..5, Terminator::Return(4)),
+        block(4..5, Terminator::Return(Some(4))),
     ];
     let mut funcs = vec![func(10, insts, blocks)];
     seal_all(&mut funcs, known(&[40], &[], &[]), true);

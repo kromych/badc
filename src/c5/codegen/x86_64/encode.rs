@@ -19,8 +19,6 @@
 //! `REX.W + C7 /0 id` for a negative value that sign-extends from 32
 //! bits, 10-byte `REX.W + B8+rd io` otherwise.
 
-#![allow(dead_code)] // Encoders ahead of lowering coverage.
-
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
@@ -46,6 +44,8 @@ use crate::c5::codegen::ssa::code_buf::CodeBuf;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Reg(pub u8);
 
+// Every register has its name, whether or not a lowering names it.
+#[allow(dead_code)]
 impl Reg {
     pub const RAX: Reg = Reg(0);
     pub const RCX: Reg = Reg(1);
@@ -157,13 +157,6 @@ fn mw(base: Reg, disp: i32, width: u8) -> super::table::Opnd {
         disp,
         width,
     }
-}
-
-fn r64(r: Reg) -> super::table::Opnd {
-    rw(r, 8)
-}
-fn m64(base: Reg, disp: i32) -> super::table::Opnd {
-    mw(base, disp, 8)
 }
 
 /// A `[base + index * scale]` (SIB) memory reference of the given width.
@@ -598,14 +591,6 @@ pub(crate) fn emit_ret(code: &mut CodeBuf) {
     code.describe(at, || String::from("retq"));
 }
 
-/// `SYSCALL`. Linux x86_64 intrinsic entry; nr in `rax`, args in
-/// `rdi/rsi/rdx/r10/r8/r9`, return in `rax`.
-pub(crate) fn emit_syscall(code: &mut CodeBuf) {
-    let at = code.len();
-    emit_bytes(code, &[0x0F, 0x05]);
-    code.describe(at, || String::from("syscall"));
-}
-
 /// `MOV r64, [base + disp]` -- 64-bit memory load.
 /// Encoding: `REX.W + 8B /r` with the addressing form chosen by
 /// `disp`'s magnitude. Handles `[rsp + disp]` (which always needs a
@@ -614,21 +599,10 @@ pub(crate) fn emit_mov_r_mem(code: &mut CodeBuf, dst: Reg, base: Reg, disp: i32)
     super::table::encode_into(code, Mnem::Mov, Some(8), &[rw(dst, 8), mw(base, disp, 8)]);
 }
 
-/// `MOV r32, [base + disp]` -- 32-bit load (zero-extends to 64).
-/// Encoding: `8B /r` (no REX.W).
-pub(crate) fn emit_mov_r_mem32(code: &mut CodeBuf, dst: Reg, base: Reg, disp: i32) {
-    super::table::encode_into(code, Mnem::Mov, Some(4), &[rw(dst, 4), mw(base, disp, 4)]);
-}
-
 /// `MOV [base + disp], r64` -- 64-bit memory store.
 /// Encoding: `REX.W + 89 /r`.
 pub(crate) fn emit_mov_mem_r(code: &mut CodeBuf, base: Reg, disp: i32, src: Reg) {
     super::table::encode_into(code, Mnem::Mov, Some(8), &[mw(base, disp, 8), rw(src, 8)]);
-}
-
-/// `MOV [base + disp], r32` -- 32-bit store.
-pub(crate) fn emit_mov_mem_r32(code: &mut CodeBuf, base: Reg, disp: i32, src: Reg) {
-    super::table::encode_into(code, Mnem::Mov, Some(4), &[mw(base, disp, 4), rw(src, 4)]);
 }
 
 /// `MOV [base + disp], r16` -- 16-bit store.
@@ -670,7 +644,7 @@ pub(crate) fn emit_mov_r32_mem(code: &mut CodeBuf, dst: Reg, base: Reg, disp: i3
 /// of `src`. Encoding: no REX.W, just `89 /r` (with REX only if any
 /// operand register needs the high bank). Companion to
 /// [`emit_movsxd_r_mem`] for the `StoreKind::I32` lowering.
-pub(crate) fn emit_mov_mem32_r(code: &mut CodeBuf, base: Reg, disp: i32, src: Reg) {
+pub(crate) fn emit_mov_mem_r32(code: &mut CodeBuf, base: Reg, disp: i32, src: Reg) {
     super::table::encode_into(code, Mnem::Mov, Some(4), &[mw(base, disp, 4), rw(src, 4)]);
 }
 
@@ -1137,22 +1111,6 @@ pub(crate) fn emit_movq_r_xmm(code: &mut CodeBuf, dst: Reg, xmm: Reg) {
     });
 }
 
-/// `MOVQ xmm, [base+disp]` -- load 8 bytes from memory into the
-/// low quad of an XMM register. Encoding: `F3 0F 7E /r`.
-pub(crate) fn emit_movq_xmm_r_mem(code: &mut CodeBuf, xmm: Reg, base: Reg, disp: i32) {
-    let at = code.len();
-    emit_byte(code, 0xF3);
-    if xmm.high() || base.high() {
-        emit_byte(code, rex(false, xmm.high(), false, base.high()));
-    }
-    emit_byte(code, 0x0F);
-    emit_byte(code, 0x7E);
-    emit_modrm_mem(code, xmm, base, disp);
-    code.describe(at, || {
-        format!("movq {}, {}", t::mem_at(base.0, disp), t::xmm(xmm.0))
-    });
-}
-
 /// `MOVSD xmm, [base+disp]` -- load 8 bytes (scalar double) into
 /// the low quad of an XMM register, zeroing the rest. Encoding:
 /// `F2 0F 10 /r`.
@@ -1477,20 +1435,6 @@ pub(crate) fn emit_sqrtsd(code: &mut CodeBuf, dst: Reg, src: Reg) {
 /// `SQRTSS xmm, xmm` -- `dst = sqrt(src)`, scalar single. `F3 0F 51 /r`.
 pub(crate) fn emit_sqrtss(code: &mut CodeBuf, dst: Reg, src: Reg) {
     emit_sse_ss(code, 0x51, dst, src);
-}
-
-/// `ANDPD xmm, xmm` -- bitwise AND of two doubles. `66 0F 54 /r`. Used
-/// for `FABS` (AND with the inverted sign-bit mask in another XMM).
-pub(crate) fn emit_andpd(code: &mut CodeBuf, dst: Reg, src: Reg) {
-    let at = code.len();
-    emit_byte(code, 0x66);
-    if dst.high() || src.high() {
-        emit_byte(code, rex(false, dst.high(), false, src.high()));
-    }
-    emit_byte(code, 0x0F);
-    emit_byte(code, 0x54);
-    emit_byte(code, modrm(0b11, dst.lo(), src.lo()));
-    code.describe(at, || format!("andpd {}, {}", t::xmm(src.0), t::xmm(dst.0)));
 }
 
 /// `ROUNDSD xmm, xmm, imm8` -- round a scalar double per the immediate
@@ -2300,19 +2244,6 @@ pub(crate) fn emit_movzx_r_r8(code: &mut CodeBuf, dst: Reg, src: Reg) {
     super::table::encode_into(code, Mnem::Movzx, None, &[rw(dst, 8), rw(src, 1)]);
 }
 
-/// `MOV byte ptr [base + disp], r8` -- store the low byte of `src`.
-/// Encoding: `MOV r/m8, r8` = `88 /r`. REX is mandatory when storing
-/// from one of the upper or new low-byte registers.
-pub(crate) fn emit_mov_mem8_r(code: &mut CodeBuf, base: Reg, disp: i32, src: Reg) {
-    let at = code.len();
-    emit_byte(code, rex(false, src.high(), false, base.high()));
-    emit_byte(code, 0x88);
-    emit_modrm_mem(code, src, base, disp);
-    code.describe(at, || {
-        format!("movb {}, {}", t::gpr(src.0, 1), t::mem_at(base.0, disp))
-    });
-}
-
 // ---- Branches. All forms encode the displacement relative to the
 //      *byte after* the instruction. `JMP rel32` is 5 bytes; `Jcc
 //      rel32` is 6.
@@ -2499,20 +2430,6 @@ pub(crate) fn emit_jmp_qword_rip32(code: &mut CodeBuf, disp32: i32) {
     });
 }
 
-/// Byte length of [`emit_jmp_qword_rip32`]. Same encoding family
-/// as the indirect call, so the length is also 6.
-pub(crate) const JMP_QWORD_RIP32_LEN: usize = 6;
-
-/// `XOR eax, eax` -- 32-bit form, zero-extends to 64 (sets rax = 0).
-/// Used as the System V variadic-ABI "no XMM args" marker before
-/// printf-shape calls: AL must be 0 going in.
-pub(crate) fn emit_xor_eax_eax(code: &mut CodeBuf) {
-    let at = code.len();
-    emit_byte(code, 0x31);
-    emit_byte(code, 0xC0);
-    code.describe(at, || String::from("xorl %eax, %eax"));
-}
-
 // ------------------------------------------------------------------
 // ModR/M + SIB + displacement encoding for memory operands.
 //
@@ -2639,101 +2556,6 @@ pub(crate) fn emit_lea_r_sib(code: &mut CodeBuf, dst: Reg, base: Reg, index: Reg
     );
 }
 
-/// `MOV r32, [base + index * scale]` -- 32-bit zero-extending indexed
-/// load.
-pub(crate) fn emit_mov_r32_sib(code: &mut CodeBuf, dst: Reg, base: Reg, index: Reg, scale: u8) {
-    super::table::encode_into(
-        code,
-        Mnem::Mov,
-        Some(4),
-        &[rw(dst, 4), msib(base, index, scale, 4)],
-    );
-}
-
-/// `MOVSX r64, [base + index * scale]` (16-bit) -- 16-bit signed
-/// indexed load.
-pub(crate) fn emit_movsx_r_sib16(code: &mut CodeBuf, dst: Reg, base: Reg, index: Reg, scale: u8) {
-    super::table::encode_into(
-        code,
-        Mnem::Movsx,
-        None,
-        &[rw(dst, 8), msib(base, index, scale, 2)],
-    );
-}
-
-/// `MOVZX r64, [base + index * scale]` (16-bit) -- 16-bit unsigned
-/// indexed load.
-pub(crate) fn emit_movzx_r_sib16(code: &mut CodeBuf, dst: Reg, base: Reg, index: Reg, scale: u8) {
-    super::table::encode_into(
-        code,
-        Mnem::Movzx,
-        None,
-        &[rw(dst, 8), msib(base, index, scale, 2)],
-    );
-}
-
-/// `MOVSX r64, [base + index * scale]` (8-bit) -- 8-bit signed
-/// indexed load.
-pub(crate) fn emit_movsx_r_sib8(code: &mut CodeBuf, dst: Reg, base: Reg, index: Reg, scale: u8) {
-    super::table::encode_into(
-        code,
-        Mnem::Movsx,
-        None,
-        &[rw(dst, 8), msib(base, index, scale, 1)],
-    );
-}
-
-/// `MOVZX r64, [base + index * scale]` (8-bit) -- 8-bit unsigned
-/// indexed load.
-pub(crate) fn emit_movzx_r_sib8(code: &mut CodeBuf, dst: Reg, base: Reg, index: Reg, scale: u8) {
-    super::table::encode_into(
-        code,
-        Mnem::Movzx,
-        None,
-        &[rw(dst, 8), msib(base, index, scale, 1)],
-    );
-}
-
-/// `MOV [base + index * scale], r64` -- 64-bit indexed store.
-pub(crate) fn emit_mov_sib_r(code: &mut CodeBuf, base: Reg, index: Reg, scale: u8, src: Reg) {
-    super::table::encode_into(
-        code,
-        Mnem::Mov,
-        Some(8),
-        &[msib(base, index, scale, 8), rw(src, 8)],
-    );
-}
-
-/// `MOV [base + index * scale], r32` -- 32-bit indexed store.
-pub(crate) fn emit_mov_sib_r32(code: &mut CodeBuf, base: Reg, index: Reg, scale: u8, src: Reg) {
-    super::table::encode_into(
-        code,
-        Mnem::Mov,
-        Some(4),
-        &[msib(base, index, scale, 4), rw(src, 4)],
-    );
-}
-
-/// `MOV [base + index * scale], r16` -- 16-bit indexed store.
-pub(crate) fn emit_mov_sib_r16(code: &mut CodeBuf, base: Reg, index: Reg, scale: u8, src: Reg) {
-    super::table::encode_into(
-        code,
-        Mnem::Mov,
-        Some(2),
-        &[msib(base, index, scale, 2), rw(src, 2)],
-    );
-}
-
-/// `MOV [base + index * scale], r8` -- 8-bit indexed store (opcode 88).
-pub(crate) fn emit_mov_sib_r8(code: &mut CodeBuf, base: Reg, index: Reg, scale: u8, src: Reg) {
-    super::table::encode_into(
-        code,
-        Mnem::Mov,
-        Some(1),
-        &[msib(base, index, scale, 1), rw(src, 1)],
-    );
-}
-
 /// `FLD tbyte [base+disp]` (DB /5) -- push the x87 80-bit extended
 /// value onto the x87 register stack.
 pub(crate) fn emit_fld_m80(code: &mut CodeBuf, base: Reg, disp: i32) {
@@ -2828,14 +2650,13 @@ fn emit_modrm_mem(code: &mut Vec<u8>, reg: Reg, base: Reg, disp: i32) {
 // Branch fixups. Bytecode branches target absolute ent_pcs, but
 // the native PC of those targets isn't known until the whole function
 // body is laid out. Two-pass approach mirrors aarch64.rs: emit a
-// 5-byte (jmp / call) or 6-byte (jcc) placeholder, record (offset,
+// 5-byte (jmp / call) placeholder, record (offset,
 // target bc PC, kind), patch after the walk.
 // ------------------------------------------------------------------
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum BranchKind {
     Jmp,
-    Jcc(Cc),
     Call,
 }
 
@@ -2845,20 +2666,6 @@ pub(crate) struct Fixup {
     pub(crate) native_offset: usize,
     pub(crate) target_ent_pc: usize,
     pub(crate) kind: BranchKind,
-}
-
-/// Translate a c5 address-of-local offset (in 8-byte VM-slot
-/// units) into the matching native byte offset from rbp. Same
-/// convention as the aarch64 backend: locals (val < 2) keep
-/// `* 8`; args (val >= 2) switch to `* 16` because the
-/// accumulator push writes 16-byte slots so SP stays aligned at
-/// libc-call sites.
-fn lea_offset_bytes(offset: i64) -> i64 {
-    if offset >= 2 {
-        (offset - 1) * 16
-    } else {
-        offset * 8
-    }
 }
 
 // ------------------------------------------------------------------
@@ -3157,11 +2964,9 @@ fn apply_fixups(
         // The rel32 displacement is computed from the byte *after*
         // the placeholder. Layouts:
         //   JMP rel32:  E9 dd dd dd dd        (5 bytes, rel32 at +1)
-        //   Jcc rel32:  0F 8x dd dd dd dd     (6 bytes, rel32 at +2)
         //   CALL rel32: E8 dd dd dd dd        (5 bytes, rel32 at +1)
         let (placeholder_len, rel32_offset) = match f.kind {
             BranchKind::Jmp => (5usize, 1usize),
-            BranchKind::Jcc(_) => (6usize, 2usize),
             BranchKind::Call => (5usize, 1usize),
         };
         let after = (f.native_offset + placeholder_len) as i64;
@@ -3526,50 +3331,6 @@ mod tests {
         assert_eq!(
             assemble(|c| emit_mov_rr(c, Reg::RDI, Reg::RAX)),
             vec![0x48, 0x89, 0xC7]
-        );
-    }
-
-    /// The byte-wide base + index forms of the scale-1 indexed accesses:
-    /// low registers, a source that needs REX to name its low byte
-    /// (`sil`), the extended bank, and the bases that force a displacement
-    /// byte (`rbp` / `r13`) or take the SIB path (`rsp` / `r12`).
-    #[test]
-    fn byte_sib_forms() {
-        assert_eq!(
-            assemble(|c| emit_movsx_r_sib8(c, Reg::RAX, Reg::RDI, Reg::RSI, 1)),
-            vec![0x48, 0x0F, 0xBE, 0x04, 0x37]
-        );
-        assert_eq!(
-            assemble(|c| emit_movzx_r_sib8(c, Reg::RAX, Reg::RDI, Reg::RSI, 1)),
-            vec![0x48, 0x0F, 0xB6, 0x04, 0x37]
-        );
-        assert_eq!(
-            assemble(|c| emit_mov_sib_r8(c, Reg::RDI, Reg::RSI, 1, Reg::RAX)),
-            vec![0x88, 0x04, 0x37]
-        );
-        assert_eq!(
-            assemble(|c| emit_mov_sib_r8(c, Reg::RDI, Reg::RCX, 1, Reg::RSI)),
-            vec![0x40, 0x88, 0x34, 0x0F]
-        );
-        assert_eq!(
-            assemble(|c| emit_mov_sib_r8(c, Reg::R8, Reg::R9, 1, Reg::R10)),
-            vec![0x47, 0x88, 0x14, 0x08]
-        );
-        assert_eq!(
-            assemble(|c| emit_movsx_r_sib8(c, Reg::R11, Reg::R13, Reg::R12, 1)),
-            vec![0x4F, 0x0F, 0xBE, 0x5C, 0x25, 0x00]
-        );
-        assert_eq!(
-            assemble(|c| emit_movzx_r_sib8(c, Reg::RDX, Reg::RBP, Reg::RAX, 1)),
-            vec![0x48, 0x0F, 0xB6, 0x54, 0x05, 0x00]
-        );
-        assert_eq!(
-            assemble(|c| emit_mov_sib_r8(c, Reg::RSP, Reg::RBX, 1, Reg::RDX)),
-            vec![0x88, 0x14, 0x1C]
-        );
-        assert_eq!(
-            assemble(|c| emit_mov_sib_r8(c, Reg::R12, Reg::R13, 1, Reg::RCX)),
-            vec![0x43, 0x88, 0x0C, 0x2C]
         );
     }
 
@@ -4052,11 +3813,6 @@ mod tests {
     #[test]
     fn ret_is_c3() {
         assert_eq!(assemble(emit_ret), vec![0xC3]);
-    }
-
-    #[test]
-    fn syscall_is_0f_05() {
-        assert_eq!(assemble(emit_syscall), vec![0x0F, 0x05]);
     }
 
     #[test]

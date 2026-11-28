@@ -835,7 +835,6 @@ mod asm_noop_tests {
             clobber_regs: 0x8,
             clobber_fp_regs: 0,
             clobber_memory: true,
-            volatile: true,
         }
     }
 

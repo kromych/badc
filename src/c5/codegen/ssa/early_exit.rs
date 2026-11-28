@@ -15,8 +15,7 @@ use crate::c5::codegen::ArgPlacement;
 use crate::c5::codegen::passes::constfold::mirror;
 use crate::c5::codegen::passes::narrow::is_cmp32;
 use crate::c5::ir::{
-    Arm, BinOp, BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator, ValueId,
-    is_int_comparison_op,
+    Arm, BinOp, BlockId, FunctionSsa, Inst, LoadKind, Terminator, ValueId, is_int_comparison_op,
 };
 
 /// Expression nodes the test and the returned value may take together.
@@ -136,7 +135,6 @@ fn pure(inst: &Inst) -> bool {
         | Inst::Call { .. }
         | Inst::CallIndirect { .. }
         | Inst::CallExt { .. }
-        | Inst::TailExt(_)
         | Inst::Mzero { .. }
         | Inst::Mcpy { .. }
         | Inst::AtomicRmw { .. }
@@ -256,10 +254,9 @@ pub(crate) fn early_exit(func: &FunctionSsa, plan: &[ArgPlacement]) -> Option<Ea
     let Terminator::Return(r) = func.blocks[exit as usize].terminator else {
         return None;
     };
-    let ret = if r == NO_VALUE {
-        None
-    } else {
-        Some(simplify(cx.expr(r)?))
+    let ret = match r {
+        Some(r) => Some(simplify(cx.expr(r)?)),
+        None => None,
     };
     // A return riding the low word reads no sign extension above it.
     let ret = ret.map(|e| match e {

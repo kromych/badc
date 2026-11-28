@@ -33,7 +33,12 @@ Interestingness test (`scripts/csmith_fuzz.py --reduce-minutes N` writes it):
   and `=zero` (an unguarded reduction walks into uninitialized reads);
 - badc's output differs from the reference.
 
-Reduce with creduce (macOS, Homebrew) or cvise (the Linux x86_64 box). csmith's
+Reduce with creduce (macOS, Homebrew) or cvise (the Linux x86_64 box), or with
+`scripts/c_reduce.py` where neither runs: cvise 2.12.0 stops in its first pass under
+python3-pebble 5.2.1 on Python 3.15 (`'ChannelMutex' object has no attribute
+'writer_mutex'`). The harness falls back to `c_reduce.py` when the reducer it picked
+exits with an error. A case that needs csmith's headers reduces further once badc has
+preprocessed it (`badc -E`); gcc's preprocessed glibc declares `_Float128`. csmith's
 headers: Homebrew's `include/csmith-2.3.0` on the Mac, a copy outside `/usr/include`
 on Linux, since the devel package's `windows/stdint.h` must not shadow the system's.
 The harness keys a runtime verdict by (verdict, configuration, architecture) only,

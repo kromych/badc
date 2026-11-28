@@ -2216,8 +2216,7 @@ mod tests {
             blocks: vec![Block {
                 start_pc: 0,
                 inst_range: 0..3,
-                terminator: Terminator::Return(1),
-                exit_acc: 1,
+                terminator: Terminator::Return(Some(1)),
             }],
             ..FunctionSsa::default()
         };
@@ -2259,8 +2258,7 @@ mod tests {
             blocks: vec![Block {
                 start_pc: 0,
                 inst_range: 0..n as u32,
-                terminator: Terminator::Return(crate::c5::ir::NO_VALUE),
-                exit_acc: 0,
+                terminator: Terminator::Return(None),
             }],
             ..FunctionSsa::default()
         }
@@ -2366,7 +2364,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: range,
                 terminator: t,
-                exit_acc: 0,
             };
             FunctionSsa {
                 inst_src: vec![crate::c5::ir::InstSrc::default(); n as usize],
@@ -2381,8 +2378,8 @@ mod tests {
                             fall_through: 1,
                         },
                     ),
-                    block(3..3, Terminator::Return(crate::c5::ir::NO_VALUE)),
-                    block(3..n, Terminator::Return(n - 1)),
+                    block(3..3, Terminator::Return(None)),
+                    block(3..n, Terminator::Return(Some(n - 1))),
                 ],
                 ..FunctionSsa::default()
             }
@@ -2518,7 +2515,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator: t,
-            exit_acc: 0,
         };
         let mut f = FunctionSsa {
             inst_src: vec![crate::c5::ir::InstSrc::default(); n as usize],
@@ -2533,8 +2529,8 @@ mod tests {
                         fall_through: 1,
                     },
                 ),
-                block(4..4, Terminator::Return(crate::c5::ir::NO_VALUE)),
-                block(4..n, Terminator::Return(n - 1)),
+                block(4..4, Terminator::Return(None)),
+                block(4..n, Terminator::Return(Some(n - 1))),
             ],
             ..FunctionSsa::default()
         };
@@ -2599,7 +2595,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator: t,
-            exit_acc: 0,
         };
         let mut f = FunctionSsa {
             inst_src: vec![crate::c5::ir::InstSrc::default(); 5],
@@ -2617,7 +2612,7 @@ mod tests {
                 ),
                 block(3..4, Terminator::Jmp(3)),
                 block(4..5, Terminator::Jmp(1)),
-                block(5..5, Terminator::Return(crate::c5::ir::NO_VALUE)),
+                block(5..5, Terminator::Return(None)),
             ],
             ..FunctionSsa::default()
         };
@@ -2666,7 +2661,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator: t,
-            exit_acc: 0,
         };
         let mut f = FunctionSsa {
             inst_src: vec![crate::c5::ir::InstSrc::default(); 5],
@@ -2716,7 +2710,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator: Terminator::Jmp(1),
-            exit_acc: 0,
         };
         let f = FunctionSsa {
             inst_src: vec![crate::c5::ir::InstSrc::default(); 4],
@@ -2777,7 +2770,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator: Terminator::Jmp(1),
-            exit_acc: 0,
         };
         let f = FunctionSsa {
             n_params: 1,
@@ -2832,7 +2824,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator: t,
-            exit_acc: 0,
         };
         let mut f = FunctionSsa {
             n_params: 1,
@@ -2848,8 +2839,8 @@ mod tests {
                         fall_through: 1,
                     },
                 ),
-                block(2..6, Terminator::Return(2)),
-                block(6..7, Terminator::Return(6)),
+                block(2..6, Terminator::Return(Some(2))),
+                block(6..7, Terminator::Return(Some(6))),
             ],
             ..FunctionSsa::default()
         };
@@ -2995,7 +2986,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: crate::c5::ir::NO_VALUE,
         };
         let mut cmp32 = vec![false; insts.len()];
         cmp32[4] = raw;
@@ -3017,7 +3007,7 @@ mod tests {
                     },
                 ),
                 block(5..7, Terminator::Jmp(1)),
-                block(7..7, Terminator::Return(crate::c5::ir::NO_VALUE)),
+                block(7..7, Terminator::Return(None)),
             ],
             ..FunctionSsa::default()
         }
@@ -3155,7 +3145,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: crate::c5::ir::NO_VALUE,
         };
         let f = FunctionSsa {
             n_params: 2,
@@ -3172,7 +3161,7 @@ mod tests {
                     },
                 ),
                 block(3..5, Terminator::Jmp(2)),
-                block(5..6, Terminator::Return(crate::c5::ir::NO_VALUE)),
+                block(5..6, Terminator::Return(None)),
             ],
             ..FunctionSsa::default()
         };
@@ -3226,7 +3215,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: range,
                 terminator,
-                exit_acc: crate::c5::ir::NO_VALUE,
             };
             let branch = |cond, target, fall_through| Terminator::Bnz {
                 cond,
@@ -3243,7 +3231,7 @@ mod tests {
                     block(3..6, branch(5, 2, 4)),
                     block(6..7, branch(1, 1, 3)),
                     block(7..8, Terminator::Jmp(1)),
-                    block(8..8, Terminator::Return(crate::c5::ir::NO_VALUE)),
+                    block(8..8, Terminator::Return(None)),
                 ],
                 ..FunctionSsa::default()
             }
@@ -3491,7 +3479,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: range,
                 terminator: t,
-                exit_acc: 0,
             };
             FunctionSsa {
                 n_params: 1,
@@ -3507,8 +3494,8 @@ mod tests {
                             fall_through: 2,
                         },
                     ),
-                    block(4..5, Terminator::Return(4)),
-                    block(4..4, Terminator::Return(crate::c5::ir::NO_VALUE)),
+                    block(4..5, Terminator::Return(Some(4))),
+                    block(4..4, Terminator::Return(None)),
                 ],
                 ..FunctionSsa::default()
             }
@@ -3558,7 +3545,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator: t,
-            exit_acc: 0,
         };
         let mut f = FunctionSsa {
             n_params: 1,
@@ -3574,8 +3560,8 @@ mod tests {
                         fall_through: 2,
                     },
                 ),
-                block(2..2, Terminator::Return(crate::c5::ir::NO_VALUE)),
-                block(2..3, Terminator::Return(2)),
+                block(2..2, Terminator::Return(None)),
+                block(2..3, Terminator::Return(Some(2))),
             ],
             ..FunctionSsa::default()
         };
@@ -3663,7 +3649,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: crate::c5::ir::NO_VALUE,
         };
         let mut f = fresh(insts, 1);
         f.blocks = vec![
@@ -3675,7 +3660,7 @@ mod tests {
                     fall_through: 2,
                 },
             ),
-            block(2..3, Terminator::Return(2)),
+            block(2..3, Terminator::Return(Some(2))),
             block(
                 3..3,
                 Terminator::Bz {
@@ -3684,7 +3669,7 @@ mod tests {
                     fall_through: 3,
                 },
             ),
-            block(3..3, Terminator::Return(crate::c5::ir::NO_VALUE)),
+            block(3..3, Terminator::Return(None)),
         ];
         assert!(Ranges::compute(&f, &[]).at(0, 0).is_universe());
         // b2 is entered with `v1 == 0`, so its branch folds; b0's stays.
@@ -3737,7 +3722,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: crate::c5::ir::NO_VALUE,
         };
         let branch = |cond, target, fall_through| Terminator::Bnz {
             cond,
@@ -3748,8 +3732,8 @@ mod tests {
         f.blocks = vec![
             block(0..1, Terminator::Jmp(1)),
             block(2..4, branch(3, 2, 4)),
-            block(6..6, Terminator::Return(crate::c5::ir::NO_VALUE)),
-            block(1..2, Terminator::Return(1)),
+            block(6..6, Terminator::Return(None)),
+            block(1..2, Terminator::Return(Some(1))),
             block(4..5, branch(4, 2, 5)),
             block(5..6, branch(5, 3, 2)),
         ];
@@ -3859,7 +3843,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator: Terminator::Jmp(1),
-            exit_acc: 0,
         };
         let mut f = fresh(insts, 1);
         f.blocks = vec![block(0..2), block(2..7)];

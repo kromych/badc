@@ -218,7 +218,7 @@ where
 /// The value block 0 returns.
 fn returned(func: &FunctionSsa) -> ValueId {
     match func.blocks[0].terminator {
-        crate::c5::ir::Terminator::Return(v) => v,
+        crate::c5::ir::Terminator::Return(Some(v)) => v,
         ref t => panic!("{t:?}"),
     }
 }

@@ -631,10 +631,7 @@ fn arm_exits(
     let preheaders: BTreeSet<BlockId> = shapes.iter().map(|s| s.preheader).collect();
     let mut exits: Vec<(u32, BlockId, BlockId, Option<Reload>)> = Vec::new();
     for (b, block) in func.blocks.iter().enumerate() {
-        let jumps = matches!(
-            block.terminator,
-            Terminator::Jmp(_) | Terminator::FallThrough(_)
-        );
+        let jumps = matches!(block.terminator, Terminator::Jmp(_));
         let end = (jumps && succs[b].len() == 1 && !preheaders.contains(&(b as BlockId)))
             .then_some(Reload::End(b as BlockId));
         for &s in &succs[b] {
@@ -694,7 +691,6 @@ fn node_rows(out: &mut Regions<'_>, func: &FunctionSsa, node_of: &[ValueId]) {
             }
         }
         block.terminator.for_each_operand(|v| read(v, b));
-        read(block.exit_acc, b);
     }
     for (v, &b) in out.block_of.iter().enumerate() {
         if b == BlockId::MAX {
@@ -753,7 +749,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 
@@ -785,7 +780,7 @@ mod tests {
                 ),
                 block(2..5, Terminator::Jmp(3)),
                 block(5..6, Terminator::Jmp(3)),
-                block(6..7, Terminator::Return(NO_VALUE)),
+                block(6..7, Terminator::Return(None)),
             ],
             ..Default::default()
         }

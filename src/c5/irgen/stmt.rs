@@ -239,7 +239,6 @@ impl<'a> Walker<'a> {
                 let blk = self.switch_dispatch.last().and_then(|d| d.default);
                 self.walk_case_marker(b, blk, body_id)
             }
-            Stmt::Asm { .. } => Err(WalkError::InvalidStmt { id, kind: "Asm" }),
             Stmt::Decl(d) => {
                 let decl_id = *d;
                 self.walk_decl(b, decl_id)?;
@@ -473,10 +472,8 @@ impl<'a> Walker<'a> {
             }
             Stmt::Compound(items) => {
                 let items = items.clone();
-                for item in items {
-                    if let BlockItem::Stmt(s) = item {
-                        self.collect_switch_cases(b, s, cases, ranges, default_blk);
-                    }
+                for s in items {
+                    self.collect_switch_cases(b, s, cases, ranges, default_blk);
                 }
             }
             Stmt::If { then_s, else_s, .. } => {
@@ -514,14 +511,14 @@ impl<'a> Walker<'a> {
         value_item: u32,
     ) -> Result<ValueId, WalkError> {
         let depth = self.scopes.len();
-        let items: alloc::vec::Vec<BlockItem> = match self.ast.stmt(block) {
+        let items: alloc::vec::Vec<StmtId> = match self.ast.stmt(block) {
             Stmt::Compound(items) => {
                 if let Some(scope) = self.block_scope(block, items) {
                     self.scopes.push(scope);
                 }
                 items.clone()
             }
-            _ => alloc::vec![BlockItem::Stmt(block)],
+            _ => alloc::vec![block],
         };
         let value = self.walk_stmt_expr_items(b, items, value_item);
         self.scopes.truncate(depth);
@@ -531,7 +528,7 @@ impl<'a> Walker<'a> {
     fn walk_stmt_expr_items(
         &mut self,
         b: &mut SsaBuilder,
-        items: alloc::vec::Vec<BlockItem>,
+        items: alloc::vec::Vec<StmtId>,
         value_item: u32,
     ) -> Result<ValueId, WalkError> {
         let mut result: Option<ValueId> = None;
@@ -540,38 +537,32 @@ impl<'a> Walker<'a> {
                 let dead = b.new_block();
                 b.switch_to(dead);
             }
-            match item {
-                BlockItem::Stmt(mut s) => {
-                    // The scope-exit statements after it are walked for
-                    // effect only, which is C's scope-exit order.
-                    let carries_value = i as u32 == value_item;
-                    if carries_value {
-                        while let Stmt::Labeled { label, body } = self.ast.stmt(s) {
-                            let (label, body) = (*label, *body);
-                            let label_blk = self.block_for_label(b, label);
-                            if b.is_block_open() {
-                                b.jmp(label_blk);
-                            }
-                            b.switch_to(label_blk);
-                            s = body;
-                        }
+            let mut s = item;
+            // The scope-exit statements after it are walked for
+            // effect only, which is C's scope-exit order.
+            let carries_value = i as u32 == value_item;
+            if carries_value {
+                while let Stmt::Labeled { label, body } = self.ast.stmt(s) {
+                    let (label, body) = (*label, *body);
+                    let label_blk = self.block_for_label(b, label);
+                    if b.is_block_open() {
+                        b.jmp(label_blk);
                     }
-                    if let Stmt::Expr(e) = self.ast.stmt(s) {
-                        let e = *e;
-                        let v = self.walk_expr_rvalue(b, e)?;
-                        if carries_value {
-                            // A value the item left in a closed block
-                            // (a noreturn call) is unreachable; the
-                            // placeholder below stands for it.
-                            result = b.is_block_open().then_some(v);
-                        }
-                    } else {
-                        let _ = self.walk_stmt(b, s)?;
-                    }
+                    b.switch_to(label_blk);
+                    s = body;
                 }
-                BlockItem::Decl(d) => {
-                    self.walk_decl(b, d)?;
+            }
+            if let Stmt::Expr(e) = self.ast.stmt(s) {
+                let e = *e;
+                let v = self.walk_expr_rvalue(b, e)?;
+                if carries_value {
+                    // A value the item left in a closed block
+                    // (a noreturn call) is unreachable; the
+                    // placeholder below stands for it.
+                    result = b.is_block_open().then_some(v);
                 }
+            } else {
+                let _ = self.walk_stmt(b, s)?;
             }
         }
         // A final statement that transfers control out of the
@@ -606,10 +597,9 @@ impl<'a> Walker<'a> {
             Stmt::Case { body, .. } | Stmt::Default { body } => {
                 !cases_owned || self.stmt_defines_external_label(*body, cases_owned)
             }
-            Stmt::Compound(items) => items.iter().any(|it| match it {
-                BlockItem::Stmt(s) => self.stmt_defines_external_label(*s, cases_owned),
-                BlockItem::Decl(_) => false,
-            }),
+            Stmt::Compound(items) => items
+                .iter()
+                .any(|s| self.stmt_defines_external_label(*s, cases_owned)),
             Stmt::If { then_s, else_s, .. } => {
                 self.stmt_defines_external_label(*then_s, cases_owned)
                     || else_s.is_some_and(|e| self.stmt_defines_external_label(e, cases_owned))
@@ -623,11 +613,14 @@ impl<'a> Walker<'a> {
     }
 
     /// Close the block with a return that names no operand: no value in a
-    /// `void` function (C99 6.8.6.4p1), 0 in `main` (C99 5.1.2.2.3) and in a
-    /// value-returning function, whose value C99 6.9.1p12 leaves undefined.
+    /// `void` function (C99 6.8.6.4p1) and in one returning an aggregate,
+    /// whose operand is the address of the returned object and there is
+    /// none; 0 in `main` (C99 5.1.2.2.3) and in any other value-returning
+    /// function, whose value C99 6.9.1p12 leaves undefined.
     pub(super) fn return_without_value(&self, b: &mut SsaBuilder) {
-        if self.returns_no_value {
-            self.return_value(b, NO_VALUE);
+        if self.returns_no_value || self.ret_in_regs || self.ret_indirect {
+            self.leave_scopes(b, 0, true);
+            b.return_none();
         } else {
             let zero = b.imm(0);
             self.return_value(b, zero);
@@ -727,10 +720,8 @@ impl<'a> Walker<'a> {
     }
 
     /// The scope block `id` opens, when its last item is a `Stmt::ScopeEnd`.
-    fn block_scope(&self, id: StmtId, items: &'a [BlockItem]) -> Option<OpenScope<'a>> {
-        let Some(BlockItem::Stmt(last)) = items.last() else {
-            return None;
-        };
+    fn block_scope(&self, id: StmtId, items: &'a [StmtId]) -> Option<OpenScope<'a>> {
+        let last = items.last()?;
         match self.ast.stmt(*last) {
             Stmt::ScopeEnd(slots) => Some(OpenScope {
                 id,
@@ -776,13 +767,11 @@ impl<'a> Walker<'a> {
                 if self.block_scope(id, items).is_some() {
                     chain.push(id);
                 }
-                for item in items {
-                    if let BlockItem::Stmt(s) = item {
-                        if matches!(self.ast.stmt(*s), Stmt::VlaScopeEnter { .. }) {
-                            chain.push(*s);
-                        }
-                        self.collect_label_scopes(*s, chain, out);
+                for s in items {
+                    if matches!(self.ast.stmt(*s), Stmt::VlaScopeEnter { .. }) {
+                        chain.push(*s);
                     }
+                    self.collect_label_scopes(*s, chain, out);
                 }
                 chain.truncate(depth);
             }
@@ -945,40 +934,25 @@ impl<'a> Walker<'a> {
     pub(super) fn walk_compound(
         &mut self,
         b: &mut SsaBuilder,
-        items: &'a [BlockItem],
+        items: &'a [StmtId],
     ) -> Result<bool, WalkError> {
-        for item in items {
-            match item {
-                BlockItem::Stmt(s) => {
-                    // A previous item closed the block. A `Stmt::Labeled`
-                    // resumes at its own label block, so an earlier
-                    // `goto label`, `case` or `default` lands somewhere
-                    // walkable; other dead code walks into a fresh
-                    // synthetic block the prune removes later.
-                    if !b.is_block_open()
-                        && !matches!(
-                            self.ast.stmt(*s),
-                            Stmt::Labeled { .. } | Stmt::Case { .. } | Stmt::Default { .. },
-                        )
-                    {
-                        let dead = b.new_block();
-                        b.switch_to(dead);
-                    }
-                    if self.walk_stmt(b, *s)? {
-                        continue;
-                    }
-                }
-                BlockItem::Decl(d) => {
-                    // A declaration in a dead region still walks, so the
-                    // local-slot bookkeeping mirrors what the parser
-                    // stamped.
-                    if !b.is_block_open() {
-                        let dead = b.new_block();
-                        b.switch_to(dead);
-                    }
-                    let d = *d;
-                    self.walk_decl(b, d)?;
-                }
+        for s in items {
+            // A previous item closed the block. A `Stmt::Labeled`
+            // resumes at its own label block, so an earlier
+            // `goto label`, `case` or `default` lands somewhere
+            // walkable; other dead code walks into a fresh
+            // synthetic block the prune removes later.
+            if !b.is_block_open()
+                && !matches!(
+                    self.ast.stmt(*s),
+                    Stmt::Labeled { .. } | Stmt::Case { .. } | Stmt::Default { .. },
+                )
+            {
+                let dead = b.new_block();
+                b.switch_to(dead);
+            }
+            if self.walk_stmt(b, *s)? {
+                continue;
             }
         }
         Ok(!b.is_block_open())
@@ -1121,21 +1095,15 @@ impl<'a> Walker<'a> {
     pub(super) fn walk_for(
         &mut self,
         b: &mut SsaBuilder,
-        init: Option<BlockItem>,
+        init: Option<StmtId>,
         cond: Option<ExprId>,
         post: Option<ExprId>,
         body: StmtId,
     ) -> Result<bool, WalkError> {
         // C99 6.8.5.3: for-init is an expression or a declaration, and
         // runs once before the cond / body / post loop.
-        match init {
-            Some(BlockItem::Stmt(s)) => {
-                let _ = self.walk_stmt(b, s)?;
-            }
-            Some(BlockItem::Decl(d)) => {
-                self.walk_decl(b, d)?;
-            }
-            None => {}
+        if let Some(s) = init {
+            let _ = self.walk_stmt(b, s)?;
         }
         let header = b.new_block();
         let post_blk = b.new_block();

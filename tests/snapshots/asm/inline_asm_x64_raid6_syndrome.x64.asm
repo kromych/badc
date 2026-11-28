@@ -777,12 +777,12 @@ Disassembly of section .text:
                	sfence
                	vzeroupper
                	leaq	<rip>, %rax # <addr>
-               	leaq	0x400(%rax), %rsi
-               	leaq	<rip>, %rdi # <addr>
+               	leaq	0x400(%rax), %rcx
+               	leaq	<rip>, %rdx # <addr>
                	xorl	%eax, %eax
-               	movzbq	(%rsi,%rax), %rcx
-               	movzbq	(%rdi,%rax), %rdx
-               	cmpl	%edx, %ecx
+               	movzbq	(%rcx,%rax), %rsi
+               	movzbq	(%rdx,%rax), %rdi
+               	cmpl	%edi, %esi
                	jne	<addr>
                	incq	%rax
                	cmpl	$0x100, %eax            # imm = 0x100

@@ -31,9 +31,7 @@ Disassembly of section .text:
                	je	<addr>
                	movl	$0x9, %eax
                	retq
-               	shlq	$0x3, %rsi
-               	leaq	(%rdi,%rsi), %rax
-               	movq	(%rax), %rax
+               	movq	(%rdi,%rsi,8), %rax
                	jmp	<addr>
 
 <pick_ptr>:
@@ -66,10 +64,7 @@ Disassembly of section .text:
                	nopl	(%rax,%rax)
                	testb	$0x1, %al
                	jne	<addr>
-               	movq	%rax, %rcx
-               	shlq	$0x3, %rcx
-               	addq	%rdi, %rcx
-               	movq	(%rcx), %rcx
+               	movq	(%rdi,%rax,8), %rcx
                	jmp	<addr>
                	movq	%rdx, %rax
                	retq

@@ -29,9 +29,6 @@
 //! comparison, a runtime index, a terminator operand, an atomic or
 //! segment-relative access -- can reach the object through a pointer
 //! this pass does not track, and declines it.
-//! `Block::exit_acc` is not such a use: it names the block's last
-//! defined value for liveness, and every rewrite here leaves that id
-//! defining something.
 //!
 //! A copy out of a split object stores each field in its span, bytes a block
 //! write defined included, through its destination, or into the field's slot
@@ -77,7 +74,7 @@ use alloc::vec::Vec;
 
 use crate::c5::codegen::ssa::reg_alloc::for_each_operand;
 use crate::c5::codegen::ssa::tape::{self, At, Insertion};
-use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId};
+use crate::c5::ir::{BinOp, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, ValueId};
 
 /// Byte ranges, relative to the object a pointer parameter points at,
 /// that a body reads and writes through it. A parameter absent from
@@ -159,7 +156,6 @@ pub(crate) fn param_footprints(funcs: &[FunctionSsa]) -> FootprintMap {
         for block in &func.blocks {
             let mut term = block.terminator;
             term.for_each_operand_mut(|v| mark(*v, &mut used));
-            mark(block.exit_acc, &mut used);
         }
         for (i, inst) in func.insts.iter().enumerate() {
             let cell = match inst {
@@ -757,7 +753,7 @@ fn split_objects(
             .map(|(b, _)| b)
             .filter(|b| cells_of.contains_key(b))
     };
-    // Values an operand or a terminator reads; `Block::exit_acc` is no reader.
+    // Values an operand or a terminator reads.
     let mut consumed: Vec<bool> = alloc::vec![false; n];
     for inst in &func.insts {
         for_each_operand(inst, |v| {
@@ -992,17 +988,9 @@ fn split_objects(
             }
         }
     }
-    // A base address reaching a terminator or block accumulator escapes.
+    // A base address reaching a terminator escapes.
     for block in &func.blocks {
-        let v = match &block.terminator {
-            Terminator::Return(v)
-            | Terminator::Bz { cond: v, .. }
-            | Terminator::Bnz { cond: v, .. }
-            | Terminator::GotoIndirect { target: v }
-            | Terminator::JumpTable { idx: v, .. } => *v,
-            _ => NO_VALUE,
-        };
-        if let Some(base) = base_of(v) {
+        if let Some(base) = block.terminator.operand().and_then(&base_of) {
             declined.insert(base);
         }
     }
@@ -1935,7 +1923,6 @@ fn expand_writes(func: &mut FunctionSsa, splits: &BTreeMap<u32, Expansion>) {
         func.blocks[bi].inst_range = start..new_insts.len() as u32;
     }
     for block in func.blocks.iter_mut() {
-        block.exit_acc = remap(block.exit_acc);
         block.terminator.for_each_operand_mut(|v| *v = remap(*v));
     }
     // The per-site cross-TU relocation tables key on the value id of the
@@ -2160,7 +2147,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..n,
                 terminator: term,
-                exit_acc: NO_VALUE,
             }],
             multi_cell_slots: multi_cell,
             locals: 4,
@@ -2197,7 +2183,7 @@ mod tests {
             ret_agg: None,
             ret_slot_local: 0,
         });
-        let mut f = func(insts, Terminator::Return(NO_VALUE), alloc::vec![(-2, 2)]);
+        let mut f = func(insts, Terminator::Return(None), alloc::vec![(-2, 2)]);
         f.agg_descs = alloc::vec![crate::c5::ir::AggDesc {
             size: 16,
             align: 8,
@@ -2273,7 +2259,7 @@ mod tests {
                 rhs: 11,
             }, // v12 a[0] + a[1]
         ];
-        func(insts, Terminator::Return(12), alloc::vec![(-2, 2)])
+        func(insts, Terminator::Return(Some(12)), alloc::vec![(-2, 2)])
     }
 
     #[test]
@@ -2376,7 +2362,7 @@ mod tests {
         }); //                                v18
         let mut f = func(
             insts,
-            Terminator::Return(k + 5),
+            Terminator::Return(Some(k + 5)),
             alloc::vec![(-2, 2), (-3, 1)],
         );
         let split = split_objects(&mut f, 2);
@@ -2452,7 +2438,7 @@ mod tests {
         }); //                               k+7
         let mut f = func(
             insts,
-            Terminator::Return(k + 7),
+            Terminator::Return(Some(k + 7)),
             alloc::vec![(-2, 2), (-3, 1)],
         );
         let promoted = run(&mut f, 64);
@@ -2484,7 +2470,7 @@ mod tests {
                 rhs: 4,
             }, // v6
         ];
-        let mut f = func(insts, Terminator::Return(6), alloc::vec![(-2, 1)]);
+        let mut f = func(insts, Terminator::Return(Some(6)), alloc::vec![(-2, 1)]);
         let promoted = run(&mut f, 64);
         assert!(promoted.is_empty(), "the object keeps its storage");
         assert!(
@@ -2513,7 +2499,7 @@ mod tests {
                 rhs: 4,
             }, // v6
         ];
-        let mut f = func(insts, Terminator::Return(6), alloc::vec![(-2, 1)]);
+        let mut f = func(insts, Terminator::Return(Some(6)), alloc::vec![(-2, 1)]);
         assert_eq!(run(&mut f, 64), alloc::vec![-2]);
         assert!(
             matches!(f.insts[2], Inst::Undef)
@@ -2548,7 +2534,7 @@ mod tests {
                 rhs: 7,
             }, // v10
         ];
-        let mut f = func(insts, Terminator::Return(10), alloc::vec![(-2, 2)]);
+        let mut f = func(insts, Terminator::Return(Some(10)), alloc::vec![(-2, 2)]);
         let promoted = run(&mut f, 64);
         assert!(promoted.is_empty(), "one field stays in the frame");
         assert!(
@@ -2569,7 +2555,7 @@ mod tests {
             Inst::Imm(3),             // v2
             store32(0, 0, 2),         // v3
         ];
-        let mut f = func(insts, Terminator::Return(1), alloc::vec![(-2, 1)]);
+        let mut f = func(insts, Terminator::Return(Some(1)), alloc::vec![(-2, 1)]);
         let promoted = run(&mut f, 64);
         assert!(promoted.is_empty(), "nothing is lifted");
         assert!(
@@ -2593,22 +2579,6 @@ mod tests {
         );
     }
 
-    /// `Block::exit_acc` naming an address into the object is a liveness
-    /// pin, not a use of the address, so it must not decline the split;
-    /// the neutralized expression still defines a value there.
-    #[test]
-    fn base_address_as_exit_acc_still_splits() {
-        let mut f = two_elem_array();
-        f.blocks[0].exit_acc = 9; // LocalAddr(-2)
-        let split = split_objects(&mut f, 64);
-        assert_eq!(split.len(), 1);
-        assert_eq!(
-            (split[0].base, split[0].slots.clone()),
-            (-2, alloc::vec![-2, -1])
-        );
-        assert!(matches!(f.insts[9], Inst::Imm(0)));
-    }
-
     #[test]
     fn runtime_index_object_not_split() {
         // a[0]=v0 (constant), then a load at a runtime offset.
@@ -2628,7 +2598,7 @@ mod tests {
             }, // v5 &a[k] (runtime)
             load(5),             // v6
         ];
-        let mut f = func(insts, Terminator::Return(6), alloc::vec![(-2, 2)]);
+        let mut f = func(insts, Terminator::Return(Some(6)), alloc::vec![(-2, 2)]);
         let before = alloc::format!("{:?}", f.insts);
         let split = split_objects(&mut f, 64);
         assert!(split.is_empty(), "runtime-index object must not split");
@@ -2645,7 +2615,7 @@ mod tests {
             store(1, 0),         // v2 a[0]=5
             Inst::LocalAddr(-2), // v3 escapes below
         ];
-        let mut f = func(insts, Terminator::Return(3), alloc::vec![(-2, 2)]);
+        let mut f = func(insts, Terminator::Return(Some(3)), alloc::vec![(-2, 2)]);
         let before = alloc::format!("{:?}", f.insts);
         let split = split_objects(&mut f, 64);
         assert!(split.is_empty(), "escaped-address object must not split");
@@ -2665,7 +2635,7 @@ mod tests {
                 volatile: false,
             },
         ];
-        let mut f = func(insts, Terminator::Return(1), alloc::vec![]);
+        let mut f = func(insts, Terminator::Return(Some(1)), alloc::vec![]);
         let before = alloc::format!("{:?}", f.insts);
         let promoted = run(&mut f, 64);
         assert!(promoted.is_empty());
@@ -2699,7 +2669,7 @@ mod tests {
                 pc_rel: false
             }, // v4 s.state
         ];
-        let mut f = func(insts, Terminator::Return(4), alloc::vec![(-4, 4)]);
+        let mut f = func(insts, Terminator::Return(Some(4)), alloc::vec![(-4, 4)]);
         let split = split_objects(&mut f, 64);
         assert_eq!(split.len(), 1, "the struct splits");
         // Offset 0 is a lone 8-aligned field, so it reuses cell 0.
@@ -2774,7 +2744,7 @@ mod tests {
                 rhs: 9,
             }, // v10
         ];
-        let mut f = func(insts, Terminator::Return(10), alloc::vec![(-2, 1)]);
+        let mut f = func(insts, Terminator::Return(Some(10)), alloc::vec![(-2, 1)]);
         let promoted = run(&mut f, 64);
         assert_eq!(promoted, alloc::vec![-2], "the one-cell base promotes");
         assert!(
@@ -2835,7 +2805,7 @@ mod tests {
                 pc_rel: false
             }, // v6
         ];
-        let mut f = func(insts, Terminator::Return(6), alloc::vec![(-2, 1)]);
+        let mut f = func(insts, Terminator::Return(Some(6)), alloc::vec![(-2, 1)]);
         let split = split_objects(&mut f, 64);
         assert_eq!(split.len(), 1);
         let slots = &split[0].slots;
@@ -2867,10 +2837,10 @@ mod tests {
                 pc_rel: false
             }, // v4 4-byte load at 0
         ];
-        let mut f = func(insts, Terminator::Return(4), alloc::vec![(-2, 1)]);
+        let mut f = func(insts, Terminator::Return(Some(4)), alloc::vec![(-2, 1)]);
         let split = split_objects(&mut f, 64);
         assert_eq!(split.len(), 1, "{:?}", f.insts);
-        let Terminator::Return(r) = f.blocks[0].terminator else {
+        let Terminator::Return(Some(r)) = f.blocks[0].terminator else {
             panic!("{:?}", f.insts)
         };
         let Inst::Extend {
@@ -2915,7 +2885,7 @@ mod tests {
                 pc_rel: false
             }, // v4 4-byte load at 6
         ];
-        let mut f = func(insts, Terminator::Return(4), alloc::vec![(-2, 2)]);
+        let mut f = func(insts, Terminator::Return(Some(4)), alloc::vec![(-2, 2)]);
         let before = alloc::format!("{:?}", f.insts);
         let split = split_objects(&mut f, 64);
         assert!(split.is_empty(), "overlapping widths must not split");
@@ -2955,7 +2925,7 @@ mod tests {
                 rhs: 5,
             }, // v6
         ];
-        let mut f = func(insts, Terminator::Return(6), alloc::vec![(-2, 1)]);
+        let mut f = func(insts, Terminator::Return(Some(6)), alloc::vec![(-2, 1)]);
         let split = split_objects(&mut f, 64);
         assert_eq!(split.len(), 1, "the fill must not block the split");
         // The fill became one immediate + store per field, little-endian:
@@ -2990,7 +2960,7 @@ mod tests {
             Inst::LocalAddr(-2), // v3
             load(3),             // v4 8-byte load at 0
         ];
-        let mut f = func(insts, Terminator::Return(4), alloc::vec![(-2, 1)]);
+        let mut f = func(insts, Terminator::Return(Some(4)), alloc::vec![(-2, 1)]);
         let split = split_objects(&mut f, 64);
         assert_eq!(split.len(), 1);
         assert!(
@@ -3031,7 +3001,7 @@ mod tests {
                 pc_rel: false
             }, // v4
         ];
-        let mut f = func(insts, Terminator::Return(4), alloc::vec![(-2, 2)]);
+        let mut f = func(insts, Terminator::Return(Some(4)), alloc::vec![(-2, 2)]);
         let split = split_objects(&mut f, 64);
         assert_eq!(split.len(), 1, "the initialized object splits");
         // The Mcpy became one load/store pair for the single live field.
@@ -3083,7 +3053,11 @@ mod tests {
                 pc_rel: false
             }, // v4
         ];
-        let mut f = func(insts, Terminator::Return(4), alloc::vec![(-1126, 1126)]);
+        let mut f = func(
+            insts,
+            Terminator::Return(Some(4)),
+            alloc::vec![(-1126, 1126)],
+        );
         f.locals = 1126;
         let split = split_objects(&mut f, 64);
         assert_eq!(split.len(), 1, "the object splits");
@@ -3130,7 +3104,7 @@ mod tests {
                 align: 1
             }, // v4
         ];
-        let mut f = func(insts, Terminator::Return(3), alloc::vec![(-601, 601)]);
+        let mut f = func(insts, Terminator::Return(Some(3)), alloc::vec![(-601, 601)]);
         f.locals = 601;
         let split = split_objects(&mut f, 1024);
         assert_eq!(split.len(), 1, "the object splits");
@@ -3174,7 +3148,7 @@ mod tests {
             Inst::LocalAddr(-2), // v3
             load(3),             // v4
         ];
-        let mut f = func(insts, Terminator::Return(4), alloc::vec![(-2, 2)]);
+        let mut f = func(insts, Terminator::Return(Some(4)), alloc::vec![(-2, 2)]);
         let split = split_objects(&mut f, 64);
         assert_eq!(split.len(), 1, "the object splits");
         assert!(
@@ -3221,7 +3195,7 @@ mod tests {
                 align: 8
             }, // v4
         ];
-        let mut f = func(insts, Terminator::Return(3), alloc::vec![(-2, 2)]);
+        let mut f = func(insts, Terminator::Return(Some(3)), alloc::vec![(-2, 2)]);
         let split = split_objects(&mut f, 64);
         assert_eq!(split.len(), 1, "the object splits");
         let dst = f
@@ -3264,7 +3238,7 @@ mod tests {
             }, // v4
             load(1),             // v5
         ];
-        let mut f = func(insts, Terminator::Return(5), alloc::vec![(-2, 1)]);
+        let mut f = func(insts, Terminator::Return(Some(5)), alloc::vec![(-2, 1)]);
         let split = split_objects(&mut f, 64);
         assert_eq!(split.len(), 1, "the object splits");
         assert!(
@@ -3288,7 +3262,7 @@ mod tests {
             }, // v2
             load(1),             // v3
         ];
-        let mut f = func(insts, Terminator::Return(3), alloc::vec![(-2, 2)]);
+        let mut f = func(insts, Terminator::Return(Some(3)), alloc::vec![(-2, 2)]);
         let before = alloc::format!("{:?}", f.insts);
         assert!(
             split_objects(&mut f, 64).is_empty(),
@@ -3320,7 +3294,7 @@ mod tests {
                 align: 8
             }, // v4
         ];
-        let mut f = func(insts, Terminator::Return(3), alloc::vec![(-2, 1)]);
+        let mut f = func(insts, Terminator::Return(Some(3)), alloc::vec![(-2, 1)]);
         assert_eq!(split_objects(&mut f, 64).len(), 1, "the object splits");
         assert!(
             f.insts.iter().any(|i| matches!(
@@ -3355,7 +3329,7 @@ mod tests {
                 pc_rel: false
             }, // v2
         ];
-        let mut f = func(insts, Terminator::Return(2), alloc::vec![(-2, 1)]);
+        let mut f = func(insts, Terminator::Return(Some(2)), alloc::vec![(-2, 1)]);
         assert_eq!(split_objects(&mut f, 64).len(), 1, "the object splits");
         assert!(
             f.insts.iter().any(|i| matches!(
@@ -3392,7 +3366,7 @@ mod tests {
                 pc_rel: false
             }, // v3
         ];
-        let mut f = func(insts, Terminator::Return(3), alloc::vec![(-2, 1)]);
+        let mut f = func(insts, Terminator::Return(Some(3)), alloc::vec![(-2, 1)]);
         let before = alloc::format!("{:?}", f.insts);
         assert!(
             split_objects(&mut f, 64).is_empty(),
@@ -3420,7 +3394,11 @@ mod tests {
             }, // v5
             load(4),             // v6 destination field
         ];
-        let mut f = func(insts, Terminator::Return(6), alloc::vec![(-2, 1), (-4, 1)]);
+        let mut f = func(
+            insts,
+            Terminator::Return(Some(6)),
+            alloc::vec![(-2, 1), (-4, 1)],
+        );
         let split = split_objects(&mut f, 64);
         assert_eq!(
             split.iter().map(|s| s.base).collect::<Vec<_>>(),
@@ -3460,7 +3438,11 @@ mod tests {
                     rhs: 7,
                 }, // v8
             ];
-            func(insts, Terminator::Return(8), alloc::vec![(-2, 1), (-4, 1)])
+            func(
+                insts,
+                Terminator::Return(Some(8)),
+                alloc::vec![(-2, 1), (-4, 1)],
+            )
         };
         let mut f = swap();
         let split = split_objects(&mut f, 64);
@@ -3508,7 +3490,11 @@ mod tests {
                 align: 8
             }, // v4
         ];
-        let mut f = func(insts, Terminator::Return(3), alloc::vec![(-2, 1), (-4, 1)]);
+        let mut f = func(
+            insts,
+            Terminator::Return(Some(3)),
+            alloc::vec![(-2, 1), (-4, 1)],
+        );
         let split = split_objects(&mut f, 64);
         assert_eq!(
             split.iter().map(|s| s.base).collect::<Vec<_>>(),
@@ -3562,7 +3548,7 @@ mod tests {
                 size: 16,
                 align: 1,
             });
-            func(insts, Terminator::Return(0), alloc::vec![(-2, 2)])
+            func(insts, Terminator::Return(Some(0)), alloc::vec![(-2, 2)])
         };
         let split = |caller: usize| {
             let mut f = shape();
@@ -3616,7 +3602,11 @@ mod tests {
                 }, // v5
                 load(4),             // v6 destination field
             ];
-            func(insts, Terminator::Return(6), alloc::vec![(-2, 1), (-4, 1)])
+            func(
+                insts,
+                Terminator::Return(Some(6)),
+                alloc::vec![(-2, 1), (-4, 1)],
+            )
         };
         assert!(more(&mut chain(), 64), "the source waits on the copy");
         let mut f = two_elem_array();
@@ -3631,7 +3621,7 @@ mod tests {
         }); //                              k+2
         f = func(
             insts,
-            Terminator::Return(k + 2),
+            Terminator::Return(Some(k + 2)),
             alloc::vec![(-2, 2), (-3, 1)],
         );
         assert!(
@@ -3649,7 +3639,7 @@ mod tests {
             add_imm(0, 8),       // v1
             Inst::Imm(1),        // v2
         ];
-        let mut f = func(insts, Terminator::Return(2), alloc::vec![(-2, 2)]);
+        let mut f = func(insts, Terminator::Return(Some(2)), alloc::vec![(-2, 2)]);
         let split = split_objects(&mut f, 64);
         assert_eq!(split.len(), 1, "the object goes");
         assert!(split[0].slots.is_empty(), "with no field to move");
@@ -3680,7 +3670,7 @@ mod tests {
                 align: 8
             }, // v6
         ];
-        func(insts, Terminator::Return(0), alloc::vec![(-2, cells)])
+        func(insts, Terminator::Return(Some(0)), alloc::vec![(-2, cells)])
     }
 
     /// An object holding an array keeps its block copy out.
@@ -3732,7 +3722,7 @@ mod tests {
             load(2),             // v3 read by nothing
             Inst::Imm(1),        // v4
         ];
-        let mut f = func(insts, Terminator::Return(4), alloc::vec![(-2, 2)]);
+        let mut f = func(insts, Terminator::Return(Some(4)), alloc::vec![(-2, 2)]);
         let split = split_objects(&mut f, 64);
         assert_eq!(split.len(), 1, "the object goes");
         assert!(split[0].slots.is_empty(), "with no field to move");
@@ -3758,7 +3748,7 @@ mod tests {
             load(0),             // v3 read by nothing
             Inst::Imm(1),        // v4
         ];
-        let mut f = func(insts, Terminator::Return(4), alloc::vec![(-2, 2)]);
+        let mut f = func(insts, Terminator::Return(Some(4)), alloc::vec![(-2, 2)]);
         let split = split_objects(&mut f, 64);
         assert_eq!(split.len(), 1, "the object goes");
         assert!(
@@ -3781,7 +3771,7 @@ mod tests {
             load(1),             // v3 read by nothing
             load(1),             // v4
         ];
-        let mut f = func(insts, Terminator::Return(4), alloc::vec![(-2, 1)]);
+        let mut f = func(insts, Terminator::Return(Some(4)), alloc::vec![(-2, 1)]);
         assert_eq!(split_objects(&mut f, 64).len(), 1, "the object splits");
         assert!(
             matches!(f.insts[3], Inst::Imm(0))
@@ -3814,7 +3804,7 @@ mod tests {
             }, // v1 read by nothing
             Inst::Imm(1),        // v2
         ];
-        let mut f = func(insts, Terminator::Return(2), alloc::vec![(-2, 1)]);
+        let mut f = func(insts, Terminator::Return(Some(2)), alloc::vec![(-2, 1)]);
         let before = alloc::format!("{:?}", f.insts);
         assert!(
             split_objects(&mut f, 64).is_empty(),
@@ -3831,7 +3821,7 @@ mod tests {
             Inst::LocalAddr(-2), // v0
             load(0),             // v1
         ];
-        let mut f = func(insts, Terminator::Return(1), alloc::vec![(-2, 2)]);
+        let mut f = func(insts, Terminator::Return(Some(1)), alloc::vec![(-2, 2)]);
         f.param_local_slots = alloc::vec![-2];
         let before = alloc::format!("{:?}", f.insts);
         let split = split_objects(&mut f, 64);
@@ -3866,7 +3856,7 @@ mod tests {
             add_imm(3, 8),       // v4
             load(4),             // v5
         ];
-        let mut f = func(insts, Terminator::Return(5), alloc::vec![(-2, 2)]);
+        let mut f = func(insts, Terminator::Return(Some(5)), alloc::vec![(-2, 2)]);
         let before = alloc::format!("{:?}", f.insts);
         let split = split_objects(&mut f, 64);
         assert!(split.is_empty(), "an aggregate-return temp must not split");
@@ -3893,7 +3883,7 @@ mod tests {
             add_imm(4, 8), // v5
             load(5),      // v6  a[1] through the address
         ];
-        let mut f = func(insts, Terminator::Return(6), alloc::vec![(-2, 2)]);
+        let mut f = func(insts, Terminator::Return(Some(6)), alloc::vec![(-2, 2)]);
         let before = alloc::format!("{:?}", f.insts);
         let split = split_objects(&mut f, 64);
         assert!(split.is_empty(), "a directly named cell must not split");
@@ -3916,7 +3906,7 @@ mod tests {
                 pc_rel: false
             }, // v2
         ];
-        let mut f = func(insts, Terminator::Return(2), alloc::vec![(-2, 1)]);
+        let mut f = func(insts, Terminator::Return(Some(2)), alloc::vec![(-2, 1)]);
         let before = alloc::format!("{:?}", f.insts);
         let split = split_objects(&mut f, 64);
         assert!(split.is_empty(), "volatile access must not split");
@@ -3967,7 +3957,7 @@ mod tests {
                 pc_rel: false
             }, // v6
         ];
-        let mut f = func(insts, Terminator::Return(6), alloc::vec![(-4, 4)]);
+        let mut f = func(insts, Terminator::Return(Some(6)), alloc::vec![(-4, 4)]);
         let before = alloc::format!("{:?}", f.insts);
         let split = split_objects(&mut f, 64);
         assert!(split.is_empty(), "a 16-byte access must not split");
@@ -3987,7 +3977,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..n,
                 terminator: term,
-                exit_acc: NO_VALUE,
             }],
             ..FunctionSsa::default()
         }
@@ -4037,7 +4026,7 @@ mod tests {
                 Inst::Imm(5), // v2
                 store(0, 2), // v3  writes [0, 8)
             ],
-            Terminator::Return(1),
+            Terminator::Return(Some(1)),
         );
         let mid = callee(
             200,
@@ -4046,7 +4035,7 @@ mod tests {
                 add_imm(0, 16),               // v1
                 call_to(100, alloc::vec![1]), // v2
             ],
-            Terminator::Return(2),
+            Terminator::Return(Some(2)),
         );
         let fps = param_footprints(&[leaf, mid]);
         assert_eq!(fps[&(100, 0)].reads, alloc::vec![(8, 8)]);
@@ -4066,15 +4055,15 @@ mod tests {
                 Inst::LocalAddr(-1), // v1
                 store(1, 0),         // v2  the pointer itself is stored
             ],
-            Terminator::Return(2),
+            Terminator::Return(Some(2)),
         );
         let variadic = FunctionSsa {
             is_variadic: true,
-            ..callee(200, alloc::vec![param()], Terminator::Return(0))
+            ..callee(200, alloc::vec![param()], Terminator::Return(Some(0)))
         };
         let naked = FunctionSsa {
             is_naked: true,
-            ..callee(300, alloc::vec![Inst::Imm(0)], Terminator::Return(0))
+            ..callee(300, alloc::vec![Inst::Imm(0)], Terminator::Return(Some(0)))
         };
         let fps = param_footprints(&[escaping, variadic, naked]);
         assert!(!fps.contains_key(&(100, 0)), "a stored pointer is opaque");
@@ -4115,7 +4104,7 @@ mod tests {
                 rhs: 17,
             }, // v18
         ];
-        func(insts, Terminator::Return(18), alloc::vec![(-2, 2)])
+        func(insts, Terminator::Return(Some(18)), alloc::vec![(-2, 2)])
     }
 
     /// An object a call reaches gives up the fields that call cannot
@@ -4127,7 +4116,7 @@ mod tests {
         let writer = callee(
             100,
             alloc::vec![param(), Inst::Imm(9), store(0, 1)],
-            Terminator::Return(2),
+            Terminator::Return(Some(2)),
         );
         let fps = param_footprints(&[writer]);
         let mut f = caller_passing_object(100);
@@ -4170,7 +4159,7 @@ mod tests {
                     pc_rel: false
                 },
             ],
-            Terminator::Return(1),
+            Terminator::Return(Some(1)),
         );
         let fps = param_footprints(&[reader]);
         let mut f = caller_passing_object(100);
@@ -4216,7 +4205,7 @@ mod tests {
                     pc_rel: false
                 },
             ],
-            Terminator::Return(1),
+            Terminator::Return(Some(1)),
         );
         let fps = param_footprints(&[reader]);
         let mut f = caller_passing_object(100);
@@ -4290,7 +4279,7 @@ mod tests {
                     pc_rel: false
                 },
             ],
-            Terminator::Return(1),
+            Terminator::Return(Some(1)),
         );
         let fps = param_footprints(&[reader]);
         let mut f = caller_passing_object(100);

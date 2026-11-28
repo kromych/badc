@@ -64,7 +64,7 @@ use alloc::vec::Vec;
 
 use super::super::ast::expr_ty;
 use super::super::ast::{
-    BlockItem, Decl, Expr, ExprId, LocalInit, MemTransferOp, SLOT_ALIGN, SrcPos, Stmt, StmtId, UnOp,
+    Decl, Expr, ExprId, LocalInit, MemTransferOp, SLOT_ALIGN, SrcPos, Stmt, StmtId, UnOp,
 };
 use super::super::ir::BinOp;
 use super::super::token::{Token, Ty};
@@ -96,7 +96,7 @@ struct Counted {
     /// of the zero-extended operands.
     unsigned_cmp: bool,
     cond: ExprId,
-    init: Option<BlockItem>,
+    init: Option<StmtId>,
 }
 
 /// A loop that walks two pointers and a counter by a fixed number of
@@ -149,7 +149,7 @@ struct Transfer {
 /// `{ <init>; if (<cond>) { if (<guard>) { <body> } else <fallback> } }`,
 /// each part dropped where it is not needed.
 struct Rewrite {
-    init: Option<BlockItem>,
+    init: Option<StmtId>,
     cond: Option<ExprId>,
     guard: Option<ExprId>,
     body: Vec<ExprId>,
@@ -171,11 +171,7 @@ impl Compiler {
         // An inline-asm memory operand reaches a local without an `&`
         // node for the address scan to find.
         if !self.ast.asm_blocks.is_empty()
-            || self
-                .ast
-                .stmts
-                .iter()
-                .any(|s| matches!(s, Stmt::Asm { .. } | Stmt::AsmGoto(_)))
+            || self.ast.stmts.iter().any(|s| matches!(s, Stmt::AsmGoto(_)))
         {
             return;
         }
@@ -377,7 +373,6 @@ impl Compiler {
     fn const_operand(&self, e: ExprId) -> Option<i64> {
         match self.ast.expr(e) {
             Expr::IntLit { val, .. } => Some(*val),
-            Expr::Sizeof(s) => Some(s.size_bytes),
             // The parser leaves a subscript's and a pointer step's
             // element scaling as a product of two literals.
             Expr::Binary { op, lhs, rhs, ty } => {
@@ -416,8 +411,8 @@ impl Compiler {
 
     /// The constant the for-init leaves in the induction variable, and
     /// whether the init declares it.
-    fn init_start(&self, init: Option<BlockItem>, sym: u32, val: i64) -> (Option<i64>, bool) {
-        let Some(BlockItem::Stmt(s)) = init else {
+    fn init_start(&self, init: Option<StmtId>, sym: u32, val: i64) -> (Option<i64>, bool) {
+        let Some(s) = init else {
             return (None, false);
         };
         match self.ast.stmt(s) {
@@ -517,7 +512,7 @@ impl Compiler {
         for _ in 0..4 {
             match self.ast.stmt(id) {
                 Stmt::Compound(items) => match items.as_slice() {
-                    [BlockItem::Stmt(inner)] => id = *inner,
+                    [inner] => id = *inner,
                     _ => return None,
                 },
                 _ => return Some(id),
@@ -964,10 +959,8 @@ impl Compiler {
 
     /// One `dst[j] = src[j]` of a blocked body: the two base
     /// expressions, the byte offset they share, and the element type.
-    fn match_walk_elem(&self, item: BlockItem) -> Option<(ExprId, ExprId, i64, i64)> {
-        let BlockItem::Stmt(s) = item else {
-            return None;
-        };
+    fn match_walk_elem(&self, item: StmtId) -> Option<(ExprId, ExprId, i64, i64)> {
+        let s = item;
         let Stmt::Expr(e) = *self.ast.stmt(s) else {
             return None;
         };
@@ -996,10 +989,8 @@ impl Compiler {
 
     /// `x += <constant>` and its `-=` / `++` / `--` spellings: the
     /// identifier stepped, and the signed amount.
-    fn match_step(&self, item: BlockItem) -> Option<(ExprId, i64)> {
-        let BlockItem::Stmt(s) = item else {
-            return None;
-        };
+    fn match_step(&self, item: StmtId) -> Option<(ExprId, i64)> {
+        let s = item;
         let Stmt::Expr(e) = *self.ast.stmt(s) else {
             return None;
         };
@@ -1250,10 +1241,10 @@ impl Compiler {
 
     /// Put the planned statements in the loop's place.
     fn commit(&mut self, id: StmtId, r: Rewrite, pos: SrcPos) {
-        let items: Vec<BlockItem> = r
+        let items: Vec<StmtId> = r
             .body
             .into_iter()
-            .map(|e| BlockItem::Stmt(self.ast.push_stmt(Stmt::Expr(e), pos)))
+            .map(|e| self.ast.push_stmt(Stmt::Expr(e), pos))
             .collect();
         let mut inner = self.ast.push_stmt(Stmt::Compound(items), pos);
         if let Some(guard) = r.guard {
@@ -1276,11 +1267,11 @@ impl Compiler {
                 pos,
             );
         }
-        let mut outer: Vec<BlockItem> = Vec::new();
+        let mut outer: Vec<StmtId> = Vec::new();
         if let Some(init) = r.init {
             outer.push(init);
         }
-        outer.push(BlockItem::Stmt(inner));
+        outer.push(inner);
         self.ast.stmts[id as usize] = Stmt::Compound(outer);
     }
 }

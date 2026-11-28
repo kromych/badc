@@ -40,8 +40,8 @@ use crate::c5::codegen::ssa::reg_alloc::{
     produces_pred_result, produces_value,
 };
 use crate::c5::ir::{
-    BinOp, BitCountOp, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator,
-    ValueId, is_comparison_op,
+    BinOp, BitCountOp, BlockId, FpCastKind, FunctionSsa, Inst, LoadKind, Marks, NO_VALUE,
+    Terminator, ValueId, is_comparison_op,
 };
 use alloc::vec::Vec;
 use hashbrown::HashMap;
@@ -55,36 +55,91 @@ const FP: usize = 1;
 
 /// Value-number key over leader-resolved operands: equal keys, equal
 /// values. Every variant but the addresses, which carry their bound
-/// symbol, carries the `f32_values` flag, which is part of a value's
-/// identity and which the operands do not fix -- a `(double)x` and a
-/// `(float)x` are one `FpCast` shape over one operand.
+/// symbol, carries the value's [`Marks`], which are part of its identity
+/// and which the operands do not fix. A division marked 32-bit keys as
+/// `NarrowDiv` instead, over the sources its operands renormalize.
 #[derive(PartialEq, Eq, Hash, Clone, Copy)]
-enum Key {
-    Imm(i64, bool),
-    LocalAddr(i64, bool),
+pub(crate) enum Key {
+    Imm(i64, Marks),
+    LocalAddr(i64, Marks),
     ImmData(i64, u32),
     ImmCode(usize, u32),
     TlsAddr(i64, u32),
-    Binop(BinOp, ValueId, ValueId, bool),
-    BinopI(BinOp, ValueId, i64, bool),
-    // A division read over its operands' renormalized sources.
+    Binop(BinOp, ValueId, ValueId, Marks),
+    BinopI(BinOp, ValueId, i64, Marks),
     NarrowDiv(BinOp, ValueId, ValueId),
     NarrowDivI(BinOp, ValueId, i64),
-    Extend(ValueId, LoadKind, bool),
-    Bswap(ValueId, u8, bool),
-    BitCount(BitCountOp, ValueId, u8, bool),
-    Neg(ValueId),
-    Fneg(ValueId, bool),
-    FpCast(FpCastKind, ValueId, bool),
-    Fma(ValueId, ValueId, ValueId, bool, bool, bool),
-    MulAdd(ValueId, ValueId, ValueId, bool),
-    ShiftOp(BinOp, ValueId, ValueId, BinOp, u8),
-    BitField(ValueId, u8, u8, bool),
-    Udiv128(ValueId, ValueId, ValueId),
+    Extend(ValueId, LoadKind, Marks),
+    Bswap(ValueId, u8, Marks),
+    BitCount(BitCountOp, ValueId, u8, Marks),
+    Neg(ValueId, Marks),
+    Fneg(ValueId, Marks),
+    FpCast(FpCastKind, ValueId, Marks),
+    Fma(ValueId, ValueId, ValueId, bool, bool, Marks),
+    MulAdd(ValueId, ValueId, ValueId, bool, Marks),
+    ShiftOp(BinOp, ValueId, ValueId, BinOp, u8, Marks),
+    BitField(ValueId, u8, u8, bool, Marks),
+    Udiv128(ValueId, ValueId, ValueId, Marks),
     // A splat by its lane width and vector width: of a value, or of a
     // constant's lane bits.
     VecSplat(ValueId, u8, u8),
     VecConst(u64, u8, u8),
+}
+
+/// What a function's keys read besides each instruction and its marks.
+pub(crate) struct KeyInputs {
+    /// The symbol an address-materializing value is bound to.
+    bound: HashMap<ValueId, u32>,
+    /// Per value, the source a renormalization keeps the low word of and
+    /// whether it zero-extends: a 32-bit division keys on either.
+    bare: Vec<(ValueId, bool)>,
+}
+
+impl KeyInputs {
+    pub(crate) fn new(func: &FunctionSsa) -> Self {
+        let bound = (func.extern_imm_data_refs.iter())
+            .chain(&func.extern_imm_code_refs)
+            .chain(&func.extern_tls_refs)
+            .copied()
+            .collect();
+        let zext = |k: i64| k == u32::MAX as i64;
+        let bare = (func.insts.iter().enumerate())
+            .map(|(i, inst)| {
+                let strip = match inst {
+                    Inst::BinopI {
+                        op: BinOp::And,
+                        lhs,
+                        rhs_imm,
+                    } => (*rhs_imm as u32 == u32::MAX).then_some((*lhs, zext(*rhs_imm))),
+                    Inst::Binop {
+                        op: BinOp::And,
+                        lhs,
+                        rhs,
+                    } => match (&func.insts[*lhs as usize], &func.insts[*rhs as usize]) {
+                        (Inst::Imm(k), _) if *k as u32 == u32::MAX => Some((*rhs, zext(*k))),
+                        (_, Inst::Imm(k)) if *k as u32 == u32::MAX => Some((*lhs, zext(*k))),
+                        _ => None,
+                    },
+                    Inst::Extend {
+                        value,
+                        kind: LoadKind::I32,
+                        ..
+                    } => Some((*value, false)),
+                    _ => None,
+                };
+                strip.unwrap_or((i as ValueId, false))
+            })
+            .collect();
+        KeyInputs { bound, bare }
+    }
+
+    /// The key of `v` over `leaders`, which names for each value the one it
+    /// is equal to; `None` for an instruction that has no value number.
+    pub(crate) fn key(&self, func: &FunctionSsa, v: ValueId, leaders: &[ValueId]) -> Option<Key> {
+        let sym = self.bound.get(&v).copied().unwrap_or(u32::MAX);
+        let inst = func.insts.get(v as usize)?;
+        key_of(inst, leaders, func.marks(v), sym, &self.bare)
+    }
 }
 
 pub(crate) fn run(funcs: &mut [FunctionSsa], caps: BankCapacity) {
@@ -564,19 +619,19 @@ fn lane_bytes(kind: crate::c5::ir::StoreKind) -> u8 {
 fn key_of(
     inst: &Inst,
     vn: &[ValueId],
-    is_f32: bool,
+    marks: Marks,
     sym: u32,
     bare: &[(ValueId, bool)],
-    narrow_div: bool,
 ) -> Option<Key> {
+    let narrow_div = marks.div32;
     let r = |v: ValueId| resolve_vn(vn, v);
     let low = |v: ValueId| {
         let l = r(v);
         bare.get(l as usize).copied().unwrap_or((l, false))
     };
     match inst {
-        Inst::Imm(k) => Some(Key::Imm(*k, is_f32)),
-        Inst::LocalAddr(off) => Some(Key::LocalAddr(*off, is_f32)),
+        Inst::Imm(k) => Some(Key::Imm(*k, marks)),
+        Inst::LocalAddr(off) => Some(Key::LocalAddr(*off, marks)),
         Inst::ImmData(k) => Some(Key::ImmData(*k, sym)),
         Inst::ImmCode(t) => Some(Key::ImmCode(*t, sym)),
         Inst::TlsAddr(off) => Some(Key::TlsAddr(*off, sym)),
@@ -591,7 +646,7 @@ fn key_of(
             if commutative_int(*op) && a > b {
                 core::mem::swap(&mut a, &mut b);
             }
-            Some(Key::Binop(*op, a, b, is_f32))
+            Some(Key::Binop(*op, a, b, marks))
         }
         Inst::BinopI { op, lhs, rhs_imm } => {
             if matches!(op, BinOp::Div | BinOp::Divu | BinOp::Mod | BinOp::Modu) {
@@ -600,12 +655,12 @@ fn key_of(
                     return Some(Key::NarrowDivI(*op, a, *rhs_imm));
                 }
             }
-            Some(Key::BinopI(*op, r(*lhs), *rhs_imm, is_f32))
+            Some(Key::BinopI(*op, r(*lhs), *rhs_imm, marks))
         }
-        Inst::Extend { value, kind, .. } => Some(Key::Extend(r(*value), *kind, is_f32)),
-        Inst::Bswap { value, width } => Some(Key::Bswap(r(*value), *width, is_f32)),
-        Inst::BitCount { op, value, width } => Some(Key::BitCount(*op, r(*value), *width, is_f32)),
-        Inst::Neg(v) => Some(Key::Neg(r(*v))),
+        Inst::Extend { value, kind, .. } => Some(Key::Extend(r(*value), *kind, marks)),
+        Inst::Bswap { value, width } => Some(Key::Bswap(r(*value), *width, marks)),
+        Inst::BitCount { op, value, width } => Some(Key::BitCount(*op, r(*value), *width, marks)),
+        Inst::Neg(v) => Some(Key::Neg(r(*v), marks)),
         Inst::VecSplat { value, kind, bytes } => {
             Some(Key::VecSplat(r(*value), lane_bytes(*kind), *bytes))
         }
@@ -614,8 +669,8 @@ fn key_of(
             let lane = *imm as u64 & (u64::MAX >> (64 - 8 * u32::from(width)));
             Some(Key::VecConst(lane, width, *bytes))
         }
-        Inst::Fneg(v) => Some(Key::Fneg(r(*v), is_f32)),
-        Inst::FpCast { kind, value } => Some(Key::FpCast(*kind, r(*value), is_f32)),
+        Inst::Fneg(v) => Some(Key::Fneg(r(*v), marks)),
+        Inst::FpCast { kind, value } => Some(Key::FpCast(*kind, r(*value), marks)),
         Inst::Fma {
             a,
             b,
@@ -628,28 +683,28 @@ fn key_of(
             r(*c),
             *neg_product,
             *neg_addend,
-            is_f32,
+            marks,
         )),
         Inst::MulAdd {
             a,
             b,
             c,
             neg_product,
-        } => Some(Key::MulAdd(r(*a), r(*b), r(*c), *neg_product)),
+        } => Some(Key::MulAdd(r(*a), r(*b), r(*c), *neg_product, marks)),
         Inst::ShiftOp {
             op,
             lhs,
             rhs,
             shift,
             amount,
-        } => Some(Key::ShiftOp(*op, r(*lhs), r(*rhs), *shift, *amount)),
+        } => Some(Key::ShiftOp(*op, r(*lhs), r(*rhs), *shift, *amount, marks)),
         Inst::BitField {
             value,
             lsb,
             width,
             signed,
-        } => Some(Key::BitField(r(*value), *lsb, *width, *signed)),
-        Inst::Udiv128 { hi, lo, divisor } => Some(Key::Udiv128(r(*hi), r(*lo), r(*divisor))),
+        } => Some(Key::BitField(r(*value), *lsb, *width, *signed, marks)),
+        Inst::Udiv128 { hi, lo, divisor } => Some(Key::Udiv128(r(*hi), r(*lo), r(*divisor), marks)),
         _ => None,
     }
 }
@@ -702,39 +757,7 @@ fn run_one(func: &mut FunctionSsa, caps: BankCapacity) {
     let depth = loop_depth(&preds, &tin, &tout);
     let use_counts = compute_use_counts(func);
     let pinned = branch_pinned(func, &use_counts);
-    // Per value, the source a renormalization keeps the low word of and
-    // whether it zero-extends: a 32-bit division keys on either.
-    let zext = |k: i64| k == u32::MAX as i64;
-    let bare: Vec<(ValueId, bool)> = func
-        .insts
-        .iter()
-        .enumerate()
-        .map(|(i, inst)| {
-            let strip = match inst {
-                Inst::BinopI {
-                    op: BinOp::And,
-                    lhs,
-                    rhs_imm,
-                } => (*rhs_imm as u32 == u32::MAX).then_some((*lhs, zext(*rhs_imm))),
-                Inst::Binop {
-                    op: BinOp::And,
-                    lhs,
-                    rhs,
-                } => match (&func.insts[*lhs as usize], &func.insts[*rhs as usize]) {
-                    (Inst::Imm(k), _) if *k as u32 == u32::MAX => Some((*rhs, zext(*k))),
-                    (_, Inst::Imm(k)) if *k as u32 == u32::MAX => Some((*lhs, zext(*k))),
-                    _ => None,
-                },
-                Inst::Extend {
-                    value,
-                    kind: LoadKind::I32,
-                    ..
-                } => Some((*value, false)),
-                _ => None,
-            };
-            strip.unwrap_or((i as ValueId, false))
-        })
-        .collect();
+    let inputs = KeyInputs::new(func);
     let p = pressure(func, &operands_read(func, &use_counts));
     let mut gate = Gate {
         preds: &preds,
@@ -760,13 +783,6 @@ fn run_one(func: &mut FunctionSsa, caps: BankCapacity) {
         }
     }
 
-    let bound: HashMap<ValueId, u32> = func
-        .extern_imm_data_refs
-        .iter()
-        .chain(&func.extern_imm_code_refs)
-        .chain(&func.extern_tls_refs)
-        .copied()
-        .collect();
     let mut redirect: Vec<Option<ValueId>> = alloc::vec![None; n];
     let mut vn: Vec<ValueId> = (0..n as ValueId).collect();
     let mut map: HashMap<Key, ValueId> = HashMap::new();
@@ -794,11 +810,7 @@ fn run_one(func: &mut FunctionSsa, caps: BankCapacity) {
                     if use_counts[i] == 0 || pinned[i] || !func.is_pure(&func.insts[i]) {
                         continue;
                     }
-                    let is_f32 = func.f32_values.get(i).copied().unwrap_or(false);
-                    let sym = bound.get(&idx).copied().unwrap_or(u32::MAX);
-                    let narrow_div = super::narrow::is_div32(&func.div32, idx);
-                    let Some(key) = key_of(&func.insts[i], &vn, is_f32, sym, &bare, narrow_div)
-                    else {
+                    let Some(key) = inputs.key(func, idx, &vn) else {
                         continue;
                     };
                     if let Some(&leader) = map.get(&key)
@@ -846,9 +858,6 @@ fn run_one(func: &mut FunctionSsa, caps: BankCapacity) {
         inst.for_each_operand_mut(|op| *op = resolve(&redirect, *op));
     }
     for block in func.blocks.iter_mut() {
-        if block.exit_acc != NO_VALUE {
-            block.exit_acc = resolve(&redirect, block.exit_acc);
-        }
         block
             .terminator
             .for_each_operand_mut(|v| *v = resolve(&redirect, *v));
@@ -955,12 +964,11 @@ mod tests {
         }
     }
 
-    fn blk(range: core::ops::Range<u32>, term: Terminator, acc: ValueId) -> Block {
+    fn blk(range: core::ops::Range<u32>, term: Terminator) -> Block {
         Block {
             start_pc: 0,
             inst_range: range,
             terminator: term,
-            exit_acc: acc,
         }
     }
 
@@ -974,7 +982,7 @@ mod tests {
 
     fn return_val(f: &FunctionSsa, block: usize) -> ValueId {
         match f.blocks[block].terminator {
-            Terminator::Return(v) => v,
+            Terminator::Return(Some(v)) => v,
             other => panic!("expected Return, got {other:?}"),
         }
     }
@@ -986,9 +994,9 @@ mod tests {
         fresh(
             alloc::vec![Inst::Imm(3), Inst::Imm(5), add(0, 1), add(0, 1)],
             alloc::vec![
-                blk(0..3, bz(2, 2, 1), 2),
-                blk(3..4, Terminator::Return(3), 3),
-                blk(4..4, Terminator::Return(0), 0),
+                blk(0..3, bz(2, 2, 1)),
+                blk(3..4, Terminator::Return(Some(3))),
+                blk(4..4, Terminator::Return(Some(0))),
             ],
         )
     }
@@ -1035,9 +1043,9 @@ mod tests {
                 add(3, 3),
             ],
             alloc::vec![
-                blk(0..4, bz(2, 2, 1), 2),
-                blk(4..6, Terminator::Return(4), 4),
-                blk(6..6, Terminator::Return(0), 0),
+                blk(0..4, bz(2, 2, 1)),
+                blk(4..6, Terminator::Return(Some(4))),
+                blk(6..6, Terminator::Return(Some(0))),
             ],
         );
         run_one(&mut f, caps(5, 5));
@@ -1051,9 +1059,9 @@ mod tests {
         let mut f = fresh(
             alloc::vec![Inst::Imm(3), Inst::Imm(5), muli(0, 7), add(0, 1), add(0, 1)],
             alloc::vec![
-                blk(0..3, bz(2, 2, 1), 2),
-                blk(3..4, Terminator::Return(3), 3),
-                blk(4..5, Terminator::Return(4), 4),
+                blk(0..3, bz(2, 2, 1)),
+                blk(3..4, Terminator::Return(Some(3))),
+                blk(4..5, Terminator::Return(Some(4))),
             ],
         );
         run_one(&mut f, caps(16, 8));
@@ -1076,9 +1084,9 @@ mod tests {
                 add(0, 1)
             ],
             alloc::vec![
-                blk(0..4, bz(3, 2, 1), 3),
-                blk(4..6, bz(5, 2, 1), 5),
-                blk(6..7, Terminator::Return(6), 6),
+                blk(0..4, bz(3, 2, 1)),
+                blk(4..6, bz(5, 2, 1)),
+                blk(6..7, Terminator::Return(Some(6))),
             ],
         );
         run_one(&mut f, caps(16, 8));
@@ -1098,9 +1106,9 @@ mod tests {
         let mut f = fresh(
             alloc::vec![Inst::Imm(3), Inst::Imm(5), cmp(0, 1), cmp(0, 1)],
             alloc::vec![
-                blk(0..3, bz(2, 2, 1), 2),
-                blk(3..4, Terminator::Return(3), 3),
-                blk(4..4, Terminator::Return(0), 0),
+                blk(0..3, bz(2, 2, 1)),
+                blk(3..4, Terminator::Return(Some(3))),
+                blk(4..4, Terminator::Return(Some(0))),
             ],
         );
         run_one(&mut f, caps(16, 8));
@@ -1122,9 +1130,9 @@ mod tests {
         fresh(
             alloc::vec![Inst::Imm(3), Inst::Imm(5), add(0, 1), call, add(0, 1)],
             alloc::vec![
-                blk(0..4, bz(2, 2, 1), 2),
-                blk(4..5, Terminator::Return(4), 4),
-                blk(5..5, Terminator::Return(0), 0),
+                blk(0..4, bz(2, 2, 1)),
+                blk(4..5, Terminator::Return(Some(4))),
+                blk(5..5, Terminator::Return(Some(0))),
             ],
         )
     }
@@ -1168,9 +1176,9 @@ mod tests {
                 muli(2, 2)
             ],
             alloc::vec![
-                blk(0..2, Terminator::Jmp(1), 1),
-                blk(2..6, bz(5, 2, 1), 5),
-                blk(6..6, Terminator::Return(4), 4),
+                blk(0..2, Terminator::Jmp(1)),
+                blk(2..6, bz(5, 2, 1)),
+                blk(6..6, Terminator::Return(Some(4))),
             ],
         )
     }
@@ -1199,14 +1207,46 @@ mod tests {
         let mut f = fresh(
             alloc::vec![Inst::Imm(3), cast(0), cast(0)],
             alloc::vec![
-                blk(0..2, bz(1, 2, 1), 1),
-                blk(2..3, Terminator::Return(2), 2),
-                blk(3..3, Terminator::Return(0), 0),
+                blk(0..2, bz(1, 2, 1)),
+                blk(2..3, Terminator::Return(Some(2))),
+                blk(3..3, Terminator::Return(Some(0))),
             ],
         );
         f.f32_values[2] = true;
         run_one(&mut f, caps(16, 8));
         assert_eq!(return_val(&f, 1), 2, "a float result is not a double one");
+    }
+
+    /// A comparison of two operands' low words and one of the operands are
+    /// two values: `cmp32` is part of the key.
+    #[test]
+    fn operand_width_separates_two_comparisons() {
+        let lt = || Inst::Binop {
+            op: BinOp::Lt,
+            lhs: 0,
+            rhs: 1,
+        };
+        let build = || {
+            fresh(
+                alloc::vec![Inst::Imm(3), Inst::Imm(5), lt(), lt()],
+                alloc::vec![
+                    blk(0..3, bz(0, 2, 1)),
+                    blk(3..4, Terminator::Return(Some(3))),
+                    blk(4..4, Terminator::Return(Some(2))),
+                ],
+            )
+        };
+        let mut f = build();
+        run_one(&mut f, caps(16, 8));
+        assert_eq!(return_val(&f, 1), 2, "two comparisons at one width merge");
+        let mut f = build();
+        f.cmp32[3] = true;
+        run_one(&mut f, caps(16, 8));
+        assert_eq!(
+            return_val(&f, 1),
+            3,
+            "a 32-bit comparison is not a 64-bit one"
+        );
     }
 
     /// Two duplicates over one region cost two registers, not one: the
@@ -1228,9 +1268,9 @@ mod tests {
                     add(6, 7)
                 ],
                 alloc::vec![
-                    blk(0..6, bz(5, 2, 1), 5),
-                    blk(6..9, Terminator::Return(8), 8),
-                    blk(9..9, Terminator::Return(0), 0),
+                    blk(0..6, bz(5, 2, 1)),
+                    blk(6..9, Terminator::Return(Some(8))),
+                    blk(9..9, Terminator::Return(Some(0))),
                 ],
             )
         };
@@ -1256,9 +1296,9 @@ mod tests {
             let mut f = fresh(
                 alloc::vec![Inst::ImmData(0), Inst::ImmData(0)],
                 alloc::vec![
-                    blk(0..1, bz(0, 2, 1), 0),
-                    blk(1..2, Terminator::Return(1), 1),
-                    blk(2..2, Terminator::Return(0), 0),
+                    blk(0..1, bz(0, 2, 1)),
+                    blk(1..2, Terminator::Return(Some(1))),
+                    blk(2..2, Terminator::Return(Some(0))),
                 ],
             );
             f.extern_imm_data_refs = refs;

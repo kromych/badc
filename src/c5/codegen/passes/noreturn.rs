@@ -19,7 +19,7 @@
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
-use crate::c5::ir::{Block, BlockId, FunctionSsa, Inst, NO_VALUE, Terminator};
+use crate::c5::ir::{Block, BlockId, FunctionSsa, Inst, Terminator};
 use crate::c5::program::Program;
 use crate::c5::token::Token;
 
@@ -134,11 +134,9 @@ fn seal(func: &mut FunctionSsa, ends: &Known) -> bool {
             start_pc: block.start_pc,
             inst_range: call + 1..range.end,
             terminator: block.terminator,
-            exit_acc: block.exit_acc,
         };
         block.inst_range = range.start..call + 1;
         block.terminator = Terminator::Unreachable;
-        block.exit_acc = NO_VALUE;
         let succs = crate::c5::codegen::ssa::mem2reg::successors(
             &rest.terminator,
             &func.computed_goto_targets,

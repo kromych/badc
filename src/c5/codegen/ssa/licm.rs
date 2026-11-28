@@ -849,7 +849,8 @@ fn plan_pure(func: &FunctionSsa) -> Vec<PureHoist> {
     // The site whose copy a moved value reads as, for the identity of a
     // later site's operands.
     let mut canon: Vec<ValueId> = (0..func.insts.len() as ValueId).collect();
-    let mut keys: Vec<(ValueId, alloc::string::String)> = Vec::new();
+    let inputs = crate::c5::codegen::passes::cse::KeyInputs::new(func);
+    let mut group: HashMap<(ValueId, crate::c5::codegen::passes::cse::Key), usize> = HashMap::new();
     let mut out: Vec<PureHoist> = Vec::new();
     loop {
         let mut grew = false;
@@ -894,17 +895,18 @@ fn plan_pure(func: &FunctionSsa) -> Vec<PureHoist> {
                     moved[v as usize] = true;
                     grew = true;
                     let profit = weights[b as usize].saturating_sub(weights[dest as usize]);
-                    let mut same = inst.clone();
-                    same.for_each_operand_mut(|o| *o = canon[*o as usize]);
-                    let key = alloc::format!("{same:?}");
-                    match keys.iter().position(|(k_at, k)| *k_at == at && *k == key) {
+                    // One copy serves the sites of one value number.
+                    let key = inputs.key(func, v, &canon);
+                    match key.and_then(|key| group.get(&(at, key)).copied()) {
                         Some(k) => {
                             out[k].sites.push(v);
                             out[k].profit = out[k].profit.saturating_add(profit);
                             canon[v as usize] = out[k].sites[0];
                         }
                         None => {
-                            keys.push((at, key));
+                            if let Some(key) = key {
+                                group.insert((at, key), out.len());
+                            }
                             out.push(PureHoist {
                                 at,
                                 sites: alloc::vec![v],
@@ -941,6 +943,10 @@ fn apply_pure(func: &mut FunctionSsa, hoists: &[PureHoist]) -> (Undo, Vec<ValueI
     for h in hoists {
         let site = h.sites[0];
         let mut inst = func.insts[site as usize].clone();
+        if let Inst::Extend { nsw, .. } = &mut inst {
+            *nsw = (h.sites.iter())
+                .all(|&s| matches!(func.insts[s as usize], Inst::Extend { nsw: true, .. }));
+        }
         inst.for_each_operand_mut(|o| {
             if copy_of[*o as usize] != NO_VALUE {
                 *o = copy_of[*o as usize];
@@ -1211,7 +1217,7 @@ fn apply_loads(func: &mut FunctionSsa, hoists: &[LoadHoist]) -> (Undo, Vec<Value
     (undo, copies)
 }
 
-/// Point every operand, terminator and `exit_acc` that names a value
+/// Point every operand and terminator that names a value
 /// with a `redirect` entry at that entry.
 fn redirect_uses(func: &mut FunctionSsa, redirect: &[ValueId]) {
     let redirect_of = |op: &mut ValueId| {
@@ -1224,9 +1230,6 @@ fn redirect_uses(func: &mut FunctionSsa, redirect: &[ValueId]) {
         inst.for_each_operand_mut(redirect_of);
     }
     for block in func.blocks.iter_mut() {
-        if block.exit_acc != NO_VALUE {
-            redirect_of(&mut block.exit_acc);
-        }
         block.terminator.for_each_operand_mut(redirect_of);
     }
 }
@@ -1482,7 +1485,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 
@@ -1590,7 +1592,7 @@ mod tests {
                         fall_through: 3,
                     },
                 ),
-                block(8..8, Terminator::Return(NO_VALUE)),
+                block(8..8, Terminator::Return(None)),
             ],
         );
         let hoists = plan(&f, Target::LinuxAarch64);
@@ -2130,7 +2132,7 @@ mod tests {
                     },
                 ),
                 block(4..n, Terminator::Jmp(1)),
-                block(n..n, Terminator::Return(2)),
+                block(n..n, Terminator::Return(Some(2))),
             ],
         )
     }
@@ -2303,7 +2305,7 @@ mod tests {
                     },
                 ),
                 block(h + 2..h + 4, Terminator::Jmp(1)),
-                block(h + 4..h + 4, Terminator::Return(h)),
+                block(h + 4..h + 4, Terminator::Return(Some(h))),
             ],
         )
     }
@@ -2378,7 +2380,7 @@ mod tests {
                         },
                     ),
                     block(h + 2..h + 4, Terminator::Jmp(2)),
-                    block(h + 4..h + 4, Terminator::Return(h)),
+                    block(h + 4..h + 4, Terminator::Return(Some(h))),
                 ],
             )
         };
@@ -2431,6 +2433,49 @@ mod tests {
             f.blocks[0].inst_range.contains(&value),
             "the sink reads a copy"
         );
+    }
+
+    /// Sites share a copy when they are one value number: a sum in either
+    /// operand order is, a conversion at two result widths is not, and a
+    /// copy two renormalizations share is marked only if both are.
+    #[test]
+    fn sites_share_a_copy_by_value_number() {
+        let add = |lhs, rhs| Inst::Binop {
+            op: BinOp::Add,
+            lhs,
+            rhs,
+        };
+        let cast = || Inst::FpCast {
+            kind: crate::c5::ir::FpCastKind::IntToFp,
+            value: 0,
+        };
+        let extend = |nsw| Inst::Extend {
+            value: 1,
+            kind: LoadKind::I32,
+            nsw,
+        };
+        let mut body = vec![add(0, 1), add(1, 0), cast(), cast()];
+        body.extend([extend(true), extend(false)]);
+        body.extend((0..6).map(|i| sink(BODY + i)));
+        let mut f = loop_func(body);
+        f.f32_values[BODY as usize + 3] = true;
+        let hoists = plan_pure(&f);
+        let sites: Vec<Vec<ValueId>> = hoists.iter().map(|h| h.sites.clone()).collect();
+        assert_eq!(
+            sites,
+            vec![
+                vec![BODY, BODY + 1],
+                vec![BODY + 2],
+                vec![BODY + 3],
+                vec![BODY + 4, BODY + 5]
+            ]
+        );
+        let (_, copies) = apply_pure(&mut f, &hoists);
+        assert!(!f.f32_values[copies[1] as usize] && f.f32_values[copies[2] as usize]);
+        assert!(matches!(
+            f.insts[copies[3] as usize],
+            Inst::Extend { nsw: false, .. }
+        ));
     }
 
     /// The copy runs even when the loop runs no iteration, so what can trap

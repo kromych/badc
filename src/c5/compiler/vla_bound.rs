@@ -81,9 +81,6 @@ impl Compiler {
                 Some(r) => within(r, *ty),
                 None => self.type_range(*ty),
             },
-            Expr::Unary {
-                op: UnOp::LogNot, ..
-            } => Some((0, 1)),
             Expr::Cast { child, to_ty } => match self.value_range(*child, known) {
                 Some(r) => within(r, *to_ty),
                 None => self.type_range(*to_ty),

@@ -13,7 +13,6 @@
 //! pours into the dynamic linker's PLT pool.
 
 #![cfg(feature = "std")]
-#![allow(dead_code)]
 
 use crate::c5::diag::Code;
 use alloc::borrow::Cow;
@@ -3563,12 +3562,15 @@ impl<'a> Link<'a> {
                 continue;
             };
             let mut fields = Vec::with_capacity(table.fields.len());
+            // The first field at each offset: an FDE's initial location is one.
+            let mut field_at = HashMap::with_capacity(table.fields.len());
             for f in &table.fields {
                 let target = if f.got {
                     EhFrameTarget::Slot(self.pointer_slot(i, f.target)?)
                 } else {
                     self.unwind_target(i, f.target)?
                 };
+                field_at.entry(f.offset).or_insert(target);
                 fields.push(EhFrameField {
                     offset: f.offset,
                     width: f.width,
@@ -3577,8 +3579,7 @@ impl<'a> Link<'a> {
             }
             let mut fdes = Vec::with_capacity(table.fdes.len());
             for &fde in &table.fdes {
-                let initial = fields.iter().find(|f| f.offset == fde + 8);
-                let Some(EhFrameTarget::Text(text)) = initial.map(|f| f.target) else {
+                let Some(&EhFrameTarget::Text(text)) = field_at.get(&(fde + 8)) else {
                     return Err(link_err(
                         Code::MALFORMED_INPUT,
                         MODULE,

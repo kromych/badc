@@ -1308,7 +1308,7 @@ impl FunctionEmitter<'_, '_> {
                 )?;
                 return self.record_exit(start, steps);
             }
-            Terminator::Jmp(t) | Terminator::FallThrough(t) => {
+            Terminator::Jmp(t) => {
                 return self.branch_unless_next(block_idx, t);
             }
             Terminator::Bz {
@@ -2454,7 +2454,7 @@ fn push_sp_from_fp(
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_return(
     code: &mut CodeBuf,
-    value: u32,
+    value: Option<u32>,
     alloc: &Allocation,
     frame: Frame,
     scratch: &ScratchPool,
@@ -2464,12 +2464,16 @@ pub(super) fn emit_return(
     extern_data_refs: &mut Vec<super::UserExternDataRef>,
     uw: Option<&mut Vec<super::A64Step>>,
 ) -> Emit<usize> {
-    if let Some(ai) = func.ret_agg {
-        emit_aggregate_return(code, value, ai, alloc, frame, scratch, func, abi)?;
-    } else if value != super::super::ir::NO_VALUE && func.value_sve_kind(value).is_some() {
-        super::sve::emit_return(code, func, value, alloc, frame)?;
-    } else if value != super::super::ir::NO_VALUE {
-        emit_scalar_return(code, value, alloc, frame, scratch, func);
+    // A function that reaches its closing brace returns no value, whatever
+    // its type (C17 6.9.1p12): there is no object to load.
+    if let Some(value) = value {
+        if let Some(ai) = func.ret_agg {
+            emit_aggregate_return(code, value, ai, alloc, frame, scratch, func, abi)?;
+        } else if func.value_sve_kind(value).is_some() {
+            super::sve::emit_return(code, func, value, alloc, frame)?;
+        } else {
+            emit_scalar_return(code, value, alloc, frame, scratch, func);
+        }
     }
     let start = emit_frame_exit(
         code,

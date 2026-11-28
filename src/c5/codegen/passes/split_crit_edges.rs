@@ -75,7 +75,6 @@ fn split_label_addresses(func: &mut FunctionSsa) {
                 start_pc: 0,
                 inst_range: insts_end..insts_end,
                 terminator: Terminator::Jmp(l),
-                exit_acc: crate::c5::ir::NO_VALUE,
             },
             l,
         );
@@ -157,7 +156,6 @@ fn run_one(func: &mut FunctionSsa) {
                 start_pc: 0,
                 inst_range: insts_end..insts_end,
                 terminator: Terminator::Jmp(original_succ),
-                exit_acc: crate::c5::ir::NO_VALUE,
             },
             pred,
         );
@@ -242,7 +240,7 @@ fn run_one(func: &mut FunctionSsa) {
 
 fn successors(term: &Terminator, jump_tables: &[Vec<BlockId>]) -> Vec<BlockId> {
     match term {
-        Terminator::Jmp(b) | Terminator::FallThrough(b) => alloc::vec![*b],
+        Terminator::Jmp(b) => alloc::vec![*b],
         Terminator::Bz {
             target,
             fall_through,
@@ -276,7 +274,7 @@ fn successors(term: &Terminator, jump_tables: &[Vec<BlockId>]) -> Vec<BlockId> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::c5::ir::{Block, FunctionSsa, Inst, LoadKind, NO_VALUE, Terminator};
+    use crate::c5::ir::{Block, FunctionSsa, Inst, LoadKind, Terminator};
     use alloc::vec;
 
     fn fresh(insts: Vec<Inst>, blocks: Vec<Block>) -> FunctionSsa {
@@ -356,8 +354,7 @@ mod tests {
             vec![Block {
                 start_pc: 0,
                 inst_range: 0..1,
-                terminator: Terminator::Return(0),
-                exit_acc: 0,
+                terminator: Terminator::Return(Some(0)),
             }],
         );
         let n_before = f.blocks.len();
@@ -381,19 +378,16 @@ mod tests {
                         target: 1,
                         fall_through: 2,
                     },
-                    exit_acc: 0,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 1..2,
-                    terminator: Terminator::Return(1),
-                    exit_acc: 1,
+                    terminator: Terminator::Return(Some(1)),
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 2..3,
-                    terminator: Terminator::Return(2),
-                    exit_acc: 2,
+                    terminator: Terminator::Return(Some(2)),
                 },
             ],
         );
@@ -428,19 +422,16 @@ mod tests {
                         target: 2,
                         fall_through: 1,
                     },
-                    exit_acc: 0,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 1..2,
                     terminator: Terminator::Jmp(2),
-                    exit_acc: 1,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 2..3,
-                    terminator: Terminator::Return(2),
-                    exit_acc: 2,
+                    terminator: Terminator::Return(Some(2)),
                 },
             ],
         );
@@ -471,49 +462,6 @@ mod tests {
         assert!(!incoming.iter().any(|(b, _)| *b == 0));
     }
 
-    #[test]
-    fn synthetic_block_has_no_value_exit_acc() {
-        // Single critical edge as above; verify exit_acc is the
-        // NO_VALUE sentinel so the emit's accumulator threading
-        // sees a clean predecessor.
-        let mut f = fresh(
-            vec![
-                Inst::Imm(0),
-                Inst::Imm(1),
-                Inst::Phi {
-                    incoming: alloc::vec![(0, 0), (1, 1)],
-                    kind: LoadKind::I64,
-                },
-            ],
-            vec![
-                Block {
-                    start_pc: 0,
-                    inst_range: 0..1,
-                    terminator: Terminator::Bz {
-                        cond: 0,
-                        target: 2,
-                        fall_through: 1,
-                    },
-                    exit_acc: 0,
-                },
-                Block {
-                    start_pc: 0,
-                    inst_range: 1..2,
-                    terminator: Terminator::Jmp(2),
-                    exit_acc: 1,
-                },
-                Block {
-                    start_pc: 0,
-                    inst_range: 2..3,
-                    terminator: Terminator::Return(2),
-                    exit_acc: 2,
-                },
-            ],
-        );
-        run_one(&mut f);
-        assert_eq!(f.blocks[3].exit_acc, NO_VALUE);
-    }
-
     /// A conditional whose merge block carries a phi: the split must happen
     /// even though the function records an address-taken label. Taking a
     /// label's address without ever branching to it (`({ __label__ h; h:
@@ -540,19 +488,16 @@ mod tests {
                         target: 2,
                         fall_through: 1,
                     },
-                    exit_acc: 0,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 1..2,
                     terminator: Terminator::Jmp(2),
-                    exit_acc: 1,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 2..3,
-                    terminator: Terminator::Return(2),
-                    exit_acc: 2,
+                    terminator: Terminator::Return(Some(2)),
                 },
             ],
         );
@@ -601,19 +546,16 @@ mod tests {
                         target: 1,
                         fall_through: 2,
                     },
-                    exit_acc: 0,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 1..2,
-                    terminator: Terminator::Return(1),
-                    exit_acc: 1,
+                    terminator: Terminator::Return(Some(1)),
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 2..3,
-                    terminator: Terminator::Return(2),
-                    exit_acc: 2,
+                    terminator: Terminator::Return(Some(2)),
                 },
             ],
         );
@@ -654,13 +596,11 @@ mod tests {
                         target: 1,
                         fall_through: 1,
                     },
-                    exit_acc: 0,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 1..2,
-                    terminator: Terminator::Return(1),
-                    exit_acc: 1,
+                    terminator: Terminator::Return(Some(1)),
                 },
             ],
         );
@@ -699,25 +639,21 @@ mod tests {
                     start_pc: 0,
                     inst_range: 0..1,
                     terminator: Terminator::GotoIndirect { target: 0 },
-                    exit_acc: 0,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 1..2,
-                    terminator: Terminator::Return(1),
-                    exit_acc: 1,
+                    terminator: Terminator::Return(Some(1)),
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 2..3,
-                    terminator: Terminator::Return(2),
-                    exit_acc: 2,
+                    terminator: Terminator::Return(Some(2)),
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 3..4,
                     terminator: Terminator::Jmp(1),
-                    exit_acc: 3,
                 },
             ],
         );
@@ -726,7 +662,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: 4..4,
                 terminator: Terminator::GotoIndirect { target: 3 },
-                exit_acc: NO_VALUE,
             });
         }
         f.computed_goto_targets = alloc::vec![1, 2];
@@ -793,25 +728,21 @@ mod tests {
                     start_pc: 0,
                     inst_range: 0..1,
                     terminator: Terminator::JumpTable { idx: 0, table: 0 },
-                    exit_acc: 0,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 1..2,
-                    terminator: Terminator::Return(1),
-                    exit_acc: 1,
+                    terminator: Terminator::Return(Some(1)),
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 2..3,
-                    terminator: Terminator::Return(2),
-                    exit_acc: 2,
+                    terminator: Terminator::Return(Some(2)),
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 3..4,
                     terminator: Terminator::Jmp(1),
-                    exit_acc: 3,
                 },
             ],
         );

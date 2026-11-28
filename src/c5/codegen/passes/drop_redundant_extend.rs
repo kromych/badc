@@ -156,7 +156,6 @@ fn compute_high_observed_through(
             | Inst::LocalAddr(_)
             | Inst::TlsAddr(_)
             | Inst::LoadLocal { .. }
-            | Inst::TailExt(_)
             | Inst::AllocaInit(_)
             | Inst::LifetimeEnd(_)
             | Inst::ParamRef { .. }
@@ -400,8 +399,7 @@ fn compute_high_observed_through(
     // A terminator reads its operand at full width, except a zero test
     // that reads the low word (`low_word_tests`) and a return whose
     // declared type is narrower than the return register, which carries
-    // the result in its low word alone. `Block::exit_acc` names a value
-    // and reads none.
+    // the result in its low word alone.
     let ret_low_word = func.ret_low_word;
     for (b, block) in func.blocks.iter().enumerate() {
         if func.low_word_tests.get(b).copied().unwrap_or(false)
@@ -589,9 +587,7 @@ fn dedup_dominated_extends(func: &FunctionSsa, redirect: &mut [Option<ValueId>])
         }
     }
     for block in &func.blocks {
-        if let Terminator::Return(v) = block.terminator
-            && v != NO_VALUE
-        {
+        if let Terminator::Return(Some(v)) = block.terminator {
             mark(&mut placed, v);
         }
     }
@@ -1024,9 +1020,6 @@ fn apply_redirects(func: &mut FunctionSsa, redirect: &[Option<ValueId>]) {
         inst.for_each_operand_mut(|op| *op = resolve(redirect, *op));
     }
     for block in func.blocks.iter_mut() {
-        if block.exit_acc != NO_VALUE {
-            block.exit_acc = resolve(redirect, block.exit_acc);
-        }
         block
             .terminator
             .for_each_operand_mut(|v| *v = resolve(redirect, *v));
@@ -1438,8 +1431,7 @@ mod tests {
                 vec![Block {
                     start_pc: 0,
                     inst_range: 0..3,
-                    terminator: Terminator::Return(2),
-                    exit_acc: 2,
+                    terminator: Terminator::Return(Some(2)),
                 }],
             );
             run_one(&mut f);
@@ -1479,13 +1471,12 @@ mod tests {
             vec![Block {
                 start_pc: 0,
                 inst_range: 0..3,
-                terminator: Terminator::Return(2),
-                exit_acc: 2,
+                terminator: Terminator::Return(Some(2)),
             }],
         );
         run_one(&mut f);
         assert!(
-            matches!(f.blocks[0].terminator, Terminator::Return(1)),
+            matches!(f.blocks[0].terminator, Terminator::Return(Some(1))),
             "Return should redirect from v2 (Extend) to v1 (Load); got {:?}",
             f.blocks[0].terminator
         );
@@ -1517,13 +1508,12 @@ mod tests {
             vec![Block {
                 start_pc: 0,
                 inst_range: 0..3,
-                terminator: Terminator::Return(2),
-                exit_acc: 2,
+                terminator: Terminator::Return(Some(2)),
             }],
         );
         run_one(&mut f);
         assert!(
-            matches!(f.blocks[0].terminator, Terminator::Return(1)),
+            matches!(f.blocks[0].terminator, Terminator::Return(Some(1))),
             "Return should redirect from v2 (Extend i32) to v1 (I8 Load); got {:?}",
             f.blocks[0].terminator
         );
@@ -1555,13 +1545,12 @@ mod tests {
             vec![Block {
                 start_pc: 0,
                 inst_range: 0..3,
-                terminator: Terminator::Return(2),
-                exit_acc: 2,
+                terminator: Terminator::Return(Some(2)),
             }],
         );
         run_one(&mut f);
         assert!(
-            matches!(f.blocks[0].terminator, Terminator::Return(1)),
+            matches!(f.blocks[0].terminator, Terminator::Return(Some(1))),
             "Return should redirect from v2 (Extend i32) to v1 (U8 Load); got {:?}",
             f.blocks[0].terminator
         );
@@ -1591,12 +1580,14 @@ mod tests {
             vec![Block {
                 start_pc: 0,
                 inst_range: 0..3,
-                terminator: Terminator::Return(2),
-                exit_acc: 2,
+                terminator: Terminator::Return(Some(2)),
             }],
         );
         run_one(&mut f);
-        assert!(matches!(f.blocks[0].terminator, Terminator::Return(2)));
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::Return(Some(2))
+        ));
     }
 
     #[test]
@@ -1624,12 +1615,14 @@ mod tests {
             vec![Block {
                 start_pc: 0,
                 inst_range: 0..3,
-                terminator: Terminator::Return(2),
-                exit_acc: 2,
+                terminator: Terminator::Return(Some(2)),
             }],
         );
         run_one(&mut f);
-        assert!(matches!(f.blocks[0].terminator, Terminator::Return(2)));
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::Return(Some(2))
+        ));
     }
 
     #[test]
@@ -1655,12 +1648,14 @@ mod tests {
             vec![Block {
                 start_pc: 0,
                 inst_range: 0..3,
-                terminator: Terminator::Return(2),
-                exit_acc: 2,
+                terminator: Terminator::Return(Some(2)),
             }],
         );
         run_one(&mut f);
-        assert!(matches!(f.blocks[0].terminator, Terminator::Return(2)));
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::Return(Some(2))
+        ));
     }
 
     #[test]
@@ -1670,12 +1665,14 @@ mod tests {
             vec![Block {
                 start_pc: 0,
                 inst_range: 0..1,
-                terminator: Terminator::Return(0),
-                exit_acc: 0,
+                terminator: Terminator::Return(Some(0)),
             }],
         );
         run_one(&mut f);
-        assert!(matches!(f.blocks[0].terminator, Terminator::Return(0)));
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::Return(Some(0))
+        ));
     }
 
     /// v0 Imm(addr); v1 Load I32; v2 Add(v1,v1); v3 Extend(v2,I32);
@@ -1717,8 +1714,7 @@ mod tests {
             vec![Block {
                 start_pc: 0,
                 inst_range: 0..5,
-                terminator: Terminator::Return(NO_VALUE),
-                exit_acc: NO_VALUE,
+                terminator: Terminator::Return(None),
             }],
         )
     }
@@ -1758,8 +1754,7 @@ mod tests {
         let block = Block {
             start_pc: 0,
             inst_range: 0..n,
-            terminator: Terminator::Return(NO_VALUE),
-            exit_acc: NO_VALUE,
+            terminator: Terminator::Return(None),
         };
         fresh(insts, vec![block])
     }
@@ -1863,8 +1858,7 @@ mod tests {
             vec![Block {
                 start_pc: 0,
                 inst_range: 0..n,
-                terminator: Terminator::Return(NO_VALUE),
-                exit_acc: NO_VALUE,
+                terminator: Terminator::Return(None),
             }],
         )
     }
@@ -2053,35 +2047,22 @@ mod tests {
         );
     }
 
-    /// `Block::exit_acc` names the extend without reading it, so the
-    /// extend is dropped as it is without the naming.
-    #[test]
-    fn block_exit_value_reads_no_high_bits() {
-        let mut f = extend_over_add_feeding_store(StoreKind::I32);
-        f.blocks[0].exit_acc = 3;
-        run_one(&mut f);
-        assert!(
-            matches!(f.insts[4], Inst::Store { value: 2, .. }),
-            "{:?}",
-            f.insts[4]
-        );
-        assert_eq!(f.blocks[0].exit_acc, 2);
-    }
-
     /// A terminator operand is read at full width: the returned extend
     /// stays, for its narrow consumer too.
     #[test]
     fn returned_extend_is_kept() {
         let mut f = extend_over_add_feeding_store(StoreKind::I32);
-        f.blocks[0].terminator = Terminator::Return(3);
-        f.blocks[0].exit_acc = 3;
+        f.blocks[0].terminator = Terminator::Return(Some(3));
         run_one(&mut f);
         assert!(
             matches!(f.insts[4], Inst::Store { value: 3, .. }),
             "{:?}",
             f.insts[4]
         );
-        assert!(matches!(f.blocks[0].terminator, Terminator::Return(3)));
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::Return(Some(3))
+        ));
     }
 
     #[test]
@@ -2144,19 +2125,16 @@ mod tests {
                         target: 2,
                         fall_through: 1,
                     },
-                    exit_acc: 2,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 3..5,
-                    terminator: Terminator::Return(4),
-                    exit_acc: 4,
+                    terminator: Terminator::Return(Some(4)),
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 5..7,
-                    terminator: Terminator::Return(6),
-                    exit_acc: 6,
+                    terminator: Terminator::Return(Some(6)),
                 },
             ],
         )
@@ -2229,19 +2207,16 @@ mod tests {
                         target: 2,
                         fall_through: 1,
                     },
-                    exit_acc: 1,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 2..4,
-                    terminator: Terminator::Return(3),
-                    exit_acc: 3,
+                    terminator: Terminator::Return(Some(3)),
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 4..6,
-                    terminator: Terminator::Return(5),
-                    exit_acc: 5,
+                    terminator: Terminator::Return(Some(5)),
                 },
             ],
         );
@@ -2302,19 +2277,16 @@ mod tests {
                         target: 2,
                         fall_through: 1,
                     },
-                    exit_acc: 2,
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 3..5,
-                    terminator: Terminator::Return(4),
-                    exit_acc: 4,
+                    terminator: Terminator::Return(Some(4)),
                 },
                 Block {
                     start_pc: 0,
                     inst_range: 5..5,
-                    terminator: Terminator::Return(2),
-                    exit_acc: 2,
+                    terminator: Terminator::Return(Some(2)),
                 },
             ],
         );
@@ -2366,7 +2338,6 @@ mod tests {
                 start_pc: 0,
                 inst_range: start..insts.len() as u32,
                 terminator: *terminator,
-                exit_acc: NO_VALUE,
             });
         }
         let f = fresh(insts, blocks);
@@ -2391,7 +2362,7 @@ mod tests {
             ("", Terminator::Jmp(1)),
             ("EE", Terminator::Jmp(2)),
             ("C", bnz(3, 1, 3)),
-            ("", Terminator::Return(NO_VALUE)),
+            ("", Terminator::Return(None)),
         ]);
         assert_eq!(r[2], Some(1));
     }
@@ -2404,7 +2375,7 @@ mod tests {
             ("E", Terminator::Jmp(2)),
             ("E", Terminator::Jmp(3)),
             ("C", bnz(3, 1, 4)),
-            ("", Terminator::Return(NO_VALUE)),
+            ("", Terminator::Return(None)),
         ]);
         assert_eq!(r[2], Some(1));
     }
@@ -2414,7 +2385,7 @@ mod tests {
     /// in a block between them, and in a loop the leader is outside of.
     #[test]
     fn an_extend_across_a_call_keeps_its_own() {
-        let ret = || Terminator::Return(NO_VALUE);
+        let ret = || Terminator::Return(None);
         let r = dedup_around_calls(&[("ECE", ret())]);
         assert_eq!(r[3], None);
         let r = dedup_around_calls(&[("EC", Terminator::Jmp(1)), ("E", ret())]);
@@ -2445,8 +2416,7 @@ mod tests {
             vec![Block {
                 start_pc: 0,
                 inst_range: 0..1,
-                terminator: Terminator::Return(0),
-                exit_acc: 0,
+                terminator: Terminator::Return(Some(0)),
             }],
         );
         callee.ent_pc = 7;
@@ -2486,8 +2456,7 @@ mod tests {
             vec![Block {
                 start_pc: 0,
                 inst_range: 0..4,
-                terminator: Terminator::Return(3),
-                exit_acc: 3,
+                terminator: Terminator::Return(Some(3)),
             }],
         );
         caller.ent_pc = 9;
@@ -2575,8 +2544,7 @@ mod tests {
             vec![Block {
                 start_pc: 0,
                 inst_range: 0..4,
-                terminator: Terminator::Return(3),
-                exit_acc: 3,
+                terminator: Terminator::Return(Some(3)),
             }],
         );
         caller.ent_pc = 9;
@@ -2625,8 +2593,7 @@ mod tests {
             vec![Block {
                 start_pc: 0,
                 inst_range: 0..5,
-                terminator: Terminator::Return(4),
-                exit_acc: 4,
+                terminator: Terminator::Return(Some(4)),
             }],
         );
         run_one(&mut f);
@@ -2665,8 +2632,7 @@ mod tests {
             vec![Block {
                 start_pc: 0,
                 inst_range: 0..4,
-                terminator: Terminator::Return(3),
-                exit_acc: 3,
+                terminator: Terminator::Return(Some(3)),
             }],
         );
         assert!(
@@ -2701,8 +2667,7 @@ mod tests {
             vec![Block {
                 start_pc: 0,
                 inst_range: 0..4,
-                terminator: Terminator::Return(3),
-                exit_acc: 3,
+                terminator: Terminator::Return(Some(3)),
             }],
         )
     }
@@ -2718,11 +2683,10 @@ mod tests {
             let mut f = stacked_extends(inner, outer);
             run_one(&mut f);
             assert!(
-                matches!(f.blocks[0].terminator, Terminator::Return(2)),
+                matches!(f.blocks[0].terminator, Terminator::Return(Some(2))),
                 "{inner:?} inside {outer:?} reproduces the inner bits; the \
                  outer extend must drop",
             );
-            assert_eq!(f.blocks[0].exit_acc, 2);
         }
     }
 
@@ -2736,7 +2700,7 @@ mod tests {
             let mut f = stacked_extends(inner, outer);
             run_one(&mut f);
             assert!(
-                matches!(f.blocks[0].terminator, Terminator::Return(3)),
+                matches!(f.blocks[0].terminator, Terminator::Return(Some(3))),
                 "{outer:?} truncates below {inner:?}; the outer extend stays",
             );
         }
@@ -2751,7 +2715,7 @@ mod tests {
         let mut f = stacked_extends(LoadKind::I32, LoadKind::I32);
         run_one(&mut f);
         assert!(
-            matches!(f.blocks[0].terminator, Terminator::Return(2)),
+            matches!(f.blocks[0].terminator, Terminator::Return(Some(2))),
             "the return must read the surviving extend, not the raw add",
         );
     }
@@ -2761,7 +2725,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 
@@ -2801,7 +2764,7 @@ mod tests {
                     },
                 ),
                 block(3..3, Terminator::Jmp(2)),
-                block(3..n, Terminator::Return(n - 1)),
+                block(3..n, Terminator::Return(Some(n - 1))),
             ],
         )
     }
@@ -2849,7 +2812,10 @@ mod tests {
             vec![and(3, 0xff)],
         );
         drop_fitting(&mut f, &[]);
-        assert!(matches!(f.blocks[2].terminator, Terminator::Return(4)));
+        assert!(matches!(
+            f.blocks[2].terminator,
+            Terminator::Return(Some(4))
+        ));
     }
 
     #[test]
@@ -2869,9 +2835,9 @@ mod tests {
             kind: LoadKind::I8,
             nsw: false,
         };
-        assert!(matches!(byte(sext), Terminator::Return(3)));
+        assert!(matches!(byte(sext), Terminator::Return(Some(3))));
         // A masked byte reaches 0xff, which a signed char does not hold.
-        assert!(matches!(byte(and(0, 0xff)), Terminator::Return(4)));
+        assert!(matches!(byte(and(0, 0xff)), Terminator::Return(Some(4))));
     }
 
     /// `n - 2` on both sides of `n < 2`, each renormalized and stored at 8
@@ -2917,7 +2883,6 @@ mod tests {
             start_pc: 0,
             inst_range,
             terminator,
-            exit_acc: NO_VALUE,
         };
         let mut f = fresh(
             insts,
@@ -2930,8 +2895,8 @@ mod tests {
                         fall_through: 1,
                     },
                 ),
-                block(2..5, Terminator::Return(NO_VALUE)),
-                block(5..8, Terminator::Return(NO_VALUE)),
+                block(2..5, Terminator::Return(None)),
+                block(5..8, Terminator::Return(None)),
             ],
         );
         f.n_params = 1;
@@ -3062,14 +3027,14 @@ mod tests {
                     },
                 ),
                 block(5..7, Terminator::Jmp(1)),
-                block(7..8, Terminator::Return(7)),
+                block(7..8, Terminator::Return(Some(7))),
             ],
         );
         drop_fitting(&mut f, &[]);
         assert!(
             matches!(f.insts[5], Inst::BinopI { lhs: 3, .. })
                 && matches!(f.insts[6], Inst::Binop { lhs: 5, rhs: 0, .. })
-                && matches!(f.blocks[3].terminator, Terminator::Return(3)),
+                && matches!(f.blocks[3].terminator, Terminator::Return(Some(3))),
             "{:?} {:?}",
             f.insts,
             f.blocks[3].terminator

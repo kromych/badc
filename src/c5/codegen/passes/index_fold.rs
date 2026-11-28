@@ -219,8 +219,6 @@ pub(crate) fn mark_pc_rel_accesses(func: &mut FunctionSsa, strict_align: bool) {
     }
 }
 
-/// Count uses of every value across instructions, terminators, and
-/// block exit accumulators.
 /// A pure value nothing reads, which [`use_counts`] does not count as a
 /// use of its operands.
 fn dead(func: &FunctionSsa, counts: &[u32], inst: &Inst, i: usize) -> bool {
@@ -228,7 +226,7 @@ fn dead(func: &FunctionSsa, counts: &[u32], inst: &Inst, i: usize) -> bool {
 }
 
 fn use_counts(func: &FunctionSsa) -> Vec<u32> {
-    let mut counts = crate::c5::codegen::ssa::reg_alloc::value_reads(func);
+    let mut counts = crate::c5::codegen::ssa::reg_alloc::operand_reads(func);
     // A pure value nothing reads goes with the emit's dead-pure skip, and
     // its operands lose that use.
     let mut dead: Vec<usize> = (0..counts.len())
@@ -850,7 +848,7 @@ fn fold_round(func: &mut FunctionSsa) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::c5::ir::{NO_VALUE, Terminator};
+    use crate::c5::ir::Terminator;
     use alloc::vec;
 
     // v0 = Imm (the pre-normalize w); v1 = Shl(v0, k); v2 = Shr(v1, k).
@@ -914,8 +912,7 @@ mod tests {
             blocks: vec![Block {
                 start_pc: 0,
                 inst_range: 0..n,
-                terminator: Terminator::Return(n - 1),
-                exit_acc: NO_VALUE,
+                terminator: Terminator::Return(Some(n - 1)),
             }],
             ..Default::default()
         }];

@@ -1453,9 +1453,6 @@ pub(super) fn page_only_data(
         block
             .terminator
             .for_each_operand(|op| whole[op as usize] = true);
-        if let Some(slot) = whole.get_mut(block.exit_acc as usize) {
-            *slot = true;
-        }
     }
     (0..n)
         .map(|v| {

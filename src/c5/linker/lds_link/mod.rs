@@ -29,7 +29,6 @@
 //! symbol table, and `write` assembles the image.
 
 #![cfg(feature = "std")]
-#![allow(dead_code)]
 
 mod copies;
 mod dynamic_sections;
@@ -94,8 +93,10 @@ const SHT_NOBITS: u32 = 8;
 
 const SHT_REL: u32 = 9;
 
+#[cfg(test)]
 const SHT_INIT_ARRAY: u32 = 14;
 
+#[cfg(test)]
 const SHT_FINI_ARRAY: u32 = 15;
 
 const SHT_PREINIT_ARRAY: u32 = 16;
@@ -130,15 +131,11 @@ const SHF_GROUP: u64 = 0x200;
 
 const SHF_TLS: u64 = 0x400;
 
-const SHF_COMPRESSED: u64 = 0x800;
-
 const SHF_EXCLUDE: u64 = 0x8000_0000;
 
 const SHF_GNU_RETAIN: u64 = 0x0020_0000;
 
 const SHN_UNDEF: u16 = 0;
-
-const SHN_LORESERVE: u16 = 0xff00;
 
 const SHN_ABS: u16 = 0xfff1;
 
@@ -627,7 +624,6 @@ struct ScriptSym {
 /// One input section's per-pass placement.
 #[derive(Clone, Copy, Default)]
 struct Placement {
-    out: usize,
     off: u64,
     placed: bool,
 }
@@ -745,9 +741,6 @@ pub struct LdsLinker<'a> {
 
     /// Global symbol resolution: name -> defining (obj, sym index).
     globals: HashMap<String, (usize, usize)>,
-    /// Common symbols coalesced into a synthetic bss chunk:
-    /// name -> (insec index, offset, size, align).
-    commons: HashMap<String, (usize, u64)>,
     /// Every symbol the script assigns anywhere. A script assignment
     /// outranks a synthesized section bound whatever order the two
     /// reach the symbol table in.
@@ -1071,7 +1064,6 @@ impl<'a> LdsLinker<'a> {
             outs: Vec::new(),
             stmts: Vec::new(),
             globals: HashMap::new(),
-            commons: HashMap::new(),
             script_assigned: HashSet::new(),
             visibility: HashMap::new(),
             variant_pcs: HashSet::new(),

@@ -152,7 +152,7 @@ pub(crate) fn fold_converging_arms(func: &mut FunctionSsa) -> bool {
     }
     let forwards_to = |s: BlockId| -> Option<BlockId> {
         let block = func.blocks.get(s as usize)?;
-        let (Terminator::Jmp(next) | Terminator::FallThrough(next)) = block.terminator else {
+        let Terminator::Jmp(next) = block.terminator else {
             return None;
         };
         let quiet = block.inst_range.clone().all(|i| {
@@ -816,7 +816,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         };
         fresh(
             vec![
@@ -842,7 +841,7 @@ mod tests {
                 ),
                 block(1..2, Terminator::Jmp(3)),
                 block(2..3, Terminator::Jmp(3)),
-                block(3..4, Terminator::Return(ret)),
+                block(3..4, Terminator::Return(Some(ret))),
             ],
         )
     }
@@ -907,7 +906,6 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             }],
         );
         run_one(&mut f);
@@ -926,7 +924,6 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             }],
         );
         run_one(&mut f);
@@ -945,7 +942,6 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             }],
         );
         run_one(&mut f);
@@ -964,7 +960,6 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             }],
         );
         run_one(&mut f);
@@ -988,7 +983,6 @@ mod tests {
                     start_pc: 0,
                     inst_range: 0..1,
                     terminator: Terminator::Jmp(1),
-                    exit_acc: 0,
                 },
                 Block {
                     start_pc: 0,
@@ -998,7 +992,6 @@ mod tests {
                         target: 2,
                         fall_through: 3,
                     },
-                    exit_acc: 1,
                 },
             ],
         );
@@ -1030,25 +1023,21 @@ mod tests {
                         target: 1,
                         fall_through: 2,
                     },
-                    exit_acc: 0,
                 }, // b0
                 Block {
                     start_pc: 0,
                     inst_range: 2..3,
-                    terminator: Terminator::Return(2),
-                    exit_acc: 2,
+                    terminator: Terminator::Return(Some(2)),
                 }, // b1
                 Block {
                     start_pc: 0,
                     inst_range: 1..2,
-                    terminator: Terminator::Return(1),
-                    exit_acc: 1,
+                    terminator: Terminator::Return(Some(1)),
                 }, // b2
                 Block {
                     start_pc: 0,
                     inst_range: 3..3,
                     terminator: Terminator::Jmp(1),
-                    exit_acc: NO_VALUE as ValueId,
                 }, // b3 -> b1
             ],
         );
@@ -1088,7 +1077,6 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 2,
             }],
         );
         run_one(&mut f);
@@ -1107,7 +1095,6 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             }],
         );
         let before = f.blocks[0].terminator;
@@ -1130,7 +1117,6 @@ mod tests {
                     target: 1,
                     fall_through: 2,
                 },
-                exit_acc: 0,
             }],
         );
         run_one(&mut f);
@@ -1143,19 +1129,16 @@ mod tests {
                 start_pc: 0,
                 inst_range: 0..2,
                 terminator: term,
-                exit_acc: 1,
             },
             Block {
                 start_pc: 0,
                 inst_range: 2..2,
-                terminator: Terminator::Return(NO_VALUE as ValueId),
-                exit_acc: NO_VALUE as ValueId,
+                terminator: Terminator::Return(None),
             },
             Block {
                 start_pc: 0,
                 inst_range: 2..2,
-                terminator: Terminator::Return(NO_VALUE as ValueId),
-                exit_acc: NO_VALUE as ValueId,
+                terminator: Terminator::Return(None),
             },
         ]
     }
@@ -1293,7 +1276,7 @@ mod tests {
             };
             let mut f = fresh(vec![load, narrow], zero_test_blocks(term));
             if read_again {
-                f.blocks[1].terminator = Terminator::Return(1);
+                f.blocks[1].terminator = Terminator::Return(Some(1));
             }
             strip_zero_test_conds(&mut f);
             let Terminator::Bz { cond, .. } = f.blocks[0].terminator else {
@@ -1343,7 +1326,7 @@ mod tests {
             f.blocks[0].inst_range = 0..3;
             f.cmp32 = vec![false, false, true];
             if read_again {
-                f.blocks[1].terminator = Terminator::Return(2);
+                f.blocks[1].terminator = Terminator::Return(Some(2));
             }
             assert!(strip_zero_test_conds(&mut f));
             let Terminator::Bz { cond, .. } = f.blocks[0].terminator else {

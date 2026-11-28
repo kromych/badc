@@ -197,7 +197,6 @@ pub(crate) fn run(func: &mut FunctionSsa) {
         next += 1;
         rw.ids[next - 1]
     };
-    let mut gone: BTreeSet<ValueId> = BTreeSet::new();
     for e in &edits {
         let loads: Vec<ValueId> = e.outs.iter().filter(|o| o.rw).map(|_| take()).collect();
         let site = take();
@@ -221,17 +220,10 @@ pub(crate) fn run(func: &mut FunctionSsa) {
         for o in &e.outs {
             let addr = rw.remap[o.addr as usize];
             func.insts[addr as usize] = Inst::Imm(0);
-            gone.insert(addr);
         }
         let at = rw.remap[e.at as usize];
         let last = e.outs.len() - 1;
         func.insts[at as usize] = store(&e.outs[last], values[last]);
-        gone.insert(at);
-    }
-    for b in &mut func.blocks {
-        if gone.contains(&b.exit_acc) {
-            b.exit_acc = NO_VALUE;
-        }
     }
 }
 
@@ -267,7 +259,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 
@@ -294,7 +285,6 @@ mod tests {
                 clobber_regs: 0,
                 clobber_fp_regs: 0,
                 clobber_memory: false,
-                volatile: true,
             }),
             args,
         }
@@ -331,9 +321,8 @@ mod tests {
                 ),
                 load(-1),
             ],
-            vec![block(0..3, Terminator::Return(2))],
+            vec![block(0..3, Terminator::Return(Some(2)))],
         );
-        f.blocks[0].exit_acc = 1;
         run(&mut f);
         assert!(matches!(f.insts[0], Inst::Imm(0)), "{:?}", f.insts);
         let (asm, args) = asm_at(&f, 1);
@@ -358,7 +347,6 @@ mod tests {
             }
         ));
         assert_eq!(f.blocks[0].inst_range, 0..4);
-        assert_eq!(f.blocks[0].exit_acc, NO_VALUE);
     }
 
     /// A `+r` output reads the slot ahead of the statement, at the
@@ -374,7 +362,7 @@ mod tests {
                     vec![0],
                 ),
             ],
-            vec![block(0..2, Terminator::Return(NO_VALUE))],
+            vec![block(0..2, Terminator::Return(None))],
         );
         run(&mut f);
         assert!(matches!(
@@ -419,7 +407,7 @@ mod tests {
                         vec![0],
                     ),
                 ],
-                vec![block(0..2, Terminator::Return(NO_VALUE))],
+                vec![block(0..2, Terminator::Return(None))],
             );
             run(&mut f);
             assert!(matches!(f.insts[1], Inst::LoadLocal { kind, .. } if kind == read));
@@ -435,7 +423,7 @@ mod tests {
                     vec![0],
                 ),
             ],
-            vec![block(0..2, Terminator::Return(NO_VALUE))],
+            vec![block(0..2, Terminator::Return(None))],
         );
         run(&mut f);
         assert!(matches!(f.insts[0], Inst::LocalAddr(-1)));
@@ -470,7 +458,7 @@ mod tests {
         let goto = |f: &mut FunctionSsa| {
             f.blocks[0].terminator = Terminator::AsmGoto { table: 0 };
             f.blocks[0].inst_range = 0..2;
-            f.blocks.push(block(2..3, Terminator::Return(2)));
+            f.blocks.push(block(2..3, Terminator::Return(Some(2))));
         };
         for shape in [mem, volatile, twice, goto] {
             let mut f = func_with(
@@ -483,7 +471,7 @@ mod tests {
                     ),
                     load(-1),
                 ],
-                vec![block(0..3, Terminator::Return(2))],
+                vec![block(0..3, Terminator::Return(Some(2)))],
             );
             shape(&mut f);
             run(&mut f);
@@ -509,7 +497,7 @@ mod tests {
                     vec![0, 1],
                 ),
             ],
-            vec![block(0..3, Terminator::Return(NO_VALUE))],
+            vec![block(0..3, Terminator::Return(None))],
         );
         run(&mut f);
         assert!(matches!(f.insts[..2], [Inst::Imm(0), Inst::Imm(0)]));
@@ -558,7 +546,7 @@ mod tests {
                     vec![0, 1],
                 ),
             ],
-            vec![block(0..3, Terminator::Return(NO_VALUE))],
+            vec![block(0..3, Terminator::Return(None))],
         );
         run(&mut f);
         assert!(matches!(

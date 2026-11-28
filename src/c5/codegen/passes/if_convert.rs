@@ -115,9 +115,6 @@ fn convert_all(func: &mut FunctionSsa, target: Target) -> bool {
             converted[head as usize] = true;
             let block = &mut func.blocks[head as usize];
             block.terminator = Terminator::Jmp(c.join);
-            if block.exit_acc == c.cond {
-                block.exit_acc = NO_VALUE;
-            }
             plan.push(c);
         }
     }
@@ -327,9 +324,6 @@ fn apply(func: &mut FunctionSsa, plan: &[Conversion]) {
         }
     }
     for block in func.blocks.iter_mut() {
-        if block.exit_acc != NO_VALUE {
-            redirect(&mut block.exit_acc);
-        }
         block.terminator.for_each_operand_mut(redirect);
     }
 }
@@ -344,7 +338,6 @@ mod tests {
             start_pc: 0,
             inst_range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 
@@ -403,7 +396,7 @@ mod tests {
                 ),
                 block(3..5, Terminator::Jmp(3)),
                 block(5..7, Terminator::Jmp(3)),
-                block(7..9, Terminator::Return(7)),
+                block(7..9, Terminator::Return(Some(7))),
             ],
             ..Default::default()
         };

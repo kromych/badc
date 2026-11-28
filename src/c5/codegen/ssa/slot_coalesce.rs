@@ -1751,8 +1751,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..n,
-                terminator: Terminator::Return(ret),
-                exit_acc: ret,
+                terminator: Terminator::Return(Some(ret)),
             }],
             insts,
             ..Default::default()
@@ -1929,7 +1928,6 @@ mod tests {
                             clobber_regs: 0,
                             clobber_fp_regs: 0,
                             clobber_memory: true,
-                            volatile: true,
                         }),
                         args: alloc::vec![],
                     },
@@ -2503,7 +2501,6 @@ mod tests {
                     start_pc: lo as usize,
                     inst_range: lo..hi,
                     terminator,
-                    exit_acc: NO_VALUE,
                 })
                 .collect(),
             insts,
@@ -2587,7 +2584,7 @@ mod tests {
                             fall_through: 3,
                         },
                     ),
-                    (7, 8, Terminator::Return(NO_VALUE)),
+                    (7, 8, Terminator::Return(None)),
                 ],
                 8,
             );
@@ -2645,7 +2642,7 @@ mod tests {
                         fall_through: 2,
                     },
                 ),
-                (back, back + 1, Terminator::Return(NO_VALUE)),
+                (back, back + 1, Terminator::Return(None)),
             ];
             let mut f = multi_block(insts, blocks, 8);
             f.multi_cell_slots = alloc::vec![(-8, 4), (-4, 4)];
@@ -2709,8 +2706,8 @@ mod tests {
                         fall_through: 1,
                     },
                 ),
-                (b1, b2, Terminator::Return(NO_VALUE)),
-                (b2, end, Terminator::Return(NO_VALUE)),
+                (b1, b2, Terminator::Return(None)),
+                (b2, end, Terminator::Return(None)),
             ];
             let mut f = multi_block(insts, blocks, 8);
             f.multi_cell_slots = alloc::vec![(-8, 4), (-4, 4)];

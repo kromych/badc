@@ -347,6 +347,8 @@ def build(args, arch: dict, tree: Path, manifest: Path,
         BADC_LD_MANIFEST=str(ld_manifest),
         BADC_WFLAGS_CACHE=str(manifest.parent / "badc-wflags.json"),
     )
+    if args.verify_ssa:
+        env["BADC_VERIFY_SSA"] = "1"
     if args.fallback:
         env["BADC_FALLBACK"] = str(Path(args.fallback).resolve())
     else:
@@ -1365,6 +1367,10 @@ def main() -> int:
     ap.add_argument("--real-cc", default=os.environ.get("BADC_REAL_CC"),
                     help="compiler for the units badc does not take "
                          "(default: the target's gcc)")
+    ap.add_argument("--verify-ssa", action="store_true",
+                    help="compile every unit under badc's --verify-ssa: a "
+                         "pass that leaves malformed SSA fails the unit and "
+                         "is named")
     ap.add_argument("--linker", choices=("reference", "badc"),
                     default=os.environ.get("BADC_LINKER", "badc"),
                     help="who links: `badc` (the default) runs every link "

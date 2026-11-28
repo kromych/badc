@@ -41,7 +41,11 @@ pub(crate) fn run(funcs: &mut [FunctionSsa], param_ranges: &ParamRanges) {
         let params = param_ranges
             .get(&func.ent_pc)
             .map_or(&[][..], Vec::as_slice);
-        run_one(func, params);
+        // A comparison the lowering wrote follows the run that marked the
+        // 32-bit ones.
+        if run_one(func, params) {
+            super::narrow::mark_compares(func, true);
+        }
     }
 }
 
@@ -215,10 +219,11 @@ fn resolve(redirect: &[Option<ValueId>], mut v: ValueId) -> ValueId {
     v
 }
 
-fn run_one(func: &mut FunctionSsa, params: &[Range]) {
+/// Whether a site was lowered.
+fn run_one(func: &mut FunctionSsa, params: &[Range]) -> bool {
     let sites = sites(func);
     if sites.is_empty() {
-        return;
+        return false;
     }
     debug_assert!((func.insts.len() as u64) < STEP as u64);
     let ranges = value_range::def_ranges(func, params);
@@ -323,19 +328,17 @@ fn run_one(func: &mut FunctionSsa, params: &[Range]) {
         func.insts[at as usize] = Inst::Imm(0);
     }
     if redirect.iter().all(Option::is_none) {
-        return;
+        return !expansions.is_empty();
     }
     for inst in func.insts.iter_mut() {
         inst.for_each_operand_mut(|v| *v = resolve(&redirect, *v));
     }
     for block in func.blocks.iter_mut() {
-        if block.exit_acc != NO_VALUE {
-            block.exit_acc = resolve(&redirect, block.exit_acc);
-        }
         block
             .terminator
             .for_each_operand_mut(|v| *v = resolve(&redirect, *v));
     }
+    true
 }
 
 #[cfg(test)]

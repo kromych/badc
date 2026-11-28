@@ -361,7 +361,7 @@ impl Cx<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::c5::ir::{BinOp, Block, LoadKind, NO_VALUE, StoreKind};
+    use crate::c5::ir::{BinOp, Block, LoadKind, StoreKind};
 
     /// A run thousands of instructions wide costs priorities in proportion
     /// to its operand reads: one as an instruction turns ready and one as an
@@ -408,8 +408,7 @@ mod tests {
             blocks: vec![Block {
                 start_pc: 0,
                 inst_range: 0..len,
-                terminator: Terminator::Return(NO_VALUE),
-                exit_acc: NO_VALUE,
+                terminator: Terminator::Return(None),
             }],
             ..Default::default()
         };

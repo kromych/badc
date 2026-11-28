@@ -291,7 +291,8 @@ fn unary_neg_lowers_to_one_negate() {
     );
 }
 
-/// A statement shape the parser never produces (`Asm`) surfaces as a
+/// A statement the parser never produces, a `break` no loop or `switch`
+/// encloses, surfaces as a
 /// `WalkError::InvalidStmt` so the validator can route the gap back to
 /// a parser site, and it is reported as an internal error.
 #[test]
@@ -302,16 +303,10 @@ fn unsupported_stmt_returns_error() {
         file: 0,
         offset: 0,
     };
-    let asm_id = ast.push_stmt(
-        Stmt::Asm {
-            text: alloc::string::String::new(),
-            clobbers: alloc::string::String::new(),
-        },
-        src,
-    );
-    ast.body = Some(asm_id);
+    let break_id = ast.push_stmt(Stmt::Break, src);
+    ast.body = Some(break_id);
 
-    let err = walk(ast, 0, 0, &empty_symbols()).expect_err("Asm must surface as unsupported");
-    assert!(matches!(err, WalkError::InvalidStmt { kind: "Asm", .. }));
+    let err = walk(ast, 0, 0, &empty_symbols()).expect_err("a stray break is no statement");
+    assert!(matches!(err, WalkError::InvalidStmt { kind: "Break", .. }));
     assert!(err.is_internal());
 }

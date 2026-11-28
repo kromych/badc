@@ -425,7 +425,7 @@ pub(super) fn link(units: Vec<VmUnit>) -> Result<Linked, C5Error> {
                     Inst::TlsAddr(off) => *off += b.tls as i64,
                     Inst::ParentLocalAddr { parent, .. } => *parent += b.pc,
                     Inst::CallExt { binding_idx, .. } => *binding_idx += b.binding,
-                    Inst::ImmExtCode(idx) | Inst::TailExt(idx) => *idx += b.binding,
+                    Inst::ImmExtCode(idx) => *idx += b.binding,
                     _ => {}
                 }
             }

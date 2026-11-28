@@ -17,8 +17,6 @@
 //! stable across producers so the allocator and emitters need no
 //! parallel paths.
 
-#![allow(dead_code)]
-
 use alloc::vec::Vec;
 
 /// Index into a function's instruction list.
@@ -478,10 +476,6 @@ pub(crate) enum Inst {
         /// `ret_agg` is set.
         ret_slot_local: i64,
     },
-    /// Tail-jump to an external symbol. Used only as the body
-    /// of an address-take trampoline; never has a defined value
-    /// (control transfers out).
-    TailExt(i64),
     /// Whole-object zero fill: `size` bytes at `dst` become zero. What
     /// an assignment from a zero image lowers to once the image is not
     /// built; `align` is what `dst` is known to satisfy. Has no value.
@@ -865,7 +859,6 @@ impl Inst {
                 | Inst::Call { .. }
                 | Inst::CallIndirect { .. }
                 | Inst::CallExt { .. }
-                | Inst::TailExt(_)
                 | Inst::Mcpy { .. }
                 | Inst::Mzero { .. }
                 | Inst::AtomicRmw { .. }
@@ -939,7 +932,6 @@ impl Inst {
             Inst::Call { .. } => "Call",
             Inst::CallIndirect { .. } => "CallIndirect",
             Inst::CallExt { .. } => "CallExt",
-            Inst::TailExt(_) => "TailExt",
             Inst::Mcpy { .. } => "Mcpy",
             Inst::Mzero { .. } => "Mzero",
             Inst::AtomicRmw { .. } => "AtomicRmw",
@@ -987,7 +979,6 @@ impl Inst {
             | Inst::LocalAddr(_)
             | Inst::TlsAddr(_)
             | Inst::LoadLocal { .. }
-            | Inst::TailExt(_)
             | Inst::AllocaInit(_)
             | Inst::LifetimeEnd(_)
             | Inst::ParamRef { .. }
@@ -1133,7 +1124,6 @@ impl Inst {
             | Inst::LocalAddr(_)
             | Inst::TlsAddr(_)
             | Inst::LoadLocal { .. }
-            | Inst::TailExt(_)
             | Inst::AllocaInit(_)
             | Inst::LifetimeEnd(_)
             | Inst::ParamRef { .. }
@@ -2038,8 +2028,6 @@ pub(crate) struct AsmBlock {
     /// A `"memory"` clobber was listed: an ordering barrier for memory
     /// accesses (C practice for `asm volatile("" ::: "memory")`).
     pub clobber_memory: bool,
-    /// The statement carried the `volatile` qualifier.
-    pub volatile: bool,
 }
 
 /// The register class operand `i` of `operands` takes: a matching input
@@ -2367,10 +2355,9 @@ pub(crate) enum Terminator {
         target: BlockId,
         fall_through: BlockId,
     },
-    /// Return the accumulator value. The per-arch lowering moves
-    /// `value` into the host's int / FP return register; a `void`
-    /// function's `NO_VALUE` moves nothing.
-    Return(ValueId),
+    /// Return a value, which the per-arch lowering moves into the host's
+    /// int / FP return register, or none from a `void` function.
+    Return(Option<ValueId>),
     /// Tail-jump to a libc symbol. The trampoline shape doesn't
     /// return through here.
     TailExt(i64),
@@ -2396,11 +2383,6 @@ pub(crate) enum Terminator {
     /// `Terminator` is `Copy`; every edge is opaque to the branch
     /// folds (the asm decides at runtime).
     AsmGoto { table: u32 },
-    /// Synthetic fall-through to a successor block. Preserved
-    /// on the variant for object-file round-trips of SSA bodies
-    /// that already carry it; new IR producers should use the
-    /// explicit branch terminators instead.
-    FallThrough(BlockId),
     /// Control cannot reach here: the block's last real instruction
     /// diverges (a call to a `_Noreturn` function, C11 6.7.4p8). The
     /// block has no successor and yields no value; the per-arch
@@ -2416,24 +2398,24 @@ impl Terminator {
     /// passes that renumber values. Exhaustive, so a new terminator does
     /// not compile until it answers here; a variant missed by a
     /// hand-maintained copy keeps a pre-rewrite value id.
-    ///
-    /// `Return` may carry `NO_VALUE` for a void return, which is passed
-    /// through unchanged.
     pub(crate) fn for_each_operand(&self, mut f: impl FnMut(ValueId)) {
+        if let Some(v) = self.operand() {
+            f(v);
+        }
+    }
+
+    /// The value the terminator reads; a return of none, a jump, and an
+    /// end that is not reached read none.
+    pub(crate) fn operand(&self) -> Option<ValueId> {
         match self {
-            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => f(*cond),
-            Terminator::GotoIndirect { target } => f(*target),
-            Terminator::JumpTable { idx, .. } => f(*idx),
-            Terminator::Return(v) => {
-                if *v != NO_VALUE {
-                    f(*v);
-                }
-            }
+            Terminator::Bz { cond, .. } | Terminator::Bnz { cond, .. } => Some(*cond),
+            Terminator::GotoIndirect { target } => Some(*target),
+            Terminator::JumpTable { idx, .. } => Some(*idx),
+            Terminator::Return(v) => *v,
             Terminator::Jmp(_)
-            | Terminator::FallThrough(_)
             | Terminator::TailExt(_)
             | Terminator::AsmGoto { .. }
-            | Terminator::Unreachable => {}
+            | Terminator::Unreachable => None,
         }
     }
 
@@ -2445,12 +2427,11 @@ impl Terminator {
             Terminator::GotoIndirect { target } => f(target),
             Terminator::JumpTable { idx, .. } => f(idx),
             Terminator::Return(v) => {
-                if *v != NO_VALUE {
+                if let Some(v) = v {
                     f(v);
                 }
             }
             Terminator::Jmp(_)
-            | Terminator::FallThrough(_)
             | Terminator::TailExt(_)
             | Terminator::AsmGoto { .. }
             | Terminator::Unreachable => {}
@@ -2471,12 +2452,6 @@ pub(crate) struct Block {
     /// order.
     pub inst_range: core::ops::Range<u32>,
     pub terminator: Terminator,
-    /// Accumulator value at the end of the block (before the
-    /// terminator's branch). For a `Return` block this is the
-    /// returned value. `NO_VALUE` if the accumulator wasn't
-    /// written in this block (rare; e.g. a block consisting of
-    /// just an unconditional branch to a synthetic target).
-    pub exit_acc: ValueId,
 }
 
 /// A `__try` region: an exception raised in a block of the region, or of a
@@ -2542,11 +2517,6 @@ impl ArgWidths {
             3 => 4,
             _ => 8,
         }
-    }
-
-    /// Every position moved up by `by`, for a hidden leading argument.
-    pub(crate) fn shifted(self, by: usize) -> ArgWidths {
-        ArgWidths(self.0.checked_shl(2 * by as u32).unwrap_or(0))
     }
 }
 
@@ -3086,6 +3056,18 @@ impl SspFacts {
     }
 }
 
+/// The entries of [`FunctionSsa::f32_values`], [`FunctionSsa::cmp32`] and
+/// [`FunctionSsa::div32`] for one value. Two instructions of one shape over
+/// the same operands are one value only under equal marks: `(float)x` and
+/// `(double)x` are one `FpCast`, and a comparison of the low words one
+/// `Binop` with the comparison of the full values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub(crate) struct Marks {
+    pub f32: bool,
+    pub cmp32: bool,
+    pub div32: bool,
+}
+
 impl FunctionSsa {
     /// [`Inst::is_pure`] in this function: under `FENV_ACCESS` on, an
     /// instruction that [touches the floating-point environment](Inst::touches_fenv)
@@ -3096,6 +3078,16 @@ impl FunctionSsa {
 
     pub(crate) fn has_seh(&self) -> bool {
         !self.seh_scopes.is_empty()
+    }
+
+    /// What value `v` is besides its instruction, from the per-value tables.
+    pub(crate) fn marks(&self, v: ValueId) -> Marks {
+        use super::codegen::passes::narrow;
+        Marks {
+            f32: self.f32_values.get(v as usize).copied().unwrap_or(false),
+            cmp32: narrow::is_cmp32(&self.cmp32, v),
+            div32: narrow::is_narrow_div(self, v),
+        }
     }
 
     /// The SVE kind of value `v`, through the copies a live-range split made.
@@ -3317,7 +3309,6 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::Call { .. }
             | Inst::CallIndirect { .. }
             | Inst::CallExt { .. }
-            | Inst::TailExt { .. }
             | Inst::Mcpy { .. }
             | Inst::Mzero { .. }
             | Inst::AtomicRmw { .. }

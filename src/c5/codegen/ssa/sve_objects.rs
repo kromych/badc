@@ -10,9 +10,7 @@
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
-use super::super::ir::{
-    BlockId, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, Terminator, ValueId,
-};
+use super::super::ir::{BlockId, FunctionSsa, Inst, LoadKind, StoreKind, Terminator, ValueId};
 use super::mem2reg::{dominance_frontiers, dominators, insert_phis, successors};
 use crate::c5::op::Intrinsic as I;
 
@@ -333,9 +331,6 @@ fn rename(
     }
     for blk in func.blocks.iter_mut() {
         blk.terminator.for_each_operand_mut(resolve);
-        if redirect.contains_key(&blk.exit_acc) {
-            blk.exit_acc = NO_VALUE;
-        }
     }
     for pc in dead.into_iter().chain(base.into_keys()) {
         func.insts[pc as usize] = Inst::Imm(0);

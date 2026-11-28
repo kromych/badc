@@ -571,8 +571,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..n,
-                terminator: Terminator::Return(0),
-                exit_acc: crate::c5::ir::NO_VALUE,
+                terminator: Terminator::Return(Some(0)),
             }],
             ..Default::default()
         }
@@ -818,7 +817,6 @@ mod tests {
                 clobber_regs: 0,
                 clobber_fp_regs: 0,
                 clobber_memory,
-                volatile: false,
             }),
             args: Vec::new(),
         };

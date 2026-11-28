@@ -71,11 +71,6 @@ impl<'a> Walker<'a> {
         let zero = |x: ExprId| self.const_fold_int(x) == Some(0);
         match *self.ast.expr(e) {
             Expr::Cast { child, .. } => self.expected_truth(child),
-            Expr::Unary {
-                op: UnOp::LogNot,
-                child,
-                ..
-            } => self.expected_truth(child).map(|t| !t),
             Expr::Binary {
                 op: op @ (BinOp::Ne | BinOp::Eq),
                 lhs,

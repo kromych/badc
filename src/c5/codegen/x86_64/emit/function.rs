@@ -450,7 +450,6 @@ pub(crate) fn emit_function(
             start: entry_mark.code,
             out,
             fcx,
-            ret_tags,
             tail_calls: tail_calls.clone(),
             entry,
             early_exit,
@@ -506,7 +505,6 @@ fn repeated_blocks(func: &FunctionSsa) -> Vec<bool> {
 /// accesses read, as their base; an instruction that emits nothing reads
 /// nothing.
 fn frame_bases_only(func: &FunctionSsa, alloc: &Allocation) -> Vec<bool> {
-    use super::super::ir::NO_VALUE;
     let n = func.insts.len();
     let mut only = alloc::vec![false; n];
     let mut read = alloc::vec![false; n];
@@ -562,9 +560,6 @@ fn frame_bases_only(func: &FunctionSsa, alloc: &Allocation) -> Vec<bool> {
     }
     for block in &func.blocks {
         block.terminator.for_each_operand(&mut other);
-        if block.exit_acc != NO_VALUE {
-            other(block.exit_acc);
-        }
     }
     only.iter().zip(&read).map(|(&o, &r)| o && r).collect()
 }
@@ -573,7 +568,6 @@ fn frame_bases_only(func: &FunctionSsa, alloc: &Allocation) -> Vec<bool> {
 struct FnEmit<'a, 'b> {
     out: Out<'a, 'b>,
     fcx: FnCtx<'b>,
-    ret_tags: &'b alloc::collections::BTreeMap<usize, i64>,
     /// Per block, the call it ends in as a tail call.
     tail_calls: Vec<Option<TailCall<'b>>>,
     entry: super::FunctionEntry,
@@ -1351,7 +1345,7 @@ impl FnEmit<'_, '_> {
                 }
                 Ok(())
             }
-            Terminator::Jmp(t) | Terminator::FallThrough(t) => self.jump_unless_next(block_idx, t),
+            Terminator::Jmp(t) => self.jump_unless_next(block_idx, t),
             Terminator::Bz {
                 cond,
                 target,
@@ -2350,7 +2344,7 @@ fn emit_struct_stack_param_copy(
             match width {
                 4 => {
                     super::encode::emit_mov_r32_mem(code, Reg::R10, src_base, src);
-                    super::encode::emit_mov_mem32_r(code, dst_base, dst, Reg::R10);
+                    super::encode::emit_mov_mem_r32(code, dst_base, dst, Reg::R10);
                 }
                 2 => {
                     super::encode::emit_movzx_r_mem16(code, Reg::R10, src_base, src);
@@ -2358,7 +2352,7 @@ fn emit_struct_stack_param_copy(
                 }
                 _ => {
                     super::encode::emit_movzx_r_mem8(code, Reg::R10, src_base, src);
-                    super::encode::emit_mov_mem8_r(code, dst_base, dst, Reg::R10);
+                    super::encode::emit_mov_mem_r8(code, dst_base, dst, Reg::R10);
                 }
             }
             o += width;
@@ -2420,7 +2414,7 @@ fn emit_struct_param_scatter(
 
 fn emit_return(
     code: &mut CodeBuf,
-    value: u32,
+    value: Option<u32>,
     alloc: &Allocation,
     frame: Frame,
     func: &FunctionSsa,
@@ -2431,7 +2425,8 @@ fn emit_return(
 ) -> Emit {
     // A return in registers moves its parts ahead of the restores: rax, rdx
     // and the xmm registers are not restored.
-    if let Some(Inst::AggParts { parts, fp_mask, .. }) = func.insts.get(value as usize) {
+    let returned = value.and_then(|v| func.insts.get(v as usize));
+    if let Some(Inst::AggParts { parts, fp_mask, .. }) = returned {
         let pair = (scratch(code, S0), scratch(code, S1));
         emit_parts_return(code, parts, fp_mask, alloc, frame, pair)?;
         emit_canary_check(code, frame, abi, extern_sites, extern_data_refs);
@@ -2444,15 +2439,13 @@ fn emit_return(
     // (caller-saved, never in `gpr_used`) across the restore; any other
     // source moves into rax after it. The integer mirror of an FP return
     // into rax follows the restore too.
-    let return_place = if value != super::super::ir::NO_VALUE {
-        place_of(alloc, value)
-    } else {
-        Place::None
-    };
+    let return_place = value.map_or(Place::None, |v| place_of(alloc, v));
     // A register-returned aggregate (System V AMD64 3.2.3): `value` is its
     // address, staged through rcx; the eightbytes load into rax:rdx /
     // xmm0:xmm1, an x87 pair into st(0), while rsp is still below the object.
-    if let Some(ai) = func.ret_agg {
+    // A function that reaches its closing brace returns no value (C17
+    // 6.9.1p12) and has no object to load.
+    if let Some(ai) = func.ret_agg.filter(|_| value.is_some()) {
         let desc = &func.agg_descs[ai as usize];
         let eb_classes = reg_slot_classes(desc, abi, true);
         match return_place {
@@ -2518,9 +2511,7 @@ fn emit_return(
     // which `materialize_fp` reinterprets.
     let return_is_fp = func.ret_is_fp
         || matches!(return_place, Place::FpReg(_))
-        || (value != super::super::ir::NO_VALUE
-            && (value as usize) < func.insts.len()
-            && super::ssa::reg_alloc::produces_fp_result(&func.insts[value as usize]));
+        || returned.is_some_and(super::ssa::reg_alloc::produces_fp_result);
     let needs_staging = matches!(return_place, Place::IntReg(r) if alloc.gpr_used.contains(&r));
     // An integer return in a callee-saved register moves to rax before the
     // restore: rax is caller-saved, so one `mov` replaces the rcx staging.

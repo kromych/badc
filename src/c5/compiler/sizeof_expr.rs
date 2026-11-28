@@ -715,7 +715,7 @@ impl Compiler {
         let plain_load =
             |ty| !is_volatile_ty(ty) && segment_of_ty(ty).is_none() && !is_struct_value_ty(ty);
         match self.ast.expr(id) {
-            Expr::IntLit { .. } | Expr::FloatLit { .. } | Expr::Sizeof(_) => true,
+            Expr::IntLit { .. } | Expr::FloatLit { .. } => true,
             Expr::Ident {
                 sym,
                 ty,
@@ -736,7 +736,7 @@ impl Compiler {
                         .is_some_and(|s| s.is_global_register)
             }
             Expr::Unary {
-                op: UnOp::Neg | UnOp::BitNot | UnOp::LogNot | UnOp::Renormalize { .. },
+                op: UnOp::Neg | UnOp::BitNot | UnOp::Renormalize { .. },
                 child,
                 ..
             } => self.constant_p_operand_defers(*child),

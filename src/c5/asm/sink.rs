@@ -41,6 +41,11 @@ pub(crate) struct AsmSectionSink {
     /// section, merged by name. Applied by the object writer, which is where
     /// every definition the unit holds is known.
     pub(crate) sym_decls: alloc::vec::Vec<AsmSymDecl>,
+    /// Each name's place in `sym_decls`.
+    decl_slot: hashbrown::HashMap<alloc::string::String, usize>,
+    /// What a declaration held ahead of each merge onto it, with its place,
+    /// oldest first: a [`Self::restore`] takes the merges back from the end.
+    decl_log: alloc::vec::Vec<(usize, AsmSymDecl)>,
     /// `.cfi_*` directives in the order the unit wrote them, each carrying
     /// the section and offset it reached. Turned into frame tables by
     /// [`Self::emit_cfi_sections`] once every section is laid out.
@@ -80,10 +85,13 @@ impl AsmSinkNames<'_> {
     }
 }
 
-/// Name -> how many labels and declarations give it one binding. Shared:
-/// a statement's binding tests read the counts as its materialization
-/// found them, while the same materialization keeps adding to the sink's.
-pub(crate) type AsmBindCounts = alloc::rc::Rc<hashbrown::HashMap<alloc::string::String, u32>>;
+/// Name -> how many labels and declarations give it one binding. Shared
+/// with a statement's binding tests, which read it while the statement's
+/// materialization keeps adding to it: every name that adds is one of the
+/// statement's own, which the tests take from the statement
+/// ([`super::layout::AsmBindingNames`]).
+pub(crate) type AsmBindCounts =
+    alloc::rc::Rc<core::cell::RefCell<hashbrown::HashMap<alloc::string::String, u32>>>;
 
 /// The sink's sections, behind an interface that records every walk of
 /// them. Materialization resolves what it needs through the sink's
@@ -369,16 +377,21 @@ impl AsmSectionSink {
         Ok(())
     }
 
-    /// The unit's declaration slot for `name`, appended when it has none.
+    /// The unit's declaration slot for `name`, for the caller to merge
+    /// onto: appended when the name has none, logged as it stands when it
+    /// has.
     fn sym_decl_slot(&mut self, name: &str) -> usize {
-        if let Some(i) = self.sym_decls.iter().position(|d| d.name == name) {
+        if let Some(&i) = self.decl_slot.get(name) {
+            self.decl_log.push((i, self.sym_decls[i].clone()));
             return i;
         }
         self.sym_decls.push(AsmSymDecl {
             name: alloc::string::String::from(name),
             ..Default::default()
         });
-        self.sym_decls.len() - 1
+        let i = self.sym_decls.len() - 1;
+        self.decl_slot.insert(alloc::string::String::from(name), i);
+        i
     }
 
     pub(crate) fn record_common(&mut self, name: &str, size: u64, align: u64) {
@@ -454,7 +467,8 @@ impl AsmSectionSink {
     pub(crate) fn snapshot(&self) -> AsmSectionsSnapshot {
         AsmSectionsSnapshot {
             len: self.sections.len(),
-            decls: self.sym_decls.clone(),
+            decls: self.sym_decls.len(),
+            decl_log: self.decl_log.len(),
             cfi: self.cfi.len(),
             warnings: self.warnings.len(),
             per_section: self
@@ -481,14 +495,32 @@ impl AsmSectionSink {
     /// snapshot the sink has already shrunk past restores nothing, so a
     /// caller may restore the same one more than once.
     pub(crate) fn restore(&mut self, snap: &AsmSectionsSnapshot) {
-        if self.sym_decls.len() >= snap.decls.len() {
-            for d in &self.sym_decls {
-                count_bind(&mut self.non_local, &mut self.weak, &d.name, d.bind, false);
-            }
-            self.sym_decls.clone_from(&snap.decls);
-            for d in &self.sym_decls {
-                count_bind(&mut self.non_local, &mut self.weak, &d.name, d.bind, true);
-            }
+        // The merges since the snapshot, newest first, then the names it
+        // did not hold; the counts follow each binding.
+        while self.decl_log.len() > snap.decl_log {
+            let Some((i, was)) = self.decl_log.pop() else {
+                break;
+            };
+            let now = core::mem::replace(&mut self.sym_decls[i], was);
+            count_bind(
+                &mut self.non_local,
+                &mut self.weak,
+                &now.name,
+                now.bind,
+                false,
+            );
+            let was = &self.sym_decls[i];
+            count_bind(
+                &mut self.non_local,
+                &mut self.weak,
+                &was.name,
+                was.bind,
+                true,
+            );
+        }
+        for d in self.sym_decls.drain(snap.decls.min(self.sym_decls.len())..) {
+            count_bind(&mut self.non_local, &mut self.weak, &d.name, d.bind, false);
+            self.decl_slot.remove(&d.name);
         }
         self.cfi.truncate(snap.cfi.min(self.cfi.len()));
         self.warnings
@@ -543,10 +575,10 @@ fn count_bind(
     add: bool,
 ) {
     match bind {
-        AsmSymBind::Global => count_name(alloc::rc::Rc::make_mut(non_local), name, add),
+        AsmSymBind::Global => count_name(&mut non_local.borrow_mut(), name, add),
         AsmSymBind::Weak => {
-            count_name(alloc::rc::Rc::make_mut(non_local), name, add);
-            count_name(alloc::rc::Rc::make_mut(weak), name, add);
+            count_name(&mut non_local.borrow_mut(), name, add);
+            count_name(&mut weak.borrow_mut(), name, add);
         }
         _ => {}
     }
@@ -560,10 +592,10 @@ fn count_label_bind(
     add: bool,
 ) {
     if l.global || l.weak {
-        count_name(alloc::rc::Rc::make_mut(non_local), &l.name, add);
+        count_name(&mut non_local.borrow_mut(), &l.name, add);
     }
     if l.weak {
-        count_name(alloc::rc::Rc::make_mut(weak), &l.name, add);
+        count_name(&mut weak.borrow_mut(), &l.name, add);
     }
 }
 

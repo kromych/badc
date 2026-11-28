@@ -9,7 +9,7 @@
 //! at their site.
 
 use super::super::ast::expr_ty;
-use super::super::ast::{BlockItem, Expr, ExprId, ShortCircuitOp, Stmt, StmtId, UnOp};
+use super::super::ast::{Expr, ExprId, ShortCircuitOp, Stmt, StmtId, UnOp};
 use super::super::diag::{Code, Loc};
 use super::super::error::C5Error;
 use super::super::ir::BinOp;
@@ -259,7 +259,7 @@ impl Compiler {
             // A call to a `_Noreturn` function does not reach its
             // continuation; any other expression statement does.
             Stmt::Expr(e) => !self.expr_is_noreturn_call(*e),
-            Stmt::Decl(_) | Stmt::Asm { .. } => true,
+            Stmt::Decl(_) => true,
             Stmt::Compound(items) => {
                 // Control reaches the block's end iff it flows through
                 // every item. The first item that cannot fall through
@@ -269,10 +269,7 @@ impl Compiler {
                     if !reachable {
                         break;
                     }
-                    reachable = match item {
-                        BlockItem::Stmt(s) => self.stmt_may_fall_through(*s),
-                        BlockItem::Decl(_) => true,
-                    };
+                    reachable = self.stmt_may_fall_through(*item);
                 }
                 reachable
             }
@@ -407,7 +404,6 @@ impl Compiler {
         let ice = mode == Fold::Ice;
         match self.ast.expr(e) {
             Expr::IntLit { val, .. } => Some(*val),
-            Expr::Sizeof(s) => Some(s.size_bytes),
             Expr::Cast { child, to_ty }
                 if !is_pointer_ty(*to_ty) && !is_floating_scalar(*to_ty) =>
             {
@@ -426,7 +422,6 @@ impl Compiler {
                 match op {
                     UnOp::Neg => Some(v.wrapping_neg()),
                     UnOp::BitNot => Some(!v),
-                    UnOp::LogNot => Some((v == 0) as i64),
                     UnOp::Renormalize { .. } => {
                         let bytes = self.size_of_type(*ty);
                         Some(super::types::narrow_const_int(bytes, false, false, v as i128) as i64)
@@ -529,10 +524,7 @@ impl Compiler {
             Stmt::While { .. } | Stmt::DoWhile { .. } | Stmt::For { .. } | Stmt::Switch { .. } => {
                 false
             }
-            Stmt::Compound(items) => items.iter().any(|it| match it {
-                BlockItem::Stmt(s) => self.stmt_has_loop_break(*s),
-                BlockItem::Decl(_) => false,
-            }),
+            Stmt::Compound(items) => items.iter().any(|s| self.stmt_has_loop_break(*s)),
             // A constant condition's dead branch is entered only by a `goto`,
             // which this walk does not follow, so its `break` does not count:
             // `for (;; ({ goto l; })) if (0) { l: break; } else return v;`
@@ -1392,7 +1384,6 @@ impl Compiler {
         match self.ast.expr(e) {
             Expr::IntLit { .. } if self.folded_builtin_lits.contains(&e) => None,
             Expr::IntLit { val, ty } => Some((norm(*val as i128, *ty)?, *ty)),
-            Expr::Sizeof(s) => Some((s.size_bytes as i128, s.result_ty)),
             Expr::Cast { child, to_ty } => {
                 let (v, _) = self.ast_const_value(*child)?;
                 Some((norm(v, *to_ty)?, *to_ty))

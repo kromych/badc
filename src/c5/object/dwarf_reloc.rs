@@ -1,7 +1,5 @@
 //! Relocatable DWARF emitter for `OutputKind::Relocatable` output.
 
-#![allow(dead_code)]
-
 use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::String;
@@ -19,13 +17,6 @@ use crate::c5::codegen::ssa::cfi::{write_sleb128, write_uleb128};
 use crate::c5::compiler::{StructDef, StructField};
 use crate::c5::layout::write_struct;
 use crate::c5::symbol::DeclSpelling;
-
-/// Section that an emitted reloc lives in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum DwarfSectionKind {
-    Info,
-    Line,
-}
 
 /// Section symbol the reloc resolves against.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -76,7 +67,6 @@ fn push_addr_slot(out: &mut Vec<u8>, width: DwarfRelocWidth) {
 /// bases are known.
 #[derive(Debug, Clone)]
 pub(crate) struct DwarfReloc {
-    pub section: DwarfSectionKind,
     pub offset: u64,
     pub width: DwarfRelocWidth,
     pub target: DwarfRelocTarget,
@@ -154,17 +144,9 @@ const DW_FORM_FLAG: u8 = 0x0c;
 const DW_FORM_FLAG_PRESENT: u8 = 0x19;
 const DW_FORM_SDATA: u8 = 0x0d;
 
-const DW_ATE_SIGNED: u8 = 0x05;
-const DW_ATE_UNSIGNED: u8 = 0x07;
-const DW_ATE_SIGNED_CHAR: u8 = 0x06;
-const DW_ATE_UNSIGNED_CHAR: u8 = 0x08;
-const DW_ATE_BOOLEAN: u8 = 0x02;
-const DW_ATE_FLOAT: u8 = 0x04;
-
 const DW_OP_REG29: u8 = 0x6d; // aarch64 frame pointer x29
 const DW_OP_REG6: u8 = 0x56; // x86_64 frame pointer rbp
 const DW_OP_BREG7: u8 = 0x77; // x86_64 rsp plus an offset
-const DW_OP_FBREG: u8 = 0x91; // fbreg N (SLEB128 N)
 const DW_OP_ADDR: u8 = 0x03; // addr <target address size>
 const DW_OP_CONST8U: u8 = 0x0e; // const8u <8-byte operand>
 const DW_OP_GNU_PUSH_TLS_ADDRESS: u8 = 0xe0;
@@ -899,7 +881,6 @@ impl RelocInfoUnit<'_> {
     /// A relocated slot at the current position of `self.body`.
     fn reloc(&mut self, width: DwarfRelocWidth, target: DwarfRelocTarget, addend: i64) {
         self.relocs.push(DwarfReloc {
-            section: DwarfSectionKind::Info,
             offset: DEBUG_INFO_UNIT_HEADER_SIZE + self.body.len() as u64,
             width,
             target,
@@ -945,12 +926,17 @@ impl RelocInfoUnit<'_> {
             .iter()
             .map(|&i| catalog.of_symbol(&program.symbols[i]))
             .collect();
+        // The function symbols by link name; the first of a name stands.
+        let mut functions: alloc::collections::BTreeMap<&str, &crate::c5::symbol::Symbol> =
+            alloc::collections::BTreeMap::new();
+        for s in &program.symbols {
+            if s.class == super::super::token::Token::Fun as i64 {
+                functions.entry(s.link_name()).or_insert(s);
+            }
+        }
         self.fn_facts = (0..build.func_ent_pcs.len())
             .map(|i| {
-                let sym = program.symbols.iter().find(|s| {
-                    s.class == super::super::token::Token::Fun as i64
-                        && s.link_name() == subprogram_name(build, i)
-                });
+                let sym = functions.get(subprogram_name(build, i)).copied();
                 FnFacts {
                     is_variadic: sym.is_some_and(|s| s.is_variadic()),
                     external: sym.is_none_or(|s| s.linkage != crate::c5::symbol::Linkage::Internal),
@@ -989,7 +975,6 @@ impl RelocInfoUnit<'_> {
             }
             for &(at, str_off) in strs.iter() {
                 self.relocs.push(DwarfReloc {
-                    section: DwarfSectionKind::Info,
                     offset: self.type_offsets[i] as u64 + at as u64,
                     width: DwarfRelocWidth::W4,
                     target: DwarfRelocTarget::DebugStr,
@@ -1089,6 +1074,7 @@ impl RelocInfoUnit<'_> {
     fn emit_subprograms(&mut self) {
         let (program, build) = (self.program, self.build);
         let addr_width = self.addr_width;
+        let own_variables = super::dwarf::variables_by_function(program);
         for (i, &ent_pc) in build.func_ent_pcs.iter().enumerate() {
             let lo = match build.pc_to_native.get(ent_pc).copied() {
                 Some(off) if off != usize::MAX => off as u64,
@@ -1106,12 +1092,10 @@ impl RelocInfoUnit<'_> {
                 prototyped,
                 ret,
             } = self.fn_facts[i];
-            let vars: Vec<(&super::super::program::VariableInfo, TypeId)> = program
-                .variables
-                .iter()
-                .zip(self.var_types.iter().copied())
-                .filter(|(v, _)| v.function_bc_pc == ent_pc as u64)
-                .collect();
+            let vars: Vec<(&super::super::program::VariableInfo, TypeId)> =
+                (own_variables.get(&(ent_pc as u64)).into_iter().flatten())
+                    .map(|&k| (&program.variables[k], self.var_types[k]))
+                    .collect();
             let has_children = !vars.is_empty() || is_variadic;
             write_uleb128(
                 &mut self.body,
@@ -1141,8 +1125,8 @@ impl RelocInfoUnit<'_> {
             }
             // An x86-64 frame with no pointer: rsp plus the prologue's
             // movement, where rbp would stand.
-            let sp_base = (build.fn_unwind.iter())
-                .find(|u| u64::from(u.begin) == lo)
+            let sp_base = (usize::try_from(lo).ok())
+                .and_then(|lo| build.fn_unwind_at(lo))
                 .and_then(|u| u.sp_frame_base());
             if let Some(off) = sp_base {
                 let mut expr = alloc::vec![DW_OP_BREG7];
@@ -1191,7 +1175,6 @@ impl RelocInfoUnit<'_> {
             Vec::with_capacity(DEBUG_INFO_UNIT_HEADER_SIZE as usize + self.body.len());
         write_struct(&mut out, &header);
         self.relocs.push(DwarfReloc {
-            section: DwarfSectionKind::Info,
             offset: 6, // unit_length(4) + version(2)
             width: DwarfRelocWidth::W4,
             target: DwarfRelocTarget::DebugAbbrev,
@@ -1308,7 +1291,6 @@ fn write_set_address_reloc(
     let addr_pos_in_prog = prog.len() as u64;
     push_addr_slot(prog, addr_width);
     relocs.push(DwarfReloc {
-        section: DwarfSectionKind::Line,
         offset: prefix_size + addr_pos_in_prog,
         width: addr_width,
         target: DwarfRelocTarget::Text,
@@ -1352,7 +1334,6 @@ impl StrPool {
 /// Append a `DW_FORM_strp` slot naming `s`.
 fn push_strp(out: &mut Vec<u8>, relocs: &mut Vec<DwarfReloc>, strs: &mut StrPool, s: &str) {
     relocs.push(DwarfReloc {
-        section: DwarfSectionKind::Info,
         offset: DEBUG_INFO_UNIT_HEADER_SIZE + out.len() as u64,
         width: DwarfRelocWidth::W4,
         target: DwarfRelocTarget::DebugStr,

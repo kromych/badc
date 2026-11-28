@@ -5,7 +5,8 @@ Absolute compile seconds are not comparable between runs: the hosted
 runner class changes underneath them, and the reference compiler on the
 same corpus has moved by a factor of six across a fortnight of CI. What
 is comparable is a ratio taken *within one run on one machine*, where
-the machine cancels. This reports two, both over the whole corpus:
+the machine cancels. This reports three over the whole corpus and two
+over generated inputs:
 
   * `-O0 / -O` -- the cost of the unoptimised build over the optimized
     one. `-O` runs the optimization passes on top of the same front end,
@@ -19,8 +20,21 @@ the machine cancels. This reports two, both over the whole corpus:
     doing real back-end work, so the per-invocation front-end floor --
     which is a property of the host, not of the compiler -- cancels out
     of them rather than setting the scale as it would against a median.
+  * `slowest / next` at `-O` -- the same ratio over the optimized
+    times. The `-O0` one cannot see a pass that only `-O` runs, and a
+    slower `-O` lowers `-O0 / -O`, which fails only when it rises.
+  * `2N / N functions` -- the cost of compiling with `-g` and linking a
+    unit of 2N one-line functions over that of one of N. The corpus
+    cannot show a cost that grows with the square of the number of
+    functions, as its largest unit holds two thousand: a search of the
+    whole symbol table per function took a unit of 40,000 from 0.7 s to
+    18 s and left every corpus counter where it was.
+  * `2N / N asm statements` -- the same over functions that each hold an
+    `asm` statement declaring a symbol, compiled only. A copy of the
+    unit's symbol declarations per statement took 16,000 of them from
+    0.3 s to 24 s.
 
-`--check` fails when either is over its committed ceiling.
+`--check` fails when any is over its committed ceiling.
 
 The corpus defaults to the eight QuickJS units `demos/quickjs/smoke.py`
 builds, on the defines it uses. They are gitignored -- `demos/quickjs/
@@ -80,9 +94,76 @@ DEFINES = ("_GNU_SOURCE", 'CONFIG_VERSION="0"', "CONFIG_ALL_UNICODE")
 # against twenty spinners on a twenty-core host it rises from 0.28 to
 # 0.34.
 #
+# The `-O` tail reads 17.6 on linux-x64, 20.3 on linux-aarch64 and 22.3
+# on macos-aarch64. 35.0 clears the highest by 57%, and the slowest
+# unit costing twice as much at `-O` passes it on every one of them
+# (35.2 on the lowest). It sees a cost that grows with the corpus's
+# largest function and no other: an allocator that reran up to 93 times
+# on a crowded 1000-line function left this corpus's `-O` times where
+# they were (quickjs.c 4904 ms against 4893 ms on linux-x64), so that
+# shape takes a generated input, not this counter.
+#
 # A ceiling moves only deliberately: measure, read the report, and
 # change the number in the commit that spends it.
-CEILINGS = {"o0_over_o": 0.45, "slowest_over_next": 25.0}
+#
+# `2N / N functions` reads 2.0 where every per-function step is constant
+# (2.04 on macos-aarch64, 2.02 for linux-x64). One step that searched a
+# per-function list for each function read 2.9, and the searches of the
+# symbol table 7.5. `2N / N asm statements` reads 2.0 to 2.1 on all five
+# targets and read 3.8 to 4.3 while each statement copied the unit's
+# declarations.
+CEILINGS = {
+    "o0_over_o": 0.45,
+    "slowest_over_next": 25.0,
+    "slowest_over_next_o": 35.0,
+    "functions_2n_over_n": 2.6,
+    "asm_2n_over_n": 2.6,
+}
+
+# N of each generated input.
+SCALING_FUNCTIONS = 20000
+SCALING_ASM = 8000
+
+
+def scaling_source(n: int) -> str:
+    """A unit of `n` one-line functions, each with a parameter."""
+    body = "\n".join(f"int f{i}(int x) {{ return x + {i}; }}" for i in range(n))
+    return body + "\nint main(void) { return f0(0); }\n"
+
+
+def asm_source(n: int) -> str:
+    """A unit of `n` functions, each with an `asm` statement that declares
+    a symbol."""
+    return "".join(f'void f{i}(void) {{ __asm__(".globl a{i}"); }}\n' for i in range(n))
+
+
+def build_once(badc: Path, src: Path, tmp: Path, link: bool) -> float:
+    """Seconds to compile `src` with `-g` and, with `link`, to link it."""
+    obj, exe = tmp / "scale.o", tmp / "scale.out"
+    cmds = [[str(badc), "-g", "-c", str(src), "-o", str(obj)]]
+    if link:
+        cmds.append([str(badc), "-g", str(obj), "-o", str(exe)])
+    start = time.perf_counter()
+    for cmd in cmds:
+        r = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+        if r.returncode != 0:
+            tail = (r.stderr or r.stdout).strip().splitlines()[-3:]
+            raise SystemExit(f"[throughput] {src.name} failed:\n" + "\n".join(tail))
+    return time.perf_counter() - start
+
+
+def scaling(badc: Path, reps: int, tmp: Path, n: int, source, link: bool) -> tuple[float, float]:
+    """The minimum cost of the unit `source` writes for `n` and for `2 * n`,
+    measured back to back as `measure` does its two levels."""
+    srcs = []
+    for size in (n, 2 * n):
+        srcs.append(tmp / f"{source.__name__}{size}.c")
+        srcs[-1].write_text(source(size), encoding="ascii")
+    best = [float("inf"), float("inf")]
+    for _ in range(reps):
+        for i, src in enumerate(srcs):
+            best[i] = min(best[i], build_once(badc, src, tmp, link))
+    return best[0], best[1]
 
 
 def compile_once(badc: Path, src: Path, opt: bool, out: Path) -> float:
@@ -123,23 +204,61 @@ def measure(badc: Path, corpus: list[Path], reps: int, out: Path):
     return best
 
 
-def report(o0: dict[str, float], o1: dict[str, float], check: bool) -> int:
+def report(
+    o0: dict[str, float],
+    o1: dict[str, float],
+    scale: tuple[float, float],
+    asm: tuple[float, float],
+    check: bool,
+) -> int:
     total0, total1 = sum(o0.values()), sum(o1.values())
     order = sorted(o0.items(), key=lambda kv: -kv[1])
     slowest, runner_up = order[0], order[1]
     ratio = total0 / total1 if total1 else float("inf")
     tail = slowest[1] / runner_up[1] if runner_up[1] else float("inf")
+    order_o = sorted(o1.items(), key=lambda kv: -kv[1])
+    slowest_o, runner_up_o = order_o[0], order_o[1]
+    tail_o = slowest_o[1] / runner_up_o[1] if runner_up_o[1] else float("inf")
     print("| unit | -O0 (ms) | -O (ms) |\n|---|--:|--:|")
     for name in sorted(o0, key=lambda n: -o0[n]):
         print(f"| {name} | {o0[name] * 1000:.1f} | {o1[name] * 1000:.1f} |")
     print(
         f"\n[throughput] {len(o0)} units, -O0 {total0:.3f}s, -O {total1:.3f}s, "
         f"-O0/-O {ratio:.2f}, slowest/next {tail:.1f} "
-        f"({slowest[0]} over {runner_up[0]})"
+        f"({slowest[0]} over {runner_up[0]}), at -O {tail_o:.1f} "
+        f"({slowest_o[0]} over {runner_up_o[0]})"
+    )
+    grows = scale[1] / scale[0] if scale[0] else float("inf")
+    print(
+        f"[throughput] {SCALING_FUNCTIONS} functions {scale[0]:.3f}s, "
+        f"{2 * SCALING_FUNCTIONS} functions {scale[1]:.3f}s, 2N/N {grows:.2f}"
+    )
+    asm_grows = asm[1] / asm[0] if asm[0] else float("inf")
+    print(
+        f"[throughput] {SCALING_ASM} asm statements {asm[0]:.3f}s, "
+        f"{2 * SCALING_ASM} {asm[1]:.3f}s, 2N/N {asm_grows:.2f}"
     )
     if not check:
         return 0
     rc = 0
+    if asm_grows > CEILINGS["asm_2n_over_n"]:
+        print(
+            f"[throughput] 2N/N asm statements {asm_grows:.2f} is over the "
+            f"{CEILINGS['asm_2n_over_n']:.1f} ceiling. Twice the asm statements "
+            f"cost more than twice as much; look for a statement or a "
+            f"checkpoint that copies or searches what the unit's earlier "
+            f"statements declared."
+        )
+        rc = 1
+    if grows > CEILINGS["functions_2n_over_n"]:
+        print(
+            f"[throughput] 2N/N functions {grows:.2f} is over the "
+            f"{CEILINGS['functions_2n_over_n']:.1f} ceiling. Twice the "
+            f"functions cost more than twice as much to compile with -g and "
+            f"link; look for a step that searches a per-unit list -- the "
+            f"symbols, the variables, the unwind records -- once per function."
+        )
+        rc = 1
     if ratio > CEILINGS["o0_over_o"]:
         print(
             f"[throughput] -O0/-O {ratio:.2f} is over the "
@@ -155,6 +274,15 @@ def report(o0: dict[str, float], o1: dict[str, float], check: bool) -> int:
             f"{CEILINGS['slowest_over_next']:.1f} ceiling. One unit costs far "
             f"more than the next largest; look for a pass whose cost is "
             f"super-linear in the size of a single function."
+        )
+        rc = 1
+    if tail_o > CEILINGS["slowest_over_next_o"]:
+        print(
+            f"[throughput] slowest/next at -O {tail_o:.1f} is over the "
+            f"{CEILINGS['slowest_over_next_o']:.1f} ceiling. One unit costs "
+            f"far more than the next largest once the optimization passes "
+            f"run; look for an -O pass whose cost is super-linear in the "
+            f"size of a single function."
         )
         rc = 1
     return rc
@@ -204,7 +332,9 @@ def main() -> int:
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "unit.o"
         o0, o1 = measure(badc, corpus, args.reps, out)
-    return report(o0, o1, args.check)
+        scale = scaling(badc, args.reps, Path(tmp), SCALING_FUNCTIONS, scaling_source, True)
+        asm = scaling(badc, args.reps, Path(tmp), SCALING_ASM, asm_source, False)
+    return report(o0, o1, scale, asm, args.check)
 
 
 if __name__ == "__main__":

@@ -2491,6 +2491,8 @@ pub struct Compiler {
     /// `.globl` symbol names from file-scope asm, given an undefined global
     /// entry when the unit neither defines nor references the name.
     pub(super) asm_global_names: Vec<String>,
+    /// The names the two lists above hold.
+    pub(super) asm_bound_names: [hashbrown::HashSet<String>; 2],
     /// Symbol visibility named by `.hidden` / `.internal` / `.protected` in
     /// file-scope asm.
     pub(super) asm_visibility: Vec<(String, crate::c5::program::SymVisibility)>,
@@ -3583,6 +3585,7 @@ impl Compiler {
             file_asm: Vec::new(),
             asm_weak_names: Vec::new(),
             asm_global_names: Vec::new(),
+            asm_bound_names: Default::default(),
             asm_visibility: Vec::new(),
             asm_variant_pcs: Vec::new(),
             asm_sym_sets: Vec::new(),

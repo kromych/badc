@@ -336,14 +336,14 @@ impl Compiler {
         // does it explicitly.
         self.block_scopes.push(Vec::new());
         self.tag_scopes.push();
-        let mut init_ast: Option<super::super::ast::BlockItem> = None;
+        let mut init_ast: Option<super::super::ast::StmtId> = None;
         if self.lex.tk == ';' {
             self.next()?;
         } else if self.lex_is_type_start() {
             // C99 6.8.5.3p1 admits `declaration` as the for-init.
             // `parse_local_decl` pushes one or more
             // `Stmt::Decl(d)` wrappers onto the AST stmt arena;
-            // capture them into a single BlockItem so the walker
+            // capture them into a single statement so the walker
             // gets the same shape it would for an expression
             // init. Without this the walker sees `init: None`
             // and the declared counter never reaches the
@@ -373,7 +373,7 @@ impl Compiler {
                     .retain(|&(s, _)| s < init_before);
                 if !ids.is_empty() {
                     let id = self.ast_wrap_block_items(&ids);
-                    init_ast = Some(super::super::ast::BlockItem::Stmt(id));
+                    init_ast = Some(id);
                 }
             }
         } else {
@@ -385,16 +385,16 @@ impl Compiler {
             if let Some(e) = init_expr {
                 let pos = self.ast_src_pos();
                 let stmt_id = self.ast.push_stmt(super::super::ast::Stmt::Expr(e), pos);
-                init_ast = Some(super::super::ast::BlockItem::Stmt(stmt_id));
+                init_ast = Some(stmt_id);
             } else {
                 // Drain any stmts the init expression pushed
                 // (e.g. a sub-call inside the comma chain) into
                 // a Compound so the for-init slot has a single
-                // BlockItem.
+                // statement.
                 let added = self.ast.stmts.len().saturating_sub(init_before);
                 if added > 0 {
                     let id = self.ast_wrap_stmts_since(init_before);
-                    init_ast = Some(super::super::ast::BlockItem::Stmt(id));
+                    init_ast = Some(id);
                 }
             }
             self.consume(b';', "semicolon expected after for-init")?;
@@ -551,7 +551,7 @@ impl Compiler {
     /// or `||`, through a comma's right operand. A cast to another integer
     /// type marks a deliberate integer.
     fn has_boolean_value(&self, e: Option<super::super::ast::ExprId>, ty: i64) -> bool {
-        use super::super::ast::{Expr, UnOp};
+        use super::super::ast::Expr;
         if super::types::is_bool_ty(unqualified_version_ty(ty)) {
             return true;
         }
@@ -560,10 +560,7 @@ impl Compiler {
             match self.ast.expr(id) {
                 Expr::Comma { rhs, .. } => e = Some(*rhs),
                 Expr::Binary { op, .. } => return crate::c5::ir::is_comparison_op(*op),
-                Expr::ShortCircuit { .. }
-                | Expr::Unary {
-                    op: UnOp::LogNot, ..
-                } => return true,
+                Expr::ShortCircuit { .. } => return true,
                 _ => return false,
             }
         }
@@ -1025,11 +1022,8 @@ impl Compiler {
                 continue;
             };
             let items = calls.iter().chain([&jump]);
-            self.ast.stmts[site as usize] = super::super::ast::Stmt::Compound(
-                items
-                    .map(|&id| super::super::ast::BlockItem::Stmt(id))
-                    .collect(),
-            );
+            self.ast.stmts[site as usize] =
+                super::super::ast::Stmt::Compound(items.copied().collect());
         }
     }
 
@@ -1489,7 +1483,7 @@ impl Compiler {
         block: super::super::ast::StmtId,
         value_item: u32,
     ) -> Option<super::super::ast::ExprId> {
-        use super::super::ast::{BlockItem, Stmt};
+        use super::super::ast::Stmt;
         if value_item == super::super::ast::NO_VALUE_ITEM {
             return None;
         }
@@ -1499,7 +1493,7 @@ impl Compiler {
             // `Stmt::Compound` whose item at `value_item` carries the
             // value.
             Stmt::Compound(items) => match items.get(value_item as usize) {
-                Some(BlockItem::Stmt(s)) => *s,
+                Some(s) => *s,
                 _ => return None,
             },
             _ => block,
@@ -1528,29 +1522,21 @@ impl Compiler {
     /// Shared head of an `asm` statement or a file-scope `asm`
     /// declaration: qualifiers, `(`, and the (concatenated) template
     /// string. Returns the template bytes, their start offset in the
-    /// data section (the caller truncates once done), and the
-    /// `volatile` / `goto` qualifier flags.
-    pub(super) fn parse_asm_head(
-        &mut self,
-    ) -> Result<(alloc::vec::Vec<u8>, usize, bool, bool), C5Error> {
+    /// data section (the caller truncates once done), and whether the
+    /// statement is `asm goto`.
+    pub(super) fn parse_asm_head(&mut self) -> Result<(alloc::vec::Vec<u8>, usize, bool), C5Error> {
         self.next()?; // asm / __asm__ / __asm
         // Optional qualifiers (`volatile` / `__volatile__`, `inline`,
-        // `goto`). `volatile` must not be elided and rides the parsed
-        // asm block; `goto` selects the label-list grammar and is
-        // implicitly volatile.
-        let mut is_volatile = false;
+        // `goto`). No asm statement is elided, so `volatile` adds
+        // nothing; `goto` selects the label-list grammar.
         let mut is_goto = false;
         while self.lex.tk == Token::TypeQual
             || self.lex.tk == Token::Inline
             || self.lex.tk == Token::ForceInline
             || self.lex.tk == Token::Goto
         {
-            if self.lex.tk == Token::TypeQual {
-                is_volatile = true;
-            }
             if self.lex.tk == Token::Goto {
                 is_goto = true;
-                is_volatile = true;
             }
             self.next()?;
         }
@@ -1571,7 +1557,7 @@ impl Compiler {
             self.next()?;
         }
         let template: alloc::vec::Vec<u8> = self.data[tstart..].to_vec();
-        Ok((template, tstart, is_volatile, is_goto))
+        Ok((template, tstart, is_goto))
     }
 
     /// Parse a GNU C inline-asm statement. c5 supports the operand-free
@@ -1584,17 +1570,17 @@ impl Compiler {
             return Err(self.compile_err(Code::UNSUPPORTED, crate::c5::asm::NO_INLINE_ASM));
         }
         let at = self.site();
-        let (template, tstart, is_volatile, is_goto) = self.parse_asm_head()?;
+        let (template, tstart, is_goto) = self.parse_asm_head()?;
         // `asm goto` takes the general extended-asm path directly: the
         // operand-free template shortcuts below have no label grammar.
         if is_goto {
             self.truncate_data(tstart);
-            return self.parse_extended_asm(template, is_volatile, true, at);
+            return self.parse_extended_asm(template, true, at);
         }
         // A naked function's templates are assembled as written.
         if self.current_func_attrs.is_naked {
             self.truncate_data(tstart);
-            return self.parse_extended_asm(template, is_volatile, false, at);
+            return self.parse_extended_asm(template, false, at);
         }
         // The x87 FPU control-word forms carry exactly one memory operand.
         // Detect them from the template before the operand-rejection loop.
@@ -1779,7 +1765,7 @@ impl Compiler {
         // are dropped from the data section; the parsed block references
         // its operand expressions by AST id.
         self.truncate_data(tstart);
-        self.parse_extended_asm(template, is_volatile, false, at)
+        self.parse_extended_asm(template, false, at)
     }
 
     /// Consume the `: outputs : inputs : clobbers` region and the
@@ -1822,7 +1808,6 @@ impl Compiler {
     fn parse_extended_asm(
         &mut self,
         template: alloc::vec::Vec<u8>,
-        volatile: bool,
         is_goto: bool,
         at: super::Site,
     ) -> Result<(), C5Error> {
@@ -2314,7 +2299,6 @@ impl Compiler {
             clobber_regs,
             clobber_fp_regs,
             clobber_memory,
-            volatile,
         };
         // A declared stack-pointer change is a warning, not an error.
         if clobbers_sp || sp_outputs.iter().any(|&i| block.names_operand(i)) {

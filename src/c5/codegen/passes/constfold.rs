@@ -39,7 +39,7 @@
 //! in-place, so `inst_src` / `f32_values` stay parallel. Operand
 //! `Imm`s made dead are reaped by the emit's use-count DCE.
 
-use crate::c5::codegen::ssa::reg_alloc::{for_each_operand, produces_fp_result, value_reads};
+use crate::c5::codegen::ssa::reg_alloc::{for_each_operand, operand_reads, produces_fp_result};
 use crate::c5::ir::{
     BinOp, FpCastKind, FunctionSsa, Inst, LoadKind, NO_VALUE, StoreKind, ValueId, is_comparison_op,
 };
@@ -909,13 +909,6 @@ fn forward_identities(func: &mut FunctionSsa) -> bool {
         });
     }
     for block in func.blocks.iter_mut() {
-        if block.exit_acc != NO_VALUE {
-            let t = resolve(block.exit_acc);
-            if t != block.exit_acc {
-                block.exit_acc = t;
-                changed = true;
-            }
-        }
         block.terminator.for_each_operand_mut(|v| {
             let t = resolve(*v);
             if t != *v {
@@ -1073,9 +1066,8 @@ fn select_values(func: &FunctionSsa, v: ValueId) -> Option<Vec<i64>> {
     (values.len() > 1).then_some(values)
 }
 
-/// Per-value list of the instruction indices that read it. Terminator
-/// and `exit_acc` references are left out: neither is a foldable
-/// consumer.
+/// Per-value list of the instruction indices that read it. A terminator's
+/// reference is left out: it is no foldable consumer.
 fn user_lists(func: &FunctionSsa) -> Vec<Vec<ValueId>> {
     let mut users: Vec<Vec<ValueId>> = vec![Vec::new(); func.insts.len()];
     for (i, inst) in func.insts.iter().enumerate() {
@@ -1620,7 +1612,7 @@ fn eval_fp_binop(op: BinOp, l: i64, r: i64, f32: bool) -> Option<i64> {
 }
 
 fn fold_round(func: &mut FunctionSsa) -> bool {
-    let uses = value_reads(func);
+    let uses = operand_reads(func);
     // A shared immediate operand only moves into the instruction when
     // the encoding is materialization-free; a sole use may always
     // move (the per-use materialization replaces the def's).
@@ -1954,8 +1946,7 @@ mod tests {
             blocks: vec![Block {
                 start_pc: 0,
                 inst_range: 0..n as u32,
-                terminator: Terminator::Return(crate::c5::ir::NO_VALUE),
-                exit_acc: 0,
+                terminator: Terminator::Return(None),
             }],
             extern_call_refs: Vec::new(),
             extern_imm_code_refs: Vec::new(),

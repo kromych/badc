@@ -69,7 +69,6 @@ fn is_barrier(inst: &Inst) -> bool {
         Inst::Call { .. }
             | Inst::CallIndirect { .. }
             | Inst::CallExt { .. }
-            | Inst::TailExt(_)
             | Inst::InlineAsm { .. }
             | Inst::Intrinsic { .. }
             | Inst::Mcpy { .. }
@@ -400,11 +399,6 @@ fn apply_heads(func: &mut FunctionSsa, heads: &[Head]) -> Undo {
                 *op = copy[*op as usize];
             }
         };
-        if block.exit_acc != NO_VALUE {
-            let mut acc = block.exit_acc;
-            redirect(&mut acc);
-            block.exit_acc = acc;
-        }
         block.terminator.for_each_operand_mut(redirect);
     }
     undo
@@ -558,7 +552,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 
@@ -629,7 +622,7 @@ mod tests {
             hints: vec![None; n],
             f32_values: vec![false; n],
             high_observed: Vec::new(),
-            high_clear: Vec::new(),
+            high_clear: Vec::new().into(),
             wide: vec![crate::c5::codegen::ssa::reg_alloc::VecWidth::Scalar; n],
             asm_preserve: (u32::MAX, u32::MAX),
             call_saves: Vec::new(),
@@ -652,7 +645,7 @@ mod tests {
     fn two_uses_of_a_spilled_value_plan_one_run() {
         let f = func_with(
             vec![load(), store_of(0), store_of(0)],
-            vec![block(0..3, Terminator::Return(NO_VALUE))],
+            vec![block(0..3, Terminator::Return(None))],
         );
         let runs = plan(&f, &alloc_spilling_v0(3));
         assert_eq!(runs.len(), 1);
@@ -671,7 +664,7 @@ mod tests {
         };
         let f = func_with(
             vec![load(), store_of(0), sum],
-            vec![block(0..3, Terminator::Return(NO_VALUE))],
+            vec![block(0..3, Terminator::Return(None))],
         );
         let mut alloc = alloc_spilling_v0(3);
         assert_eq!(plan(&f, &alloc).len(), 1);
@@ -683,7 +676,7 @@ mod tests {
     fn a_single_use_plans_no_run() {
         let f = func_with(
             vec![load(), store_of(0)],
-            vec![block(0..2, Terminator::Return(NO_VALUE))],
+            vec![block(0..2, Terminator::Return(None))],
         );
         assert!(plan(&f, &alloc_spilling_v0(2)).is_empty());
     }
@@ -692,7 +685,7 @@ mod tests {
     fn a_value_in_a_register_plans_no_run() {
         let f = func_with(
             vec![load(), store_of(0), store_of(0)],
-            vec![block(0..3, Terminator::Return(NO_VALUE))],
+            vec![block(0..3, Terminator::Return(None))],
         );
         let mut alloc = alloc_spilling_v0(3);
         alloc.places[0] = Place::IntReg(1);
@@ -703,7 +696,7 @@ mod tests {
     fn a_call_between_two_uses_ends_the_run() {
         let f = func_with(
             vec![load(), store_of(0), call_of(Vec::new()), store_of(0)],
-            vec![block(0..4, Terminator::Return(NO_VALUE))],
+            vec![block(0..4, Terminator::Return(None))],
         );
         assert!(plan(&f, &alloc_spilling_v0(4)).is_empty());
     }
@@ -719,13 +712,12 @@ mod tests {
                 clobber_regs: 0,
                 clobber_fp_regs: 0,
                 clobber_memory: false,
-                volatile: true,
             }),
             args: alloc::vec![0],
         };
         let f = func_with(
             vec![load(), store_of(0), asm, store_of(0), store_of(0)],
-            vec![block(0..5, Terminator::Return(NO_VALUE))],
+            vec![block(0..5, Terminator::Return(None))],
         );
         let runs = plan(&f, &alloc_spilling_v0(5));
         assert_eq!(runs.len(), 1);
@@ -752,7 +744,7 @@ mod tests {
             insts.clone(),
             vec![
                 block(0..2, Terminator::Jmp(1)),
-                block(2..3, Terminator::Return(NO_VALUE)),
+                block(2..3, Terminator::Return(None)),
             ],
         );
         let runs = plan(&chained, &alloc_spilling_v0(3));
@@ -770,7 +762,7 @@ mod tests {
                         fall_through: 1,
                     },
                 ),
-                block(2..3, Terminator::Return(NO_VALUE)),
+                block(2..3, Terminator::Return(None)),
                 block(3..3, Terminator::Jmp(1)),
             ],
         );
@@ -792,7 +784,7 @@ mod tests {
             vec![load(), store_of(0), phi, store_of(0)],
             vec![
                 block(0..2, Terminator::Jmp(1)),
-                block(2..4, Terminator::Return(NO_VALUE)),
+                block(2..4, Terminator::Return(None)),
             ],
         );
         let runs = plan(&f, &alloc_spilling_v0(4));
@@ -821,7 +813,7 @@ mod tests {
             vec![load(), store_of(0), store_of(0), phi, store_of(3)],
             vec![
                 block(0..3, Terminator::Jmp(1)),
-                block(3..5, Terminator::Return(NO_VALUE)),
+                block(3..5, Terminator::Return(None)),
             ],
         );
         let runs = plan(&f, &alloc_spilling_v0(5));
@@ -838,7 +830,7 @@ mod tests {
     fn a_rejected_split_restores_the_function() {
         let f = func_with(
             vec![load(), store_of(0), store_of(0)],
-            vec![block(0..3, Terminator::Return(NO_VALUE))],
+            vec![block(0..3, Terminator::Return(None))],
         );
         let mut split = f.clone();
         let runs = plan(&f, &alloc_spilling_v0(3));
@@ -860,7 +852,7 @@ mod tests {
     fn the_traffic_metric_charges_every_copy() {
         let mut f = func_with(
             vec![load(), store_of(0), store_of(0)],
-            vec![block(0..3, Terminator::Return(NO_VALUE))],
+            vec![block(0..3, Terminator::Return(None))],
         );
         let base = alloc_spilling_v0(3);
         assert_eq!(spill_traffic(&f, &base), 3, "def plus two reloads");
@@ -901,8 +893,8 @@ mod tests {
                         fall_through: 2,
                     },
                 ),
-                block(5..5, Terminator::Return(NO_VALUE)),
-                block(5..5, Terminator::Return(NO_VALUE)),
+                block(5..5, Terminator::Return(None)),
+                block(5..5, Terminator::Return(None)),
             ],
         );
         let alloc = super::super::reg_alloc::allocate(&f, Target::host(), FixedRegs::NONE);
@@ -954,7 +946,7 @@ mod tests {
             }
         }
         let n = insts.len() as u32;
-        func_with(insts, vec![block(0..n, Terminator::Return(NO_VALUE))])
+        func_with(insts, vec![block(0..n, Terminator::Return(None))])
     }
 
     fn split_once(cap: usize) -> (FunctionSsa, Allocation) {
@@ -1058,7 +1050,7 @@ mod tests {
             vec![load(), store_of(0), call_of(Vec::new()), store_of(0)],
             vec![
                 block(0..2, Terminator::Jmp(1)),
-                block(2..4, Terminator::Return(NO_VALUE)),
+                block(2..4, Terminator::Return(None)),
             ],
         );
         assert!(plan(&f, &alloc_spilling_v0(4)).is_empty());
@@ -1071,7 +1063,7 @@ mod tests {
     fn a_spilled_value_read_before_a_call_splits_its_head() {
         let mut f = func_with(
             vec![load(), store_of(0), call_of(alloc::vec![0]), store_of(0)],
-            vec![block(0..4, Terminator::Return(NO_VALUE))],
+            vec![block(0..4, Terminator::Return(None))],
         );
         let mut a = alloc_spilling_v0(4);
         a.use_counts[0] = 3;
@@ -1099,7 +1091,7 @@ mod tests {
             vec![load(), store_of(0), store_of(0), store_of(0)],
             vec![
                 block(0..3, Terminator::Jmp(1)),
-                block(3..4, Terminator::Return(NO_VALUE)),
+                block(3..4, Terminator::Return(None)),
             ],
         );
         let mut a = alloc_spilling_v0(4);
@@ -1119,12 +1111,12 @@ mod tests {
     fn a_head_needs_a_read_on_both_sides() {
         let f = func_with(
             vec![load(), call_of(Vec::new()), store_of(0)],
-            vec![block(0..3, Terminator::Return(NO_VALUE))],
+            vec![block(0..3, Terminator::Return(None))],
         );
         assert!(plan_heads(&f, &alloc_spilling_v0(3)).is_empty());
         let f = func_with(
             vec![load(), store_of(0), call_of(Vec::new())],
-            vec![block(0..3, Terminator::Return(NO_VALUE))],
+            vec![block(0..3, Terminator::Return(None))],
         );
         assert!(plan_heads(&f, &alloc_spilling_v0(3)).is_empty());
     }

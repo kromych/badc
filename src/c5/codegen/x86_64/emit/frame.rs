@@ -11,11 +11,6 @@ pub(crate) struct Frame {
     pub frame_bytes: u32,
     /// Byte distance from the frame base down to the allocator spill region.
     pub alloc_spill_base: u32,
-    /// Bytes of the parameter cell region between the locals and the
-    /// allocator spills: one 16-byte cell per register-carried parameter of
-    /// a System V callee that reads a register parameter from memory, 0
-    /// otherwise (`param_home_off`).
-    pub param_cells_bytes: u32,
     /// The register-carried parameters, by their order among them, that
     /// keep a cell ([`param_cells`]), each 16 bytes, packed in that order.
     pub param_cells: u64,
@@ -27,9 +22,6 @@ pub(crate) struct Frame {
     pub param_home_needed: bool,
     /// rbp-relative base of the System V register save area; 0 when unused.
     pub va_reg_save_off: i32,
-    /// Bytes of saved non-volatile xmm scratch (Win64), 16 per register;
-    /// 0 on System V.
-    pub saved_fpr_bytes: u32,
     /// Win64: bytes of the callee-saved block directly below the saved
     /// rbp, the pushed GPRs, a pad to 16 and the xmm saves at its bottom,
     /// which `UNWIND_INFO` describes; every region below shifts by it. With
@@ -279,6 +271,7 @@ fn call_stack_bytes(
     Some(super::plan_call_args_aggs(n, n, fp_arg_mask, abi, &aggs, false, widths).scratch_bytes)
 }
 
+#[cfg(test)]
 pub(crate) fn compute_frame(
     func: &FunctionSsa,
     alloc: &Allocation,
@@ -416,7 +409,6 @@ pub(crate) fn compute_frame_with_tail_calls(
             aligned: static_region_bytes,
             outgoing: 0,
         },
-        param_cells_bytes,
         param_cells,
         param_cells_off: if param_cells_bytes > 0 {
             -(upper_bytes as i32)
@@ -425,7 +417,6 @@ pub(crate) fn compute_frame_with_tail_calls(
         },
         param_home_needed: param_home_needed(func, alloc, abi),
         va_reg_save_off,
-        saved_fpr_bytes,
         saves_top,
         asm_scratch_off,
         dynamic_sp: super::ssa::emit_common::uses_dynamic_alloca(func) || realign_align > 0,

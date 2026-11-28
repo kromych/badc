@@ -927,9 +927,11 @@ pub(crate) struct AsmSectionLabel {
 /// leave the appended bytes / relocs / labels in a pre-existing section.
 pub(crate) struct AsmSectionsSnapshot {
     pub(crate) len: usize,
-    /// The declarations verbatim: a merge onto an entry that predates the
-    /// snapshot is not undone by a length truncation.
-    pub(crate) decls: alloc::vec::Vec<AsmSymDecl>,
+    /// The declarations and the length of the log of their earlier
+    /// values: a merge onto an entry that predates the snapshot is not
+    /// undone by a length truncation.
+    pub(crate) decls: usize,
+    pub(crate) decl_log: usize,
     /// Recorded `.cfi_*` directives at the snapshot, so a re-laid-out
     /// function does not describe its frame twice.
     pub(crate) cfi: usize,

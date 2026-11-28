@@ -17,8 +17,7 @@ fn func(insts: Vec<Inst>) -> FunctionSsa {
         blocks: alloc::vec![Block {
             start_pc: 0,
             inst_range: 0..n as u32,
-            terminator: Terminator::Return(n as ValueId - 1),
-            exit_acc: n as ValueId - 1,
+            terminator: Terminator::Return(Some(n as ValueId - 1)),
         }],
         ..FunctionSsa::default()
     }
@@ -26,7 +25,7 @@ fn func(insts: Vec<Inst>) -> FunctionSsa {
 
 fn returned(f: &FunctionSsa) -> ValueId {
     match f.blocks[0].terminator {
-        Terminator::Return(r) => r,
+        Terminator::Return(Some(r)) => r,
         ref other => panic!("no return: {other:?}"),
     }
 }
@@ -311,7 +310,7 @@ fn forwarded_quotient_redirects_every_reader() {
         },
     ]);
     run_one(&mut g, &[]);
-    assert_eq!((returned(&g), g.blocks[0].exit_acc), (0, 0));
+    assert_eq!(returned(&g), 0);
 }
 
 /// A zero divisor is left to the hardware divide (C99 6.5.5p5): the

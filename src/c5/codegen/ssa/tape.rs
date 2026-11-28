@@ -121,7 +121,6 @@ fn renumber(k: &mut Keyed<'_>, remap: &[ValueId]) {
         inst.for_each_operand_mut(map);
     }
     for block in k.blocks.iter_mut() {
-        map(&mut block.exit_acc);
         block.terminator.for_each_operand_mut(map);
     }
     rekey(k, remap);
@@ -251,8 +250,8 @@ fn sort(ins: &mut Vec<Insertion>, blocks: &[Block], n_old: usize) -> Vec<usize> 
 }
 
 /// Place `ins` into the tape and move everything keyed by value id with
-/// it: the parallel tables, every block range, every operand, terminator
-/// and `exit_acc`, and the relocation tables. Insertions at one place
+/// it: the parallel tables, every block range, every operand and
+/// terminator, and the relocation tables. Insertions at one place
 /// land in slice order, and `Rewrite::ids` follows the slice. An
 /// inserted value takes the source position of the instruction it goes
 /// ahead of or after, or of the one after an empty block.
@@ -611,7 +610,6 @@ mod tests {
             start_pc: 0,
             inst_range: range,
             terminator,
-            exit_acc: NO_VALUE,
         }
     }
 
@@ -631,7 +629,7 @@ mod tests {
                     pc_rel: false
                 },
             ],
-            alloc::vec![block(0..2, Terminator::Return(1))],
+            alloc::vec![block(0..2, Terminator::Return(Some(1)))],
         );
         f.f32_values = alloc::vec![false, false];
         f.extern_imm_data_refs = alloc::vec![(0, 7)];
@@ -650,7 +648,10 @@ mod tests {
         assert!(matches!(f.insts[0], Inst::Imm(5)));
         assert_eq!(f.f32_values, alloc::vec![true, false, false]);
         assert!(matches!(f.insts[2], Inst::Load { addr: 1, .. }));
-        assert!(matches!(f.blocks[0].terminator, Terminator::Return(2)));
+        assert!(matches!(
+            f.blocks[0].terminator,
+            Terminator::Return(Some(2))
+        ));
         assert_eq!(f.extern_imm_data_refs, alloc::vec![(1, 7)]);
     }
 
@@ -659,7 +660,7 @@ mod tests {
     fn the_undo_restores_the_function() {
         let mut f = func_with(
             alloc::vec![Inst::Imm(1), Inst::Imm(2)],
-            alloc::vec![block(0..2, Terminator::Return(1))],
+            alloc::vec![block(0..2, Terminator::Return(Some(1)))],
         );
         f.extern_imm_data_refs = alloc::vec![(1, 3)];
         let n_before = f.insts.len();
@@ -689,7 +690,7 @@ mod tests {
             alloc::vec![Inst::Imm(1), Inst::Imm(2)],
             alloc::vec![
                 block(0..1, Terminator::Jmp(1)),
-                block(1..2, Terminator::Return(1)),
+                block(1..2, Terminator::Return(Some(1))),
             ],
         );
         let rw = insert(
@@ -715,7 +716,10 @@ mod tests {
         assert!(matches!(f.insts[2], Inst::Imm(9)));
         assert_eq!(f.blocks[0].inst_range, 0..2);
         assert_eq!(f.blocks[1].inst_range, 2..4);
-        assert!(matches!(f.blocks[1].terminator, Terminator::Return(3)));
+        assert!(matches!(
+            f.blocks[1].terminator,
+            Terminator::Return(Some(3))
+        ));
     }
 
     /// Two empty blocks at one index take their instructions in block
@@ -729,8 +733,8 @@ mod tests {
                 block(0..1, Terminator::Jmp(1)),
                 block(1..1, Terminator::Jmp(3)),
                 block(1..1, Terminator::Jmp(3)),
-                block(1..2, Terminator::Return(1)),
-                block(2..2, Terminator::Return(NO_VALUE)),
+                block(1..2, Terminator::Return(Some(1))),
+                block(2..2, Terminator::Return(None)),
             ],
         );
         let rw = insert(
@@ -768,7 +772,10 @@ mod tests {
         assert_eq!(ranges, alloc::vec![0..2, 2..3, 3..4, 4..6, 6..6]);
         assert!(matches!(f.insts[2], Inst::Imm(8)));
         assert!(matches!(f.insts[3], Inst::Imm(9)));
-        assert!(matches!(f.blocks[3].terminator, Terminator::Return(5)));
+        assert!(matches!(
+            f.blocks[3].terminator,
+            Terminator::Return(Some(5))
+        ));
     }
 
     /// A plan given out of tape order keeps each insertion's reads of an
@@ -783,7 +790,7 @@ mod tests {
             alloc::vec![
                 block(0..1, Terminator::Jmp(1)),
                 block(1..1, Terminator::Jmp(2)),
-                block(1..2, Terminator::Return(1)),
+                block(1..2, Terminator::Return(Some(1))),
             ],
         );
         let put = |at, inst| Insertion {
@@ -805,7 +812,10 @@ mod tests {
         assert_eq!(ranges, alloc::vec![0..1, 1..3, 3..6]);
         assert!(matches!(f.insts[2], Inst::Binop { lhs: 0, rhs: 1, .. }));
         assert!(matches!(f.insts[5], Inst::Binop { lhs: 3, rhs: 4, .. }));
-        assert!(matches!(f.blocks[2].terminator, Terminator::Return(3)));
+        assert!(matches!(
+            f.blocks[2].terminator,
+            Terminator::Return(Some(3))
+        ));
     }
 
     fn add(lhs: ValueId, rhs: ValueId) -> Inst {
@@ -823,20 +833,23 @@ mod tests {
             alloc::vec![Inst::Imm(1), Inst::Imm(2), add(0, 1)],
             alloc::vec![
                 block(0..1, Terminator::Jmp(1)),
-                block(1..3, Terminator::Return(2)),
+                block(1..3, Terminator::Return(Some(2))),
             ],
         );
         concat(&mut f, &[alloc::vec![0, 1]]);
         assert_eq!(f.blocks[0].inst_range, 0..3);
         assert!(f.blocks[1].inst_range.is_empty());
         assert!(matches!(f.insts[2], Inst::Binop { lhs: 0, rhs: 1, .. }));
-        assert!(matches!(f.blocks[1].terminator, Terminator::Return(2)));
+        assert!(matches!(
+            f.blocks[1].terminator,
+            Terminator::Return(Some(2))
+        ));
     }
 
     /// A member that sits elsewhere on the tape moves behind the head,
     /// and everything keyed by value id follows: operands, terminators,
-    /// `exit_acc`, the parallel tables, the relocation table and the
-    /// range of the block in between.
+    /// the parallel tables, the relocation table and the range of the block
+    /// in between.
     #[test]
     fn concat_moves_a_distant_range_behind_the_head() {
         let mut f = func_with(
@@ -849,7 +862,7 @@ mod tests {
             ],
             alloc::vec![
                 block(0..1, Terminator::Jmp(2)),
-                block(1..3, Terminator::Return(2)),
+                block(1..3, Terminator::Return(Some(2))),
                 block(
                     3..5,
                     Terminator::Bz {
@@ -860,7 +873,6 @@ mod tests {
                 ),
             ],
         );
-        f.blocks[2].exit_acc = 4;
         let at = |line| crate::c5::ir::InstSrc {
             line,
             ..Default::default()
@@ -877,12 +889,14 @@ mod tests {
         assert!(matches!(f.insts[1], Inst::ImmData(16)));
         assert!(matches!(f.insts[2], Inst::Binop { lhs: 0, rhs: 1, .. }));
         assert!(matches!(f.insts[4], Inst::Binop { lhs: 3, rhs: 3, .. }));
-        assert!(matches!(f.blocks[1].terminator, Terminator::Return(4)));
+        assert!(matches!(
+            f.blocks[1].terminator,
+            Terminator::Return(Some(4))
+        ));
         assert!(matches!(
             f.blocks[2].terminator,
             Terminator::Bz { cond: 2, .. }
         ));
-        assert_eq!(f.blocks[2].exit_acc, 2);
         assert_eq!(
             f.inst_src,
             alloc::vec![at(10), at(13), at(14), at(11), at(12)]
@@ -907,7 +921,7 @@ mod tests {
                 block(0..0, Terminator::Jmp(1)),
                 block(3..3, Terminator::Jmp(2)),
                 block(2..3, Terminator::Jmp(3)),
-                block(0..1, Terminator::Return(0)),
+                block(0..1, Terminator::Return(Some(0))),
             ],
         );
         concat(&mut f, &[alloc::vec![0, 1, 2, 3]]);
@@ -916,7 +930,10 @@ mod tests {
         assert!(f.blocks[1..].iter().all(|b| b.inst_range.is_empty()));
         assert!(matches!(f.insts[1], Inst::Imm(2)));
         assert!(matches!(f.insts[2], Inst::Imm(3)));
-        assert!(matches!(f.blocks[3].terminator, Terminator::Return(2)));
+        assert!(matches!(
+            f.blocks[3].terminator,
+            Terminator::Return(Some(2))
+        ));
     }
 
     /// An empty block standing ahead of a member that moves stays on a
@@ -932,8 +949,8 @@ mod tests {
             ],
             alloc::vec![
                 block(0..1, Terminator::Jmp(2)),
-                block(1..2, Terminator::Return(1)),
-                block(2..3, Terminator::Return(2)),
+                block(1..2, Terminator::Return(Some(1))),
+                block(2..3, Terminator::Return(Some(2))),
                 block(2..2, Terminator::Jmp(1)),
             ],
         );
@@ -972,8 +989,8 @@ mod tests {
             alloc::vec![
                 block(0..1, Terminator::Jmp(2)),
                 block(1..2, Terminator::Jmp(3)),
-                block(2..3, Terminator::Return(2)),
-                block(3..4, Terminator::Return(3)),
+                block(2..3, Terminator::Return(Some(2))),
+                block(3..4, Terminator::Return(Some(3))),
             ],
         );
         concat(&mut f, &[alloc::vec![0, 2], alloc::vec![1, 3]]);
@@ -982,7 +999,13 @@ mod tests {
         assert_eq!(f.blocks[1].inst_range, 2..4);
         assert!(matches!(f.insts[1], Inst::Imm(12)));
         assert!(matches!(f.insts[2], Inst::Imm(11)));
-        assert!(matches!(f.blocks[2].terminator, Terminator::Return(1)));
-        assert!(matches!(f.blocks[3].terminator, Terminator::Return(3)));
+        assert!(matches!(
+            f.blocks[2].terminator,
+            Terminator::Return(Some(1))
+        ));
+        assert!(matches!(
+            f.blocks[3].terminator,
+            Terminator::Return(Some(3))
+        ));
     }
 }

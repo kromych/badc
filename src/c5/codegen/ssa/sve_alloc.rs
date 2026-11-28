@@ -58,10 +58,8 @@ impl SveAlloc {
 pub(crate) fn reaches_other_pcs(func: &FunctionSsa, target: crate::c5::Target) -> bool {
     use crate::c5::ir::Inst;
     let tls = super::reg_alloc::tls_addr_is_call(target, func);
-    (func.insts.iter()).any(|i| {
-        super::reg_alloc::is_call_site(i, tls)
-            || matches!(i, Inst::TailExt(_) | Inst::InlineAsm { .. })
-    })
+    (func.insts.iter())
+        .any(|i| super::reg_alloc::is_call_site(i, tls) || matches!(i, Inst::InlineAsm { .. }))
 }
 
 /// An operand an SVE row takes from its encoding: its index, the

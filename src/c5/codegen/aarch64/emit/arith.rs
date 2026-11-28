@@ -1001,6 +1001,7 @@ fn cmp_reg_word(alloc: &Allocation, v: super::super::ir::ValueId, rn: Reg, rm: R
 #[allow(clippy::too_many_arguments)]
 pub(super) fn emit_binop_imm(
     code: &mut CodeBuf,
+    func: &FunctionSsa,
     op: BinOp,
     v: super::super::ir::ValueId,
     dst: Place,
@@ -1059,7 +1060,7 @@ pub(super) fn emit_binop_imm(
         Some(r) => r,
         None => return fail("BinopI: lhs not int reg / spill"),
     };
-    let narrow = alloc.high_dead(v) || (alloc.high_clear(lhs) && (rhs_imm as u64) >> 32 == 0);
+    let narrow = alloc.high_dead(v) || (alloc.high_clear(func, lhs) && (rhs_imm as u64) >> 32 == 0);
     if let Some(word) = binop_imm_peephole(op, rhs_imm, narrow, rd, rn) {
         emit(code, word);
         store_spilled_int(code, frame, dst, rd);

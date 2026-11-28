@@ -227,21 +227,28 @@ fn encode_x86_asm_section_code(
     use super::super::ir::Inst;
     use crate::c5::asm::AsmSectionTarget;
     // A same-TU function operand is an `ImmCode` whose ent_pc reverses to its
-    // name here; a cross-TU one carries its name in `extern_code_names`.
-    let mut entpc2name: alloc::collections::BTreeMap<usize, &str> =
-        alloc::collections::BTreeMap::new();
-    for (n, &pc) in name2entpc {
-        entpc2name.entry(pc).or_insert(n.as_str());
-    }
+    // name here; a cross-TU one carries its name in `extern_code_names`. The
+    // reverse map is over the unit's functions: built for a statement that
+    // has such an operand.
+    let entpc2name = core::cell::OnceCell::new();
+    let function_named = |pc: usize| -> Option<&str> {
+        let by_pc = entpc2name.get_or_init(|| {
+            let mut by_pc = alloc::collections::BTreeMap::new();
+            for (n, &pc) in name2entpc {
+                by_pc.entry(pc).or_insert(n.as_str());
+            }
+            by_pc
+        });
+        by_pc.get(&pc).copied()
+    };
     let operand_target = |idx: u8| -> Option<AsmSectionTarget> {
         let arg = *args.get(idx as usize)?;
         if let Some(name) = extern_code_names.get(&arg) {
             return Some(AsmSectionTarget::Symbol(name.clone()));
         }
         match func.insts.get(arg as usize) {
-            Some(Inst::ImmCode(pc)) => entpc2name
-                .get(pc)
-                .map(|n| AsmSectionTarget::Symbol(alloc::string::String::from(*n))),
+            Some(Inst::ImmCode(pc)) => function_named(*pc)
+                .map(|n| AsmSectionTarget::Symbol(alloc::string::String::from(n))),
             _ => crate::c5::asm::asm_operand_data_target(func, arg, &|v| {
                 extern_data_names.get(&v).cloned()
             })
@@ -1658,14 +1665,6 @@ const RIPREL_PROBE_DISP: i32 = 0x5B3D_71A7u32 as i32;
 /// The byte-wise complement of [`RIPREL_PROBE_DISP`], for locating a field
 /// that already carries the first probe: every byte differs again.
 const RIPREL_PROBE_DISP2: i32 = 0xA4C2_8E58u32 as i32;
-
-/// Byte offset of the four-byte run that differs between two encodings that
-/// vary only in a RIP-relative displacement. Returns `None` unless exactly
-/// four contiguous bytes differ -- an encoder-invariant check that the disp32
-/// is the sole variable field.
-fn riprel_disp32_field(a: &[u8], b: &[u8]) -> Option<usize> {
-    differing_run(a, b).filter(|&(_, n)| n == 4).map(|(s, _)| s)
-}
 
 /// The single contiguous run of bytes two equal-length encodings differ in,
 /// as (offset, length). `None` when they differ nowhere or in more than one
@@ -4338,7 +4337,7 @@ fn emit_asm_load_width(code: &mut CodeBuf, dst: Reg, base: Reg, disp: i32, width
     match width {
         1 => super::encode::emit_movzx_r_mem8(code, dst, base, disp),
         2 => super::encode::emit_movzx_r_mem16(code, dst, base, disp),
-        4 => super::encode::emit_mov_r_mem32(code, dst, base, disp),
+        4 => super::encode::emit_mov_r32_mem(code, dst, base, disp),
         _ => super::encode::emit_mov_r_mem(code, dst, base, disp),
     }
 }

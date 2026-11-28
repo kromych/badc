@@ -52,7 +52,6 @@ fn emit_asm(
         clobber_regs: clobbers,
         clobber_fp_regs: 0,
         clobber_memory: memory,
-        volatile: true,
     };
     b.inline_asm(Box::new(block), args);
 }

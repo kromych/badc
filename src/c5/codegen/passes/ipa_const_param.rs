@@ -369,8 +369,7 @@ mod tests {
             blocks: alloc::vec![Block {
                 start_pc: 0,
                 inst_range: 0..n,
-                terminator: Terminator::Return(ret),
-                exit_acc: ret,
+                terminator: Terminator::Return(Some(ret)),
             }],
             ..Default::default()
         }

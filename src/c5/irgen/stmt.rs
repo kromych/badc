@@ -613,10 +613,12 @@ impl<'a> Walker<'a> {
     }
 
     /// Close the block with a return that names no operand: no value in a
-    /// `void` function (C99 6.8.6.4p1), 0 in `main` (C99 5.1.2.2.3) and in a
-    /// value-returning function, whose value C99 6.9.1p12 leaves undefined.
+    /// `void` function (C99 6.8.6.4p1) and in one returning an aggregate,
+    /// whose operand is the address of the returned object and there is
+    /// none; 0 in `main` (C99 5.1.2.2.3) and in any other value-returning
+    /// function, whose value C99 6.9.1p12 leaves undefined.
     pub(super) fn return_without_value(&self, b: &mut SsaBuilder) {
-        if self.returns_no_value {
+        if self.returns_no_value || self.ret_in_regs || self.ret_indirect {
             self.return_value(b, NO_VALUE);
         } else {
             let zero = b.imm(0);

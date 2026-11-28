@@ -2446,7 +2446,9 @@ fn emit_return(
     // A register-returned aggregate (System V AMD64 3.2.3): `value` is its
     // address, staged through rcx; the eightbytes load into rax:rdx /
     // xmm0:xmm1, an x87 pair into st(0), while rsp is still below the object.
-    if let Some(ai) = func.ret_agg {
+    // A function that reaches its closing brace returns no value (C17
+    // 6.9.1p12) and has no object to load.
+    if let Some(ai) = func.ret_agg.filter(|_| value != super::super::ir::NO_VALUE) {
         let desc = &func.agg_descs[ai as usize];
         let eb_classes = reg_slot_classes(desc, abi, true);
         match return_place {

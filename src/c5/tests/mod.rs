@@ -1352,6 +1352,41 @@ int main(void) {{
     )
 }
 
+/// The cycles the calling thread has run for.
+#[cfg(all(windows, not(debug_assertions)))]
+fn thread_cycles() -> u64 {
+    unsafe extern "system" {
+        fn GetCurrentThread() -> *mut core::ffi::c_void;
+        fn QueryThreadCycleTime(
+            thread: *mut core::ffi::c_void,
+            cycles: *mut u64,
+        ) -> core::ffi::c_int;
+    }
+    let mut cycles = 0u64;
+    assert_ne!(
+        unsafe { QueryThreadCycleTime(GetCurrentThread(), &mut cycles) },
+        0
+    );
+    cycles
+}
+
+/// The rate of [`thread_cycles`]: the most cycles per second of wall time
+/// over a few short spins, as one the scheduler interrupts shows fewer.
+#[cfg(all(windows, not(debug_assertions)))]
+fn cycles_per_second() -> f64 {
+    static RATE: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
+    *RATE.get_or_init(|| {
+        let spin = || {
+            let (from, start) = (thread_cycles(), std::time::Instant::now());
+            while start.elapsed() < core::time::Duration::from_millis(5) {
+                core::hint::spin_loop();
+            }
+            (thread_cycles() - from) as f64 / start.elapsed().as_secs_f64()
+        };
+        (0..5).map(|_| spin()).fold(1.0, f64::max)
+    })
+}
+
 /// CPU time the calling thread has consumed, which waiting for a core does not advance.
 #[cfg(not(debug_assertions))]
 pub(crate) fn thread_cpu_time() -> core::time::Duration {
@@ -1376,23 +1411,12 @@ pub(crate) fn thread_cpu_time() -> core::time::Duration {
         );
         core::time::Duration::new(ts.sec as u64, ts.nsec as u32)
     }
+    // `GetThreadTimes` moves a scheduler tick at a time, 15.625 ms: a sample
+    // of a few ticks is no measure, and the least of several such samples
+    // less of one. The cycle counter moves with the thread.
     #[cfg(windows)]
     {
-        unsafe extern "system" {
-            fn GetCurrentThread() -> *mut core::ffi::c_void;
-            fn GetThreadTimes(
-                thread: *mut core::ffi::c_void,
-                creation: *mut [u32; 2],
-                exit: *mut [u32; 2],
-                kernel: *mut [u32; 2],
-                user: *mut [u32; 2],
-            ) -> core::ffi::c_int;
-        }
-        let mut t = [[0u32; 2]; 4];
-        let [c, e, k, u] = &mut t;
-        assert_ne!(unsafe { GetThreadTimes(GetCurrentThread(), c, e, k, u) }, 0);
-        let hundred_ns = |f: [u32; 2]| (u64::from(f[1]) << 32) | u64::from(f[0]);
-        core::time::Duration::from_nanos((hundred_ns(t[2]) + hundred_ns(t[3])) * 100)
+        core::time::Duration::from_secs_f64(thread_cycles() as f64 / cycles_per_second())
     }
 }
 

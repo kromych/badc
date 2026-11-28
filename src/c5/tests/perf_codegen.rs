@@ -1034,6 +1034,21 @@ fn compound_division_by_a_constant_takes_no_divide() {
     m.finish();
 }
 
+/// Above half the range the quotient is a comparison, and the remainder
+/// reads it (C17 6.5.5p6): the comparison the remainder's lowering writes
+/// takes the 32-bit form the quotient's has, so the two are one.
+#[test]
+fn quotient_and_remainder_by_a_large_divisor_share_a_compare() {
+    const SRC: &str = "unsigned both(const unsigned *p) {\n\
+        unsigned x = *p; return x / 2147483649u ^ x % 2147483649u; }\n";
+    let ws = a64(SRC, "both");
+    // `cmp`: `subs` into the zero register, of a register or an immediate.
+    let compares = (ws.iter())
+        .filter(|&&w| w & 0x7F20_001F == 0x6B00_001F || w & 0x7F00_001F == 0x7100_001F)
+        .count();
+    assert_eq!(compares, 1, "aarch64: {ws:08x?}");
+}
+
 /// Every 128-bit division form steps by one `div` on x86-64 and by two
 /// 32-bit quotient digits over `udiv` on aarch64; none loops over bits.
 #[test]

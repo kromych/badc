@@ -434,7 +434,7 @@ fn site_of(
     let mut cur = head;
     while cur != b {
         let next = match func.blocks[cur as usize].terminator {
-            Terminator::Jmp(t) | Terminator::FallThrough(t) => t,
+            Terminator::Jmp(t) => t,
             _ => return None,
         };
         if preds[next as usize].len() != 1 || chain.contains(&next) {
@@ -768,7 +768,7 @@ fn thread(
         }
     };
     match &mut func.blocks[p as usize].terminator {
-        Terminator::Jmp(t) | Terminator::FallThrough(t) => retarget(t),
+        Terminator::Jmp(t) => retarget(t),
         Terminator::Bz {
             target,
             fall_through,

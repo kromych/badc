@@ -411,7 +411,7 @@ fn try_shape(
         }
         chain.push(cur);
         let (next, out) = match func.blocks[cur as usize].terminator {
-            Terminator::Jmp(t) | Terminator::FallThrough(t) => (t, None),
+            Terminator::Jmp(t) => (t, None),
             Terminator::Bz {
                 target,
                 fall_through,
@@ -461,7 +461,6 @@ fn try_shape(
                 | Inst::AtomicStore { .. }
                 | Inst::Intrinsic { .. }
                 | Inst::AllocaInit(_)
-                | Inst::TailExt(_)
                 | Inst::BlockAddr(_) => return None,
                 _ => {}
             }
@@ -1410,7 +1409,7 @@ mod tests {
             assert!(b.inst_range.end >= b.inst_range.start);
             expect = b.inst_range.end;
             match b.terminator {
-                Terminator::Jmp(t) | Terminator::FallThrough(t) => {
+                Terminator::Jmp(t) => {
                     assert!((t as usize) < f.blocks.len())
                 }
                 Terminator::Bz {

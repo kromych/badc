@@ -1308,7 +1308,7 @@ impl FunctionEmitter<'_, '_> {
                 )?;
                 return self.record_exit(start, steps);
             }
-            Terminator::Jmp(t) | Terminator::FallThrough(t) => {
+            Terminator::Jmp(t) => {
                 return self.branch_unless_next(block_idx, t);
             }
             Terminator::Bz {

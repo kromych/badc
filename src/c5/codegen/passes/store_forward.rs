@@ -970,8 +970,7 @@ fn run_one(func: &mut FunctionSsa, objects: &[(i64, i64)]) {
                 | Inst::CallExt { .. }
                 | Inst::Intrinsic { .. }
                 | Inst::Simd { .. }
-                | Inst::InlineAsm { .. }
-                | Inst::TailExt(_) => {
+                | Inst::InlineAsm { .. } => {
                     table.clear();
                     indexed.clear();
                     slot_table.clear();
@@ -1564,8 +1563,7 @@ pub(crate) fn fold_const_loads(func: &mut FunctionSsa) -> bool {
                 | Inst::CallExt { .. }
                 | Inst::Intrinsic { .. }
                 | Inst::Simd { .. }
-                | Inst::InlineAsm { .. }
-                | Inst::TailExt(_) => {
+                | Inst::InlineAsm { .. } => {
                     table.clear();
                     slot_table.retain(|e| !exposed.contains(&e.off));
                 }

@@ -250,7 +250,6 @@ fn is_effectful(inst: &Inst) -> bool {
             | Inst::AtomicStore { .. }
             | Inst::Intrinsic { .. }
             | Inst::InlineAsm { .. }
-            | Inst::TailExt(_)
             | Inst::Load { volatile: true, .. }
             | Inst::LoadLocal { volatile: true, .. }
             | Inst::SegLoad { volatile: true, .. }
@@ -294,7 +293,7 @@ fn targets_entry(func: &FunctionSsa) -> bool {
     }
     for blk in &func.blocks {
         let hit = match blk.terminator {
-            Terminator::Jmp(t) | Terminator::FallThrough(t) => t == 0,
+            Terminator::Jmp(t) => t == 0,
             Terminator::Bz {
                 target,
                 fall_through,

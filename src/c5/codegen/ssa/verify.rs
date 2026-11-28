@@ -41,7 +41,7 @@ pub(crate) fn check(f: &FunctionSsa) -> Result<(), String> {
     }
     for (b, blk) in f.blocks.iter().enumerate() {
         let bad_target = match blk.terminator {
-            Terminator::Jmp(t) | Terminator::FallThrough(t) => outside(&t).then_some(t),
+            Terminator::Jmp(t) => outside(&t).then_some(t),
             Terminator::Bz {
                 target,
                 fall_through,

@@ -649,12 +649,9 @@ pub(crate) fn asm_operand_form(func: &FunctionSsa, arg: u32) -> alloc::string::S
             Some(Inst::Fneg(_) | Inst::Fma { .. } | Inst::FpCast { .. }) => {
                 "a floating-point result"
             }
-            Some(
-                Inst::Call { .. }
-                | Inst::CallExt { .. }
-                | Inst::CallIndirect { .. }
-                | Inst::TailExt(_),
-            ) => "a call result",
+            Some(Inst::Call { .. } | Inst::CallExt { .. } | Inst::CallIndirect { .. }) => {
+                "a call result"
+            }
             Some(Inst::Intrinsic { .. }) => "an intrinsic result",
             Some(
                 Inst::Simd { .. }

@@ -131,7 +131,7 @@ pub(crate) fn successors(
     jump_tables: &[Vec<BlockId>],
 ) -> Vec<BlockId> {
     match term {
-        Terminator::Jmp(b) | Terminator::FallThrough(b) => alloc::vec![*b],
+        Terminator::Jmp(b) => alloc::vec![*b],
         Terminator::Bz {
             target,
             fall_through,

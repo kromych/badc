@@ -25,7 +25,7 @@ use crate::c5::ir::{BlockId, FunctionSsa, Inst, Terminator};
 
 fn push_successors(t: &Terminator, out: &mut Vec<BlockId>) {
     match *t {
-        Terminator::Jmp(b) | Terminator::FallThrough(b) => out.push(b),
+        Terminator::Jmp(b) => out.push(b),
         Terminator::Bz {
             target,
             fall_through,

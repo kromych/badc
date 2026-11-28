@@ -161,7 +161,7 @@ impl BlockPlan {
             return (!self.falls_into(b, arm)).then_some(arm);
         }
         let t = match func.blocks[b].terminator {
-            Terminator::Jmp(t) | Terminator::FallThrough(t) => t,
+            Terminator::Jmp(t) => t,
             Terminator::Bz {
                 target,
                 fall_through,
@@ -519,7 +519,7 @@ fn emits_nothing(inst: &Inst, v: ValueId, alloc: &Allocation) -> bool {
 
 fn forwards_to(func: &FunctionSsa, alloc: &Allocation, b: BlockId) -> Option<BlockId> {
     let block = &func.blocks[b as usize];
-    let (Terminator::Jmp(t) | Terminator::FallThrough(t)) = block.terminator else {
+    let Terminator::Jmp(t) = block.terminator else {
         return None;
     };
     let silent = block

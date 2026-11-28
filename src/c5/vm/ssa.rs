@@ -1089,9 +1089,6 @@ fn run_func<H: Host>(
                     fall_through as usize
                 };
             }
-            Terminator::FallThrough(target) => {
-                frame.block_idx = target as usize;
-            }
             Terminator::GotoIndirect { target } => {
                 // GNU C labels as values: the operand must be the address
                 // of a label in this function; any other jump is undefined
@@ -1827,7 +1824,6 @@ fn run_inst<H: Host>(
             frame.regs[v as usize] = call_library(prog, mem, host, frame, v, call, args)?;
             return Ok(());
         }
-        Inst::TailExt(_) => "TailExt",
         Inst::Intrinsic { kind, args }
             if *kind == crate::c5::op::Intrinsic::FunctionPrefix as i64 =>
         {

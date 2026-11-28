@@ -631,10 +631,7 @@ fn arm_exits(
     let preheaders: BTreeSet<BlockId> = shapes.iter().map(|s| s.preheader).collect();
     let mut exits: Vec<(u32, BlockId, BlockId, Option<Reload>)> = Vec::new();
     for (b, block) in func.blocks.iter().enumerate() {
-        let jumps = matches!(
-            block.terminator,
-            Terminator::Jmp(_) | Terminator::FallThrough(_)
-        );
+        let jumps = matches!(block.terminator, Terminator::Jmp(_));
         let end = (jumps && succs[b].len() == 1 && !preheaders.contains(&(b as BlockId)))
             .then_some(Reload::End(b as BlockId));
         for &s in &succs[b] {

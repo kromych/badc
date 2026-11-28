@@ -1349,7 +1349,7 @@ impl FnEmit<'_, '_> {
                 }
                 Ok(())
             }
-            Terminator::Jmp(t) | Terminator::FallThrough(t) => self.jump_unless_next(block_idx, t),
+            Terminator::Jmp(t) => self.jump_unless_next(block_idx, t),
             Terminator::Bz {
                 cond,
                 target,

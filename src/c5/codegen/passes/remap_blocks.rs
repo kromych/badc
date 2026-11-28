@@ -5,7 +5,7 @@
 //! between blocks: each block keeps its `inst_range` slice of the
 //! flat `insts` array, so value ids, liveness, and the allocator's
 //! input are unaffected. The complete block-id reference surface is
-//! the terminators' targets (`Jmp`, `Bz`, `Bnz`, `FallThrough`),
+//! the terminators' targets (`Jmp`, `Bz`, `Bnz`),
 //! `Phi::incoming` predecessor ids, `Inst::BlockAddr`,
 //! `FunctionSsa::computed_goto_targets`,
 //! `FunctionSsa::label_data_relocs`, and the
@@ -54,9 +54,7 @@ fn mapped(new_id: &[BlockId], old: BlockId, surface: &str) -> BlockId {
 pub(crate) fn remap_block_ids(func: &mut FunctionSsa, new_id: &[BlockId]) {
     for block in func.blocks.iter_mut() {
         match &mut block.terminator {
-            Terminator::Jmp(t) | Terminator::FallThrough(t) => {
-                *t = mapped(new_id, *t, "terminator")
-            }
+            Terminator::Jmp(t) => *t = mapped(new_id, *t, "terminator"),
             Terminator::Bz {
                 target,
                 fall_through,

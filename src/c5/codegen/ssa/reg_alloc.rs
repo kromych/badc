@@ -467,7 +467,6 @@ pub(crate) fn flags_survive(inst: &Inst, is_x86: bool) -> bool {
         | Inst::Call { .. }
         | Inst::CallIndirect { .. }
         | Inst::CallExt { .. }
-        | Inst::TailExt(_)
         | Inst::Mzero { .. }
         | Inst::Mcpy { .. }
         | Inst::AtomicRmw { .. }
@@ -2631,7 +2630,6 @@ fn allocate_keeping(
             | Inst::Call { .. }
             | Inst::CallIndirect { .. }
             | Inst::CallExt { .. }
-            | Inst::TailExt(_)
             | Inst::Mzero { .. }
             | Inst::Mcpy { .. }
             | Inst::AtomicRmw { .. }
@@ -5485,7 +5483,6 @@ fn result_kind(inst: &Inst) -> ResultKind {
                 ResultKind::Int
             }
         }
-        TailExt(_) => ResultKind::None,
         Mcpy { .. } => ResultKind::Int,
         Mzero { .. } => ResultKind::None,
         // C11 7.17.7: the prior value (RMW) / boolean success (CAS) is

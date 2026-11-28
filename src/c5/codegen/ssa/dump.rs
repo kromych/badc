@@ -315,7 +315,6 @@ fn fmt_inst(inst: &Inst) -> String {
                 fmt_value_list(args),
             )
         }
-        TailExt(b) => format!("TailExt({b})"),
         Mcpy {
             dst,
             src,
@@ -494,7 +493,6 @@ fn fmt_terminator(t: Terminator) -> String {
         Terminator::Return(NO_VALUE) => "Return".to_string(),
         Terminator::Return(v) => format!("Return(v{v})"),
         Terminator::TailExt(b) => format!("TailExt({b})"),
-        Terminator::FallThrough(b) => format!("FallThrough(b{b})"),
         Terminator::GotoIndirect { target } => format!("GotoIndirect(v{target})"),
         Terminator::JumpTable { idx, table } => {
             format!("JumpTable {{ idx=v{idx}, table={table} }}")

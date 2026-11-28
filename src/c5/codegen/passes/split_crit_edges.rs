@@ -242,7 +242,7 @@ fn run_one(func: &mut FunctionSsa) {
 
 fn successors(term: &Terminator, jump_tables: &[Vec<BlockId>]) -> Vec<BlockId> {
     match term {
-        Terminator::Jmp(b) | Terminator::FallThrough(b) => alloc::vec![*b],
+        Terminator::Jmp(b) => alloc::vec![*b],
         Terminator::Bz {
             target,
             fall_through,

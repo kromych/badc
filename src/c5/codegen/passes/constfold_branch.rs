@@ -152,7 +152,7 @@ pub(crate) fn fold_converging_arms(func: &mut FunctionSsa) -> bool {
     }
     let forwards_to = |s: BlockId| -> Option<BlockId> {
         let block = func.blocks.get(s as usize)?;
-        let (Terminator::Jmp(next) | Terminator::FallThrough(next)) = block.terminator else {
+        let Terminator::Jmp(next) = block.terminator else {
             return None;
         };
         let quiet = block.inst_range.clone().all(|i| {

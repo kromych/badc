@@ -76,7 +76,7 @@ fn run_one(func: &mut FunctionSsa, chains: &mut JumpChains) {
 /// The unconditional target of a terminator, if any.
 fn uncond_target(term: &Terminator) -> Option<BlockId> {
     match term {
-        Terminator::Jmp(t) | Terminator::FallThrough(t) => Some(*t),
+        Terminator::Jmp(t) => Some(*t),
         _ => None,
     }
 }
@@ -263,7 +263,6 @@ fn thread_jumps(func: &mut FunctionSsa, chains: &mut JumpChains) {
         let term = func.blocks[i].terminator;
         let new_term = match term {
             Terminator::Jmp(t) => Terminator::Jmp(chains.target(func, t)),
-            Terminator::FallThrough(t) => Terminator::FallThrough(chains.target(func, t)),
             Terminator::Bz {
                 cond,
                 target,
@@ -735,7 +734,7 @@ fn lay_out(
                 // Push the conditional's taken target first so the
                 // fall-through arm pops first and chains.
                 match func.blocks[b as usize].terminator {
-                    Terminator::Jmp(t) | Terminator::FallThrough(t) => stack.push(t),
+                    Terminator::Jmp(t) => stack.push(t),
                     Terminator::Bz {
                         target,
                         fall_through,
@@ -858,7 +857,7 @@ fn continued_latch(func: &FunctionSsa, l: &NaturalLoop, chunks: &[Vec<BlockId>])
         c.len() == 1
             && matches!(
                 func.blocks[c[0] as usize].terminator,
-                Terminator::Jmp(t) | Terminator::FallThrough(t) if t == l.header
+                Terminator::Jmp(t) if t == l.header
             )
     })?;
     let latch = chunks[lp][0];
@@ -882,7 +881,7 @@ fn move_latch_before_header(func: &FunctionSsa, header: BlockId, chunks: &mut Ve
         return;
     }
     let reaches_header = |b: BlockId| match func.blocks[b as usize].terminator {
-        Terminator::Jmp(t) | Terminator::FallThrough(t) => t == header,
+        Terminator::Jmp(t) => t == header,
         Terminator::Bz { fall_through, .. } | Terminator::Bnz { fall_through, .. } => {
             fall_through == header
         }
@@ -895,7 +894,7 @@ fn move_latch_before_header(func: &FunctionSsa, header: BlockId, chunks: &mut Ve
         c.len() == 1
             && matches!(
                 func.blocks[c[0] as usize].terminator,
-                Terminator::Jmp(t) | Terminator::FallThrough(t) if t == header
+                Terminator::Jmp(t) if t == header
             )
     });
     if let Some(lp) = latch {

@@ -1146,7 +1146,7 @@ pub(crate) fn fold_template_loads(func: &mut FunctionSsa, cd: &ConstData<'_>) ->
             }
         };
         match &blk.terminator {
-            Terminator::Jmp(t) | Terminator::FallThrough(t) => edge(*t),
+            Terminator::Jmp(t) => edge(*t),
             Terminator::Bz {
                 target,
                 fall_through,

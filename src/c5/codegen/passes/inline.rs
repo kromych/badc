@@ -1075,10 +1075,7 @@ fn candidacy(
             // postfix merge for it. The multi-block splice preserves it
             // as-is (it has no successor and no block-id operands).
             Terminator::Unreachable => {}
-            Terminator::Jmp(_)
-            | Terminator::FallThrough(_)
-            | Terminator::Bz { .. }
-            | Terminator::Bnz { .. } => {}
+            Terminator::Jmp(_) | Terminator::Bz { .. } | Terminator::Bnz { .. } => {}
         }
     }
     // A call to a function that never returns ends the path it is on.
@@ -2269,9 +2266,7 @@ fn needs_param_agg_copy(c: &FunctionSsa) -> bool {
         | Inst::RetPart { .. }
         | Inst::AsmOut { .. }
         | Inst::AggParts { .. } => false,
-        Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. } | Inst::TailExt(_) => {
-            true
-        }
+        Inst::Call { .. } | Inst::CallIndirect { .. } | Inst::CallExt { .. } => true,
         // Extended asm writes through its output operands' destination
         // addresses; a `"memory"` clobber widens that to anything, and
         // stack-pointer asm is outside the model entirely.
@@ -2440,7 +2435,6 @@ fn merge_agg_descs(
 pub(super) fn remap_terminator(term: &mut Terminator, remap: &[ValueId]) {
     match term {
         Terminator::Jmp(_)
-        | Terminator::FallThrough(_)
         | Terminator::TailExt(_)
         | Terminator::AsmGoto { .. }
         | Terminator::Unreachable => {}
@@ -2492,8 +2486,7 @@ fn fp_join_kind(func: &FunctionSsa) -> Option<LoadKind> {
 ///   including the call; terminator becomes `Jmp(callee_entry)`.
 /// * a synthetic postfix block at `splice_block_idx + 1`: carries
 ///   the original block's trailing insts plus the original
-///   terminator (with `FallThrough` lowered to `Jmp` since the
-///   layout no longer guarantees fall-through).
+///   terminator.
 /// * caller blocks `splice_block_idx + 1..` (original indices)
 ///   shift up by 1.
 /// * callee blocks appended at the end, terminator block-ids offset
@@ -3032,7 +3025,6 @@ fn splice_sites(caller: &mut FunctionSsa, sites: &[Site<'_>], whole_vector: u32,
     let map_term = |term: Terminator, remap: &[ValueId]| -> Terminator {
         match term {
             Terminator::Jmp(b) => Terminator::Jmp(entry_of(b)),
-            Terminator::FallThrough(b) => Terminator::FallThrough(entry_of(b)),
             Terminator::Bz {
                 cond,
                 target,
@@ -3254,10 +3246,7 @@ fn splice_sites(caller: &mut FunctionSsa, sites: &[Site<'_>], whole_vector: u32,
         for q in pc..block.inst_range.end {
             emit_caller_inst(q, &mut out, &mut original);
         }
-        let terminator = match block.terminator {
-            Terminator::FallThrough(t) if sites_in[b] > 0 => Terminator::Jmp(entry_of(t)),
-            other => map_term(other, &remap),
-        };
+        let terminator = map_term(block.terminator, &remap);
         new_blocks.push(Block {
             start_pc,
             inst_range: part_start..out.len(),
@@ -3411,7 +3400,7 @@ fn splice_sites(caller: &mut FunctionSsa, sites: &[Site<'_>], whole_vector: u32,
                 p.callee_remap[ce_pc as usize] = id;
             }
             let terminator = match cblock.terminator {
-                Terminator::Jmp(b) | Terminator::FallThrough(b) => Terminator::Jmp(shift(b)),
+                Terminator::Jmp(b) => Terminator::Jmp(shift(b)),
                 Terminator::Bz {
                     cond,
                     target,

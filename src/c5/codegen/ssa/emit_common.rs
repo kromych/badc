@@ -587,7 +587,7 @@ pub(crate) fn body_keeps_frame_record(
     func.insts.iter().enumerate().any(|(pc, inst)| match inst {
         // A tail call leaves the return address where the caller put it.
         Inst::Call { .. } | Inst::CallExt { .. } => !tail_calls.contains(&pc),
-        Inst::CallIndirect { .. } | Inst::TailExt(_) => true,
+        Inst::CallIndirect { .. } => true,
         Inst::TlsAddr(_) => super::reg_alloc::tls_addr_is_call(target, func),
         Inst::InlineAsm { asm, .. } => asm.clobbers_sp(target),
         // An unknown discriminant has no lowering; the emit refuses it.
@@ -1067,7 +1067,7 @@ pub(crate) fn emit_phi_predecessor_moves<B: EmitBackend>(
     use super::reg_alloc::Place;
     let succs: alloc::vec::Vec<super::super::ir::BlockId> =
         match func.blocks[self_block as usize].terminator {
-            Terminator::Jmp(t) | Terminator::FallThrough(t) => alloc::vec![t],
+            Terminator::Jmp(t) => alloc::vec![t],
             Terminator::Bz {
                 target,
                 fall_through,

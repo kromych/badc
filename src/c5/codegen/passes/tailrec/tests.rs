@@ -31,7 +31,7 @@ fn assert_well_formed(f: &FunctionSsa) {
         assert!(b.inst_range.end >= b.inst_range.start);
         expect = b.inst_range.end;
         match b.terminator {
-            Terminator::Jmp(t) | Terminator::FallThrough(t) => {
+            Terminator::Jmp(t) => {
                 assert!((t as usize) < f.blocks.len())
             }
             Terminator::Bz {
@@ -80,7 +80,7 @@ fn predecessors(f: &FunctionSsa) -> Vec<Vec<BlockId>> {
     let mut preds = vec![Vec::new(); f.blocks.len()];
     for (i, b) in f.blocks.iter().enumerate() {
         let succ: Vec<BlockId> = match b.terminator {
-            Terminator::Jmp(t) | Terminator::FallThrough(t) => vec![t],
+            Terminator::Jmp(t) => vec![t],
             Terminator::Bz {
                 target,
                 fall_through,

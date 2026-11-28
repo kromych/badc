@@ -156,7 +156,6 @@ fn compute_high_observed_through(
             | Inst::LocalAddr(_)
             | Inst::TlsAddr(_)
             | Inst::LoadLocal { .. }
-            | Inst::TailExt(_)
             | Inst::AllocaInit(_)
             | Inst::LifetimeEnd(_)
             | Inst::ParamRef { .. }

@@ -146,7 +146,7 @@ fn merge(func: &mut FunctionSsa, preds: &[Vec<BlockId>]) -> bool {
         };
         let jumps_here = matches!(
             func.blocks[p as usize].terminator,
-            Terminator::Jmp(t) | Terminator::FallThrough(t) if t as usize == s
+            Terminator::Jmp(t) if t as usize == s
         );
         let leads_with_phi = func.blocks[s]
             .inst_range
@@ -345,7 +345,7 @@ mod tests {
             vec![param(0), lt(0, 1), lt(1, 2)],
             vec![
                 block(0..1, Terminator::Jmp(1)),
-                block(1..2, Terminator::FallThrough(2)),
+                block(1..2, Terminator::Jmp(2)),
                 block(2..3, Terminator::Return(2)),
             ],
         );

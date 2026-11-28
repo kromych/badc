@@ -136,7 +136,6 @@ fn pure(inst: &Inst) -> bool {
         | Inst::Call { .. }
         | Inst::CallIndirect { .. }
         | Inst::CallExt { .. }
-        | Inst::TailExt(_)
         | Inst::Mzero { .. }
         | Inst::Mcpy { .. }
         | Inst::AtomicRmw { .. }

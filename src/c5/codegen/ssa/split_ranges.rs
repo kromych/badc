@@ -69,7 +69,6 @@ fn is_barrier(inst: &Inst) -> bool {
         Inst::Call { .. }
             | Inst::CallIndirect { .. }
             | Inst::CallExt { .. }
-            | Inst::TailExt(_)
             | Inst::InlineAsm { .. }
             | Inst::Intrinsic { .. }
             | Inst::Mcpy { .. }

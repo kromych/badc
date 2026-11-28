@@ -17,8 +17,6 @@
 //! stable across producers so the allocator and emitters need no
 //! parallel paths.
 
-#![allow(dead_code)]
-
 use alloc::vec::Vec;
 
 /// Index into a function's instruction list.
@@ -478,10 +476,6 @@ pub(crate) enum Inst {
         /// `ret_agg` is set.
         ret_slot_local: i64,
     },
-    /// Tail-jump to an external symbol. Used only as the body
-    /// of an address-take trampoline; never has a defined value
-    /// (control transfers out).
-    TailExt(i64),
     /// Whole-object zero fill: `size` bytes at `dst` become zero. What
     /// an assignment from a zero image lowers to once the image is not
     /// built; `align` is what `dst` is known to satisfy. Has no value.
@@ -865,7 +859,6 @@ impl Inst {
                 | Inst::Call { .. }
                 | Inst::CallIndirect { .. }
                 | Inst::CallExt { .. }
-                | Inst::TailExt(_)
                 | Inst::Mcpy { .. }
                 | Inst::Mzero { .. }
                 | Inst::AtomicRmw { .. }
@@ -939,7 +932,6 @@ impl Inst {
             Inst::Call { .. } => "Call",
             Inst::CallIndirect { .. } => "CallIndirect",
             Inst::CallExt { .. } => "CallExt",
-            Inst::TailExt(_) => "TailExt",
             Inst::Mcpy { .. } => "Mcpy",
             Inst::Mzero { .. } => "Mzero",
             Inst::AtomicRmw { .. } => "AtomicRmw",
@@ -987,7 +979,6 @@ impl Inst {
             | Inst::LocalAddr(_)
             | Inst::TlsAddr(_)
             | Inst::LoadLocal { .. }
-            | Inst::TailExt(_)
             | Inst::AllocaInit(_)
             | Inst::LifetimeEnd(_)
             | Inst::ParamRef { .. }
@@ -1133,7 +1124,6 @@ impl Inst {
             | Inst::LocalAddr(_)
             | Inst::TlsAddr(_)
             | Inst::LoadLocal { .. }
-            | Inst::TailExt(_)
             | Inst::AllocaInit(_)
             | Inst::LifetimeEnd(_)
             | Inst::ParamRef { .. }
@@ -2394,11 +2384,6 @@ pub(crate) enum Terminator {
     /// `Terminator` is `Copy`; every edge is opaque to the branch
     /// folds (the asm decides at runtime).
     AsmGoto { table: u32 },
-    /// Synthetic fall-through to a successor block. Preserved
-    /// on the variant for object-file round-trips of SSA bodies
-    /// that already carry it; new IR producers should use the
-    /// explicit branch terminators instead.
-    FallThrough(BlockId),
     /// Control cannot reach here: the block's last real instruction
     /// diverges (a call to a `_Noreturn` function, C11 6.7.4p8). The
     /// block has no successor and yields no value; the per-arch
@@ -2428,7 +2413,6 @@ impl Terminator {
                 }
             }
             Terminator::Jmp(_)
-            | Terminator::FallThrough(_)
             | Terminator::TailExt(_)
             | Terminator::AsmGoto { .. }
             | Terminator::Unreachable => {}
@@ -2448,7 +2432,6 @@ impl Terminator {
                 }
             }
             Terminator::Jmp(_)
-            | Terminator::FallThrough(_)
             | Terminator::TailExt(_)
             | Terminator::AsmGoto { .. }
             | Terminator::Unreachable => {}
@@ -3310,7 +3293,6 @@ impl crate::c5::layout::DataOffsets for Inst {
             | Inst::Call { .. }
             | Inst::CallIndirect { .. }
             | Inst::CallExt { .. }
-            | Inst::TailExt { .. }
             | Inst::Mcpy { .. }
             | Inst::Mzero { .. }
             | Inst::AtomicRmw { .. }

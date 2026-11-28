@@ -1574,6 +1574,47 @@ fn a_subscript_the_loop_condition_bounds_carries_no_check() {
     }
 }
 
+/// C17 6.5.1.1p3: a generic selection's controlling expression is not
+/// evaluated, and the data a check staged for it is dropped. A site that
+/// follows names its own file and type, not the bytes that took the place
+/// of the ones the dropped operand had named first.
+#[test]
+fn a_site_after_an_unevaluated_operand_names_its_file_and_type() {
+    let dir = TempDir::new("badc-sanitize-generic");
+    let src = dir.join("overflow.c");
+    std::fs::write(
+        &src,
+        "struct n { unsigned int count[6]; int last; };\n\
+         __attribute__((noinline)) unsigned f(struct n *p, int dir) {\n    \
+         return _Generic((p->count[dir]), unsigned int: 1, default: 2) + p->count[dir];\n}\n\
+         int main(int argc, char **argv) {\n    struct n v = {{1, 2, 3, 4, 5, 6}, 7};\n    \
+         (void)argv;\n    return f(&v, 5 + argc) == 0;\n}\n",
+    )
+    .unwrap();
+    for opt in ["-O0", "-O"] {
+        let exe = dir.join(format!("generic{opt}"));
+        let built = Command::new(env!("CARGO_BIN_EXE_badc"))
+            .args(["-q", opt, "-fsanitize=bounds", "-o"])
+            .arg(&exe)
+            .arg(&src)
+            .output()
+            .expect("run badc");
+        assert!(
+            built.status.success(),
+            "{opt}: {}",
+            String::from_utf8_lossy(&built.stderr)
+        );
+        let o = run(&exe, &[]);
+        assert_eq!(
+            reports(&o),
+            ["3:69: runtime error: index 6 out of bounds for type 'unsigned int[6]'"],
+            "{opt}: {o:?}"
+        );
+        let named = String::from_utf8_lossy(&o.stderr).contains("overflow.c:3:69");
+        assert!(named, "{opt}: {o:?}");
+    }
+}
+
 const BOOLS: &str = "#include <stdio.h>
 #include <string.h>
 struct in { int v[2]; };

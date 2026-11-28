@@ -3515,9 +3515,9 @@ impl Compiler {
         for slot in popped {
             self.init_reloc_slots.remove(&slot);
         }
+        self.data_relocs.truncate(cp.data_relocs);
         self.truncate_data(cp.data);
         self.data_object_starts.truncate(cp.data_object_starts);
-        self.data_relocs.truncate(cp.data_relocs);
         self.code_relocs.truncate(cp.code_relocs);
         self.code_reloc_sym_idx.truncate(cp.code_reloc_sym_idx);
         self.extern_data_relocs.truncate(cp.extern_data_relocs);

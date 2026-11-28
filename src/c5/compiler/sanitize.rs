@@ -1121,6 +1121,7 @@ impl Compiler {
         self.data.push(0);
         self.data_object_starts.push(at);
         self.ubsan_files.insert(name, at);
+        self.ubsan_interned_end = self.data.len() as i64;
         at
     }
 
@@ -1193,6 +1194,7 @@ impl Compiler {
         self.data.push(0);
         self.data_object_starts.push(at);
         self.ubsan_types.insert(key, at);
+        self.ubsan_interned_end = self.data.len() as i64;
         at
     }
 }
